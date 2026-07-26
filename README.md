@@ -27,3 +27,26 @@
 4. 최종 조립 → `output/[주제]/final.md`, `final.html`
 
 생성 결과는 로컬 `output/`에만 남고 Git에는 커밋되지 않습니다.
+
+## 일일 자동 파이프라인
+
+Topic Planner가 후보 10개 이상을 평가해 TOP2를 선정하고, 각 주제를 Research부터 WordPress Draft 생성까지 순서대로 처리합니다.
+실행기는 Codex CLI의 비대화식 `codex exec`를 사용하며 승인 정책은 `never`, 샌드박스는 `danger-full-access`로 고정합니다. 승인 없이 수행할 수 없는 단계는 대기하지 않고 실패합니다. Agent에는 프로젝트 외부 변경, Git push 및 공개 Publish를 금지하며 Publisher는 Draft만 생성합니다.
+
+```bash
+./.venv/bin/python scripts/run_daily_pipeline.py
+```
+
+추가 키워드는 선택적으로 전달할 수 있습니다.
+
+```bash
+./.venv/bin/python scripts/run_daily_pipeline.py --keywords "AWS,FastAPI"
+```
+
+외부 호출이나 WordPress 변경 없이 Topic Planner 출력 계약, TOP2 파싱 및 단계별 Codex 명령 생성을 확인할 수 있습니다.
+
+```bash
+./.venv/bin/python scripts/run_daily_pipeline.py --dry-run
+```
+
+macOS 자동 실행은 `deploy/com.huntlab.daily-pipeline.plist`를 `~/Library/LaunchAgents/`에 설치하고 launchd에 등록합니다. 매일 오전 2시에 실행되며 로그는 `logs/launchd.out.log`와 `logs/launchd.err.log`에 기록됩니다. `deploy/crontab.example`은 deprecated된 과거 예시로만 보존합니다.
