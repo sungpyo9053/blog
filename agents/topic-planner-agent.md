@@ -114,6 +114,10 @@ TOP10과 TOP2를 정하기 전에 다음을 확인한다.
 6. 오늘 가장 가치 있는 최종 TOP2를 선정한다.
 7. 계약 형식에 맞춰 `topics.md`를 작성한다.
 
+## 일일 카테고리 균형
+
+매일 자동 실행의 TOP2에는 `Economy`, `Society`, `Politics`, `Hot Issue` 중 최소 한 카테고리의 주제를 반드시 포함한다. `Tech`, `AI`, `Build Log`만으로 TOP2를 구성하지 않는다. 비기술 후보도 공식 출처, 검색 의도와 품질 기준을 낮추지 않으며, 조건을 충족하는 비기술 후보가 없으면 억지로 선정하지 말고 Planner를 실패 처리한다.
+
 ## `topics.md` 계약
 
 `topics.md`에는 후보 최소 35개, TOP10, TOP2가 있어야 한다. 각 후보는 다음 단일 행 필드를 모두 포함한다.
@@ -171,6 +175,7 @@ Primary Keyword는 내부 기획 용어나 추상적인 분석명이 아니라 �
 - WordPress와 `output/` 중복 검사를 완료했다.
 - TOP10이 정확히 10개다.
 - TOP2가 정확히 2개이며 TOP10에 포함된다.
+- TOP2 중 최소 1개가 Economy, Society, Politics 또는 Hot Issue다.
 - Economy, Society, Politics, Hot Issue의 강화된 출처 규칙을 통과했다.
 - `topics.md`만 생성하고 다른 단계나 외부 변경을 수행하지 않았다.
 

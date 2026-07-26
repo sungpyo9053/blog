@@ -375,6 +375,11 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         raise PipelineError("TOP10 제목이 Topic Candidates와 일치하지 않습니다.")
     if any(title not in top10 for title in topics):
         raise PipelineError("TOP2는 TOP10에 포함되어야 합니다.")
+    non_technical = {"Economy", "Society", "Politics", "Hot Issue"}
+    if not any(candidates[title]["category"] in non_technical for title in topics):
+        raise PipelineError(
+            "TOP2에는 Economy, Society, Politics, Hot Issue 중 하나가 필요합니다."
+        )
     return [candidates[title] for title in topics]
 
 
@@ -697,7 +702,8 @@ def dry_run_topics() -> str:
                 "- duplicate_check: 중복 없음\n"
                 "- sources: dry-run"
             )
-    top10 = [item.splitlines()[0].split(". ", 1)[1] for item in candidates[:10]]
+    top10_items = candidates[:9] + [candidates[10]]
+    top10 = [item.splitlines()[0].split(". ", 1)[1] for item in top10_items]
     return (
         "# Topic Candidates\n\n"
         + "\n\n".join(candidates)
@@ -707,7 +713,7 @@ def dry_run_topics() -> str:
         + "\n\n"
         "## TOP2\n\n"
         f"1. {top10[0]}\n"
-        f"2. {top10[1]}\n"
+        f"2. {top10[-1]}\n"
     )
 
 

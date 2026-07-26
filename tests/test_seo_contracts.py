@@ -30,6 +30,10 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("primary_keyword", text)
         self.assertIn("secondary_keywords", text)
         self.assertIn("target_reader", text)
+        self.assertIn(
+            "TOP2 중 최소 1개가 Economy, Society, Politics 또는 Hot Issue",
+            text,
+        )
 
     def test_research_requires_seo_analysis(self):
         text = read("agents/researcher.md")
