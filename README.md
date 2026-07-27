@@ -50,3 +50,13 @@ Topic Planner가 후보 10개 이상을 평가해 TOP2를 선정하고, 각 주�
 ```
 
 macOS 자동 실행은 `deploy/com.huntlab.daily-pipeline.plist`를 `~/Library/LaunchAgents/`에 설치하고 launchd에 등록합니다. 매일 오전 2시에 실행되며 로그는 `logs/launchd.out.log`와 `logs/launchd.err.log`에 기록됩니다. `deploy/crontab.example`은 deprecated된 과거 예시로만 보존합니다.
+
+## 독립 Analytics·수익화 분석
+
+`guides/analytics-optimization-guide.md`와 `agents/analytics-optimizer-agent.md`는 Daily Pipeline과 분리된 분석 정책입니다. Search Console·Analytics의 읽기 전용 인증 어댑터를 설정한 뒤 다음 실행기로 `output/analytics/latest.md` 분석 리포트를 생성합니다. 이 리포트는 다음 글쓰기 요청에 명시적으로 참고 자료로 전달하며 자동 주입하지 않습니다.
+
+```bash
+./.venv/bin/python scripts/run_analytics_optimizer.py
+```
+
+현재 API 인증이 설정되지 않으면 실행기는 `INCOMPLETE` 리포트만 만들고 WordPress나 공개 글을 변경하지 않습니다. `deploy/com.huntlab.analytics-optimizer.plist`는 인증 어댑터를 설정한 뒤에만 사용자 LaunchAgents에 등록합니다.

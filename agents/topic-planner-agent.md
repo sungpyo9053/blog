@@ -180,3 +180,7 @@ Primary Keyword는 내부 기획 용어나 추상적인 분석명이 아니라 �
 - `topics.md`만 생성하고 다른 단계나 외부 변경을 수행하지 않았다.
 
 조건을 충족하지 못하면 임의의 TOP2를 반환하지 않고 실패한다.
+
+## 수익화 편집
+
+작업 전에 `guides/monetization-guide.md`를 읽는다. 후보마다 `monetization_intent`, `conversion_goal`, `commercial_keywords`를 기록하되 수익성보다 검색 의도와 독자 가치를 우선한다. 제품·가격·비교 주제만 상업적 검색 의도를 갖도록 하고, 수익 보장이나 투자 추천 주제는 제외한다.

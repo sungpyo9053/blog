@@ -72,6 +72,37 @@ class SEOAgentContractTests(unittest.TestCase):
         ):
             self.assertIn(check, text)
 
+    def test_agents_follow_monetization_policy(self):
+        guide = read("guides/monetization-guide.md")
+        for field in (
+            "검색 의도",
+            "제휴",
+            "과장",
+            "공식 가격",
+            "recommended_cta",
+            "affiliate_disclosure",
+        ):
+            self.assertIn(field, guide)
+        for agent in (
+            "agents/topic-planner-agent.md",
+            "agents/researcher.md",
+            "agents/writer.md",
+            "agents/reviewer.md",
+            "agents/publisher-agent.md",
+        ):
+            self.assertIn("monetization-guide.md", read(agent))
+
+    def test_analytics_optimizer_is_independent(self):
+        guide = read("guides/analytics-optimization-guide.md")
+        agent = read("agents/analytics-optimizer-agent.md")
+        runner = read("scripts/run_analytics_optimizer.py")
+        self.assertIn("Daily Pipeline과", guide)
+        self.assertIn("Publisher 호출", agent)
+        self.assertIn('REPORT_DIR = ROOT / "output" / "analytics"', runner)
+        self.assertIn("INCOMPLETE", runner)
+        self.assertIn("trigger_pipeline_if_needed", runner)
+        self.assertIn("not_triggered_insufficient_signal", runner)
+
 
 class SEOImageAndPublisherPolicyTests(unittest.TestCase):
     def test_image_policy_blocks_sensitive_fabrication(self):

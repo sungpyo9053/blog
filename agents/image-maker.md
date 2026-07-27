@@ -15,6 +15,7 @@ description: 블로그 초안의 이미지 마커를 분석해 HTML·CSS 시각 
 
 1. `output/[주제]/draft.md`
 2. `guides/image-guide.md`
+3. `guides/monetization-guide.md`
 
 하나라도 없거나 읽을 수 없으면 추측해서 진행하지 말고 누락된 정확한 경로를 보고한다.
 
@@ -236,6 +237,7 @@ output/[주제]/images/thumbnail.png
 - 같은 이미지 파일을 여러 마커에 무의미하게 반복
 - 기존 사용자 원본 이미지 삭제 또는 덮어쓰기
 - `draft.md`의 이미지 마커 외 본문을 임의로 다시 작성
+- 수익·가격·전환을 보장하는 시각 표현이나 가짜 제품 화면을 만들지 않는다.
 
 ## 산출물
 

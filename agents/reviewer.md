@@ -17,6 +17,7 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 - `guides/style-guide.md`
 - `guides/seo-guide.md`
 - `guides/publisher-guide.md`
+- `guides/monetization-guide.md`
 
 다른 run의 산출물을 사용하지 않는다.
 
@@ -38,6 +39,7 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 - Category와 Tags가 Topic Planner 지정값과 일치한다.
 - 검색자가 해결하려던 문제를 글 끝까지 해결한다.
 - 사실, 경험, 추정과 변경 가능 정보가 구분돼 E-E-A-T를 훼손하지 않는다.
+- CTA가 검색 의도 해결 뒤에 있고 과장·허위 보장·제휴 고지 누락이 없다.
 
 ## 승인 계약
 

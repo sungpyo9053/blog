@@ -460,6 +460,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             (
                 common
                 + f"입력은 {str(topic_dir / 'research.md')!r} 하나입니다. "
+                f"분석 리포트 {str(PROJECT_ROOT / 'output/analytics/latest.md')!r}가 있으면 "
+                "검색 의도·CTA 제안만 참고하고 사실 근거는 research.md를 우선하세요. "
                 f"기존 Guide를 적용해 {str(topic_dir / 'draft.md')!r}를 작성하세요."
             ),
         ),
@@ -492,6 +494,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 f"{str(topic_dir / 'research.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/style-guide.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/seo-guide.md')!r}, "
+                f"{str(PROJECT_ROOT / 'guides/monetization-guide.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/publisher-guide.md')!r} "
                 "기준으로 검토하세요. 정책 문서는 읽기만 하고 주제 디렉터리로 "
                 "복사하지 마세요. "
@@ -785,6 +788,8 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             "Tech, AI, Economy, Society, Politics, Hot Issue, Build Log에서 "
             f"각각 후보 5개 이상, 전체 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
             "작성하세요. "
+            f"{str(PROJECT_ROOT / 'output/analytics/latest.md')!r}가 있으면 검색어·CTR·조회수 "
+            "관측값과 제안만 참고하고, 데이터가 없으면 추측하지 마세요. "
             "output의 다른 파일은 수정하지 마세요. "
             "글 작성, 본문 리서치, 이미지 생성, Publisher 호출은 하지 마세요."
         ),
@@ -864,7 +869,13 @@ def main() -> int:
 
         results: list[dict[str, Any]] = []
         for context in contexts:
-            context.directory.mkdir(parents=False, exist_ok=False)
+            if args.resume_run_id:
+                if context.directory.exists():
+                    assert_owned_path(context, context.directory)
+                else:
+                    context.directory.mkdir(parents=False, exist_ok=False)
+            else:
+                context.directory.mkdir(parents=False, exist_ok=False)
             logger.info(
                 "topic=%r run_id=%s topic_id=%s directory=%s event=start",
                 context.title,
@@ -873,6 +884,33 @@ def main() -> int:
                 context.directory,
             )
             for stage in topic_stages(context):
+                if args.resume_run_id:
+                    required = {
+                        "Research Agent": (context.directory / "research.md",),
+                        "Writer Agent": (context.directory / "draft.md",),
+                        "Image Maker Agent": (
+                            context.directory / "draft.md",
+                            context.directory / "images/thumbnail.png",
+                        ),
+                        "Assembler Agent": (
+                            context.directory / "final.md",
+                            context.directory / "final.html",
+                        ),
+                        "Reviewer Agent": (
+                            context.directory / "publish.md",
+                            context.directory / "review.md",
+                        ),
+                        "Publisher Agent": (context.directory / "publisher-audit.jsonl",),
+                    }.get(stage.name, ())
+                    if required and all(path.is_file() for path in required):
+                        logger.info(
+                            "topic=%r run_id=%s topic_id=%s agent=%s event=resume_skip",
+                            context.title,
+                            context.run_id,
+                            context.topic_id,
+                            stage.name,
+                        )
+                        continue
                 if stage.name == "Publisher Agent":
                     digest = validate_publish_contract(context)
                     logger.info(

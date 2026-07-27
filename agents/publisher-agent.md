@@ -11,6 +11,8 @@ HuntLab WordPress Publisher Agent는 Reviewer가 승인한 Markdown 콘텐츠를
 
 Publisher Agent는 발행 단계만 담당한다. 콘텐츠를 작성하거나 편집하지 않으며, 발행 정책을 새로 정의하지 않는다.
 
+수익화 메타데이터와 CTA는 `guides/monetization-guide.md`에 따라 검증된 입력만 전달한다. 수익화 정책을 만들거나 본문을 광고성으로 수정하지 않는다.
+
 ## 정책 기준
 
 `guides/publisher-guide.md`는 Publisher Agent의 유일한 발행 정책이자 Single Source of Truth(SSOT)다.

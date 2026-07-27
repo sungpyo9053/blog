@@ -30,6 +30,8 @@ tools:
 
 ## SEO 조사
 
+작업 전에 `guides/monetization-guide.md`도 읽는다. 가격·요금·비교·추천이 포함되면 공식 가격표, 이용 조건, 제한과 확인일을 조사하고 제휴·협찬 여부를 추측하지 않는다.
+
 Research는 사실 조사와 함께 다음 SEO 분석을 반드시 수행한다.
 
 - Primary Keyword: 실제 검색 표현인지 확인하고 그대로 유지한다.
@@ -121,6 +123,14 @@ output/[주제]/research.md
 - 공식 문서:
 - 검색 의도:
 - FAQ 후보:
+
+## 수익화 분석
+
+- monetization_intent:
+- conversion_goal:
+- commercial_keywords:
+- recommended_cta:
+- affiliate_disclosure:
 
 ## [주제에 맞는 소주제]
 

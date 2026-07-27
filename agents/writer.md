@@ -16,6 +16,7 @@ description: 주제별 리서치 결과와 문체·SEO 가이드를 모두 읽�
 1. `output/[주제]/research.md`
 2. `guides/style-guide.md`
 3. `guides/seo-guide.md`
+4. `guides/monetization-guide.md`
 
 현재 저장소에 `guides/`가 없고 `gudies/`가 있다면 다음 경로를 사용한다.
 
@@ -76,6 +77,10 @@ SEO를 위해 문체를 훼손하거나, 문체를 살리기 위해 사실을 �
 - `category`: Topic Planner 지정값을 그대로 사용
 - `tags`: Topic Planner 지정값을 순서와 의미를 바꾸지 않고 사용
 - `publish_mode`: 오케스트레이터가 지정한 `draft` 또는 `publish`
+- `monetization_intent`: 상업적 검색 의도 또는 `none`
+- `conversion_goal`: 글을 읽은 뒤 선택 가능한 다음 행동
+- `recommended_cta`: 근거 있는 CTA 한 문장
+- `affiliate_disclosure`: 제휴·협찬이 없으면 `없음`
 
 제목, Meta Description, Slug와 본문은 같은 검색 의도를 약속해야 한다.
 
@@ -214,3 +219,4 @@ publish_mode: draft
 - 검증이 필요한 모든 사실이 `research.md` 범위 안에 있다.
 - `output/[주제]/draft.md` 한 개만 생성했다.
 - 필수 Frontmatter, 110~160자 Meta Description, 안전한 Slug와 FAQ 3개 이상을 포함했다.
+- 수익화 가이드에 맞는 CTA와 제휴 고지를 포함했다.
