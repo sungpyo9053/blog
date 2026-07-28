@@ -100,8 +100,24 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("Publisher 호출", agent)
         self.assertIn('REPORT_DIR = ROOT / "output" / "analytics"', runner)
         self.assertIn("INCOMPLETE", runner)
-        self.assertIn("trigger_pipeline_if_needed", runner)
-        self.assertIn("not_triggered_insufficient_signal", runner)
+        self.assertIn("def analyze(", runner)
+        self.assertIn("disabled_review_required", runner)
+        self.assertNotIn("trigger_pipeline_if_needed", runner)
+
+    def test_planner_has_cluster_and_cannibalization_contract(self):
+        text = read("agents/topic-planner-agent.md")
+        for field in (
+            "internal_link_candidates",
+            "topic_cluster",
+            "pillar_candidate",
+            "Keyword Cannibalization",
+        ):
+            self.assertIn(field, text)
+
+    def test_reviewer_requires_featured_image_contract(self):
+        text = read("agents/reviewer.md")
+        self.assertIn("./images/thumbnail.png", text)
+        self.assertIn("featured_image_alt", text)
 
 
 class SEOImageAndPublisherPolicyTests(unittest.TestCase):

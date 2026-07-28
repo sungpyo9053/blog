@@ -540,7 +540,10 @@ E-E-A-T는 별도의 검색 순위 공식이 아니라 HuntLab 콘텐츠의 신�
 3. 실제 경험
 4. 가독성
 
-네이버를 Primary SEO로, Google을 Secondary SEO로 운영하되 어느 검색엔진의 최적화도 독자의 이해, 안전, 신뢰를 해쳐서는 안 된다.
+HuntLab WordPress는 Google Search Central의 people-first 원칙과 기술 요구사항을
+Primary SEO 기준으로 운영한다. 네이버 검색 지침은 국내 검색 노출을 위한 보조
+기준으로 사용하되 어느 검색엔진의 최적화도 독자의 이해, 안전, 신뢰를 해쳐서는
+안 된다.
 
 ## 10. 참고한 공식 자료
 

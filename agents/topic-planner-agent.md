@@ -101,6 +101,11 @@ TOP10과 TOP2를 정하기 전에 다음을 확인한다.
 1. WordPress 공개 글과 Draft의 제목·slug·카테고리
 2. `output/`의 기존 제목과 최근 실행 주제
 3. 최근 반복된 제품, 기술, 사건과 검색 의도
+4. `output/analytics/latest.md`의 관측된 Refresh·Content Gap 후보
+
+제목 유사도만으로 중복을 판단하지 않는다. Primary Keyword, 검색 의도, 독자가
+얻는 결과가 실질적으로 같으면 Keyword Cannibalization 위험으로 제외한다. 기존
+글을 보강하면 해결되는 질의는 신규 글보다 Refresh를 우선한다.
 
 동일 제목과 실질적으로 같은 검색 의도의 매우 유사한 제목은 제외한다. 최근 작성 글과 반복 기술은 원칙적으로 제외하고, 명확한 버전 변경·새 데이터·후속 검증처럼 독립적 가치가 있을 때만 감점 후 유지한다.
 
@@ -143,6 +148,9 @@ TOP10과 TOP2를 정하기 전에 다음을 확인한다.
 - research_focus: Research Agent가 확인할 핵심 질문과 우선 출처
 - recommended_images: 대표 이미지와 본문 이미지 제안
 - duplicate_check: 기존 글 및 최근 반복 검사 결과
+- internal_link_candidates: 공개 URL이 확인된 관련 글과 연결 이유, 없으면 없음
+- topic_cluster: 속할 Topic Cluster와 검색 여정 단계
+- pillar_candidate: 기존 Pillar URL 또는 새 Pillar 필요 여부
 - sources: 핵심 후보 출처
 
 ## TOP10
@@ -164,6 +172,9 @@ TOP10과 TOP2를 정하기 전에 다음을 확인한다.
 - `primary_keyword`: 사용자가 Google에 실제 입력할 자연스러운 검색 표현
 - `secondary_keywords`: 쉼표로 구분한 관련 검색어 2~5개
 - `target_reader`: 검색자의 상황, 지식 수준과 해결하려는 문제
+- `internal_link_candidates`: 공개 상태와 URL을 확인한 관련 글만 기록
+- `topic_cluster`: 같은 검색 여정을 공유하는 글 묶음과 현재 글의 역할
+- `pillar_candidate`: 허브가 될 기존 글 또는 향후 Pillar 필요 여부
 
 Primary Keyword는 내부 기획 용어나 추상적인 분석명이 아니라 실제 검색 표현이어야 한다. 예를 들어 `Cloudflare Workers Memory Usage`는 적합하지만 `Cloudflare Workers 메모리 회귀 분석`처럼 검색자가 거의 사용하지 않는 내부 표현은 피한다.
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -78,7 +77,29 @@ def collect() -> tuple[list[dict], list[dict]]:
     return search_rows, ga_rows
 
 
+def analyze(search_rows: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Derive conservative refresh and content-gap candidates."""
+    refresh: list[dict] = []
+    gaps: list[dict] = []
+    for row in search_rows:
+        keys = row.get("keys", ["", ""])
+        item = {
+            "query": keys[0] if keys else "",
+            "page": keys[1] if len(keys) > 1 else "",
+            "clicks": float(row.get("clicks", 0)),
+            "impressions": float(row.get("impressions", 0)),
+            "ctr": float(row.get("ctr", 0)),
+            "position": float(row.get("position", 0)),
+        }
+        if item["impressions"] >= 50 and item["ctr"] < 0.02:
+            refresh.append({**item, "reason": "high_impressions_low_ctr"})
+        if item["impressions"] >= 30 and item["clicks"] == 0 and item["position"] >= 8:
+            gaps.append({**item, "reason": "visible_query_without_clicks"})
+    return refresh, gaps
+
+
 def render(search_rows: list[dict], ga_rows: list[dict], now: datetime) -> str:
+    refresh, gaps = analyze(search_rows)
     lines = [
         "# Analytics Optimization Report",
         "",
@@ -111,6 +132,26 @@ def render(search_rows: list[dict], ga_rows: list[dict], now: datetime) -> str:
         lines.append(f"| {row['page'].replace('|', '\\|')} | {row['screenPageViews']} |")
     if not ga_rows:
         lines.append("| 데이터 없음 | 0 |")
+    lines += ["", "## Refresh 후보", ""]
+    if refresh:
+        for item in refresh[:10]:
+            lines.append(
+                f"- `{item['page']}`: `{item['query']}` "
+                f"(노출 {item['impressions']:.0f}, CTR {item['ctr']:.1%}) — "
+                "제목·Meta Description·첫 화면의 검색 의도 일치를 검토"
+            )
+    else:
+        lines.append("- 관측 임계치를 충족한 후보 없음")
+    lines += ["", "## Content Gap 후보", ""]
+    if gaps:
+        for item in gaps[:10]:
+            lines.append(
+                f"- `{item['query']}` → `{item['page']}` "
+                f"(노출 {item['impressions']:.0f}, 평균 순위 {item['position']:.1f}) — "
+                "기존 글 보강을 우선하고 별도 검색 의도일 때만 신규 글 검토"
+            )
+    else:
+        lines.append("- 관측 임계치를 충족한 후보 없음")
     lines += [
         "",
         "## 다음 사이클 제안",
@@ -123,37 +164,6 @@ def render(search_rows: list[dict], ga_rows: list[dict], now: datetime) -> str:
     return "\n".join(lines) + "\n"
 
 
-def content_gap(search_rows: list[dict], ga_rows: list[dict]) -> bool:
-    """Require meaningful data before starting an extra publishing run."""
-    impressions = sum(float(row.get("impressions", 0)) for row in search_rows)
-    return len(search_rows) >= 5 and impressions >= 100 and bool(ga_rows)
-
-
-def trigger_pipeline_if_needed(
-    search_rows: list[dict], ga_rows: list[dict], now: datetime
-) -> str:
-    if not content_gap(search_rows, ga_rows):
-        return "not_triggered_insufficient_signal"
-    marker = LOG_DIR / f"analytics-trigger-{now:%Y-%m-%d}.lock"
-    if marker.exists():
-        return "not_triggered_daily_limit"
-    marker.write_text(now.isoformat(), encoding="utf-8")
-    command = [str(ROOT / ".venv/bin/python"), str(ROOT / "scripts/run_daily_pipeline.py")]
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        timeout=21600,
-        check=False,
-    )
-    return (
-        "triggered_pipeline_success"
-        if result.returncode == 0
-        else f"triggered_pipeline_failed_exit_{result.returncode}"
-    )
-
-
 def main() -> int:
     load_env_file(ROOT / ".env")
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -162,7 +172,7 @@ def main() -> int:
     try:
         search_rows, ga_rows = collect()
         body = render(search_rows, ga_rows, now)
-        body += f"\n- automatic_pipeline: `{trigger_pipeline_if_needed(search_rows, ga_rows, now)}`\n"
+        body += "\n- automatic_pipeline: `disabled_review_required`\n"
         status = "COMPLETE"
     except Exception as exc:  # noqa: BLE001 - safe operational report
         body = (

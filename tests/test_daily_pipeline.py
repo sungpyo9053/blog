@@ -121,6 +121,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 'source_id: "huntlab:run-3:topic-test"\n'
                 'publish_mode: "publish"\n'
                 'category: "Tech"\n'
+                'featured_image: "./images/thumbnail.png"\n'
+                'featured_image_alt: "Docker 보안 업데이트 대표 이미지"\n'
                 "tags:\n"
                 '  - "Docker"\n'
                 '  - "Security"\n'
@@ -129,6 +131,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 "## 안전한 업그레이드\n",
                 encoding="utf-8",
             )
+            (directory / "images").mkdir()
+            (directory / "images/thumbnail.png").write_bytes(b"png")
             digest = hashlib.sha256(publish.read_bytes()).hexdigest()
             (directory / "review.md").write_text(
                 f"APPROVED\nrun-3\ntopic-test\n{digest}\n",
@@ -158,6 +162,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 'source_id: "huntlab:old-run:old-topic"\n'
                 'publish_mode: "publish"\n'
                 'category: "WordPress"\n'
+                'featured_image: "./images/thumbnail.png"\n'
+                'featured_image_alt: "이전 글 대표 이미지"\n'
                 "tags:\n"
                 '  - "AWS"\n'
                 '  - "WordPress"\n'

@@ -324,6 +324,9 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         "research_focus",
         "recommended_images",
         "duplicate_check",
+        "internal_link_candidates",
+        "topic_cluster",
+        "pillar_candidate",
     }
     category_counts = {category: 0 for category in EDITOR_CATEGORIES}
     candidates: dict[str, dict[str, Any]] = {}
@@ -446,6 +449,9 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "search_intent": plan.get("search_intent", ""),
         "research_focus": context.research_focus,
         "duplicate_check": duplicate_check,
+        "internal_link_candidates": plan.get("internal_link_candidates", ""),
+        "topic_cluster": plan.get("topic_cluster", ""),
+        "pillar_candidate": plan.get("pillar_candidate", ""),
         "sources": plan.get("sources", ""),
     }
     path.write_text(
@@ -536,7 +542,10 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 f"원문 의미를 바꾸지 않는 {str(topic_dir / 'publish.md')!r}를 "
                 "준비하되 WordPress "
                 "제목이 H1이 되도록 본문은 H2부터 시작하고 필요한 Frontmatter를 "
-                f"추가하세요. Frontmatter title은 {topic!r}와 정확히 일치해야 하고, "
+                "추가하세요. images/thumbnail.png가 존재하므로 featured_image는 "
+                "'./images/thumbnail.png', featured_image_alt는 대표 이미지 내용을 "
+                "설명하는 구체적인 문장으로 반드시 설정하세요. "
+                f"Frontmatter title은 {topic!r}와 정확히 일치해야 하고, "
                 f"run_id는 {context.run_id!r}, topic_id는 {context.topic_id!r}, "
                 f"source_id는 {context.source_id!r}, category는 "
                 f"{context.category!r}, tags는 {list(context.tags)!r}, "
@@ -638,6 +647,16 @@ def validate_publish_contract(context: TopicContext) -> str:
             f"{context.topic_id}: publish.md tags 불일치 "
             f"(expected={list(context.tags)!r}, actual={list(actual_tags)!r})"
         )
+    if metadata.get("featured_image") != "./images/thumbnail.png":
+        raise PipelineError(
+            f"{context.topic_id}: publish.md featured_image 누락 또는 경로 불일치"
+        )
+    featured_alt = metadata.get("featured_image_alt")
+    if not isinstance(featured_alt, str) or not featured_alt.strip():
+        raise PipelineError(f"{context.topic_id}: publish.md featured_image_alt 누락")
+    thumbnail = context.directory / "images/thumbnail.png"
+    if not thumbnail.is_file():
+        raise PipelineError(f"{context.topic_id}: 대표 이미지 파일 누락: {thumbnail}")
 
     digest = hashlib.sha256(publish_path.read_bytes()).hexdigest()
     review = review_path.read_text(encoding="utf-8")
@@ -741,6 +760,9 @@ def dry_run_topics() -> str:
                 "- research_focus: 공식 자료 확인\n"
                 "- recommended_images: 대표 이미지 1개\n"
                 "- duplicate_check: 중복 없음\n"
+                "- internal_link_candidates: 없음\n"
+                "- topic_cluster: Dry Run\n"
+                "- pillar_candidate: 없음\n"
                 "- sources: dry-run"
             )
     top10_items = candidates[:9] + [candidates[10]]
@@ -827,7 +849,9 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             f"각각 후보 5개 이상, 전체 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
             "작성하세요. "
             f"{str(PROJECT_ROOT / 'output/analytics/latest.md')!r}가 있으면 검색어·CTR·조회수 "
-            "관측값과 제안만 참고하고, 데이터가 없으면 추측하지 마세요. "
+            "관측값, Refresh 후보와 Content Gap 제안만 참고하고, 데이터가 없으면 "
+            "추측하지 마세요. 후보마다 기존 공개 글과 검색 의도가 겹치는지 검사하고 "
+            "internal_link_candidates, topic_cluster, pillar_candidate를 기록하세요. "
             "output의 다른 파일은 수정하지 마세요. "
             "글 작성, 본문 리서치, 이미지 생성, Publisher 호출은 하지 마세요."
         ),
