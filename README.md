@@ -1,37 +1,32 @@
-# Blog Content Pipeline
+# HuntLab Blog Content Pipeline
 
-주제 하나를 입력하면 리서치부터 글쓰기, 이미지 제작, 최종 조립까지 순서대로 수행하는 블로그 콘텐츠 파이프라인입니다.
+검색 주제 기획부터 리서치, 글쓰기, 이미지 제작, 검수, WordPress 발행과
+발행 후 Search Console·GA4 분석까지 수행하는 콘텐츠 운영 시스템입니다.
 
 ## 구성
 
-- `CLAUDE.md`: 전체 파이프라인과 오케스트레이션 규칙
-- `agents/`: researcher, writer, image-maker, assembler 역할별 지침
-- `guides/`: 문체, SEO, 이미지 제작 가이드
-- `output/[주제]/`: 실행 중 생성되는 산출물(저장소에는 포함하지 않음)
+- `agents/`: Planner, Researcher, Writer, Image Maker, Assembler, Reviewer,
+  Publisher, Analytics Optimizer 역할별 지침
+- `guides/`: 문체, Google SEO, 이미지, 발행, 분석·수익화 정책
+- `publisher/`: WordPress REST API 검증·업로드·발행 모듈
+- `scripts/run_daily_pipeline.py`: TOP2 실행 Harness
+- `tests/`: 단계 간 계약과 Publisher 회귀 테스트
+- `output/runs/[run_id]/[topic_id]/`: 격리된 실행 산출물(Git 제외)
 
-## 실행
+## Workflow
 
-이 저장소를 열고 다음처럼 주제와 함께 전체 파이프라인 실행을 요청합니다.
+1. Topic Planner → 7개 카테고리 후보 35개 이상, TOP10, TOP2
+2. Research Agent → `research.md`
+3. Writer Agent → `draft.md`
+4. Image Maker Agent → 대표 이미지와 본문 이미지
+5. Assembler Agent → `final.md`, `final.html`
+6. Reviewer Agent → `publish.md`, 승인 SHA-256
+7. Publisher Agent → WordPress 공개 발행과 감사 로그
 
-```text
-주제: "후쿠오카 여행"
+Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/source 식별자,
+카테고리·태그와 대표 이미지 계약이 모두 일치해야 공개 발행합니다.
 
-이 주제로 전체 파이프라인을 처음부터 끝까지 실행해줘.
-```
-
-파이프라인은 다음 순서로 진행됩니다.
-
-1. 리서치 → `output/[주제]/research.md`
-2. 글쓰기 → `output/[주제]/draft.md`
-3. 이미지 제작 및 초안 이미지 마커 치환
-4. 최종 조립 → `output/[주제]/final.md`, `final.html`
-
-생성 결과는 로컬 `output/`에만 남고 Git에는 커밋되지 않습니다.
-
-## 일일 자동 파이프라인
-
-Topic Planner가 후보 10개 이상을 평가해 TOP2를 선정하고, 각 주제를 Research부터 WordPress Draft 생성까지 순서대로 처리합니다.
-실행기는 Codex CLI의 비대화식 `codex exec`를 사용하며 승인 정책은 `never`, 샌드박스는 `danger-full-access`로 고정합니다. 승인 없이 수행할 수 없는 단계는 대기하지 않고 실패합니다. Agent에는 프로젝트 외부 변경, Git push 및 공개 Publish를 금지하며 Publisher는 Draft만 생성합니다.
+## 일일 실행
 
 ```bash
 ./.venv/bin/python scripts/run_daily_pipeline.py
@@ -43,29 +38,77 @@ Topic Planner가 후보 10개 이상을 평가해 TOP2를 선정하고, 각 주�
 ./.venv/bin/python scripts/run_daily_pipeline.py --keywords "AWS,FastAPI"
 ```
 
-외부 호출이나 WordPress 변경 없이 Topic Planner 출력 계약, TOP2 파싱 및 단계별 Codex 명령 생성을 확인할 수 있습니다.
+외부 호출과 WordPress 변경 없이 Planner 계약, TOP2 파싱과 단계별 명령을
+검증할 수 있습니다.
 
 ```bash
 ./.venv/bin/python scripts/run_daily_pipeline.py --dry-run
 ```
 
-macOS 자동 실행은 `deploy/com.huntlab.daily-pipeline.plist`를 `~/Library/LaunchAgents/`에 설치하고 launchd에 등록합니다. 매일 오전 2시에 실행되며 로그는 `logs/launchd.out.log`와 `logs/launchd.err.log`에 기록됩니다. `deploy/crontab.example`은 deprecated된 과거 예시로만 보존합니다.
+## 실패 실행 재개
 
-Ubuntu 서버에서는 `deploy/huntlab-daily-pipeline.service`와
-`deploy/huntlab-daily-pipeline.timer`를 systemd에 설치합니다. 서버 시간대를
-`Asia/Seoul`로 설정하면 매일 오전 2시에 실행되며 로그는
-`logs/systemd-daily.out.log`와 `logs/systemd-daily.err.log`에 기록됩니다.
-Playwright를 처음 설치한 뒤에는 `.venv/bin/playwright install --with-deps chromium`으로
-브라우저 런타임을 준비합니다.
+완료된 단계는 재사용하고 TOP2 중 실패한 순위만 재개할 수 있습니다.
 
-## 독립 Analytics·수익화 분석
+```bash
+./.venv/bin/python scripts/run_daily_pipeline.py \
+  --resume-run-id 20260728T170005Z-764b58d29d \
+  --start-rank 2 \
+  --limit 1
+```
 
-`guides/analytics-optimization-guide.md`와 `agents/analytics-optimizer-agent.md`는 Daily Pipeline과 분리된 분석 정책입니다. Search Console·Analytics의 읽기 전용 인증 어댑터를 설정한 뒤 다음 실행기로 `output/analytics/latest.md` 분석 리포트를 생성합니다. 이 리포트는 다음 글쓰기 요청에 명시적으로 참고 자료로 전달하며 자동 주입하지 않습니다.
+Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검색 의도 문제를
+수정한 뒤 같은 run을 재개해야 하며, 이미 발행된 다른 순위 글은 변경하지
+않습니다.
+
+## Ubuntu 운영
+
+다음 systemd unit을 사용합니다.
+
+- `deploy/huntlab-daily-pipeline.service`
+- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST
+- `deploy/huntlab-daily-retry.service`
+- `deploy/huntlab-daily-retry.timer`: 매일 12:00 KST 실패 점검
+- `deploy/huntlab-analytics-optimizer.service`
+- `deploy/huntlab-analytics-optimizer.timer`: 매시간
+
+서버 시간대는 `Asia/Seoul`로 설정합니다. Playwright를 처음 설치한 뒤에는
+다음 명령으로 Chromium 런타임을 준비합니다.
+
+```bash
+.venv/bin/playwright install --with-deps chromium
+```
+
+12시 재시도는 당일 실패 실행을 점검하고 안전하게 재개할 수 있는 경우만
+처리합니다. 정상 발행된 글을 다시 발행하지 않습니다.
+
+## Analytics·SEO Lifecycle
 
 ```bash
 ./.venv/bin/python scripts/run_analytics_optimizer.py
 ```
 
-현재 API 인증이 설정되지 않으면 실행기는 `INCOMPLETE` 리포트만 만들고 WordPress나 공개 글을 변경하지 않습니다. `deploy/com.huntlab.analytics-optimizer.plist`는 인증 어댑터를 설정한 뒤에만 사용자 LaunchAgents에 등록합니다.
-Ubuntu 서버에서는 대응하는 `deploy/huntlab-analytics-optimizer.service`와
-`deploy/huntlab-analytics-optimizer.timer`를 사용합니다.
+Search Console·GA4 읽기 전용 인증으로 `output/analytics/latest.md`를 만들고,
+저CTR Refresh 후보와 Content Gap 후보를 다음 Planner에 전달합니다.
+분석 결과만으로 추가 발행이나 기존 글 Update를 실행하지 않습니다. 인증이
+없거나 데이터가 부족하면 `INCOMPLETE` 또는 데이터 없음으로 기록하고 성과를
+추정하지 않습니다.
+
+Topic Planner는 Keyword Cannibalization, 내부 링크 후보, Topic Cluster와
+Pillar 후보를 기록합니다. Reviewer는 공개 URL, 앵커 문맥, 대표 이미지와
+실제 경험 근거를 검증합니다.
+
+## macOS Remote 유지
+
+`deploy/com.huntlab.keepawake.plist`는 ChatGPT Remote 사용 중 Mac의 화면,
+시스템과 디스크 절전을 막는 선택 설정입니다. 전원 연결 상태에서 사용하고,
+덮개를 닫을 때의 잠자기는 별도 동작임에 유의합니다.
+
+## 검증
+
+```bash
+./.venv/bin/python -m unittest discover -s tests -v
+./.venv/bin/python -m py_compile scripts/*.py publisher/*.py
+git diff --check
+```
+
+실행 산출물과 인증정보는 Git에 커밋하지 않습니다.
