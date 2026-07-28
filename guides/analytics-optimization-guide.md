@@ -50,6 +50,10 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
 분석 결과는 다음 글쓰기 사이클에서 참고 자료로 제공할 수 있지만, 기존 Guide의
 정책이나 Reviewer 승인 계약을 변경하지 않는다.
 
+전달 책임은 정규 Harness에 있다. Harness는 Planner와 Writer 호출 프롬프트에
+`output/analytics/latest.md` 경로를 명시적으로 제공하며, Analytics Agent가
+Daily Pipeline을 직접 호출하거나 암묵적인 전역 컨텍스트를 변경하지 않는다.
+
 ## WordPress 운영 경계
 
 - WordPress 공개 글·Draft·카테고리·태그는 읽기만 한다.

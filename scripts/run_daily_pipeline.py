@@ -29,6 +29,7 @@ from publisher.frontmatter import FrontmatterError, load_document
 
 OUTPUT_DIR = PROJECT_ROOT / "output"
 RUNS_DIR = OUTPUT_DIR / "runs"
+ANALYTICS_REPORT = OUTPUT_DIR / "analytics" / "latest.md"
 LOG_DIR = PROJECT_ROOT / "logs"
 LOCK_FILE = LOG_DIR / "daily-pipeline.lock"
 TOP2_PATTERN = re.compile(r"(?m)^\s*[12]\.\s+(.+?)\s*$")
@@ -485,8 +486,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             (
                 common
                 + f"입력은 {str(topic_dir / 'research.md')!r} 하나입니다. "
-                f"분석 리포트 {str(PROJECT_ROOT / 'output/analytics/latest.md')!r}가 있으면 "
-                "검색 의도·CTA 제안만 참고하고 사실 근거는 research.md를 우선하세요. "
+                f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "
+                "파일이 있으면 검색 의도·CTA 제안만 참고하고 사실 근거는 research.md를 우선하세요. "
                 f"기존 Guide를 적용해 {str(topic_dir / 'draft.md')!r}를 작성하세요."
             ),
         ),
@@ -835,8 +836,8 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             "Tech, AI, Economy, Society, Politics, Hot Issue, Build Log를 편집 범위로 삼되 "
             f"카테고리별 수량을 강제하지 말고 전체 후보 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
             "작성하세요. "
-            f"{str(PROJECT_ROOT / 'output/analytics/latest.md')!r}가 있으면 검색어·CTR·조회수 "
-            "관측값, Refresh 후보와 Content Gap 제안만 참고하고, 데이터가 없으면 "
+            f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "
+            "파일이 있으면 검색어·CTR·조회수 관측값, Refresh 후보와 Content Gap 제안만 참고하고, 데이터가 없으면 "
             "추측하지 마세요. 후보마다 기존 공개 글과 검색 의도가 겹치는지 검사하고 "
             "internal_link_candidates, topic_cluster, pillar_candidate를 기록하세요. "
             "output의 다른 파일은 수정하지 마세요. "

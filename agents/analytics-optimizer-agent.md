@@ -43,6 +43,7 @@ Not Responsible:
 
 - API Key, Application Password, 토큰을 명령행·프롬프트·stdout·로그에 출력하지 않는다.
 - 기존 파이프라인 디렉터리와 산출물을 읽거나 덮어쓰지 않는다.
-- 분석 결과를 다음 사이클에 자동 주입하지 않는다. 호출자가 명시적으로 제공할 때만 참고한다.
+- Analytics Agent 자신은 Daily Pipeline을 호출하거나 분석 결과를 다른 Agent에 주입하지 않는다.
+- 정규 Harness가 Planner/Writer 프롬프트에 `output/analytics/latest.md` 경로를 명시적으로 제공한 경우에만 해당 Agent가 참고한다.
 - 데이터가 없으면 추측하지 않고 원인과 재시도 방법을 기록한다.
 - Guide에 없는 자동 최적화나 WordPress 변경을 만들지 않는다.

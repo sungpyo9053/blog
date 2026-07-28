@@ -159,7 +159,7 @@ def render(search_rows: list[dict], ga_rows: list[dict], now: datetime) -> str:
         "- 노출 대비 CTR이 낮은 검색어는 제목과 Meta Description 개선 후보로 검토한다.",
         "- 조회 데이터가 있는 페이지는 검색 의도를 해결한 뒤 관련 글 CTA를 검토한다.",
         "- 표본이 없거나 적으면 성과·전환을 추정하지 않는다.",
-        "- 이 리포트는 다음 Planner/Writer 호출에 명시적으로 전달할 때만 참고한다.",
+        "- 정규 Harness가 다음 Planner/Writer 프롬프트에 이 리포트 경로를 명시적으로 제공할 때만 참고한다.",
     ]
     return "\n".join(lines) + "\n"
 

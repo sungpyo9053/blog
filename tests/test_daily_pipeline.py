@@ -11,6 +11,7 @@ from scripts.run_daily_pipeline import (
     TopicContext,
     make_topic_context,
     parse_topic_plan,
+    planner_stage,
     topic_stages,
     validate_publish_contract,
     write_planner_context,
@@ -19,6 +20,18 @@ from scripts.retry_daily_pipeline import choose_command
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_harness_explicitly_injects_analytics_report_path(self):
+        planner = planner_stage("", "run-analytics", Path("/tmp/topics.md"))
+        self.assertIn("Harness가 분석 리포트 경로", planner.prompt)
+        self.assertIn("output/analytics/latest.md", planner.prompt)
+
+        context = make_topic_context("run-analytics", "Python 운영 분석")
+        writer = next(
+            stage for stage in topic_stages(context) if stage.name == "Writer Agent"
+        )
+        self.assertIn("Harness가 분석 리포트 경로", writer.prompt)
+        self.assertIn("output/analytics/latest.md", writer.prompt)
+
     def test_planner_allows_two_technical_topics_without_category_quota(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "topics.md"

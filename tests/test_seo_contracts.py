@@ -104,6 +104,8 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("def analyze(", runner)
         self.assertIn("disabled_review_required", runner)
         self.assertNotIn("trigger_pipeline_if_needed", runner)
+        self.assertIn("전달 책임은 정규 Harness에 있다", guide)
+        self.assertIn("정규 Harness가 Planner/Writer 프롬프트", agent)
 
     def test_planner_has_cluster_and_cannibalization_contract(self):
         text = read("agents/topic-planner-agent.md")
