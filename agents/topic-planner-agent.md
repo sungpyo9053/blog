@@ -165,7 +165,7 @@ TOP10과 TOP2를 정하기 전에 다음을 확인한다.
 2. 두 번째 최종 주제
 ```
 
-`title`, `category`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `recommended_images`는 반드시 존재해야 한다. `tags`는 중복 없는 3~7개다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
+`title`, `category`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `recommended_images`는 반드시 존재해야 한다. `tags`는 중복 없는 3~4개다. 기존 WordPress에서 재사용할 수 있는 넓고 안정적인 주제 태그를 우선하며, 검색어 변형이나 한 글에서만 쓰일 긴 문구를 새 태그로 만들지 않는다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
 
 각 후보에는 다음 SEO 필드도 단일 행으로 반드시 포함한다.
 

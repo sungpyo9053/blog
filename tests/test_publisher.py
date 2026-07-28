@@ -179,6 +179,20 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(result.status, "Failed")
             self.assertIsNone(client.created_payload)
 
+    def test_validation_rejects_more_than_four_tags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN.replace(
+                "  - Automation\n",
+                "  - Automation\n  - Security\n  - Performance\n",
+            )
+            document = load_document(self._write_document(Path(tmp), text))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertFalse(report.passed)
+            self.assertIn(
+                "invalid_tag_count",
+                {issue.code for issue in report.errors},
+            )
+
     def test_local_body_image_is_uploaded_and_rewritten(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

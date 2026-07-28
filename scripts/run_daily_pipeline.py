@@ -352,8 +352,8 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         tags = tuple(
             dict.fromkeys(tag.strip() for tag in fields["tags"].split(",") if tag.strip())
         )
-        if not 3 <= len(tags) <= 7:
-            raise PipelineError(f"{title}: tags는 3~7개여야 합니다.")
+        if not 3 <= len(tags) <= 4:
+            raise PipelineError(f"{title}: tags는 재사용 가능한 3~4개여야 합니다.")
         category_counts[category] += 1
         candidates[title] = {**fields, "tags": tags}
 

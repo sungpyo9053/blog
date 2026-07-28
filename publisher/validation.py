@@ -130,11 +130,11 @@ def validate_document(
         _add_error(report, "missing_markdown", "Markdown body is required.", "markdown")
 
     tags = normalize_tags(metadata.get("tags"))
-    if len(tags) < 3 or len(tags) > 7:
+    if len(tags) < 3 or len(tags) > 4:
         _add_error(
             report,
             "invalid_tag_count",
-            "After duplicate removal, tags must contain 3 to 7 items.",
+            "After duplicate removal, tags must contain 3 to 4 reusable items.",
             "tags",
         )
     if metadata.get("tags") is not None and not tags:
