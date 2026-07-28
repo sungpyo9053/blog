@@ -471,7 +471,9 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             (
                 common
                 + f"입력 {str(topic_dir / 'draft.md')!r}만 사용해 이미지 제작과 "
-                "해당 draft.md의 마커 치환을 완료하세요."
+                "해당 draft.md의 마커 치환을 완료하세요. 이미지 캡처 런타임은 "
+                f"{str(PROJECT_ROOT / '.venv/bin/python3')!r} 및 "
+                f"{str(PROJECT_ROOT / '.venv/bin/playwright')!r}를 절대 경로로 사용하세요."
             ),
         ),
         Stage(
@@ -508,6 +510,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "publish_mode는 'publish'여야 "
                 f"합니다. publish.md의 SHA-256, run_id, topic_id와 APPROVED 또는 "
                 f"REJECTED를 {str(topic_dir / 'review.md')!r}에 기록하세요. "
+                "Topic Planner의 기존 WordPress 제목·Draft 중복 검사 결과를 검토 기록에 반영하세요. "
+                "현재 research.md와 기존 공개 글 목록에 관련 내부 링크 후보가 없으면 그 사실을 기록하고 억지로 링크를 만들지 마세요. "
                 "REJECTED이면 0이 아닌 종료 상태로 끝내세요."
             ),
         ),
@@ -902,7 +906,14 @@ def main() -> int:
                         ),
                         "Publisher Agent": (context.directory / "publisher-audit.jsonl",),
                     }.get(stage.name, ())
-                    if required and all(path.is_file() for path in required):
+                    reviewer_approved = False
+                    if stage.name == "Reviewer Agent":
+                        review_path = context.directory / "review.md"
+                        reviewer_approved = review_path.is_file() and "APPROVED" in review_path.read_text(encoding="utf-8")
+                    can_skip = required and all(path.is_file() for path in required)
+                    if stage.name == "Reviewer Agent" and not reviewer_approved:
+                        can_skip = False
+                    if can_skip:
                         logger.info(
                             "topic=%r run_id=%s topic_id=%s agent=%s event=resume_skip",
                             context.title,
