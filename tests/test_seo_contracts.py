@@ -30,7 +30,8 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("primary_keyword", text)
         self.assertIn("secondary_keywords", text)
         self.assertIn("target_reader", text)
-        self.assertIn(
+        self.assertIn("TOP2에는 카테고리별 의무 할당을 두지 않는다", text)
+        self.assertNotIn(
             "TOP2 중 최소 1개가 Economy, Society, Politics 또는 Hot Issue",
             text,
         )

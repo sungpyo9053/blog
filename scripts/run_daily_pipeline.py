@@ -328,7 +328,6 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         "topic_cluster",
         "pillar_candidate",
     }
-    category_counts = {category: 0 for category in EDITOR_CATEGORIES}
     candidates: dict[str, dict[str, Any]] = {}
     for match in candidate_matches:
         fields = {
@@ -354,14 +353,7 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         )
         if not 3 <= len(tags) <= 4:
             raise PipelineError(f"{title}: tags는 재사용 가능한 3~4개여야 합니다.")
-        category_counts[category] += 1
         candidates[title] = {**fields, "tags": tags}
-
-    insufficient = {
-        category: count for category, count in category_counts.items() if count < 5
-    }
-    if insufficient:
-        raise PipelineError(f"카테고리별 후보가 5개 미만입니다: {insufficient}")
 
     top10_marker = re.search(r"(?m)^## TOP10\s*$", text)
     if top10_marker is None or top10_marker.start() > marker.start():
@@ -379,11 +371,6 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         raise PipelineError("TOP10 제목이 Topic Candidates와 일치하지 않습니다.")
     if any(title not in top10 for title in topics):
         raise PipelineError("TOP2는 TOP10에 포함되어야 합니다.")
-    non_technical = {"Economy", "Society", "Politics", "Hot Issue"}
-    if not any(candidates[title]["category"] in non_technical for title in topics):
-        raise PipelineError(
-            "TOP2에는 Economy, Society, Politics, Hot Issue 중 하나가 필요합니다."
-        )
     return [candidates[title] for title in topics]
 
 
@@ -845,8 +832,8 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             f"run_id는 {run_id!r}입니다. "
             f"추가 키워드는 {keywords.strip() or '없음'}입니다. "
             "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 "
-            "Tech, AI, Economy, Society, Politics, Hot Issue, Build Log에서 "
-            f"각각 후보 5개 이상, 전체 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
+            "Tech, AI, Economy, Society, Politics, Hot Issue, Build Log를 편집 범위로 삼되 "
+            f"카테고리별 수량을 강제하지 말고 전체 후보 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
             "작성하세요. "
             f"{str(PROJECT_ROOT / 'output/analytics/latest.md')!r}가 있으면 검색어·CTR·조회수 "
             "관측값, Refresh 후보와 Content Gap 제안만 참고하고, 데이터가 없으면 "

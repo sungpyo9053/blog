@@ -10,6 +10,7 @@ from scripts.run_daily_pipeline import (
     PipelineError,
     TopicContext,
     make_topic_context,
+    parse_topic_plan,
     topic_stages,
     validate_publish_contract,
     write_planner_context,
@@ -18,6 +19,42 @@ from scripts.retry_daily_pipeline import choose_command
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_planner_allows_two_technical_topics_without_category_quota(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "topics.md"
+            candidates = []
+            for index in range(1, 36):
+                title = f"기술 후보 {index}"
+                candidates.append(
+                    f"## {index}. {title}\n\n"
+                    f"- title: {title}\n"
+                    "- category: Tech\n"
+                    "- tags: Tech, Python, Automation\n"
+                    "- score: 80/90\n"
+                    "- score_breakdown: 최신성 9; 검색 수요 9; 공식 출처 9; Evergreen 9; HuntLab 적합성 9; 기술적 깊이 9; 독창성 9; 최근 작성 여부 9; 카테고리 균형 8\n"
+                    "- reason: 기술 독자의 실제 문제 해결\n"
+                    "- evergreen: 높음\n"
+                    "- search_intent: 구현 방법 확인\n"
+                    "- research_focus: 공식 문서와 재현 절차\n"
+                    "- recommended_images: 구조도\n"
+                    "- duplicate_check: 중복 없음\n"
+                    "- internal_link_candidates: 없음\n"
+                    "- topic_cluster: 기술 운영\n"
+                    "- pillar_candidate: 향후 검토\n"
+                )
+            top10 = "\n".join(f"{index}. 기술 후보 {index}" for index in range(1, 11))
+            path.write_text(
+                "# Topic Candidates\n\n"
+                + "\n".join(candidates)
+                + "\n## TOP10\n\n"
+                + top10
+                + "\n\n## TOP2\n\n1. 기술 후보 1\n2. 기술 후보 2\n",
+                encoding="utf-8",
+            )
+
+            selected = parse_topic_plan(path)
+            self.assertEqual([item["category"] for item in selected], ["Tech", "Tech"])
+
     def test_topic_ids_and_directories_are_isolated(self):
         first = make_topic_context("run-1", "Docker Engine 보안 업데이트")
         second = make_topic_context("run-1", "Python 호환성 테스트")
