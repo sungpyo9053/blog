@@ -14,6 +14,7 @@ from scripts.run_daily_pipeline import (
     validate_publish_contract,
     write_planner_context,
 )
+from scripts.retry_daily_pipeline import choose_command
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
@@ -180,6 +181,21 @@ class DailyPipelineIsolationTests(unittest.TestCase):
 
             with self.assertRaises(PipelineError):
                 validate_publish_contract(context)
+
+
+class DailyRetryTests(unittest.TestCase):
+    def test_noon_retry_skips_after_daily_success(self):
+        self.assertIsNone(
+            choose_command(
+                "pipeline event=end failed=false run_id="
+                "20260728T170000Z-1234567890"
+            )
+        )
+
+    def test_noon_retry_starts_fresh_without_a_run(self):
+        command = choose_command("pipeline event=failed reason=planner")
+        self.assertIsNotNone(command)
+        self.assertNotIn("--resume-run-id", command)
 
 
 if __name__ == "__main__":
