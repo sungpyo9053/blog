@@ -323,6 +323,7 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         "search_intent",
         "research_focus",
         "recommended_images",
+        "duplicate_check",
     }
     category_counts = {category: 0 for category in EDITOR_CATEGORIES}
     candidates: dict[str, dict[str, Any]] = {}
@@ -425,6 +426,35 @@ def assert_owned_path(context: TopicContext, path: Path) -> None:
         )
 
 
+def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
+    """Persist the selected Planner evidence inside the topic's isolation boundary."""
+    path = context.directory / "planner-context.json"
+    assert_owned_path(context, path)
+    duplicate_check = str(plan.get("duplicate_check", "")).strip()
+    if not duplicate_check:
+        raise PipelineError(f"{context.topic_id}: Planner 중복 검사 근거가 없습니다.")
+    payload = {
+        "run_id": context.run_id,
+        "topic_id": context.topic_id,
+        "title": context.title,
+        "category": context.category,
+        "tags": list(context.tags),
+        "primary_keyword": plan.get("primary_keyword", ""),
+        "secondary_keywords": plan.get("secondary_keywords", ""),
+        "target_reader": plan.get("target_reader", ""),
+        "reason": context.reason,
+        "search_intent": plan.get("search_intent", ""),
+        "research_focus": context.research_focus,
+        "duplicate_check": duplicate_check,
+        "sources": plan.get("sources", ""),
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def topic_stages(context: TopicContext) -> list[Stage]:
     topic = context.title
     topic_dir = context.directory
@@ -450,6 +480,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             (
                 common
                 + f"Topic Planner의 TOP2 중 다음 주제만 조사하세요: {topic!r}. "
+                f"선정 근거와 검색 의도는 {str(topic_dir / 'planner-context.json')!r}에서 "
+                "읽고, 중복 검사 결과를 사실 근거로 확대 해석하지 마세요. "
                 f"다른 주제를 조사하지 말고 산출물을 "
                 f"{str(topic_dir / 'research.md')!r}에 저장하세요."
             ),
@@ -494,6 +526,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 common
                 + f"{str(topic_dir / 'final.md')!r}를 "
                 f"{str(topic_dir / 'research.md')!r}, "
+                f"{str(topic_dir / 'planner-context.json')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/style-guide.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/seo-guide.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/monetization-guide.md')!r}, "
@@ -510,7 +543,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "publish_mode는 'publish'여야 "
                 f"합니다. publish.md의 SHA-256, run_id, topic_id와 APPROVED 또는 "
                 f"REJECTED를 {str(topic_dir / 'review.md')!r}에 기록하세요. "
-                "Topic Planner의 기존 WordPress 제목·Draft 중복 검사 결과를 검토 기록에 반영하세요. "
+                "planner-context.json의 기존 WordPress 제목·Draft 중복 검사 결과를 "
+                "검토 기록에 근거로 반영하세요. "
                 "현재 research.md와 기존 공개 글 목록에 관련 내부 링크 후보가 없으면 그 사실을 기록하고 억지로 링크를 만들지 마세요. "
                 "REJECTED이면 0이 아닌 종료 상태로 끝내세요."
             ),
@@ -880,12 +914,18 @@ def main() -> int:
                     context.directory.mkdir(parents=False, exist_ok=False)
             else:
                 context.directory.mkdir(parents=False, exist_ok=False)
+            plan = next(
+                plan for plan in selected_plans if plan["title"] == context.title
+            )
+            planner_context_path = write_planner_context(context, plan)
             logger.info(
-                "topic=%r run_id=%s topic_id=%s directory=%s event=start",
+                "topic=%r run_id=%s topic_id=%s directory=%s "
+                "planner_context=%s event=start",
                 context.title,
                 context.run_id,
                 context.topic_id,
                 context.directory,
+                planner_context_path,
             )
             for stage in topic_stages(context):
                 if args.resume_run_id:
