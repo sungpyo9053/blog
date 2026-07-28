@@ -15,7 +15,7 @@
 
 ## Workflow
 
-1. Topic Planner → 7개 카테고리 후보 35개 이상, TOP10, TOP2
+1. Topic Planner → 카테고리 할당 없이 후보 35개 이상, TOP10, TOP2
 2. Research Agent → `research.md`
 3. Writer Agent → `draft.md`
 4. Image Maker Agent → 대표 이미지와 본문 이미지
@@ -25,6 +25,17 @@
 
 Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/source 식별자,
 카테고리·태그와 대표 이미지 계약이 모두 일치해야 공개 발행합니다.
+
+### Topic Planner 선정 원칙
+
+`Tech`, `AI`, `Economy`, `Society`, `Politics`, `Hot Issue`, `Build Log`를
+편집 범위로 사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
+TOP2는 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를
+기준으로 선정하므로 기술 주제 두 개만 선택할 수 있습니다. 비기술 후보는
+해당 카테고리의 강화된 출처 규칙과 동일한 품질 기준을 통과할 때만 경쟁합니다.
+
+WordPress 태그는 게시물당 재사용 가능한 3~4개만 허용합니다. 기존 태그를
+우선하고 한 글에서만 쓰일 검색어 변형을 새 태그로 만들지 않습니다.
 
 ## 일일 실행
 
