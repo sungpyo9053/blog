@@ -114,6 +114,10 @@ Topic Planner는 Keyword Cannibalization, 내부 링크 후보, Topic Cluster와
 Pillar 후보를 기록합니다. Reviewer는 공개 URL, 앵커 문맥, 대표 이미지와
 실제 경험 근거를 검증합니다.
 
+AI 보조 사용, 주제별 근거 기준, 검수 방식과 발행 후 보강 원칙은
+`guides/editorial-policy.md`에 공개 가능한 편집 정책으로 정리되어 있습니다.
+하루 발행량보다 품질 게이트를 우선하며 기준 미달 글은 발행하지 않습니다.
+
 ## macOS Remote 유지
 
 `deploy/com.huntlab.keepawake.plist`는 ChatGPT Remote 사용 중 Mac의 화면,

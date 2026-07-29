@@ -99,6 +99,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("guides/publisher-guide.md", reviewer.prompt)
         self.assertIn("guides/monetization-guide.md", reviewer.prompt)
         self.assertIn("planner-context.json", reviewer.prompt)
+        self.assertIn("agents/reviewer.md", reviewer.prompt)
+        self.assertIn("주제 유형별 고유 가치", reviewer.prompt)
         self.assertIn("정책 문서는 읽기만", reviewer.prompt)
         self.assertIn(
             "다른 주제 디렉터리를 입력 후보로 검색하거나 재사용하지 마세요",

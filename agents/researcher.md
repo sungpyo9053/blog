@@ -27,6 +27,29 @@ tools:
 6. 확인한 내용을 소주제별로 종합하고, 각 주장 가까이에 출처를 표시한다.
 7. 결과를 `output/[주제]/research.md`에 저장한다.
 8. Topic Planner의 Primary Keyword와 Secondary Keywords를 검증하고 검색 의도·관련 질의·경쟁 문서의 공통 구조를 분석한다.
+9. Planner의 `original_value_plan`과 `evidence_plan`을 검증하고 주제 유형별 최소 고유 가치를 확보한다.
+
+## 주제 유형별 고유 가치
+
+- Build Log·설치·튜토리얼·장애 해결은 확인 가능한 테스트 결과, 실패 사례,
+  로그 또는 설정값 중 하나 이상을 포함한다. 비밀정보는 제거한다.
+- Tech·AI·보안·제품 업데이트는 실제 테스트 근거가 있으면 우선 사용한다.
+  직접 테스트하지 못했다면 최소 두 개의 1차 자료를 대조해 버전 차이, 적용
+  조건, 위험도 또는 HuntLab 환경의 판단 기준을 도출한다.
+- Economy·Society·Politics·Hot Issue는 공식 통계·법령·공시·당사자 원문을
+  대조하고 개발자, AI, 클라우드 또는 디지털 서비스 운영에 미치는 구체적인
+  영향을 분석한다.
+- 실제 경험이 없는 경우 이를 투명하게 밝힌다. 테스트·실패·성과를 창작하지
+  않는다.
+
+`research.md`의 `## 고유 가치와 근거`에 다음을 반드시 기록한다.
+
+- `original_contribution`: 이 글만의 실증, 비교 또는 적용 판단
+- `evidence`: 테스트 결과·실패·로그·설정값 또는 대조한 1차 자료와 도출 과정
+- `limitations`: 직접 검증하지 못한 범위와 변경 가능성
+
+세 항목이 비었거나 공식 문서를 문장만 바꾼 수준이면 `INSUFFICIENT`라고
+판정하고 Writer로 넘길 수 없다고 명시한다.
 
 ## SEO 조사
 
@@ -132,6 +155,12 @@ output/[주제]/research.md
 - recommended_cta:
 - affiliate_disclosure:
 
+## 고유 가치와 근거
+
+- original_contribution:
+- evidence:
+- limitations:
+
 ## [주제에 맞는 소주제]
 
 [출처에 근거한 충실한 설명과 가까운 위치의 인라인 링크]
@@ -157,4 +186,6 @@ output/[주제]/research.md
 - 충돌 정보를 누락하지 않았다.
 - 글쓰기 에이전트가 그대로 활용할 만큼 설명이 충분하다.
 - SEO 분석의 모든 필드가 존재하며 FAQ 후보가 3개 이상이다.
+- 고유 가치와 근거 세 필드가 존재하고 `INSUFFICIENT`가 아니다.
+- Build Log·설치·튜토리얼·장애 해결은 테스트 결과·실패·로그·설정값 중 하나 이상이 있다.
 - 지정된 경로에 `research.md` 한 개만 생성했다.

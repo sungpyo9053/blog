@@ -122,6 +122,22 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("./images/thumbnail.png", text)
         self.assertIn("featured_image_alt", text)
 
+    def test_original_value_and_editorial_policy_contract(self):
+        planner = read("agents/topic-planner-agent.md")
+        researcher = read("agents/researcher.md")
+        writer = read("agents/writer.md")
+        reviewer = read("agents/reviewer.md")
+        policy = read("guides/editorial-policy.md")
+        for field in ("original_value_plan", "evidence_plan"):
+            self.assertIn(field, planner)
+        for field in ("original_contribution", "evidence", "limitations", "INSUFFICIENT"):
+            self.assertIn(field, researcher)
+        self.assertIn("INSUFFICIENT", writer)
+        self.assertIn("단순 재요약은 REJECT", reviewer)
+        self.assertIn("AI를 조사 정리와 초안 작성의 보조 도구", policy)
+        self.assertIn("하루 발행량보다 품질 기준", policy)
+        self.assertIn("유사 글 증산보다", policy)
+
 
 class SEOImageAndPublisherPolicyTests(unittest.TestCase):
     def test_image_policy_blocks_sensitive_fabrication(self):

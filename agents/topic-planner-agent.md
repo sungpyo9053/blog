@@ -88,7 +88,7 @@ HuntLab의 실제 프로젝트와 운영 경험을 적극 활용한다. ReviewDr
 | 장기 유입(Evergreen) | 단기 이슈 이후에도 지속 가치가 있는가 |
 | HuntLab 적합성 | HuntLab 독자와 브랜드 성장에 기여하는가 |
 | 기술적 깊이 | 원리, 데이터, 구현 또는 검증의 깊이를 확보할 수 있는가 |
-| 독창성 | 단순 요약이 아닌 HuntLab만의 관점이나 검증이 가능한가 |
+| 독창성 | 단순 요약이 아닌 HuntLab만의 실증, 비교 또는 적용 판단이 가능한가 |
 | 최근 작성 여부 | 최근 글과 겹치지 않고 새로운 가치를 주는가 |
 | 카테고리 균형 | 최근 편집 구성의 편중을 완화하는가 |
 
@@ -107,6 +107,11 @@ TOP10과 TOP2를 정하기 전에 다음을 확인한다.
 얻는 결과가 실질적으로 같으면 Keyword Cannibalization 위험으로 제외한다. 기존
 글을 보강하면 해결되는 질의는 신규 글보다 Refresh를 우선한다.
 
+Analytics에서 색인·노출·CTR 저하가 관측된 기존 글과 같은 검색 의도의 후보는
+신규 글로 증산하지 않는다. `기존 글 보강 → 후속 관점으로 분리 → 둘 다
+불가능하면 폐기` 순서로 판단한다. 데이터 표본이 부족하면 저성과로 단정하지
+않고 보류한다.
+
 동일 제목과 실질적으로 같은 검색 의도의 매우 유사한 제목은 제외한다. 최근 작성 글과 반복 기술은 원칙적으로 제외하고, 명확한 버전 변경·새 데이터·후속 검증처럼 독립적 가치가 있을 때만 감점 후 유지한다.
 
 ## 작업 절차
@@ -122,6 +127,11 @@ TOP10과 TOP2를 정하기 전에 다음을 확인한다.
 ## TOP2 선정 원칙
 
 TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를 기준으로 가장 강한 두 후보를 선정하며 `Tech`, `AI`, `Build Log` 두 개로 구성해도 된다. 비기술 후보는 강화된 출처 규칙을 통과하고 기술 후보와 같은 품질 기준에서 경쟁력이 있을 때만 선정한다.
+
+Tech, AI와 Build Log를 우선한다. Economy, Society, Politics와 Hot Issue는
+개발자, AI, 클라우드 또는 디지털 서비스 운영과의 연결을 `reason`에 구체적으로
+설명할 수 있을 때만 TOP2로 선정한다. 단순 인기 검색어 추종이나 카테고리
+균형만을 이유로 선정하지 않는다.
 
 ## `topics.md` 계약
 
@@ -146,6 +156,8 @@ TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공
 - evergreen: 높음, 중간 또는 낮음과 근거
 - search_intent: 독자가 해결하려는 질문과 기대 행동
 - research_focus: Research Agent가 확인할 핵심 질문과 우선 출처
+- original_value_plan: 실제 운영 근거, 원문 비교 또는 환경별 적용 판단 중 이 글만의 기여
+- evidence_plan: 확보할 테스트 결과·실패·로그·설정값 또는 대조할 1차 자료
 - recommended_images: 대표 이미지와 본문 이미지 제안
 - duplicate_check: 기존 글 및 최근 반복 검사 결과
 - internal_link_candidates: 공개 URL이 확인된 관련 글과 연결 이유, 없으면 없음
@@ -165,7 +177,11 @@ TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공
 2. 두 번째 최종 주제
 ```
 
-`title`, `category`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `recommended_images`는 반드시 존재해야 한다. `tags`는 중복 없는 3~4개다. 기존 WordPress에서 재사용할 수 있는 넓고 안정적인 주제 태그를 우선하며, 검색어 변형이나 한 글에서만 쓰일 긴 문구를 새 태그로 만들지 않는다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
+`title`, `category`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `original_value_plan`, `evidence_plan`, `recommended_images`는 반드시 존재해야 한다. `tags`는 중복 없는 3~4개다. 기존 WordPress에서 재사용할 수 있는 넓고 안정적인 주제 태그를 우선하며, 검색어 변형이나 한 글에서만 쓰일 긴 문구를 새 태그로 만들지 않는다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
+
+`original_value_plan`이 공식 문서 재요약에 그치거나 `evidence_plan`에 검증 가능한
+방법이 없으면 TOP2로 선정하지 않는다. 하루 발행량을 채우기 위해 기준 미달
+후보를 올리지 않으며, 충분한 후보가 없으면 실패로 종료한다.
 
 각 후보에는 다음 SEO 필드도 단일 행으로 반드시 포함한다.
 
