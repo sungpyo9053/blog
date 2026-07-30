@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from scripts.run_analytics_optimizer import analyze
+from scripts.run_analytics_optimizer import analyze, write_reports
 
 
 class AnalyticsOptimizerTests(unittest.TestCase):
@@ -36,6 +39,19 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         )
         self.assertEqual(refresh, [])
         self.assertEqual(gaps, [])
+
+    def test_write_reports_keeps_latest_and_dated_snapshot(self):
+        with TemporaryDirectory() as temporary:
+            report_dir = Path(temporary)
+            now = datetime(2026, 7, 31, 1, 0, tzinfo=timezone.utc)
+
+            latest, dated = write_reports("daily report\n", now, report_dir)
+
+            self.assertEqual(latest, report_dir / "latest.md")
+            self.assertEqual(dated, report_dir / "2026-07-31.md")
+            self.assertEqual(latest.read_text(encoding="utf-8"), "daily report\n")
+            self.assertEqual(dated.read_text(encoding="utf-8"), "daily report\n")
+            self.assertEqual(list(report_dir.glob(".*.tmp")), [])
 
 
 if __name__ == "__main__":

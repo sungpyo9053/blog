@@ -164,6 +164,18 @@ def render(search_rows: list[dict], ga_rows: list[dict], now: datetime) -> str:
     return "\n".join(lines) + "\n"
 
 
+def write_reports(body: str, now: datetime, report_dir: Path = REPORT_DIR) -> tuple[Path, Path]:
+    """Atomically update the pipeline input and the daily snapshot."""
+    report_dir.mkdir(parents=True, exist_ok=True)
+    latest_path = report_dir / "latest.md"
+    dated_path = report_dir / f"{now:%Y-%m-%d}.md"
+    for destination in (latest_path, dated_path):
+        temporary = report_dir / f".{destination.name}.tmp"
+        temporary.write_text(body, encoding="utf-8")
+        temporary.replace(destination)
+    return latest_path, dated_path
+
+
 def main() -> int:
     load_env_file(ROOT / ".env")
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -183,14 +195,15 @@ def main() -> int:
             "- error: `API read failed; credentials are not logged`\n"
         )
         status = "INCOMPLETE"
-    temporary = REPORT_DIR / ".latest.md.tmp"
-    temporary.write_text(body, encoding="utf-8")
-    temporary.replace(REPORT_DIR / "latest.md")
+    latest_path, dated_path = write_reports(body, now)
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
     (LOG_DIR / f"analytics-{now:%Y-%m-%d}.log").open("a", encoding="utf-8").write(
         f"{now.isoformat()} status={status} report_sha256={digest} credentials=not_logged\n"
     )
-    print(f"analytics status={status} report={REPORT_DIR / 'latest.md'}")
+    print(
+        f"analytics status={status} report={latest_path} "
+        f"daily_snapshot={dated_path}"
+    )
     return 0 if status == "COMPLETE" else 1
 
 

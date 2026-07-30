@@ -106,6 +106,8 @@ Search Console·GA4 읽기 전용 인증으로 `output/analytics/latest.md`를 �
 정규 Harness가 해당 파일 경로를 다음 Planner와 Writer 프롬프트에 명시적으로
 주입합니다. Agent가 분석 파일을 임의로 탐색하거나 Analytics Optimizer가
 Daily Pipeline을 직접 호출하지 않습니다.
+같은 보고서를 `output/analytics/YYYY-MM-DD.md`에도 저장해 일별 비교 기록을
+보존하며, `latest.md`는 항상 다음 파이프라인이 읽을 최신 보고서로 유지합니다.
 분석 결과만으로 추가 발행이나 기존 글 Update를 실행하지 않습니다. 인증이
 없거나 데이터가 부족하면 `INCOMPLETE` 또는 데이터 없음으로 기록하고 성과를
 추정하지 않습니다.
