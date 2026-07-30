@@ -193,6 +193,32 @@ class PublisherTests(unittest.TestCase):
                 {issue.code for issue in report.errors},
             )
 
+    def test_validation_allows_explicit_secret_placeholder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN + (
+                "\n```http\n"
+                "Authorization: Bearer {API_TOKEN}\n"
+                "```\n"
+            )
+            document = load_document(self._write_document(Path(tmp), text))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertTrue(report.passed)
+
+    def test_validation_rejects_realistic_bearer_secret(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN + (
+                "\n```http\n"
+                "Authorization: Bearer abcdefghijklmnop1234567890\n"
+                "```\n"
+            )
+            document = load_document(self._write_document(Path(tmp), text))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertFalse(report.passed)
+            self.assertIn(
+                "possible_secret_exposure",
+                {issue.code for issue in report.errors},
+            )
+
     def test_local_body_image_is_uploaded_and_rewritten(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

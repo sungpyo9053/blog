@@ -34,6 +34,15 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)(api[_ -]?key|app[_ -]?password|authorization)\s*[:=]"),
     re.compile(r"(?i)bearer\s+[a-z0-9._~+/=-]{12,}"),
 )
+SAFE_SECRET_PLACEHOLDER = re.compile(
+    r"(?im)^\s*(?:"
+    r"authorization\s*:\s*(?:bearer|basic)\s+|"
+    r"(?:api[_ -]?key|app[_ -]?password)\s*[:=]\s*"
+    r")"
+    r"(?:\{[A-Z][A-Z0-9_]*\}|\$\{[A-Z][A-Z0-9_]*\}|"
+    r"<[A-Z][A-Z0-9_]*>|YOUR_[A-Z][A-Z0-9_]*|REDACTED)"
+    r"\s*$"
+)
 MARKDOWN_LINK = re.compile(r"!?\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 MARKDOWN_IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 HEADING = re.compile(r"^(#{1,6})\s+\S", re.MULTILINE)
@@ -257,8 +266,9 @@ def validate_document(
                 "markdown",
             )
 
+    secret_scan_text = SAFE_SECRET_PLACEHOLDER.sub("", markdown)
     for pattern in SECRET_PATTERNS:
-        if pattern.search(markdown):
+        if pattern.search(secret_scan_text):
             _add_error(
                 report,
                 "possible_secret_exposure",
