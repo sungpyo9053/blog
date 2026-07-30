@@ -9,6 +9,7 @@ from pathlib import Path
 from scripts.run_daily_pipeline import (
     PipelineError,
     TopicContext,
+    has_successful_publish,
     make_topic_context,
     parse_topic_plan,
     planner_stage,
@@ -20,6 +21,24 @@ from scripts.retry_daily_pipeline import choose_command
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_failed_publisher_audit_is_not_resume_success(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-failed" / "topic-failed"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="실패한 발행",
+                run_id="run-failed",
+                topic_id="topic-failed",
+                directory=directory,
+                category="Tech",
+                tags=("API",),
+            )
+            (directory / "publisher-audit.jsonl").write_text(
+                '{"event":"validation","status":"failed"}\n',
+                encoding="utf-8",
+            )
+            self.assertFalse(has_successful_publish(context))
+
     def test_harness_explicitly_injects_analytics_report_path(self):
         planner = planner_stage("", "run-analytics", Path("/tmp/topics.md"))
         self.assertIn("Harness가 분석 리포트 경로", planner.prompt)

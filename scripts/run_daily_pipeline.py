@@ -687,6 +687,14 @@ def read_publish_result(context: TopicContext) -> dict[str, Any]:
     }
 
 
+def has_successful_publish(context: TopicContext) -> bool:
+    try:
+        read_publish_result(context)
+    except PipelineError:
+        return False
+    return True
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="HuntLab TOP2 daily pipeline")
     parser.add_argument(
@@ -968,6 +976,8 @@ def main() -> int:
                     can_skip = required and all(path.is_file() for path in required)
                     if stage.name == "Reviewer Agent" and not reviewer_approved:
                         can_skip = False
+                    if stage.name == "Publisher Agent":
+                        can_skip = has_successful_publish(context)
                     if can_skip:
                         logger.info(
                             "topic=%r run_id=%s topic_id=%s agent=%s event=resume_skip",
