@@ -66,6 +66,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "- score_breakdown: 최신성 9; 검색 수요 9; 공식 출처 9; Evergreen 9; HuntLab 적합성 9; 기술적 깊이 9; 독창성 9; 최근 작성 여부 9; 카테고리 균형 8\n"
                     "- reason: 기술 독자의 실제 문제 해결\n"
                     "- evergreen: 높음\n"
+                    f"- primary_keyword: {title}\n"
                     "- search_intent: 구현 방법 확인\n"
                     "- research_focus: 공식 문서와 재현 절차\n"
                     "- recommended_images: 구조도\n"
@@ -86,6 +87,46 @@ class DailyPipelineIsolationTests(unittest.TestCase):
 
             selected = parse_topic_plan(path)
             self.assertEqual([item["category"] for item in selected], ["Tech", "Tech"])
+
+    def test_selected_topic_requires_primary_keyword_in_title(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "topics.md"
+            candidates = []
+            for index in range(1, 36):
+                title = f"기술 후보 {index}"
+                primary_keyword = title if index != 1 else "검색 의도 불일치"
+                candidates.append(
+                    f"## {index}. {title}\n\n"
+                    f"- title: {title}\n"
+                    "- category: Tech\n"
+                    "- tags: Tech, Python, Automation\n"
+                    "- score: 80/90\n"
+                    "- score_breakdown: 계약 검증\n"
+                    "- reason: 기술 독자의 실제 문제 해결\n"
+                    "- evergreen: 높음\n"
+                    f"- primary_keyword: {primary_keyword}\n"
+                    "- search_intent: 구현 방법 확인\n"
+                    "- research_focus: 공식 문서와 재현 절차\n"
+                    "- recommended_images: 구조도\n"
+                    "- duplicate_check: 중복 없음\n"
+                    "- internal_link_candidates: 없음\n"
+                    "- topic_cluster: 기술 운영\n"
+                    "- pillar_candidate: 향후 검토\n"
+                )
+            top10 = "\n".join(
+                f"{index}. 기술 후보 {index}" for index in range(1, 11)
+            )
+            path.write_text(
+                "# Topic Candidates\n\n"
+                + "\n".join(candidates)
+                + "\n## TOP10\n\n"
+                + top10
+                + "\n\n## TOP2\n\n1. 기술 후보 1\n2. 기술 후보 2\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(PipelineError, "primary_keyword"):
+                parse_topic_plan(path)
 
     def test_topic_ids_and_directories_are_isolated(self):
         first = make_topic_context("run-1", "Docker Engine 보안 업데이트")

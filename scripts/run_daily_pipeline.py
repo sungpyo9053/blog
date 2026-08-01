@@ -372,6 +372,15 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         raise PipelineError("TOP10 제목이 Topic Candidates와 일치하지 않습니다.")
     if any(title not in top10 for title in topics):
         raise PipelineError("TOP2는 TOP10에 포함되어야 합니다.")
+    for title in topics:
+        primary_keyword = candidates[title].get("primary_keyword", "").strip()
+        if not primary_keyword:
+            raise PipelineError(f"{title}: TOP2 primary_keyword가 없습니다.")
+        if primary_keyword.casefold() not in title.casefold():
+            raise PipelineError(
+                f"{title}: TOP2 제목에 primary_keyword가 포함되어야 합니다: "
+                f"{primary_keyword}"
+            )
     return [candidates[title] for title in topics]
 
 
@@ -755,6 +764,7 @@ def dry_run_topics() -> str:
                 "최근 작성 여부 8; 카테고리 균형 8\n"
                 "- reason: 파서 검증\n"
                 "- evergreen: 중간\n"
+                f"- primary_keyword: {title}\n"
                 "- search_intent: 자동화 검증\n"
                 "- research_focus: 공식 자료 확인\n"
                 "- recommended_images: 대표 이미지 1개\n"
@@ -846,7 +856,7 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 "
             "Tech, AI, Economy, Society, Politics, Hot Issue, Build Log를 편집 범위로 삼되 "
             f"카테고리별 수량을 강제하지 말고 전체 후보 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
-            "작성하세요. "
+            "작성하세요. 최종 TOP2는 각 후보의 primary_keyword를 제목에 그대로 포함해야 합니다. "
             f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "
             "파일이 있으면 검색어·CTR·조회수 관측값, Refresh 후보와 Content Gap 제안만 참고하고, 데이터가 없으면 "
             "추측하지 마세요. 후보마다 기존 공개 글과 검색 의도가 겹치는지 검사하고 "
