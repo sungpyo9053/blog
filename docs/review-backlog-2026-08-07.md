@@ -173,8 +173,14 @@ Planner는 키워드를 자유 생성하기 전에 관측 가능한 문제 흔�
 2. Google·Naver 자동완성·연관 검색어에서 반복되는 문제 표현
 3. HuntLab 서버 로그, 배포 실패와 기존 Build Log의 실제 증상·오류 문구
 4. 공식 문서의 Troubleshooting, Known Issues와 제품 Changelog
-5. GitHub Issues, Stack Overflow와 개발 커뮤니티에서 반복되는 질문
-6. 비기술·시사·생활 후보는 Threads와 X에서 반복되는 질문·불편·표현
+5. 기술 후보는 Stack Overflow에서 반복되는 오류 문구·질문·해결 행동
+6. GitHub Issues는 특정 제품의 실제 버그, 회귀와 버전 영향을 확인하는 보조 근거
+7. 비기술·시사·생활 후보는 Threads와 X에서 반복되는 질문·불편·표현
+
+기술 토픽은 Stack Overflow를 핵심 수요 발견처로 사용한다. 질문 제목, 오류 원문과
+반복되는 해결 의도를 키워드 후보로 삼되 답변의 정확성은 공식 문서와 실제 재현으로
+검증한다. GitHub Issues는 검색 수요의 크기보다 제품별 결함과 버전 조건을 확인하는
+용도로 구분한다.
 
 Threads와 X는 실시간 관심과 독자가 사용하는 표현을 발견하는 보조 출처로만 쓴다.
 단일 바이럴 게시물이나 좋아요 수를 검색 수요로 간주하지 않고, Google·Naver 검색
