@@ -204,6 +204,37 @@ class PublisherTests(unittest.TestCase):
             report = validate_document(document, reviewer_approved=True)
             self.assertTrue(report.passed)
 
+    def test_validation_ignores_shell_comments_inside_fenced_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN.replace(
+                "### 검증 항목",
+                "```bash\n"
+                "# 1) predicate descriptor 조회\n"
+                "# 2) statement 원문 조회\n"
+                "```\n\n"
+                "### 검증 항목",
+            )
+            document = load_document(self._write_document(Path(tmp), text))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertTrue(report.passed)
+            self.assertEqual(report.checks["heading_structure"], "passed")
+
+    def test_validation_still_rejects_h1_outside_fenced_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN + (
+                "\n```bash\n"
+                "# harmless shell comment\n"
+                "```\n\n"
+                "# 실제 본문 H1\n"
+            )
+            document = load_document(self._write_document(Path(tmp), text))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertFalse(report.passed)
+            self.assertIn(
+                "body_h1_not_allowed",
+                {issue.code for issue in report.errors},
+            )
+
     def test_validation_rejects_realistic_bearer_secret(self):
         with tempfile.TemporaryDirectory() as tmp:
             text = VALID_MARKDOWN + (

@@ -49,6 +49,30 @@ HEADING = re.compile(r"^(#{1,6})\s+\S", re.MULTILINE)
 FENCE = re.compile(r"^```([^\n]*)$", re.MULTILINE)
 
 
+def _mask_fenced_code(markdown: str) -> str:
+    """Hide fenced code contents from Markdown structure checks.
+
+    Preserve line breaks so headings outside a fence keep their relative order.
+    An unclosed fence is masked through EOF and reported separately by the
+    existing fence validation.
+    """
+    fences = list(FENCE.finditer(markdown))
+    if not fences:
+        return markdown
+
+    masked: list[str] = []
+    cursor = 0
+    for index in range(0, len(fences), 2):
+        opening = fences[index]
+        closing = fences[index + 1] if index + 1 < len(fences) else None
+        end = closing.end() if closing else len(markdown)
+        masked.append(markdown[cursor : opening.start()])
+        masked.append("\n" * markdown[opening.start() : end].count("\n"))
+        cursor = end
+    masked.append(markdown[cursor:])
+    return "".join(masked)
+
+
 def normalize_tags(value: Any) -> list[str]:
     if value is None:
         return []
@@ -150,7 +174,8 @@ def validate_document(
         _add_error(report, "invalid_tags", "tags must be a list or comma-separated text.")
     report.checks["tags"] = f"{len(tags)} unique tag(s)"
 
-    h1_matches = re.findall(r"^#\s+\S", markdown, flags=re.MULTILINE)
+    structural_markdown = _mask_fenced_code(markdown)
+    h1_matches = re.findall(r"^#\s+\S", structural_markdown, flags=re.MULTILINE)
     if h1_matches:
         _add_error(
             report,
@@ -159,7 +184,9 @@ def validate_document(
             "markdown",
         )
 
-    heading_levels = [len(match.group(1)) for match in HEADING.finditer(markdown)]
+    heading_levels = [
+        len(match.group(1)) for match in HEADING.finditer(structural_markdown)
+    ]
     for previous, current in zip(heading_levels, heading_levels[1:]):
         if current > previous + 1:
             _add_error(
