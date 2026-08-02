@@ -6,6 +6,7 @@ import base64
 import json
 import mimetypes
 import socket
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -164,20 +165,40 @@ class WordPressClient:
         )
 
     def upload_media(self, path: Path, *, alt_text: str) -> dict[str, Any]:
-        media_type = mimetypes.guess_type(path.name)[0]
-        if not media_type or not media_type.startswith("image/"):
-            raise WordPressError("validation", "Featured image format is not supported.")
-        body = path.read_bytes()
-        media = self.request(
-            "POST",
-            "media",
-            body=body,
-            content_type=media_type,
-            extra_headers={
-                "Content-Disposition": f'attachment; filename="{path.name}"',
-            },
-            expected=(200, 201),
-        )
+        upload_path = path
+        with tempfile.TemporaryDirectory(prefix="huntlab-media-") as temp_dir:
+            if path.suffix.casefold() == ".png":
+                try:
+                    from PIL import Image
+
+                    webp_path = Path(temp_dir) / f"{path.stem}.webp"
+                    with Image.open(path) as image:
+                        image.save(webp_path, "WEBP", quality=82, method=6)
+                    if webp_path.stat().st_size < path.stat().st_size:
+                        upload_path = webp_path
+                except (ImportError, OSError, ValueError):
+                    # Publishing must remain available if an unusual PNG cannot
+                    # be converted. WordPress can still serve the original.
+                    upload_path = path
+
+            media_type = mimetypes.guess_type(upload_path.name)[0]
+            if not media_type or not media_type.startswith("image/"):
+                raise WordPressError(
+                    "validation", "Featured image format is not supported."
+                )
+            body = upload_path.read_bytes()
+            media = self.request(
+                "POST",
+                "media",
+                body=body,
+                content_type=media_type,
+                extra_headers={
+                    "Content-Disposition": (
+                        f'attachment; filename="{upload_path.name}"'
+                    ),
+                },
+                expected=(200, 201),
+            )
         return self.request(
             "POST",
             f"media/{media['id']}",
