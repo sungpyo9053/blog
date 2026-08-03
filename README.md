@@ -103,6 +103,8 @@ Topic Planner가 읽습니다.
 ```
 
 Search Console·GA4 읽기 전용 인증으로 `output/analytics/latest.md`를 만들고,
+같은 실행에서 공개 `robots.txt`, Sitemap, `ads.txt`, 빈 카테고리, 깨진 내부 링크,
+일반 작성자명과 대표 이미지·ALT도 읽기 전용으로 점검합니다.
 정규 Harness가 해당 파일 경로를 다음 Planner와 Writer 프롬프트에 명시적으로
 주입합니다. Agent가 분석 파일을 임의로 탐색하거나 Analytics Optimizer가
 Daily Pipeline을 직접 호출하지 않습니다.

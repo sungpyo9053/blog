@@ -57,6 +57,9 @@ Daily Pipeline을 직접 호출하거나 암묵적인 전역 컨텍스트를 변
 ## WordPress 운영 경계
 
 - WordPress 공개 글·Draft·카테고리·태그는 읽기만 한다.
+- 공개 사이트 감사는 `robots.txt`, Sitemap, `ads.txt`, 빈 카테고리, 내부 링크,
+  canonical, 작성자명과 대표 이미지·ALT를 읽기 전용으로 점검한다. 감사 실패는
+  Search Console·GA4 수집을 막지 않으며 WordPress를 자동 수정하지 않는다.
 - 설정 변경은 관리자가 명시적으로 승인한 항목만 수행한다.
 - SEO 플러그인, Sitemap, 공개성, 퍼머링크를 추측해 변경하지 않는다.
 - 분석 Agent는 Publisher를 호출하지 않는다.

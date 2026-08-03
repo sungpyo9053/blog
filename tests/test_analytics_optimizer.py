@@ -5,10 +5,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from scripts.run_analytics_optimizer import analyze, write_reports
+from scripts.run_analytics_optimizer import analyze, render, write_reports
 
 
 class AnalyticsOptimizerTests(unittest.TestCase):
+    def test_render_keeps_public_audit_independent(self):
+        body = render([], [], datetime(2026, 8, 3, tzinfo=timezone.utc))
+        self.assertIn("Analytics Optimization Report", body)
+        self.assertNotIn("Public Site Quality Audit", body)
+
     def test_analyze_returns_refresh_and_gap_candidates(self):
         rows = [
             {

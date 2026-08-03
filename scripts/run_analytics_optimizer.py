@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from publisher.config import load_env_file
+from scripts.audit_public_site import audit_site, render_markdown as render_public_audit
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIR = ROOT / "output" / "analytics"
@@ -181,9 +182,20 @@ def main() -> int:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).astimezone()
+    public_site_url = os.environ.get("PUBLIC_SITE_URL", "https://huntlab.app/")
+    try:
+        public_audit = render_public_audit(audit_site(public_site_url), heading_level=2)
+    except Exception as exc:  # noqa: BLE001 - public audit must not block analytics
+        public_audit = (
+            "## Public Site Quality Audit\n\n"
+            "- status: `INCOMPLETE`\n"
+            f"- error_type: `{type(exc).__name__}`\n"
+            "- error: `public read failed; no site setting was changed`\n"
+        )
     try:
         search_rows, ga_rows = collect()
         body = render(search_rows, ga_rows, now)
+        body += "\n" + public_audit
         body += "\n- automatic_pipeline: `disabled_review_required`\n"
         status = "COMPLETE"
     except Exception as exc:  # noqa: BLE001 - safe operational report
@@ -193,6 +205,7 @@ def main() -> int:
             f"- generated_at: `{now.isoformat()}`\n"
             f"- error_type: `{type(exc).__name__}`\n"
             "- error: `API read failed; credentials are not logged`\n"
+            "\n" + public_audit
         )
         status = "INCOMPLETE"
     latest_path, dated_path = write_reports(body, now)

@@ -178,6 +178,32 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
         ):
             self.assertIn(section, text)
 
+    def test_editorial_policy_exposes_author_and_verification_contract(self):
+        text = read("guides/editorial-policy.md")
+        self.assertIn("HuntLab 편집팀", text)
+        self.assertIn("작성자와 운영 환경", text)
+        self.assertIn("Reviewer 승인", text)
+
+    def test_research_writer_reviewer_share_execution_evidence_contract(self):
+        researcher = read("agents/researcher.md")
+        writer = read("agents/writer.md")
+        reviewer = read("agents/reviewer.md")
+        for term in (
+            "verification_date",
+            "environment",
+            "observed_result",
+            "operator_judgment",
+        ):
+            self.assertIn(term, researcher)
+        for term in ("검증 날짜", "환경", "관측 결과", "운영 판단"):
+            self.assertIn(term, writer)
+            self.assertIn(term, reviewer)
+
+    def test_topic_planner_prioritizes_core_categories(self):
+        text = read("agents/topic-planner-agent.md")
+        self.assertIn("70% 이상", text)
+        self.assertIn("TOP2의\n최대 한 자리", text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -45,6 +45,9 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 - 내부 링크는 공개 URL과 관련성이 확인된 후보만 사용하며 앵커가 목적지를
   구체적으로 설명한다. 후보가 없다는 이유만으로 링크를 창작하지 않는다.
 - 직접 경험·테스트·실패·측정 표현에는 Research에 대응하는 증거가 있다.
+- 직접 실행을 주장하는 기술 글은 검증 날짜, 환경·핵심 버전, 방법·명령,
+  관측 결과, 실패 또는 한계와 운영 판단이 Research와 본문에서 서로 대응한다.
+  한 항목이라도 창작됐거나 검증 범위가 불분명하면 REJECT한다.
 - Research의 `original_contribution`, `evidence`, `limitations`가 모두
   존재하고 `INSUFFICIENT`가 아니다.
 - Build Log·설치·튜토리얼·장애 해결은 테스트 결과·실패·로그·설정값 중
