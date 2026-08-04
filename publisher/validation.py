@@ -159,6 +159,19 @@ def validate_document(
             "publish_mode",
         )
 
+    existing_post_id = metadata.get("existing_post_id")
+    if existing_post_id is not None and (
+        isinstance(existing_post_id, bool)
+        or not isinstance(existing_post_id, int)
+        or existing_post_id <= 0
+    ):
+        _add_error(
+            report,
+            "invalid_existing_post_id",
+            "existing_post_id must be a positive WordPress post ID.",
+            "existing_post_id",
+        )
+
     if not markdown:
         _add_error(report, "missing_markdown", "Markdown body is required.", "markdown")
 

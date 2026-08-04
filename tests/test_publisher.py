@@ -40,6 +40,7 @@ class FakeWordPressClient:
         self.created_payload: dict[str, Any] | None = None
         self.tags: dict[str, int] = {}
         self.categories: dict[str, int] = {}
+        self.posts: dict[int, dict[str, Any]] = {}
         self.config = type(
             "Config",
             (),
@@ -47,7 +48,15 @@ class FakeWordPressClient:
         )()
 
     def find_posts(self, *, title: str | None = None, slug: str | None = None):
-        return []
+        posts = list(self.posts.values())
+        if title is not None:
+            posts = [post for post in posts if title in post["title"]["rendered"]]
+        if slug is not None:
+            posts = [post for post in posts if post.get("slug") == slug]
+        return posts
+
+    def get_post(self, post_id: int):
+        return self.posts[post_id]
 
     def find_term(self, taxonomy: str, name: str):
         if taxonomy == "categories" and name in self.categories:
@@ -84,6 +93,16 @@ class FakeWordPressClient:
             "status": status,
             "slug": payload.get("slug"),
             "link": "https://huntlab.app/?p=123",
+        }
+
+    def update_post(self, post_id: int, payload: dict[str, Any], *, status: str):
+        self.created_payload = dict(payload)
+        self.created_payload["status"] = status
+        return {
+            "id": post_id,
+            "status": status,
+            "slug": payload.get("slug"),
+            "link": f"https://huntlab.app/?p={post_id}",
         }
 
 
@@ -313,6 +332,52 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(result.action, "Publish")
             self.assertEqual(result.published_url, "https://huntlab.app/?p=123")
             self.assertEqual(client.created_payload["status"], "publish")
+
+    def test_approved_existing_post_id_updates_matching_post(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = VALID_MARKDOWN.replace(
+                "publish_mode: draft\n",
+                "publish_mode: publish\n"
+                "run_id: run-1\n"
+                "topic_id: topic-1\n"
+                "source_id: huntlab:run-1:topic-1\n"
+                "existing_post_id: 195\n",
+            )
+            path = self._write_document(root, text)
+            digest = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+            review = root / "review.md"
+            review.write_text(
+                f"APPROVED\nrun-1\ntopic-1\n{digest}\n",
+                encoding="utf-8",
+            )
+            client = FakeWordPressClient()
+            client.posts[195] = {
+                "id": 195,
+                "title": {"rendered": "HuntLab Publisher 테스트"},
+                "slug": "huntlab-publisher-test",
+                "status": "publish",
+            }
+
+            result = DraftPublisher(
+                client,
+                audit_log=root / "audit.jsonl",
+            ).publish_file(
+                path,
+                reviewer_approved=True,
+                review_path=review,
+                expected_identity={
+                    "run_id": "run-1",
+                    "topic_id": "topic-1",
+                    "source_id": "huntlab:run-1:topic-1",
+                    "category": "Tech",
+                },
+            )
+
+            self.assertEqual(result.status, "Success")
+            self.assertEqual(result.action, "Update")
+            self.assertEqual(result.post_id, 195)
+            self.assertEqual(result.published_url, "https://huntlab.app/?p=195")
 
     def test_publish_rejects_mismatched_reviewer_hash(self):
         with tempfile.TemporaryDirectory() as tmp:

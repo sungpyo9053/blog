@@ -138,6 +138,11 @@ class WordPressClient:
             query["slug"] = slug
         return self.request("GET", f"posts?{urlencode(query)}", expected=(200,))
 
+    def get_post(self, post_id: int) -> dict[str, Any]:
+        return self.request(
+            "GET", f"posts/{post_id}?context=edit", expected=(200,)
+        )
+
     def find_term(self, taxonomy: str, name: str) -> dict[str, Any] | None:
         terms = self.request(
             "GET",
@@ -219,4 +224,17 @@ class WordPressClient:
         post_payload["status"] = status
         return self.request(
             "POST", "posts", payload=post_payload, expected=(200, 201)
+        )
+
+    def update_post(
+        self,
+        post_id: int,
+        payload: dict[str, Any],
+        *,
+        status: str,
+    ) -> dict[str, Any]:
+        post_payload = dict(payload)
+        post_payload["status"] = status
+        return self.request(
+            "POST", f"posts/{post_id}", payload=post_payload, expected=(200,)
         )

@@ -192,19 +192,38 @@ class DraftPublisher:
         title = str(metadata["title"]).strip()
         slug = str(metadata.get("slug", "")).strip() or None
         publish_mode = str(metadata["publish_mode"])
+        existing_post_id = metadata.get("existing_post_id")
+        target_post_id = int(existing_post_id) if existing_post_id is not None else None
+
+        if target_post_id is not None:
+            target = self.client.get_post(target_post_id)
+            target_title = _normalized(_plain_text(target.get("title")))
+            target_slug = str(target.get("slug", "")).strip()
+            if target_title != _normalized(title):
+                raise WordPressError(
+                    "validation",
+                    "existing_post_id title does not match the approved document.",
+                )
+            if slug and target_slug != slug:
+                raise WordPressError(
+                    "validation",
+                    "existing_post_id slug does not match the approved document.",
+                )
 
         title_matches = self.client.find_posts(title=title)
         exact_title_matches = [
             post
             for post in title_matches
             if _normalized(_plain_text(post.get("title"))) == _normalized(title)
+            and int(post.get("id", 0)) != target_post_id
         ]
         if exact_title_matches:
             raise WordPressError(
                 "duplicate",
                 "An existing WordPress post has the same normalized title.",
             )
-        if slug and self.client.find_posts(slug=slug):
+        slug_matches = self.client.find_posts(slug=slug) if slug else []
+        if slug and any(int(post.get("id", 0)) != target_post_id for post in slug_matches):
             raise WordPressError(
                 "duplicate",
                 "An existing WordPress post already uses the requested slug.",
@@ -324,15 +343,26 @@ class DraftPublisher:
         if isinstance(excerpt, str) and excerpt.strip():
             payload["excerpt"] = excerpt.strip()
 
-        post = self.client.create_post(payload, status=publish_mode)
+        if target_post_id is None:
+            post = self.client.create_post(payload, status=publish_mode)
+        else:
+            post = self.client.update_post(
+                target_post_id,
+                payload,
+                status=publish_mode,
+            )
         post_id = int(post["id"])
         draft_url = (
             f"{self.client.config.base_url}/wp-admin/post.php"
             f"?post={post_id}&action=edit"
         )
         published_url = str(post.get("link", "")).strip() or None
-        action = "Publish" if publish_mode == "publish" else "Draft"
-        event_name = "post_published" if publish_mode == "publish" else "draft_created"
+        if target_post_id is not None:
+            action = "Update"
+            event_name = "post_updated"
+        else:
+            action = "Publish" if publish_mode == "publish" else "Draft"
+            event_name = "post_published" if publish_mode == "publish" else "draft_created"
         summary = {
             "action": action,
             "final_status": post.get("status", publish_mode),
