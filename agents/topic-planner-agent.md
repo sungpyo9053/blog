@@ -137,6 +137,22 @@ TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공
 최대 한 자리까지 선정한다. 단순 인기 검색어 추종이나 카테고리 균형만을 이유로
 선정하지 않는다. 연결과 수요를 증명하지 못하면 점수와 관계없이 TOP2에서 제외한다.
 
+TOP1은 안전한 직접 검증으로 고유 가치를 만들 수 있는 Tech, AI 또는 Build Log
+후보를 우선한다. 프로젝트 내부, 격리된 임시 입력 또는 읽기 전용 공개 정보로
+검증할 수 있어야 하며 운영 서비스 변경, 유료 호출, 인증정보 노출을 요구하면
+직접 검증 가능 후보로 보지 않는다. 동등한 후보가 있다면 다음 실행 증거 묶음을
+모두 계획할 수 있는 후보를 TOP1으로 선택한다.
+
+- `command_and_output`: 실행 명령, 기대 출력과 종료 상태
+- `failed_attempt`: 의도적으로 안전하게 재현할 실패 조건과 예상 원인
+- `before_after`: 동일 환경·입력으로 비교할 변경 전후 또는 대조군
+- `operator_judgment`: 결과에 따라 채택·보류·롤백할 기준
+- `docs_vs_observed`: 공식 문서의 약속과 관측 결과를 비교할 기준
+
+안전하게 다섯 항목을 검증할 후보가 없다면 Build Log나 직접 검증 글로 꾸미지
+않는다. 문서 대조형 후보는 `not_directly_tested`로 계획할 수 있지만 TOP1의 직접
+검증 기준을 대체하지 않는다.
+
 ## `topics.md` 계약
 
 `topics.md`에는 후보 최소 35개, TOP10, TOP2가 있어야 한다. 각 후보는 다음 단일 행 필드를 모두 포함한다.
@@ -161,7 +177,7 @@ TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공
 - search_intent: 독자가 해결하려는 질문과 기대 행동
 - research_focus: Research Agent가 확인할 핵심 질문과 우선 출처
 - original_value_plan: 실제 운영 근거, 원문 비교 또는 환경별 적용 판단 중 이 글만의 기여
-- evidence_plan: 확보할 테스트 결과·실패·로그·설정값 또는 대조할 1차 자료
+- evidence_plan: verification_mode와 command_and_output, failed_attempt, before_after, operator_judgment, docs_vs_observed를 포함한 검증 계획
 - recommended_images: 대표 이미지와 본문 이미지 제안
 - duplicate_check: 기존 글 및 최근 반복 검사 결과
 - internal_link_candidates: 공개 URL이 확인된 관련 글과 연결 이유, 없으면 없음

@@ -211,6 +211,8 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
         self.assertIn("Reviewer 승인", text)
 
     def test_research_writer_reviewer_share_execution_evidence_contract(self):
+        planner = read("agents/topic-planner-agent.md")
+        style = read("guides/style-guide.md")
         researcher = read("agents/researcher.md")
         writer = read("agents/writer.md")
         reviewer = read("agents/reviewer.md")
@@ -222,6 +224,18 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
         ):
             self.assertIn(term, researcher)
         for term in ("검증 날짜", "환경", "관측 결과", "운영 판단"):
+            self.assertIn(term, writer)
+            self.assertIn(term, reviewer)
+        for term in (
+            "command_and_output",
+            "failed_attempt",
+            "before_after",
+            "operator_judgment",
+            "docs_vs_observed",
+        ):
+            self.assertIn(term, planner)
+            self.assertIn(term, style)
+            self.assertIn(term, researcher)
             self.assertIn(term, writer)
             self.assertIn(term, reviewer)
 

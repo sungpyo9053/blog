@@ -212,6 +212,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "title": context.title,
                     "duplicate_check": "공개 글과 Draft에 동일 검색 의도 없음",
                     "search_intent": "격리 체크리스트 확인",
+                    "original_value_plan": "격리 전후 동작 비교",
+                    "evidence_plan": "command_and_output과 failed_attempt 검증",
                     "sources": "https://example.com/source",
                 },
             )
@@ -223,6 +225,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 payload["duplicate_check"],
                 "공개 글과 Draft에 동일 검색 의도 없음",
             )
+            self.assertEqual(payload["original_value_plan"], "격리 전후 동작 비교")
+            self.assertIn("command_and_output", payload["evidence_plan"])
 
     def test_planner_context_rejects_missing_duplicate_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

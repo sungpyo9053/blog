@@ -446,6 +446,8 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "reason": context.reason,
         "search_intent": plan.get("search_intent", ""),
         "research_focus": context.research_focus,
+        "original_value_plan": plan.get("original_value_plan", ""),
+        "evidence_plan": plan.get("evidence_plan", ""),
         "duplicate_check": duplicate_check,
         "internal_link_candidates": plan.get("internal_link_candidates", ""),
         "topic_cluster": plan.get("topic_cluster", ""),
