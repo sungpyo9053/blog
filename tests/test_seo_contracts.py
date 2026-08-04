@@ -238,6 +238,11 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
         for term in ("검증 날짜", "환경", "관측 결과", "운영 판단"):
             self.assertIn(term, writer)
             self.assertIn(term, reviewer)
+        self.assertIn("capture_evidence", researcher)
+        self.assertIn("DIRECT_EVIDENCE_CAPTURE", writer)
+        self.assertIn("DIRECT_EVIDENCE_CAPTURE", read("agents/image-maker.md"))
+        self.assertIn("검증 캡처가 1~2장", reviewer)
+        self.assertIn("직접 검증 캡처", read("guides/image-guide.md"))
         for text in (planner, researcher, writer, reviewer):
             self.assertIn("controlled_comparison", text)
             self.assertIn("not_directly_tested", text)
