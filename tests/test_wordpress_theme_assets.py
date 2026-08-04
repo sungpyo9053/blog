@@ -15,6 +15,9 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("filemtime", php)
         self.assertIn("huntlab-warm-editorial-late-overrides", php)
         self.assertIn("add_action( 'wp_head'", php)
+        self.assertIn("huntlab_warm_editorial_home_intro", php)
+        self.assertIn("복잡한 기술을", php)
+        self.assertIn("is_home() || is_front_page()", php)
 
     def test_palette_keeps_warm_surfaces_and_accessible_ink(self):
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
@@ -23,6 +26,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("--huntlab-ink: #292621", css)
         self.assertIn("--huntlab-terracotta: #a95f49", css)
         self.assertIn(".huntlab-category-tabs__link.is-active", css)
+        self.assertIn(".huntlab-home-intro", css)
+        self.assertIn(".huntlab-home-intro__dog", css)
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)
 
 

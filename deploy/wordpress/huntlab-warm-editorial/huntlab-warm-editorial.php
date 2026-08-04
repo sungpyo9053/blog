@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Warm Editorial Theme
  * Description: Applies HuntLab's warm editorial palette without replacing the active WordPress theme.
- * Version: 1.0.1
+ * Version: 1.1.0
  * Author: HuntLab
  */
 
@@ -24,6 +24,40 @@ function huntlab_warm_editorial_enqueue_styles() {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'huntlab_warm_editorial_enqueue_styles', 100 );
+
+/**
+ * Give the posts index a quiet editorial introduction without changing the
+ * active theme or the layout of article pages.
+ */
+function huntlab_warm_editorial_home_intro() {
+	if ( is_admin() || ! ( is_home() || is_front_page() ) ) {
+		return;
+	}
+	?>
+	<section id="huntlab-home-intro" class="huntlab-home-intro" aria-labelledby="huntlab-home-intro-title">
+		<div class="huntlab-home-intro__copy">
+			<p class="huntlab-home-intro__eyebrow">HuntLab · 직접 해보고 기록하는 기술 블로그</p>
+			<h1 id="huntlab-home-intro-title">복잡한 기술을,<br>오래 써먹을 수 있게.</h1>
+			<p class="huntlab-home-intro__description">실행 결과와 실패 기록을 바탕으로 AI, 개발, 클라우드 운영에서 실제로 필요한 판단을 정리합니다.</p>
+			<ul class="huntlab-home-intro__promises" aria-label="HuntLab 콘텐츠 원칙">
+				<li>직접 실행</li>
+				<li>실패도 기록</li>
+				<li>운영 판단까지</li>
+			</ul>
+		</div>
+		<div class="huntlab-home-intro__dog" aria-hidden="true">
+			<span class="huntlab-home-intro__dog-body"></span>
+			<span class="huntlab-home-intro__dog-head"></span>
+			<span class="huntlab-home-intro__dog-ear"></span>
+			<span class="huntlab-home-intro__dog-tail"></span>
+		</div>
+	</section>
+	<script id="huntlab-home-intro-position">
+	document.addEventListener('DOMContentLoaded',function(){var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(intro&&main&&main.parentNode){main.parentNode.insertBefore(intro,main);}});
+	</script>
+	<?php
+}
+add_action( 'wp_body_open', 'huntlab_warm_editorial_home_intro', 25 );
 
 /**
  * The existing HuntLab navigation and brand plugins print their styles inline.
