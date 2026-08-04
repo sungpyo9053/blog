@@ -13,6 +13,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("wp_enqueue_style", php)
         self.assertIn("assets/warm-editorial.css", php)
         self.assertIn("filemtime", php)
+        self.assertIn("huntlab-warm-editorial-late-overrides", php)
+        self.assertIn("add_action( 'wp_head'", php)
 
     def test_palette_keeps_warm_surfaces_and_accessible_ink(self):
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
