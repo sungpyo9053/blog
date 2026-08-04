@@ -42,6 +42,11 @@ EDITOR_CATEGORIES = {
     "Hot Issue",
     "Build Log",
 }
+MAX_REVIEW_REPAIR_ATTEMPTS = 1
+REVIEW_STATUS_PATTERN = re.compile(
+    r"(?im)^\s*(?:-\s*)?status\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
+    r"|^\s*(APPROVED|REJECTED)\s*$"
+)
 
 
 class PipelineError(RuntimeError):
@@ -585,6 +590,77 @@ def topic_stages(context: TopicContext) -> list[Stage]:
     ]
 
 
+def read_review_decision(context: TopicContext) -> str | None:
+    """Read only the explicit Reviewer status, not incidental body mentions."""
+    review_path = context.directory / "review.md"
+    assert_owned_path(context, review_path)
+    if not review_path.is_file():
+        return None
+    match = REVIEW_STATUS_PATTERN.search(review_path.read_text(encoding="utf-8"))
+    if match is None:
+        return None
+    return next(value for value in match.groups() if value is not None).upper()
+
+
+def review_repair_stages(
+    context: TopicContext,
+    *,
+    attempt: int,
+) -> list[Stage]:
+    """Reuse the existing content agents for one bounded Reviewer repair pass."""
+    review_path = context.directory / "review.md"
+    repair_note = (
+        f"\n\n이 단계는 Reviewer 거절 후 보정 시도 {attempt}/"
+        f"{MAX_REVIEW_REPAIR_ATTEMPTS}입니다. 이전 검토 결과 "
+        f"{str(review_path)!r}를 읽고 현재 Agent의 기존 책임 범위 안에서 거절 "
+        "사유를 직접 해결하세요. 통과한 사실과 근거는 보존하고, 검증하지 않은 "
+        "내용을 만들거나 Reviewer 기준을 우회하지 마세요. 명령·fixture·입력·출력·"
+        "종료 상태가 필요한 경우 생략 부호, 의사 코드, '동일 함수' 같은 축약 표현 "
+        "대신 재실행 가능한 실제 원문과 대응 증거를 남기세요. 현재 단계의 산출물을 "
+        "덮어써서 다음 기존 Agent가 보정된 파일을 입력으로 사용하게 하세요."
+    )
+    return [
+        Stage(stage.name, stage.agent_file, stage.prompt + repair_note)
+        for stage in topic_stages(context)
+        if stage.name != "Publisher Agent"
+    ]
+
+
+def run_review_repair_cycle(
+    codex: str,
+    context: TopicContext,
+    logger: logging.Logger,
+    *,
+    timeout_seconds: int,
+) -> None:
+    """Run one bounded repair cycle without weakening Reviewer approval."""
+    if read_review_decision(context) != "REJECTED":
+        return
+    logger.info(
+        "topic=%r run_id=%s topic_id=%s event=review_repair_start attempt=1",
+        context.title,
+        context.run_id,
+        context.topic_id,
+    )
+    for stage in review_repair_stages(context, attempt=1):
+        run_stage(
+            codex,
+            stage,
+            logger,
+            timeout_seconds=timeout_seconds,
+            topic=context.title,
+        )
+        validate_stage_artifacts(context, stage.name)
+    logger.info(
+        "topic=%r run_id=%s topic_id=%s event=review_repair_end "
+        "attempt=1 decision=%s",
+        context.title,
+        context.run_id,
+        context.topic_id,
+        read_review_decision(context) or "UNKNOWN",
+    )
+
+
 def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
     required: dict[str, tuple[Path, ...]] = {
         "Research Agent": (context.directory / "research.md",),
@@ -661,9 +737,17 @@ def validate_publish_contract(context: TopicContext) -> str:
     if not thumbnail.is_file():
         raise PipelineError(f"{context.topic_id}: 대표 이미지 파일 누락: {thumbnail}")
 
+    decision = read_review_decision(context)
+    if decision == "REJECTED":
+        raise PipelineError(f"{context.topic_id}: Reviewer가 발행을 거절했습니다.")
+    if decision != "APPROVED":
+        raise PipelineError(
+            f"{context.topic_id}: Reviewer의 명시적 APPROVED 상태가 없습니다."
+        )
+
     digest = hashlib.sha256(publish_path.read_bytes()).hexdigest()
     review = review_path.read_text(encoding="utf-8")
-    required_tokens = ("APPROVED", context.run_id, context.topic_id, digest)
+    required_tokens = (context.run_id, context.topic_id, digest)
     if not all(token in review for token in required_tokens):
         raise PipelineError(
             f"{context.topic_id}: Reviewer 승인·해시·run_id·topic_id 계약 불일치"
@@ -984,8 +1068,7 @@ def main() -> int:
                     }.get(stage.name, ())
                     reviewer_approved = False
                     if stage.name == "Reviewer Agent":
-                        review_path = context.directory / "review.md"
-                        reviewer_approved = review_path.is_file() and "APPROVED" in review_path.read_text(encoding="utf-8")
+                        reviewer_approved = read_review_decision(context) == "APPROVED"
                     can_skip = required and all(path.is_file() for path in required)
                     if stage.name == "Reviewer Agent" and not reviewer_approved:
                         can_skip = False
@@ -1001,6 +1084,12 @@ def main() -> int:
                         )
                         continue
                 if stage.name == "Publisher Agent":
+                    run_review_repair_cycle(
+                        codex,
+                        context,
+                        logger,
+                        timeout_seconds=args.timeout,
+                    )
                     digest = validate_publish_contract(context)
                     logger.info(
                         "topic=%r run_id=%s topic_id=%s "

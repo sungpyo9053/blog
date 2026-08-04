@@ -17,6 +17,8 @@ from scripts.run_daily_pipeline import (
     make_topic_context,
     parse_topic_plan,
     planner_stage,
+    read_review_decision,
+    review_repair_stages,
     run_stage,
     topic_stages,
     validate_publish_contract,
@@ -321,6 +323,80 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             )
 
             with self.assertRaises(PipelineError):
+                validate_publish_contract(context)
+
+    def test_review_decision_uses_explicit_status_only(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-review" / "topic-review"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="검토 상태 판정",
+                run_id="run-review",
+                topic_id="topic-review",
+                directory=directory,
+            )
+            review = directory / "review.md"
+            review.write_text(
+                "# Review Result\n\n- status: `REJECTED`\n\n"
+                "수정 후 APPROVED가 필요합니다.\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(read_review_decision(context), "REJECTED")
+
+    def test_repair_cycle_reuses_existing_agents_and_preserves_reviewer(self):
+        context = make_topic_context("run-repair", "검증 근거 보정")
+        stages = review_repair_stages(context, attempt=1)
+
+        self.assertEqual(
+            [stage.name for stage in stages],
+            [
+                "Research Agent",
+                "Writer Agent",
+                "Image Maker Agent",
+                "Assembler Agent",
+                "Reviewer Agent",
+            ],
+        )
+        self.assertTrue(all("review.md" in stage.prompt for stage in stages))
+        self.assertTrue(all("실제 원문" in stage.prompt for stage in stages))
+        self.assertNotIn("Publisher Agent", [stage.name for stage in stages])
+
+    def test_publish_contract_reports_explicit_reviewer_rejection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-rejected" / "topic-rejected"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="거절된 글",
+                run_id="run-rejected",
+                topic_id="topic-rejected",
+                directory=directory,
+                category="Tech",
+                tags=("Review",),
+            )
+            (directory / "publish.md").write_text(
+                "---\n"
+                'title: "거절된 글"\n'
+                'run_id: "run-rejected"\n'
+                'topic_id: "topic-rejected"\n'
+                'source_id: "huntlab:run-rejected:topic-rejected"\n'
+                'publish_mode: "publish"\n'
+                'category: "Tech"\n'
+                'featured_image: "./images/thumbnail.png"\n'
+                'featured_image_alt: "거절된 글 대표 이미지"\n'
+                "tags:\n"
+                '  - "Review"\n'
+                "---\n\n## 본문\n",
+                encoding="utf-8",
+            )
+            (directory / "images").mkdir()
+            (directory / "images/thumbnail.png").write_bytes(b"png")
+            (directory / "review.md").write_text(
+                "# Review Result\n\n- status: `REJECTED`\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(PipelineError, "Reviewer가 발행을 거절"):
                 validate_publish_contract(context)
 
 
