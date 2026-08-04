@@ -226,6 +226,10 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
         for term in ("검증 날짜", "환경", "관측 결과", "운영 판단"):
             self.assertIn(term, writer)
             self.assertIn(term, reviewer)
+        for text in (planner, researcher, writer, reviewer):
+            self.assertIn("controlled_comparison", text)
+            self.assertIn("not_directly_tested", text)
+        self.assertIn("정의되지 않은 변형값은 REJECT", reviewer)
         for term in (
             "command_and_output",
             "failed_attempt",

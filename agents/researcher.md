@@ -59,6 +59,8 @@ tools:
 - `failure_or_limit`: 실패 사례, 재현하지 못한 조건 또는 검증 한계
 - `operator_judgment`: 관측 결과를 바탕으로 한 HuntLab의 선택과 이유
 
+검증 모드는 `direct`, `controlled_comparison`, `not_directly_tested` 가운데 정확히
+하나만 사용한다. `direct_read_only`처럼 임의의 변형값을 만들지 않는다.
 직접 검증 주제는 `verification_mode: direct`로 기록하고 다음 실행 증거 묶음을
 모두 채운다.
 

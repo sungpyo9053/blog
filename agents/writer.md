@@ -80,6 +80,8 @@ SEO를 위해 문체를 훼손하거나, 문체를 살리기 위해 사실을 �
 - 다섯 요소를 매번 같은 H2로 만들지 않는다. 실행 순서, 실패 기록, 비교표와
   결론에 자연스럽게 나누어 배치하되 하나라도 Research에 없으면 만들지 말고
   초안 작성을 중단한다.
+- `verification_mode`가 `direct`, `controlled_comparison`, `not_directly_tested` 중
+  하나가 아니면 의미를 추측하지 않고 초안 작성을 중단한다.
 - `not_directly_tested`인 항목은 직접 실행한 것처럼 바꾸지 않고 공식 자료 대조
   범위와 직접 검증하지 못한 부분을 명시한다.
 - Build Log·설치·튜토리얼·장애 해결 글에는 Research에서 확인된 테스트 결과,

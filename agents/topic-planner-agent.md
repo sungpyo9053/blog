@@ -177,7 +177,7 @@ TOP1은 안전한 직접 검증으로 고유 가치를 만들 수 있는 Tech, A
 - search_intent: 독자가 해결하려는 질문과 기대 행동
 - research_focus: Research Agent가 확인할 핵심 질문과 우선 출처
 - original_value_plan: 실제 운영 근거, 원문 비교 또는 환경별 적용 판단 중 이 글만의 기여
-- evidence_plan: verification_mode와 command_and_output, failed_attempt, before_after, operator_judgment, docs_vs_observed를 포함한 검증 계획
+- evidence_plan: verification_mode=direct, controlled_comparison 또는 not_directly_tested 중 하나와 command_and_output, failed_attempt, before_after, operator_judgment, docs_vs_observed를 포함한 검증 계획
 - recommended_images: 대표 이미지와 본문 이미지 제안
 - duplicate_check: 기존 글 및 최근 반복 검사 결과
 - internal_link_candidates: 공개 URL이 확인된 관련 글과 연결 이유, 없으면 없음

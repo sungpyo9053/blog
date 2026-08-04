@@ -54,6 +54,8 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
   실패 접근에는 관측 오류와 원인이, 전후 비교에는 동일 조건이 기록돼야 한다.
   운영 판단은 채택·보류·롤백 기준 중 관련 조건을 포함하고 공식 문서 대비는
   일치 여부까지 명시해야 한다. 하나라도 없거나 추정으로 채웠으면 REJECT한다.
+- `verification_mode`는 `direct`, `controlled_comparison`, `not_directly_tested`만
+  허용한다. `direct_read_only`처럼 정의되지 않은 변형값은 REJECT한다.
 - Research의 `original_contribution`, `evidence`, `limitations`가 모두
   존재하고 `INSUFFICIENT`가 아니다.
 - Build Log·설치·튜토리얼·장애 해결은 테스트 결과·실패·로그·설정값 중
