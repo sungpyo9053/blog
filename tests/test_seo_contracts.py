@@ -48,14 +48,14 @@ class SEOAgentContractTests(unittest.TestCase):
         ):
             self.assertIn(field, text)
 
-    def test_writer_requires_metadata_slug_and_faq(self):
+    def test_writer_requires_metadata_slug_and_optional_faq(self):
         text = read("agents/writer.md")
         for field in (
             "meta_description",
             "excerpt",
             "publish_mode",
             "110~160자",
-            "FAQ를 최소 3개",
+            "FAQ는 검색 의도상",
         ):
             self.assertIn(field, text)
         self.assertIn("소문자 영문·숫자·하이픈", text)
@@ -72,10 +72,12 @@ class SEOAgentContractTests(unittest.TestCase):
             "검증 범위와 판단",
             "AI가 쓴 티를 줄이는 규칙",
             "한눈에 보기는 선택 사항",
+            "오픈소스·기술 프로젝트 딥다이브",
         ):
             self.assertIn(field, style)
         self.assertNotIn("네이버 블로그 초안", writer)
         self.assertNotIn("gudies/", writer)
+        self.assertNotIn("FAQ를 최소 3개", writer)
         self.assertNotIn("ㅋㅋㅋ, ..., ??", style)
         for field in (
             "첫 두 문단",
@@ -173,6 +175,16 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
         self.assertIn("가짜 뉴스 화면", text)
         self.assertIn("가짜 성공 화면", text)
         self.assertIn("이미지 0장", text)
+
+    def test_image_policy_uses_editorial_landscape_thumbnail(self):
+        guide = read("guides/image-guide.md")
+        agent = read("agents/image-maker.md")
+        for text in (guide, agent):
+            self.assertIn("1600×900", text)
+            self.assertIn("에디토리얼", text)
+            self.assertIn("개념 비유", text)
+            self.assertIn("HTML·CSS fallback", text)
+        self.assertNotIn("1080×1080px", agent)
 
     def test_publisher_metadata_and_category_contract(self):
         text = read("guides/publisher-guide.md")
