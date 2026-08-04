@@ -60,6 +60,32 @@ class SEOAgentContractTests(unittest.TestCase):
             self.assertIn(field, text)
         self.assertIn("소문자 영문·숫자·하이픈", text)
 
+    def test_style_guide_and_agents_use_technical_blog_contract(self):
+        style = read("guides/style-guide.md")
+        writer = read("agents/writer.md")
+        reviewer = read("agents/reviewer.md")
+        for field in (
+            "HuntLab WordPress 기술 블로그 문체 가이드",
+            "기술·AI 제품 또는 아키텍처 해설",
+            "설치·튜토리얼·장애 해결",
+            "Build Log·개발 경험",
+            "검증 범위와 판단",
+            "AI가 쓴 티를 줄이는 규칙",
+            "한눈에 보기는 선택 사항",
+        ):
+            self.assertIn(field, style)
+        self.assertNotIn("네이버 블로그 초안", writer)
+        self.assertNotIn("gudies/", writer)
+        self.assertNotIn("ㅋㅋㅋ, ..., ??", style)
+        for field in (
+            "첫 두 문단",
+            "구조, 작동 원리",
+            "직접 검증, 공식 자료",
+            "같은 H2·요약·결론",
+        ):
+            self.assertIn(field, writer)
+            self.assertIn(field, reviewer)
+
     def test_reviewer_rejects_incomplete_seo(self):
         text = read("agents/reviewer.md")
         self.assertIn("하나라도 부족하면 `REJECTED`", text)
