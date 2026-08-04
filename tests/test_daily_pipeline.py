@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.run_daily_pipeline import (
     PipelineError,
+    Stage,
     TopicContext,
     has_successful_publish,
     make_topic_context,
     parse_topic_plan,
     planner_stage,
+    run_stage,
     topic_stages,
     validate_publish_contract,
     write_planner_context,
@@ -21,6 +26,26 @@ from scripts.retry_daily_pipeline import choose_command
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_agent_subprocess_closes_stdin_for_noninteractive_runs(self):
+        completed = subprocess.CompletedProcess(
+            args=["codex"],
+            returncode=0,
+            stdout="CODEX_OK\n",
+        )
+        with patch(
+            "scripts.run_daily_pipeline.subprocess.run",
+            return_value=completed,
+        ) as mocked_run:
+            output = run_stage(
+                "/usr/local/bin/codex",
+                Stage("Smoke Agent", None, "CODEX_OK"),
+                logging.getLogger("test-agent-stdin"),
+                timeout_seconds=10,
+            )
+
+        self.assertEqual(output, "CODEX_OK\n")
+        self.assertIs(mocked_run.call_args.kwargs["stdin"], subprocess.DEVNULL)
+
     def test_failed_publisher_audit_is_not_resume_success(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "run-failed" / "topic-failed"

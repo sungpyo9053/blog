@@ -244,6 +244,7 @@ def run_stage(
         result = subprocess.run(
             command,
             cwd=PROJECT_ROOT,
+            stdin=subprocess.DEVNULL,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
