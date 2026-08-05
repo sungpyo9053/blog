@@ -215,6 +215,36 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             reviewer.prompt,
         )
 
+    def test_all_posts_keep_toc_and_require_grounded_quick_summary(self):
+        context = make_topic_context(
+            "run-quick-view",
+            "Transactional Outbox 패턴",
+            category="System Architecture",
+        )
+        stages = topic_stages(context)
+        writer = next(stage for stage in stages if stage.name == "Writer Agent")
+        reviewer = next(stage for stage in stages if stage.name == "Reviewer Agent")
+
+        self.assertIn("`## 핵심 요약`", writer.prompt)
+        self.assertIn("`무엇`, `왜`, `어떻게`", writer.prompt)
+        self.assertIn("기존 `한눈에 보기` 자동 목차", writer.prompt)
+        self.assertIn("삭제하거나 대체하지 마세요", writer.prompt)
+        self.assertIn("research.md에 없는 사실", writer.prompt)
+        self.assertIn("REJECT하세요", reviewer.prompt)
+
+    def test_non_technical_posts_also_require_quick_summary(self):
+        context = make_topic_context(
+            "run-no-quick-view",
+            "공식 통계 해설",
+            category="Economy",
+        )
+        writer = next(
+            stage for stage in topic_stages(context) if stage.name == "Writer Agent"
+        )
+
+        self.assertIn("`## 핵심 요약`", writer.prompt)
+        self.assertIn("`무엇`, `왜`, `어떻게`", writer.prompt)
+
     def test_selected_planner_evidence_is_copied_into_topic_boundary(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "run-planner" / "topic-test"

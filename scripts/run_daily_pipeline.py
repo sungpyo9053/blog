@@ -487,6 +487,19 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         "카테고리와 태그를 다른 값으로 바꾸지 마세요. "
     )
     common += editorial
+    quick_view_writer = (
+        "도입 직후에 `## 핵심 요약`을 두고 `무엇`, `왜`, `어떻게`를 각각 한 개의 "
+        "짧은 항목으로 작성하세요. 독자가 20초 안에 대상, 해결 이유와 본문에서 확인할 "
+        "방법을 파악해야 하며 research.md에 없는 사실을 추가하거나 도입·결론을 반복하지 "
+        "마세요. WordPress의 기존 `한눈에 보기` 자동 목차는 별도 탐색 기능이므로 삭제하거나 "
+        "대체하지 마세요. "
+    )
+    quick_view_review = (
+        "도입 직후의 `## 핵심 요약`에 근거가 확인되는 `무엇`, `왜`, `어떻게`가 각각 "
+        "존재하고 20초 안에 이해할 수 있는지 검사하세요. 하나라도 빠지거나 본문에 없는 "
+        "주장을 만들었으면 REJECT하세요. WordPress의 기존 `한눈에 보기` 자동 목차를 "
+        "삭제하거나 대체하지 마세요. "
+    )
     return [
         Stage(
             "Research Agent",
@@ -508,7 +521,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 + f"입력은 {str(topic_dir / 'research.md')!r} 하나입니다. "
                 f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "
                 "파일이 있으면 검색 의도·CTA 제안만 참고하고 사실 근거는 research.md를 우선하세요. "
-                f"기존 Guide를 적용해 {str(topic_dir / 'draft.md')!r}를 작성하세요."
+                + quick_view_writer
+                + f"기존 Guide를 적용해 {str(topic_dir / 'draft.md')!r}를 작성하세요."
             ),
         ),
         Stage(
@@ -548,7 +562,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 f"{str(PROJECT_ROOT / 'guides/publisher-guide.md')!r} "
                 "기준으로 검토하세요. reviewer.md의 주제 유형별 고유 가치와 "
                 "실증 근거 검사를 포함한 모든 필수 검사를 적용하세요. "
-                "정책 문서는 읽기만 하고 주제 디렉터리로 "
+                + quick_view_review
+                + "정책 문서는 읽기만 하고 주제 디렉터리로 "
                 "복사하지 마세요. "
                 f"원문 의미를 바꾸지 않는 {str(topic_dir / 'publish.md')!r}를 "
                 "준비하되 WordPress "

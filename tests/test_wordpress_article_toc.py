@@ -14,6 +14,20 @@ class HuntLabArticleTocTests(unittest.TestCase):
         self.assertIn("<h([23])", php)
         self.assertIn("huntlab-section-", php)
         self.assertIn("한눈에 보기", php)
+
+    def test_plugin_backfills_grounded_quick_summary_without_replacing_toc(self):
+        php = (PLUGIN / "huntlab-article-toc.php").read_text(encoding="utf-8")
+        css = (PLUGIN / "assets/article-toc.css").read_text(encoding="utf-8")
+
+        self.assertIn("Version: 1.1.0", php)
+        self.assertIn("huntlab_article_quick_summary", php)
+        self.assertIn("20초 핵심 요약", php)
+        self.assertIn("<strong>무엇</strong>", php)
+        self.assertIn("<strong>왜</strong>", php)
+        self.assertIn("<strong>어떻게</strong>", php)
+        self.assertIn("핵심 요약", php)
+        self.assertIn("huntlab-article-quick-summary", css)
+        self.assertIn(".huntlab-article-toc", css)
         self.assertIn("add_filter( 'the_content'", php)
 
     def test_toc_has_responsive_sticky_navigation_and_active_section(self):
