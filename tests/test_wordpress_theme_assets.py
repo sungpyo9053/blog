@@ -42,6 +42,9 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         ):
             self.assertIn(slug, php)
         self.assertIn("0 === (int) $category->count", php)
+        self.assertIn("Version: 1.1.1", php)
+        self.assertIn("width:100%;padding-inline:6px;font-size:13px", php)
+        self.assertIn("white-space:normal;overflow-wrap:anywhere", php)
 
 
 if __name__ == "__main__":
