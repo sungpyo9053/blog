@@ -78,6 +78,16 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("Harness가 분석 리포트 경로", writer.prompt)
         self.assertIn("output/analytics/latest.md", writer.prompt)
 
+    def test_planner_prioritizes_ml_thinking_without_forcing_top2(self):
+        planner = planner_stage("", "run-ml-thinking", Path("/tmp/topics.md"))
+
+        self.assertIn("ML적 사고력", planner.prompt)
+        self.assertIn("문제 정의", planner.prompt)
+        self.assertIn("평가지표", planner.prompt)
+        self.assertIn("실제 적용 판단", planner.prompt)
+        self.assertIn("TOP2 의무 할당은 두지 말고", planner.prompt)
+        self.assertIn("후속 관점 또는 Refresh", planner.prompt)
+
     def test_planner_allows_two_technical_topics_without_category_quota(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "topics.md"
