@@ -11,9 +11,10 @@ class PublicSiteAuditTests(unittest.TestCase):
         self.assertEqual(sitemap_urls(xml), ["https://huntlab.app/post/"])
 
     def test_inspect_page_collects_author_media_and_evidence(self):
-        html = '''<html><head><title>Test</title><meta name="author" content="admin"><meta property="og:image" content="https://huntlab.app/a.webp"><link rel="canonical" href="https://huntlab.app/post/"></head><body><img class="wp-post-image" alt="diagram"><section class="huntlab-article-quick-summary"><ul><li><strong>무엇</strong><span>검사 대상</span></li><li><strong>왜</strong><span>판단 이유</span></li><li><strong>어떻게</strong><span>확인 순서</span></li></ul></section><aside class="huntlab-article-toc">목차</aside><p>검증 환경과 실행 결과를 확인했다.</p><a href="/next/">next</a></body></html>'''.encode("utf-8")
+        html = '''<html><head><title>Test</title><meta name="author" content="admin"><meta property="article:published_time" content="2026-07-31T17:00:00+00:00"><meta property="og:image" content="https://huntlab.app/a.webp"><link rel="canonical" href="https://huntlab.app/post/"></head><body><time class="entry-date published" datetime="2026-08-01T02:00:00+09:00" itemprop="datePublished">2026-08-01</time><img class="wp-post-image" alt="diagram"><section class="huntlab-article-quick-summary"><ul><li><strong>무엇</strong><span>검사 대상</span></li><li><strong>왜</strong><span>판단 이유</span></li><li><strong>어떻게</strong><span>확인 순서</span></li></ul></section><aside class="huntlab-article-toc">목차</aside><p>검증 환경과 실행 결과를 확인했다.</p><a href="/next/">next</a></body></html>'''.encode("utf-8")
         facts = inspect_page(FetchResult("https://huntlab.app/post/", 200, "text/html", html), "https://huntlab.app/")
         self.assertEqual(facts.author, "admin")
+        self.assertEqual(facts.published_at, "2026-08-01T02:00:00+09:00")
         self.assertEqual(facts.featured_alt, "diagram")
         self.assertIn("검증 환경", facts.evidence_signals)
         self.assertTrue(facts.has_quick_summary)

@@ -228,6 +228,60 @@ def is_article_path(path: str) -> bool:
     )
 
 
+def mature_content_funnel(
+    page_rows: list[dict],
+    site_audit: dict[str, Any] | None,
+    search_period: dict[str, str],
+    *,
+    minimum_age_days: int = 3,
+) -> dict[str, Any] | None:
+    """Measure search entry only for posts old enough to appear in GSC data."""
+    if not site_audit or not search_period.get("end"):
+        return None
+    try:
+        cutoff = date.fromisoformat(search_period["end"]) - timedelta(
+            days=minimum_age_days
+        )
+    except ValueError:
+        return None
+
+    post_count = int(site_audit.get("counts", {}).get("post", 0))
+    post_pages = site_audit.get("pages", [])[:post_count]
+    eligible_paths: set[str] = set()
+    for page in post_pages:
+        published_at = str(page.get("published_at", ""))
+        try:
+            published_on = date.fromisoformat(published_at[:10])
+        except ValueError:
+            continue
+        if page.get("status") == 200 and published_on <= cutoff:
+            eligible_paths.add(normalize_page_path(str(page.get("url", ""))))
+
+    observed_paths = {
+        str(row.get("page", ""))
+        for row in page_rows
+        if _number(row.get("impressions")) > 0
+    }
+    clicked_paths = {
+        str(row.get("page", ""))
+        for row in page_rows
+        if _number(row.get("clicks")) > 0
+    }
+    observed = eligible_paths & observed_paths
+    clicked = eligible_paths & clicked_paths
+    eligible = len(eligible_paths)
+    return {
+        "cutoff": cutoff.isoformat(),
+        "eligible": eligible,
+        "observed": len(observed),
+        "clicked": len(clicked),
+        "without_impressions": sorted(eligible_paths - observed),
+        "search_entry_rate": len(observed) / eligible if eligible else None,
+        "click_rate": len(clicked) / eligible if eligible else None,
+        "fresh_or_unverified": max(post_count - eligible, 0),
+    }
+
+
 def known_query_breakdown(diagnostics: dict[str, Any]) -> dict[str, float]:
     totals = diagnostics.get("search_totals", {})
     total_clicks = _number(totals.get("clicks"))
@@ -339,8 +393,8 @@ def render(
         and 0 < _number(row["position"]) <= 15
     ]
     public_posts = int((site_audit or {}).get("counts", {}).get("post", 0))
-    unobserved_posts = max(public_posts - len(observed_articles), 0) if public_posts else 0
     period = diagnostics.get("search_period", {})
+    mature_funnel = mature_content_funnel(page_rows, site_audit, period)
     period_label = (
         f"{period.get('start', '?')}~{period.get('end', '?')}"
         if period
@@ -359,24 +413,52 @@ def render(
         "## 콘텐츠 검색 퍼널 기준점",
         "",
         f"- public_posts: `{public_posts or 'N/A'}`",
-        f"- posts_with_search_impressions: `{len(observed_articles)}`",
-        f"- posts_with_search_clicks: `{len(clicked_articles)}`",
-        f"- posts_without_observed_impressions: `{unobserved_posts if public_posts else 'N/A'}`",
+        f"- all_observed_article_urls: `{len(observed_articles)}`",
         f"- total_search_clicks: `{query_breakdown['total_clicks']:.0f}`",
         f"- total_search_impressions: `{query_breakdown['total_impressions']:.0f}`",
         f"- known_brand_clicks: `{query_breakdown['known_brand_clicks']:.0f}`",
         f"- known_nonbrand_clicks: `{query_breakdown['known_nonbrand_clicks']:.0f}`",
         f"- privacy_hidden_or_other_clicks: `{query_breakdown['privacy_hidden_clicks']:.0f}`",
-        "",
-        "Search Console의 저빈도 검색어 비공개 처리 때문에 비브랜드 전체 클릭을 "
-        "알려진 검색어 합계만으로 단정하지 않는다. 발행 후 3일 미만 글과 색인 여부는 "
-        "별도 코호트로 확인하기 전까지 미노출 실패로 판정하지 않는다.",
-        "",
-        "## GA4 측정 기준점",
-        "",
-        "| 기간 | 사용자 | 세션 | 참여 세션 | 페이지뷰 | 총 참여 시간(초) |",
-        "|---|---:|---:|---:|---:|---:|",
     ]
+    if mature_funnel:
+        entry_rate = mature_funnel["search_entry_rate"]
+        click_rate = mature_funnel["click_rate"]
+        lines.extend(
+            [
+                f"- mature_cutoff: `{mature_funnel['cutoff']}`",
+                f"- mature_posts_eligible: `{mature_funnel['eligible']}`",
+                f"- mature_posts_with_search_impressions: `{mature_funnel['observed']}`",
+                f"- mature_posts_with_search_clicks: `{mature_funnel['clicked']}`",
+                f"- mature_posts_without_observed_impressions: `{len(mature_funnel['without_impressions'])}`",
+                f"- mature_search_entry_rate: `{entry_rate:.1%}`" if entry_rate is not None else "- mature_search_entry_rate: `N/A`",
+                f"- mature_click_rate: `{click_rate:.1%}`" if click_rate is not None else "- mature_click_rate: `N/A`",
+                f"- fresh_or_unverified_posts_excluded: `{mature_funnel['fresh_or_unverified']}`",
+            ]
+        )
+    else:
+        lines.append("- mature_cohort: `N/A`")
+    lines.extend(
+        [
+            "",
+            "Search Console의 저빈도 검색어 비공개 처리 때문에 비브랜드 전체 클릭을 "
+            "알려진 검색어 합계만으로 단정하지 않는다. 검색 퍼널 비율은 Search Console "
+            "종료일 기준 발행 후 3일 이상이며 공개 응답과 발행일이 확인된 글만 계산한다.",
+        ]
+    )
+    if mature_funnel and mature_funnel["without_impressions"]:
+        lines.extend(["", "### 검색 노출 미관측 성숙 글", ""])
+        lines.extend(
+            f"- `{path}`" for path in mature_funnel["without_impressions"]
+        )
+    lines.extend(
+        [
+            "",
+            "## GA4 측정 기준점",
+            "",
+            "| 기간 | 사용자 | 세션 | 참여 세션 | 페이지뷰 | 총 참여 시간(초) |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+    )
     for label, display in (
         ("today", "오늘 현재"),
         ("yesterday", "어제"),

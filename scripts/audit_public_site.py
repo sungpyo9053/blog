@@ -45,6 +45,7 @@ class PageFacts:
     title: str = ""
     canonical: str = ""
     author: str = ""
+    published_at: str = ""
     og_image: str = ""
     noindex: bool = False
     featured_alt: str | None = None
@@ -65,6 +66,8 @@ class PageParser(HTMLParser):
         self.ignored_depth = 0
         self.canonical = ""
         self.author = ""
+        self.published_at = ""
+        self._published_time_seen = False
         self.og_image = ""
         self.robots = ""
         self.featured_alt: str | None = None
@@ -88,6 +91,8 @@ class PageParser(HTMLParser):
             content = values.get("content", "").strip()
             if key == "author":
                 self.author = content
+            elif key == "article:published_time":
+                self.published_at = content
             elif key == "og:image":
                 self.og_image = content
             elif key == "robots":
@@ -98,6 +103,15 @@ class PageParser(HTMLParser):
             self.links.add(urllib.parse.urljoin(self.url, values["href"]))
         elif tag == "img" and "wp-post-image" in values.get("class", "").split():
             self.featured_alt = values.get("alt", "").strip()
+        elif (
+            tag == "time"
+            and "published" in classes
+            and values.get("itemprop") == "datePublished"
+            and values.get("datetime")
+            and not self._published_time_seen
+        ):
+            self.published_at = values["datetime"].strip()
+            self._published_time_seen = True
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
@@ -190,6 +204,7 @@ def inspect_page(result: FetchResult, base_url: str) -> PageFacts:
     facts.title = " ".join(parser.title_parts).strip()
     facts.canonical = parser.canonical
     facts.author = parser.author
+    facts.published_at = parser.published_at
     facts.og_image = parser.og_image
     facts.noindex = "noindex" in parser.robots
     facts.featured_alt = parser.featured_alt

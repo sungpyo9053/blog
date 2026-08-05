@@ -10,6 +10,7 @@ from scripts.run_analytics_optimizer import (
     analyze,
     known_query_breakdown,
     measurement_warnings,
+    mature_content_funnel,
     render,
     write_reports,
 )
@@ -121,7 +122,21 @@ class AnalyticsOptimizerTests(unittest.TestCase):
             "ga4_summary": {},
             "ga4_channels": [],
         }
-        site_audit = {"counts": {"post": 10}}
+        site_audit = {
+            "counts": {"post": 2},
+            "pages": [
+                {
+                    "url": "https://huntlab.app/observed-post/",
+                    "status": 200,
+                    "published_at": "2026-07-30T02:00:00+09:00",
+                },
+                {
+                    "url": "https://huntlab.app/fresh-post/",
+                    "status": 200,
+                    "published_at": "2026-08-03T02:00:00+09:00",
+                },
+            ],
+        }
 
         body = render(
             [],
@@ -131,11 +146,52 @@ class AnalyticsOptimizerTests(unittest.TestCase):
             site_audit=site_audit,
         )
 
-        self.assertIn("posts_with_search_impressions: `1`", body)
-        self.assertIn("posts_without_observed_impressions: `9`", body)
+        self.assertIn("mature_posts_eligible: `1`", body)
+        self.assertIn("mature_posts_with_search_impressions: `1`", body)
+        self.assertIn("mature_posts_without_observed_impressions: `0`", body)
+        self.assertIn("fresh_or_unverified_posts_excluded: `1`", body)
         self.assertIn("`/observed-post/`", body)
         self.assertIn("disabled_review_required", body)
         self.assertIn("자동 Refresh 금지", body)
+
+    def test_mature_content_funnel_excludes_fresh_posts(self):
+        rows = [
+            {"page": "/old/", "clicks": 1, "impressions": 5},
+            {"page": "/fresh/", "clicks": 0, "impressions": 0},
+        ]
+        site_audit = {
+            "counts": {"post": 3},
+            "pages": [
+                {"url": "https://huntlab.app/old/", "status": 200, "published_at": "2026-08-01T02:00:00+09:00"},
+                {"url": "https://huntlab.app/old-unseen/", "status": 200, "published_at": "2026-07-31T02:00:00+09:00"},
+                {"url": "https://huntlab.app/fresh/", "status": 200, "published_at": "2026-08-03T02:00:00+09:00"},
+            ],
+        }
+
+        funnel = mature_content_funnel(
+            rows,
+            site_audit,
+            {"start": "2026-07-29", "end": "2026-08-04"},
+        )
+
+        self.assertEqual(funnel["eligible"], 2)
+        self.assertEqual(funnel["observed"], 1)
+        self.assertEqual(funnel["clicked"], 1)
+        self.assertEqual(funnel["without_impressions"], ["/old-unseen/"])
+        self.assertEqual(funnel["fresh_or_unverified"], 1)
+
+        body = render(
+            [],
+            [],
+            datetime(2026, 8, 5, tzinfo=timezone.utc),
+            diagnostics={
+                "search_period": {"start": "2026-07-29", "end": "2026-08-04"},
+                "search_pages": rows,
+            },
+            site_audit=site_audit,
+        )
+        self.assertIn("검색 노출 미관측 성숙 글", body)
+        self.assertIn("`/old-unseen/`", body)
 
     def test_write_reports_keeps_latest_and_dated_snapshot(self):
         with TemporaryDirectory() as temporary:
