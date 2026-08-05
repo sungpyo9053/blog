@@ -5,7 +5,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from scripts.run_analytics_optimizer import analyze, render, write_reports
+from scripts.run_analytics_optimizer import (
+    aggregate_page_rows,
+    analyze,
+    known_query_breakdown,
+    measurement_warnings,
+    render,
+    write_reports,
+)
 
 
 class AnalyticsOptimizerTests(unittest.TestCase):
@@ -44,6 +51,91 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         )
         self.assertEqual(refresh, [])
         self.assertEqual(gaps, [])
+
+    def test_aggregate_page_rows_collapses_protocol_www_and_query(self):
+        rows = [
+            {
+                "keys": ["http://www.huntlab.app/post/?utm_source=rss"],
+                "clicks": 0,
+                "impressions": 3,
+                "position": 12,
+            },
+            {
+                "keys": ["https://huntlab.app/post/"],
+                "clicks": 1,
+                "impressions": 2,
+                "position": 6,
+            },
+        ]
+
+        aggregated = aggregate_page_rows(rows)
+
+        self.assertEqual(len(aggregated), 1)
+        self.assertEqual(aggregated[0]["page"], "/post/")
+        self.assertEqual(aggregated[0]["clicks"], 1)
+        self.assertEqual(aggregated[0]["impressions"], 5)
+        self.assertAlmostEqual(aggregated[0]["position"], 9.6)
+
+    def test_query_breakdown_keeps_privacy_hidden_clicks_separate(self):
+        diagnostics = {
+            "search_totals": {"clicks": 10, "impressions": 50},
+            "search_queries": [
+                {"keys": ["huntlab"], "clicks": 4, "impressions": 5},
+                {"keys": ["fastapi timeout"], "clicks": 2, "impressions": 10},
+            ],
+        }
+
+        breakdown = known_query_breakdown(diagnostics)
+
+        self.assertEqual(breakdown["known_brand_clicks"], 4)
+        self.assertEqual(breakdown["known_nonbrand_clicks"], 2)
+        self.assertEqual(breakdown["privacy_hidden_clicks"], 4)
+
+    def test_measurement_warnings_detect_inconsistent_ga4_data(self):
+        diagnostics = {
+            "ga4_summary": {
+                "yesterday": {"screenPageViews": "20", "engagedSessions": "0"},
+                "last7days": {"sessions": "10", "screenPageViews": "100"},
+            },
+            "ga4_channels": [{"sessions": "14"}],
+        }
+        ga_rows = [{"page": "/", "screenPageViews": "60"}]
+
+        warnings = measurement_warnings(diagnostics, ga_rows)
+
+        self.assertEqual(len(warnings), 3)
+
+    def test_render_records_early_candidates_without_auto_refresh(self):
+        diagnostics = {
+            "search_period": {"start": "2026-07-28", "end": "2026-08-03"},
+            "search_totals": {"clicks": 1, "impressions": 8},
+            "search_queries": [],
+            "search_pages": [
+                {
+                    "keys": ["https://huntlab.app/observed-post/"],
+                    "clicks": 0,
+                    "impressions": 8,
+                    "position": 9,
+                }
+            ],
+            "ga4_summary": {},
+            "ga4_channels": [],
+        }
+        site_audit = {"counts": {"post": 10}}
+
+        body = render(
+            [],
+            [],
+            datetime(2026, 8, 5, tzinfo=timezone.utc),
+            diagnostics=diagnostics,
+            site_audit=site_audit,
+        )
+
+        self.assertIn("posts_with_search_impressions: `1`", body)
+        self.assertIn("posts_without_observed_impressions: `9`", body)
+        self.assertIn("`/observed-post/`", body)
+        self.assertIn("disabled_review_required", body)
+        self.assertIn("자동 Refresh 금지", body)
 
     def test_write_reports_keeps_latest_and_dated_snapshot(self):
         with TemporaryDirectory() as temporary:
