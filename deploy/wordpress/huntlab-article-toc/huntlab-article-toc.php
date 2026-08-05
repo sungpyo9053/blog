@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Article Table of Contents
  * Description: Adds a warm, accessible H2/H3 table of contents to HuntLab posts.
- * Version: 1.1.3
+ * Version: 1.1.4
  * Author: HuntLab
  */
 
@@ -24,6 +24,9 @@ function huntlab_article_summary_text( $html, $limit = 190 ) {
 	}
 	if ( function_exists( 'mb_strlen' ) && mb_strlen( $text, 'UTF-8' ) > $limit ) {
 		return rtrim( mb_substr( $text, 0, $limit, 'UTF-8' ) ) . '…';
+	}
+	if ( ! function_exists( 'mb_strlen' ) && preg_match_all( '/./us', $text, $characters ) && count( $characters[0] ) > $limit ) {
+		return rtrim( implode( '', array_slice( $characters[0], 0, $limit ) ) ) . '…';
 	}
 	if ( strlen( $text ) > $limit ) {
 		return rtrim( substr( $text, 0, $limit ) ) . '…';
