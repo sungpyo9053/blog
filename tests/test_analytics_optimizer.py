@@ -144,12 +144,24 @@ class AnalyticsOptimizerTests(unittest.TestCase):
             datetime(2026, 8, 5, tzinfo=timezone.utc),
             diagnostics=diagnostics,
             site_audit=site_audit,
+            public_post_metadata=[
+                {
+                    "link": "https://huntlab.app/observed-post/",
+                    "date": "2026-07-30T02:00:00",
+                    "status": "publish",
+                },
+                {
+                    "link": "https://huntlab.app/fresh-post/",
+                    "date": "2026-08-03T02:00:00",
+                    "status": "publish",
+                },
+            ],
         )
 
         self.assertIn("mature_posts_eligible: `1`", body)
         self.assertIn("mature_posts_with_search_impressions: `1`", body)
         self.assertIn("mature_posts_without_observed_impressions: `0`", body)
-        self.assertIn("fresh_or_unverified_posts_excluded: `1`", body)
+        self.assertIn("fresh_posts_excluded: `1`", body)
         self.assertIn("`/observed-post/`", body)
         self.assertIn("disabled_review_required", body)
         self.assertIn("자동 Refresh 금지", body)
@@ -159,18 +171,27 @@ class AnalyticsOptimizerTests(unittest.TestCase):
             {"page": "/old/", "clicks": 1, "impressions": 5},
             {"page": "/fresh/", "clicks": 0, "impressions": 0},
         ]
-        site_audit = {
-            "counts": {"post": 3},
-            "pages": [
-                {"url": "https://huntlab.app/old/", "status": 200, "published_at": "2026-08-01T02:00:00+09:00"},
-                {"url": "https://huntlab.app/old-unseen/", "status": 200, "published_at": "2026-07-31T02:00:00+09:00"},
-                {"url": "https://huntlab.app/fresh/", "status": 200, "published_at": "2026-08-02T17:00:00+00:00"},
-            ],
-        }
+        public_posts = [
+            {
+                "link": "https://huntlab.app/old/",
+                "status": "publish",
+                "date": "2026-08-01T02:00:00",
+            },
+            {
+                "link": "https://huntlab.app/old-unseen/",
+                "status": "publish",
+                "date": "2026-07-31T02:00:00",
+            },
+            {
+                "link": "https://huntlab.app/fresh/",
+                "status": "publish",
+                "date": "2026-08-03T02:00:00",
+            },
+        ]
 
         funnel = mature_content_funnel(
             rows,
-            site_audit,
+            public_posts,
             {"start": "2026-07-29", "end": "2026-08-04"},
         )
 
@@ -178,7 +199,7 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertEqual(funnel["observed"], 1)
         self.assertEqual(funnel["clicked"], 1)
         self.assertEqual(funnel["without_impressions"], ["/old-unseen/"])
-        self.assertEqual(funnel["fresh_or_unverified"], 1)
+        self.assertEqual(funnel["fresh"], 1)
 
         body = render(
             [],
@@ -188,7 +209,8 @@ class AnalyticsOptimizerTests(unittest.TestCase):
                 "search_period": {"start": "2026-07-29", "end": "2026-08-04"},
                 "search_pages": rows,
             },
-            site_audit=site_audit,
+            site_audit={"counts": {"post": 3}},
+            public_post_metadata=public_posts,
         )
         self.assertIn("검색 노출 미관측 성숙 글", body)
         self.assertIn("`/old-unseen/`", body)

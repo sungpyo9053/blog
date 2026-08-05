@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import sys
 import urllib.parse
@@ -12,7 +13,11 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from publisher.config import load_env_file
-from scripts.audit_public_site import audit_site, render_markdown as render_public_audit
+from scripts.audit_public_site import (
+    audit_site,
+    fetch,
+    render_markdown as render_public_audit,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIR = ROOT / "output" / "analytics"
@@ -228,15 +233,41 @@ def is_article_path(path: str) -> bool:
     )
 
 
+def collect_public_posts(base_url: str, *, timeout: float = 10.0) -> list[dict]:
+    """Collect published post dates with one stable REST request per 100 posts."""
+    posts: list[dict] = []
+    endpoint = urllib.parse.urljoin(base_url.rstrip("/") + "/", "wp-json/wp/v2/posts")
+    for page in range(1, 101):
+        query = urllib.parse.urlencode(
+            {
+                "per_page": 100,
+                "page": page,
+                "_fields": "date,link,slug,status",
+            }
+        )
+        result = fetch(f"{endpoint}?{query}", timeout=timeout)
+        if result.status == 400 and page > 1:
+            break
+        if result.status != 200:
+            raise RuntimeError("public WordPress post metadata read failed")
+        batch = json.loads(result.body.decode("utf-8"))
+        if not isinstance(batch, list):
+            raise ValueError("public WordPress post metadata is not a list")
+        posts.extend(batch)
+        if len(batch) < 100:
+            break
+    return posts
+
+
 def mature_content_funnel(
     page_rows: list[dict],
-    site_audit: dict[str, Any] | None,
+    public_posts: list[dict] | None,
     search_period: dict[str, str],
     *,
     minimum_age_days: int = 3,
 ) -> dict[str, Any] | None:
     """Measure search entry only for posts old enough to appear in GSC data."""
-    if not site_audit or not search_period.get("end"):
+    if public_posts is None or not search_period.get("end"):
         return None
     try:
         cutoff = date.fromisoformat(search_period["end"]) - timedelta(
@@ -245,24 +276,18 @@ def mature_content_funnel(
     except ValueError:
         return None
 
-    post_count = int(site_audit.get("counts", {}).get("post", 0))
-    post_pages = site_audit.get("pages", [])[:post_count]
     eligible_paths: set[str] = set()
-    for page in post_pages:
-        published_at = str(page.get("published_at", ""))
+    for post in public_posts:
+        published_at = str(post.get("date", ""))
         try:
             published_moment = datetime.fromisoformat(
                 published_at.replace("Z", "+00:00")
             )
-            if published_moment.tzinfo is not None:
-                published_moment = published_moment.astimezone(
-                    timezone(timedelta(hours=9))
-                )
             published_on = published_moment.date()
         except ValueError:
             continue
-        if page.get("status") == 200 and published_on <= cutoff:
-            eligible_paths.add(normalize_page_path(str(page.get("url", ""))))
+        if post.get("status", "publish") == "publish" and published_on <= cutoff:
+            eligible_paths.add(normalize_page_path(str(post.get("link", ""))))
 
     observed_paths = {
         str(row.get("page", ""))
@@ -285,7 +310,7 @@ def mature_content_funnel(
         "without_impressions": sorted(eligible_paths - observed),
         "search_entry_rate": len(observed) / eligible if eligible else None,
         "click_rate": len(clicked) / eligible if eligible else None,
-        "fresh_or_unverified": max(post_count - eligible, 0),
+        "fresh": max(len(public_posts) - eligible, 0),
     }
 
 
@@ -384,6 +409,7 @@ def render(
     *,
     diagnostics: dict[str, Any] | None = None,
     site_audit: dict[str, Any] | None = None,
+    public_post_metadata: list[dict] | None = None,
 ) -> str:
     refresh, gaps = analyze(search_rows)
     diagnostics = diagnostics or {}
@@ -399,9 +425,13 @@ def render(
         and _number(row["impressions"]) >= 3
         and 0 < _number(row["position"]) <= 15
     ]
-    public_posts = int((site_audit or {}).get("counts", {}).get("post", 0))
+    public_posts = (
+        len(public_post_metadata)
+        if public_post_metadata is not None
+        else int((site_audit or {}).get("counts", {}).get("post", 0))
+    )
     period = diagnostics.get("search_period", {})
-    mature_funnel = mature_content_funnel(page_rows, site_audit, period)
+    mature_funnel = mature_content_funnel(page_rows, public_post_metadata, period)
     period_label = (
         f"{period.get('start', '?')}~{period.get('end', '?')}"
         if period
@@ -439,7 +469,7 @@ def render(
                 f"- mature_posts_without_observed_impressions: `{len(mature_funnel['without_impressions'])}`",
                 f"- mature_search_entry_rate: `{entry_rate:.1%}`" if entry_rate is not None else "- mature_search_entry_rate: `N/A`",
                 f"- mature_click_rate: `{click_rate:.1%}`" if click_rate is not None else "- mature_click_rate: `N/A`",
-                f"- fresh_or_unverified_posts_excluded: `{mature_funnel['fresh_or_unverified']}`",
+                f"- fresh_posts_excluded: `{mature_funnel['fresh']}`",
             ]
         )
     else:
@@ -585,6 +615,7 @@ def main() -> int:
     now = datetime.now(timezone.utc).astimezone()
     public_site_url = os.environ.get("PUBLIC_SITE_URL", "https://huntlab.app/")
     public_audit_data: dict[str, Any] | None = None
+    public_post_metadata: list[dict] | None = None
     try:
         public_audit_data = audit_site(public_site_url)
         public_audit = render_public_audit(public_audit_data, heading_level=2)
@@ -596,6 +627,10 @@ def main() -> int:
             "- error: `public read failed; no site setting was changed`\n"
         )
     try:
+        public_post_metadata = collect_public_posts(public_site_url)
+    except Exception:  # noqa: BLE001 - cohort can be N/A without blocking analytics
+        public_post_metadata = None
+    try:
         search_rows, ga_rows, diagnostics = collect()
         body = render(
             search_rows,
@@ -603,6 +638,7 @@ def main() -> int:
             now,
             diagnostics=diagnostics,
             site_audit=public_audit_data,
+            public_post_metadata=public_post_metadata,
         )
         body += "\n" + public_audit
         status = "COMPLETE"
