@@ -91,6 +91,33 @@ class SEOAgentContractTests(unittest.TestCase):
             self.assertIn(field, writer)
             self.assertIn(field, reviewer)
 
+    def test_content_type_guides_are_routed_without_duplicating_common_style(self):
+        planner = read("agents/topic-planner-agent.md")
+        writer = read("agents/writer.md")
+        reviewer = read("agents/reviewer.md")
+        index = read("guides/content-types/README.md")
+        for content_type in (
+            "tutorial_troubleshooting",
+            "concept_architecture",
+            "ai_ml_experiment",
+            "build_log_operations",
+            "current_affairs_policy",
+        ):
+            self.assertIn(content_type, planner)
+            self.assertIn(content_type, index)
+        self.assertIn("content_type", writer)
+        self.assertIn("content_type", reviewer)
+        for path in (
+            "guides/content-types/tutorial-troubleshooting.md",
+            "guides/content-types/concept-architecture.md",
+            "guides/content-types/ai-ml-experiment.md",
+            "guides/content-types/build-log-operations.md",
+            "guides/content-types/current-affairs-policy.md",
+        ):
+            text = read(path)
+            self.assertIn("## 필수 근거", text)
+            self.assertIn("## Reviewer 거절 조건", text)
+
     def test_reviewer_rejects_incomplete_seo(self):
         text = read("agents/reviewer.md")
         self.assertIn("하나라도 부족하면 `REJECTED`", text)

@@ -78,6 +78,67 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("Harness가 분석 리포트 경로", writer.prompt)
         self.assertIn("output/analytics/latest.md", writer.prompt)
 
+    def test_harness_routes_only_selected_content_type_guide(self):
+        context = make_topic_context(
+            "run-content-type",
+            "이벤트 기반 아키텍처 선택 기준",
+            category="System Architecture",
+            content_type="concept_architecture",
+        )
+        stages = topic_stages(context)
+
+        for stage in stages[:2]:
+            self.assertIn("concept-architecture.md", stage.prompt)
+            self.assertNotIn("ai-ml-experiment.md", stage.prompt)
+            self.assertNotIn("build-log-operations.md", stage.prompt)
+        writer = next(stage for stage in stages if stage.name == "Writer Agent")
+        reviewer = next(stage for stage in stages if stage.name == "Reviewer Agent")
+        self.assertIn("content_type='concept_architecture'", writer.prompt)
+        self.assertIn("content_type='concept_architecture'", reviewer.prompt)
+        self.assertIn("concept-architecture.md", reviewer.prompt)
+        publisher = next(stage for stage in stages if stage.name == "Publisher Agent")
+        self.assertNotIn("guides/content-types/", publisher.prompt)
+
+    def test_legacy_topic_plan_infers_content_type_from_category(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "topics.md"
+            candidates = []
+            for index in range(1, 36):
+                title = f"AI 후보 {index}"
+                candidates.append(
+                    f"## {index}. {title}\n\n"
+                    f"- title: {title}\n"
+                    "- category: AI\n"
+                    "- tags: AI, Test, HuntLab\n"
+                    "- score: 80/90\n"
+                    "- score_breakdown: 계약 검증\n"
+                    "- reason: 하위 호환 검증\n"
+                    "- evergreen: 중간\n"
+                    f"- primary_keyword: {title}\n"
+                    "- search_intent: 개념 확인\n"
+                    "- research_focus: 공식 자료\n"
+                    "- recommended_images: 구조도\n"
+                    "- duplicate_check: 중복 없음\n"
+                    "- internal_link_candidates: 없음\n"
+                    "- topic_cluster: AI\n"
+                    "- pillar_candidate: 없음\n"
+                )
+            top10 = "\n".join(f"{index}. AI 후보 {index}" for index in range(1, 11))
+            path.write_text(
+                "# Topic Candidates\n\n"
+                + "\n".join(candidates)
+                + "\n## TOP10\n\n"
+                + top10
+                + "\n\n## TOP2\n\n1. AI 후보 1\n2. AI 후보 2\n",
+                encoding="utf-8",
+            )
+
+            plans = parse_topic_plan(path)
+            self.assertEqual(
+                [plan["content_type"] for plan in plans],
+                ["ai_ml_experiment", "ai_ml_experiment"],
+            )
+
     def test_planner_prioritizes_ml_thinking_without_forcing_top2(self):
         planner = planner_stage("", "run-ml-thinking", Path("/tmp/topics.md"))
 
@@ -274,6 +335,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             payload = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(payload["run_id"], context.run_id)
             self.assertEqual(payload["topic_id"], context.topic_id)
+            self.assertEqual(payload["content_type"], "tutorial_troubleshooting")
             self.assertEqual(
                 payload["duplicate_check"],
                 "공개 글과 Draft에 동일 검색 의도 없음",

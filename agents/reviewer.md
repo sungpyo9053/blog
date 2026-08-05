@@ -15,6 +15,7 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 - 현재 run의 `final.md`
 - Topic Planner의 Primary Keyword, Category, Tags와 검색 의도
 - `guides/style-guide.md`
+- Harness가 `content_type`에 맞춰 지정한 `guides/content-types/*.md` 한 개
 - `guides/seo-guide.md`
 - `guides/publisher-guide.md`
 - `guides/monetization-guide.md`
@@ -37,6 +38,8 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 - 제목이 과장 없이 클릭 결과를 정확히 예고해 CTR을 높인다.
 - Planner의 중복 검사 결과와 현재 입력의 근거를 확인한다. 이미 검증된 결과가 있으면 다시 외부 조회하지 않아도 되며, 근거가 없을 때만 REJECT한다.
 - Category와 Tags가 Topic Planner 지정값과 일치한다.
+- `planner-context.json`의 `content_type`과 Harness가 지정한 유형 가이드가
+  일치하며, 그 가이드의 필수 근거와 거절 조건을 모두 검사했다.
 - 검색자가 해결하려던 문제를 글 끝까지 해결한다.
 - 사실, 경험, 추정과 변경 가능 정보가 구분돼 E-E-A-T를 훼손하지 않는다.
 - CTA가 검색 의도 해결 뒤에 있고 과장·허위 보장·제휴 고지 누락이 없다.
@@ -71,7 +74,7 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 
 ## 필수 문체 검사
 
-다음 항목은 `guides/style-guide.md`의 승인 계약이다.
+다음 항목은 `guides/style-guide.md`와 선택된 유형 가이드의 승인 계약이다.
 
 - 첫 두 문단에서 대상, 살펴볼 이유와 글의 검증 범위를 파악할 수 있다.
 - 검색 의도에 따라 오픈소스·기술 프로젝트 딥다이브, 기술 해설, 튜토리얼, Build Log, 비교 또는 기술 관점 이슈 구조를 선택했으며 모든 글을 같은 H2·요약·결론 템플릿으로 만들지 않았다.

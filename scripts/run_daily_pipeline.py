@@ -45,6 +45,25 @@ EDITOR_CATEGORIES = {
     "Harness Engineering",
     "System Architecture",
 }
+CONTENT_TYPE_GUIDES = {
+    "tutorial_troubleshooting": PROJECT_ROOT / "guides/content-types/tutorial-troubleshooting.md",
+    "concept_architecture": PROJECT_ROOT / "guides/content-types/concept-architecture.md",
+    "ai_ml_experiment": PROJECT_ROOT / "guides/content-types/ai-ml-experiment.md",
+    "build_log_operations": PROJECT_ROOT / "guides/content-types/build-log-operations.md",
+    "current_affairs_policy": PROJECT_ROOT / "guides/content-types/current-affairs-policy.md",
+}
+LEGACY_CONTENT_TYPE_BY_CATEGORY = {
+    "Tech": "tutorial_troubleshooting",
+    "AI": "ai_ml_experiment",
+    "ML Algorithms": "ai_ml_experiment",
+    "Harness Engineering": "concept_architecture",
+    "System Architecture": "concept_architecture",
+    "Build Log": "build_log_operations",
+    "Economy": "current_affairs_policy",
+    "Society": "current_affairs_policy",
+    "Politics": "current_affairs_policy",
+    "Hot Issue": "current_affairs_policy",
+}
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
 REVIEW_STATUS_PATTERN = re.compile(
     r"(?im)^\s*(?:-\s*)?status\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
@@ -73,6 +92,7 @@ class TopicContext:
     tags: tuple[str, ...] = ()
     reason: str = ""
     research_focus: str = ""
+    content_type: str = "tutorial_troubleshooting"
 
     @property
     def source_id(self) -> str:
@@ -358,12 +378,21 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         category = fields["category"]
         if category not in EDITOR_CATEGORIES:
             raise PipelineError(f"허용되지 않은 카테고리: {category}")
+        content_type = fields.get("content_type") or LEGACY_CONTENT_TYPE_BY_CATEGORY[
+            category
+        ]
+        if content_type not in CONTENT_TYPE_GUIDES:
+            raise PipelineError(f"{title}: 허용되지 않은 content_type: {content_type}")
         tags = tuple(
             dict.fromkeys(tag.strip() for tag in fields["tags"].split(",") if tag.strip())
         )
         if not 3 <= len(tags) <= 4:
             raise PipelineError(f"{title}: tags는 재사용 가능한 3~4개여야 합니다.")
-        candidates[title] = {**fields, "tags": tags}
+        candidates[title] = {
+            **fields,
+            "content_type": content_type,
+            "tags": tags,
+        }
 
     top10_marker = re.search(r"(?m)^## TOP10\s*$", text)
     if top10_marker is None or top10_marker.start() > marker.start():
@@ -411,7 +440,10 @@ def make_topic_context(
     tags: tuple[str, ...] = (),
     reason: str = "",
     research_focus: str = "",
+    content_type: str = "tutorial_troubleshooting",
 ) -> TopicContext:
+    if content_type not in CONTENT_TYPE_GUIDES:
+        raise PipelineError(f"허용되지 않은 content_type: {content_type}")
     topic_id = make_topic_id(title)
     directory = RUNS_DIR / run_id / topic_id
     return TopicContext(
@@ -423,6 +455,7 @@ def make_topic_context(
         tags=tags,
         reason=reason,
         research_focus=research_focus,
+        content_type=content_type,
     )
 
 
@@ -447,6 +480,7 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "topic_id": context.topic_id,
         "title": context.title,
         "category": context.category,
+        "content_type": context.content_type,
         "tags": list(context.tags),
         "primary_keyword": plan.get("primary_keyword", ""),
         "secondary_keywords": plan.get("secondary_keywords", ""),
@@ -472,6 +506,7 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
 def topic_stages(context: TopicContext) -> list[Stage]:
     topic = context.title
     topic_dir = context.directory
+    content_type_guide = CONTENT_TYPE_GUIDES[context.content_type]
     common = (
         f"run_id={context.run_id!r}, topic_id={context.topic_id!r}, "
         f"topic_title={topic!r}입니다. 주제별 콘텐츠 입력과 산출물은 "
@@ -482,9 +517,15 @@ def topic_stages(context: TopicContext) -> list[Stage]:
     )
     editorial = (
         f"Editor 지정값은 category={context.category!r}, "
+        f"content_type={context.content_type!r}, "
         f"tags={list(context.tags)!r}, reason={context.reason!r}, "
         f"research_focus={context.research_focus!r}입니다. 이 값을 그대로 활용하고 "
-        "카테고리와 태그를 다른 값으로 바꾸지 마세요. "
+        "카테고리, 글 유형과 태그를 다른 값으로 바꾸지 마세요. "
+    )
+    content_guidance = (
+        f"공통 문체는 {str(PROJECT_ROOT / 'guides/style-guide.md')!r}, 이 글에만 "
+        f"적용할 유형별 규칙은 {str(content_type_guide)!r}에서 읽으세요. 다른 "
+        "유형 가이드를 함께 섞지 마세요. "
     )
     common += editorial
     quick_view_writer = (
@@ -506,6 +547,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             PROJECT_ROOT / "agents/researcher.md",
             (
                 common
+                + content_guidance
                 + f"Topic Planner의 TOP2 중 다음 주제만 조사하세요: {topic!r}. "
                 f"선정 근거와 검색 의도는 {str(topic_dir / 'planner-context.json')!r}에서 "
                 "읽고, 중복 검사 결과를 사실 근거로 확대 해석하지 마세요. "
@@ -518,6 +560,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             PROJECT_ROOT / "agents/writer.md",
             (
                 common
+                + content_guidance
                 + f"입력은 {str(topic_dir / 'research.md')!r} 하나입니다. "
                 f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "
                 "파일이 있으면 검색 의도·CTA 제안만 참고하고 사실 근거는 research.md를 우선하세요. "
@@ -557,6 +600,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 f"{str(topic_dir / 'planner-context.json')!r}, "
                 f"{str(PROJECT_ROOT / 'agents/reviewer.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/style-guide.md')!r}, "
+                f"{str(content_type_guide)!r}, "
                 f"{str(PROJECT_ROOT / 'guides/seo-guide.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/monetization-guide.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/publisher-guide.md')!r} "
@@ -862,6 +906,7 @@ def dry_run_topics() -> str:
                 f"## {number}. {title}\n\n"
                 f"- title: {title}\n"
                 f"- category: {category}\n"
+                f"- content_type: {LEGACY_CONTENT_TYPE_BY_CATEGORY[category]}\n"
                 "- tags: DryRun, Pipeline, HuntLab\n"
                 "- score: 72/90\n"
                 "- score_breakdown: 최신성 8; 검색 수요 8; 공식 출처 8; "
@@ -927,6 +972,7 @@ def validate_dry_run(
             run_id,
             topic,
             category=plan["category"],
+            content_type=plan["content_type"],
             tags=plan["tags"],
             reason=plan["reason"],
             research_focus=plan["research_focus"],
@@ -1044,6 +1090,7 @@ def main() -> int:
                 run_id,
                 plan["title"],
                 category=plan["category"],
+                content_type=plan["content_type"],
                 tags=plan["tags"],
                 reason=plan["reason"],
                 research_focus=plan["research_focus"],

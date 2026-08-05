@@ -45,6 +45,22 @@ WordPress 조회는 읽기 전용이다. 인증정보를 출력하거나 산출�
 
 카테고리 이름은 위 표기를 정확히 사용한다. 최근 편중은 평가 요소로 고려하되, 카테고리 균형을 맞추기 위해 품질이 낮은 후보를 TOP10이나 TOP2에 넣지 않는다.
 
+## 글 유형 선택
+
+카테고리와 별개로 검색자가 얻으려는 주된 결과에 맞춰 `content_type` 하나를
+선택한다. 작업 전에 `guides/content-types/README.md`를 읽고 다음 값만 사용한다.
+
+- `tutorial_troubleshooting`: 설치, 실행, 설정, 오류 해결
+- `concept_architecture`: 개념, 구조, 데이터 흐름, 설계 선택
+- `ai_ml_experiment`: AI·ML 문제 정의, 실험, 평가와 오류 분석
+- `build_log_operations`: 실제 변경, 장애, 운영 결과와 회고
+- `current_affairs_policy`: 정책, 공식 통계, 시사 변화의 기술 운영 영향
+
+카테고리 이름으로 기계적으로 결정하지 않는다. 후보의 `search_intent`,
+`original_value_plan`, `evidence_plan`이 선택한 유형 가이드의 필수 근거를 만들 수
+있는지 확인한다. 두 유형이 겹치면 검색자가 최종적으로 실행하려는 행동 하나를
+기준으로 선택한다.
+
 ## 카테고리별 원칙
 
 ### Tech
@@ -190,6 +206,7 @@ Engineering, System Architecture, Tech, AI 또는 Build Log
 
 - title: 후보 제목
 - category: Tech
+- content_type: tutorial_troubleshooting
 - primary_keyword: 실제 검색 표현
 - secondary_keywords: 관련 검색어1, 관련 검색어2
 - target_reader: 검색자의 상황과 해결 과제
@@ -221,7 +238,7 @@ Engineering, System Architecture, Tech, AI 또는 Build Log
 2. 두 번째 최종 주제
 ```
 
-`title`, `category`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `original_value_plan`, `evidence_plan`, `recommended_images`는 반드시 존재해야 한다. `tags`는 중복 없는 3~4개다. 기존 WordPress에서 재사용할 수 있는 넓고 안정적인 주제 태그를 우선하며, 검색어 변형이나 한 글에서만 쓰일 긴 문구를 새 태그로 만들지 않는다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
+`title`, `category`, `content_type`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `original_value_plan`, `evidence_plan`, `recommended_images`는 반드시 존재해야 한다. `tags`는 중복 없는 3~4개다. 기존 WordPress에서 재사용할 수 있는 넓고 안정적인 주제 태그를 우선하며, 검색어 변형이나 한 글에서만 쓰일 긴 문구를 새 태그로 만들지 않는다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
 
 `original_value_plan`이 공식 문서 재요약에 그치거나 `evidence_plan`에 검증 가능한
 방법이 없으면 TOP2로 선정하지 않는다. 하루 발행량을 채우기 위해 기준 미달
