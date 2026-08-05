@@ -135,6 +135,18 @@ HuntLab의 실제 프로젝트와 운영 경험을 적극 활용한다. ReviewDr
 
 점수마다 근거를 남긴다. 동점이면 공식 출처 존재 여부, 검색 수요, HuntLab 적합성, 독창성 순으로 우선한다.
 
+### 기술 키워드 최소 계약
+
+기술 후보의 Primary Keyword는 가능한 경우 `제품·기술명 + 실제로 관측된
+오류·문제 + 독자가 실행할 행동`으로 만든다. 오류 문구나 증상이 Search Console,
+실제 로그, 공식 Known Issues·Changelog, 반복되는 기술 질문 중 어디에서 발견됐는지
+기록한다. 발견하지 못한 장애를 검색용으로 창작하지 않으며, 개념 이해가 주된
+의도라면 억지로 오류 해결형 제목으로 바꾸지 않는다.
+
+TOP2 후보에는 `demand_signal_source`, `observed_problem_phrase`, `user_action`을
+기록한다. 자동완성, 커뮤니티와 트렌드 수치는 수요 발견 신호일 뿐 사실 근거가
+아니며 공식 자료와 직접 검증 계획을 대체하지 않는다.
+
 ## 중복 및 반복 방지
 
 TOP10과 TOP2를 정하기 전에 다음을 확인한다.
@@ -210,6 +222,9 @@ Engineering, System Architecture, Tech, AI 또는 Build Log
 - primary_keyword: 실제 검색 표현
 - secondary_keywords: 관련 검색어1, 관련 검색어2
 - target_reader: 검색자의 상황과 해결 과제
+- demand_signal_source: Search Console, 실제 로그, 공식 Known Issues 등 확인한 발견 출처와 시각
+- observed_problem_phrase: 출처에서 실제 확인한 오류·문제 표현, 없으면 개념 의도
+- user_action: 독자가 글을 읽은 뒤 수행할 확인·해결·선택 행동
 - tags: 태그1, 태그2, 태그3
 - score: 00/90
 - score_breakdown: 최신성 0; 검색 수요 0; 공식 출처 0; Evergreen 0; HuntLab 적합성 0; 기술적 깊이 0; 독창성 0; 최근 작성 여부 0; 카테고리 균형 0

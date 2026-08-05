@@ -485,6 +485,9 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "primary_keyword": plan.get("primary_keyword", ""),
         "secondary_keywords": plan.get("secondary_keywords", ""),
         "target_reader": plan.get("target_reader", ""),
+        "demand_signal_source": plan.get("demand_signal_source", ""),
+        "observed_problem_phrase": plan.get("observed_problem_phrase", ""),
+        "user_action": plan.get("user_action", ""),
         "reason": context.reason,
         "search_intent": plan.get("search_intent", ""),
         "research_focus": context.research_focus,
@@ -915,6 +918,9 @@ def dry_run_topics() -> str:
                 "- reason: 파서 검증\n"
                 "- evergreen: 중간\n"
                 f"- primary_keyword: {title}\n"
+                "- demand_signal_source: dry-run fixture\n"
+                "- observed_problem_phrase: 자동화 계약 검증\n"
+                "- user_action: 드라이런 결과 확인\n"
                 "- search_intent: 자동화 검증\n"
                 "- research_focus: 공식 자료 확인\n"
                 "- recommended_images: 대표 이미지 1개\n"
@@ -1022,6 +1028,11 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             "선정하지 말고, 접근할 수 없거나 반복 신호를 확인하지 못하면 추정하지 말고 "
             "Velog 신호 없음으로 계속 진행하세요. 참고한 후보는 reason 또는 sources에 "
             "관측 날짜, 페이지 URL과 발견한 주제 흐름을 기록하세요. "
+            "기술 후보의 Primary Keyword는 가능한 경우 제품·기술명, 실제로 관측된 "
+            "오류·문제 표현과 독자가 실행할 확인·해결 행동을 결합하세요. Search Console, "
+            "실제 로그, 공식 Known Issues·Changelog 또는 반복 질문에서 확인하지 못한 "
+            "장애를 창작하지 말고, 개념 이해 의도에는 오류형 제목을 강제하지 마세요. "
+            "TOP2에는 demand_signal_source, observed_problem_phrase, user_action을 기록하세요. "
             f"카테고리별 수량을 강제하지 말고 전체 후보 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
             "작성하세요. 최종 TOP2는 각 후보의 primary_keyword를 제목에 그대로 포함해야 합니다. "
             f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "

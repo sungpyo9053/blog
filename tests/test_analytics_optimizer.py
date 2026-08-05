@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from scripts.run_analytics_optimizer import (
     aggregate_page_rows,
     analyze,
+    aug7_review_decisions,
     known_query_breakdown,
     measurement_warnings,
     mature_content_funnel,
@@ -21,6 +22,56 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         body = render([], [], datetime(2026, 8, 3, tzinfo=timezone.utc))
         self.assertIn("Analytics Optimization Report", body)
         self.assertNotIn("Public Site Quality Audit", body)
+
+    def test_aug7_review_selects_one_title_and_one_discovery_action(self):
+        decision = aug7_review_decisions(
+            [
+                {
+                    "page": "/resident-registration-survey/",
+                    "clicks": 0,
+                    "impressions": 38,
+                    "position": 11.4,
+                }
+            ],
+            [
+                {
+                    "url": "https://huntlab.app/unindexed/",
+                    "status": "COMPLETE",
+                    "verdict": "FAIL",
+                    "coverage_state": "Discovered - currently not indexed",
+                },
+                {
+                    "url": "https://huntlab.app/also-unindexed/",
+                    "status": "COMPLETE",
+                    "verdict": "FAIL",
+                },
+            ],
+            datetime(2026, 8, 7, 1, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(
+            decision["title_experiment"]["status"], "ELIGIBLE_REVIEW"
+        )
+        self.assertEqual(
+            decision["title_experiment"]["single_change"], "title_only"
+        )
+        self.assertEqual(
+            decision["index_discovery"]["target_url"],
+            "https://huntlab.app/unindexed/",
+        )
+        self.assertEqual(
+            decision["index_discovery"]["single_change"],
+            "one_relevant_internal_link",
+        )
+
+    def test_aug7_review_waits_before_review_date(self):
+        decision = aug7_review_decisions(
+            [],
+            [],
+            datetime(2026, 8, 6, 1, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(decision["title_experiment"]["status"], "SCHEDULED")
+        self.assertEqual(decision["index_discovery"]["status"], "SCHEDULED")
 
     def test_analyze_returns_refresh_and_gap_candidates(self):
         rows = [
@@ -165,6 +216,8 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertIn("`/observed-post/`", body)
         self.assertIn("disabled_review_required", body)
         self.assertIn("자동 Refresh 금지", body)
+        self.assertIn("8월 7일 운영 결정", body)
+        self.assertIn("Naver·Whereispost Shadow Mode", body)
 
     def test_mature_content_funnel_excludes_fresh_posts(self):
         rows = [

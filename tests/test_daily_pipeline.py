@@ -148,6 +148,10 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("실제 적용 판단", planner.prompt)
         self.assertIn("TOP2 의무 할당은 두지 말고", planner.prompt)
         self.assertIn("후속 관점 또는 Refresh", planner.prompt)
+        self.assertIn("demand_signal_source", planner.prompt)
+        self.assertIn("observed_problem_phrase", planner.prompt)
+        self.assertIn("user_action", planner.prompt)
+        self.assertIn("확인하지 못한 장애를 창작하지 말고", planner.prompt)
 
     def test_planner_uses_velog_only_as_a_guarded_discovery_signal(self):
         planner = planner_stage("", "run-velog-signal", Path("/tmp/topics.md"))

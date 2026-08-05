@@ -21,6 +21,20 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
 - 공개 글의 URL·제목·카테고리·기존 CTA
 - 확인 기간, 측정 ID, 사이트 URL
 
+### 선택적 Naver·Whereispost Shadow Mode
+
+- 네이버 서치어드바이저는 소유자가 내보낸 데이터 또는 공식 지원 API만 입력으로
+  사용한다. 일반 성과 데이터 API가 확인되지 않은 상태에서 로그인 화면을 자동
+  조작하거나 내부 요청을 역공학하지 않는다.
+- Whereispost 키워드마스터는 공식 자동화 API와 허용 조건이 확인되기 전까지
+  화면을 크롤링하지 않는다. 사용자가 직접 확인해 제공한 JSON만 Shadow Mode로
+  읽고 TOP2 선정 결과는 바꾸지 않는다.
+- 입력 경로는 각각 `NAVER_SEARCHADVISOR_EXPORT`,
+  `WHEREISPOST_SHADOW_EXPORT` 환경 변수로 전달한다. 예시는
+  `config/search-signals/`에 있으며 실제 내보내기 파일과 인증정보는 Git에 넣지
+  않는다.
+- 데이터가 없으면 `0`이 아니라 `N/A`로 보고한다.
+
 인증정보는 환경 변수 또는 승인된 Secret Store에서만 읽고 로그에 출력하지 않는다.
 
 ## 분석 기준

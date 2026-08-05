@@ -18,6 +18,7 @@ from scripts.audit_public_site import (
     fetch,
     render_markdown as render_public_audit,
 )
+from scripts.search_signal_providers import collect_shadow_signals
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIR = ROOT / "output" / "analytics"
@@ -45,6 +46,162 @@ GA4_SUMMARY_METRICS = (
     "userEngagementDuration",
 )
 BRAND_QUERIES = {"huntlab", "hunt lab", "훈트랩"}
+RESIDENT_SURVEY_PATH = "/resident-registration-survey/"
+RESIDENT_SURVEY_PROPOSED_TITLE = (
+    "2026 주민등록 사실조사 방문조사 대상과 비대면 참여 방법"
+)
+
+
+def _optional_path(value: str | None) -> Path | None:
+    return Path(value).expanduser() if value and value.strip() else None
+
+
+def collect_url_inspections(urls: list[str]) -> list[dict[str, Any]]:
+    """Read Google's indexed-version status; never submit URLs for indexing."""
+    from googleapiclient.discovery import build
+
+    if not urls:
+        return []
+    try:
+        service = build(
+            "searchconsole",
+            "v1",
+            credentials=_credentials(),
+            cache_discovery=False,
+        )
+        site_url = os.environ["SEARCH_CONSOLE_SITE_URL"]
+    except Exception as exc:  # noqa: BLE001 - inspection is supplementary
+        return [
+            {
+                "url": url,
+                "status": "INCOMPLETE",
+                "error_type": type(exc).__name__,
+            }
+            for url in urls[:10]
+        ]
+    results: list[dict[str, Any]] = []
+    for url in urls[:10]:
+        try:
+            response = (
+                service.urlInspection()
+                .index()
+                .inspect(
+                    body={
+                        "inspectionUrl": url,
+                        "siteUrl": site_url,
+                        "languageCode": "ko-KR",
+                    }
+                )
+                .execute()
+            )
+            status = response.get("inspectionResult", {}).get(
+                "indexStatusResult", {}
+            )
+            results.append(
+                {
+                    "url": url,
+                    "status": "COMPLETE",
+                    "verdict": status.get("verdict", "VERDICT_UNSPECIFIED"),
+                    "coverage_state": status.get("coverageState", ""),
+                    "robots_txt_state": status.get("robotsTxtState", ""),
+                    "indexing_state": status.get("indexingState", ""),
+                    "page_fetch_state": status.get("pageFetchState", ""),
+                    "last_crawl_time": status.get("lastCrawlTime", ""),
+                    "user_canonical": status.get("userCanonical", ""),
+                    "google_canonical": status.get("googleCanonical", ""),
+                    "referring_urls": status.get("referringUrls", []),
+                    "sitemaps": status.get("sitemap", []),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - one URL must not block analytics
+            results.append(
+                {
+                    "url": url,
+                    "status": "INCOMPLETE",
+                    "error_type": type(exc).__name__,
+                }
+            )
+    return results
+
+
+def aug7_review_decisions(
+    page_rows: list[dict],
+    inspections: list[dict[str, Any]],
+    now: datetime,
+) -> dict[str, Any]:
+    """Turn the approved Aug-7 backlog into bounded, auditable decisions."""
+    resident = next(
+        (row for row in page_rows if row.get("page") == RESIDENT_SURVEY_PATH),
+        None,
+    )
+    review_ready = now.date() >= date(2026, 8, 7)
+    if not review_ready:
+        title_experiment = {
+            "status": "SCHEDULED",
+            "reason": "wait_for_2026-08-07_measurement",
+        }
+    elif resident is None:
+        title_experiment = {
+            "status": "HOLD",
+            "reason": "target_has_no_search_console_page_row",
+        }
+    else:
+        clicks = _number(resident.get("clicks"))
+        impressions = _number(resident.get("impressions"))
+        position = _number(resident.get("position"))
+        eligible = (
+            clicks == 0
+            and impressions >= 30
+            and 8 <= position <= 15
+        )
+        title_experiment = {
+            "status": "ELIGIBLE_REVIEW" if eligible else "HOLD",
+            "reason": (
+                "zero_clicks_with_repeated_impressions_near_page_one"
+                if eligible
+                else "threshold_not_met"
+            ),
+            "clicks": clicks,
+            "impressions": impressions,
+            "position": position,
+            "single_change": "title_only",
+            "proposed_title": RESIDENT_SURVEY_PROPOSED_TITLE,
+            "stop_rule": "14_days_or_1000_impressions",
+        }
+
+    unindexed = [
+        item
+        for item in inspections
+        if item.get("status") == "COMPLETE" and item.get("verdict") != "PASS"
+    ]
+    discovery = (
+        {
+            "status": "ELIGIBLE_REVIEW",
+            "target_url": unindexed[0]["url"],
+            "single_change": "one_relevant_internal_link",
+            "reason": unindexed[0].get("coverage_state", "not_indexed"),
+            "automatic_indexing_api_submission": "forbidden_for_general_blog_posts",
+        }
+        if review_ready and unindexed
+        else {
+            "status": "SCHEDULED" if not review_ready else "HOLD",
+            "reason": (
+                "wait_for_2026-08-07_url_inspection"
+                if not review_ready
+                else "no_unindexed_inspected_target"
+            ),
+        }
+    )
+    return {
+        "review_date_ready": review_ready,
+        "title_experiment": title_experiment,
+        "index_discovery": discovery,
+        "planner_keyword_rule": {
+            "status": "ACTIVE",
+            "rule": "product_or_technology_plus_observed_problem_plus_user_action",
+            "invented_problem": "forbidden",
+        },
+    }
 
 
 def collect() -> tuple[list[dict], list[dict], dict[str, Any]]:
@@ -410,6 +567,8 @@ def render(
     diagnostics: dict[str, Any] | None = None,
     site_audit: dict[str, Any] | None = None,
     public_post_metadata: list[dict] | None = None,
+    url_inspections: list[dict[str, Any]] | None = None,
+    shadow_signals: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     refresh, gaps = analyze(search_rows)
     diagnostics = diagnostics or {}
@@ -584,6 +743,84 @@ def render(
             )
     else:
         lines.append("- 관측 임계치를 충족한 후보 없음")
+    inspections = url_inspections or []
+    decisions = aug7_review_decisions(page_rows, inspections, now)
+    title_decision = decisions["title_experiment"]
+    discovery_decision = decisions["index_discovery"]
+    lines += [
+        "",
+        "## 8월 7일 운영 결정",
+        "",
+        f"- review_date_ready: `{str(decisions['review_date_ready']).lower()}`",
+        f"- resident_title_experiment: `{title_decision['status']}`",
+        f"- resident_title_reason: `{title_decision['reason']}`",
+    ]
+    if "impressions" in title_decision:
+        lines.extend(
+            [
+                "- resident_title_metrics: "
+                f"`clicks={title_decision['clicks']:.0f}, "
+                f"impressions={title_decision['impressions']:.0f}, "
+                f"position={title_decision['position']:.1f}`",
+                f"- proposed_single_change: `title_only` → "
+                f"`{title_decision['proposed_title']}`",
+                f"- experiment_stop_rule: `{title_decision['stop_rule']}`",
+            ]
+        )
+    lines.extend(
+        [
+            f"- index_discovery_action: `{discovery_decision['status']}`",
+            f"- index_discovery_reason: `{discovery_decision['reason']}`",
+        ]
+    )
+    if discovery_decision.get("target_url"):
+        lines.extend(
+            [
+                f"- index_discovery_target: `{discovery_decision['target_url']}`",
+                "- proposed_single_change: `one_relevant_internal_link`",
+                "- general_blog_indexing_api_submission: `forbidden`",
+            ]
+        )
+    lines.extend(
+        [
+            "- planner_keyword_rule: "
+            "`제품·기술명 + 관측된 오류·문제 + 독자가 실행할 행동`",
+            "- planner_invented_problem: `forbidden`",
+        ]
+    )
+
+    lines += ["", "### Google URL Inspection", ""]
+    if inspections:
+        lines.extend(
+            [
+                "| URL | 상태 | Verdict | Coverage | 마지막 크롤링 |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        for item in inspections:
+            lines.append(
+                "| {url} | {status} | {verdict} | {coverage} | {crawl} |".format(
+                    url=str(item.get("url", "-")).replace("|", "\\|"),
+                    status=item.get("status", "N/A"),
+                    verdict=item.get("verdict", "N/A"),
+                    coverage=str(item.get("coverage_state", "N/A")).replace(
+                        "|", "\\|"
+                    ),
+                    crawl=item.get("last_crawl_time", "N/A") or "N/A",
+                )
+            )
+    else:
+        lines.append("- URL Inspection 데이터 없음")
+
+    lines += ["", "### Naver·Whereispost Shadow Mode", ""]
+    for label, signal in (shadow_signals or {}).items():
+        lines.append(
+            f"- {label}: `{signal.get('status', 'N/A')}`; "
+            f"rows=`{len(signal.get('rows', []))}`; "
+            f"reason=`{signal.get('reason', 'provided_export')}`"
+        )
+    if not shadow_signals:
+        lines.append("- optional shadow inputs: `N/A`")
     lines += [
         "",
         "## 다음 사이클 제안",
@@ -614,6 +851,10 @@ def main() -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).astimezone()
     public_site_url = os.environ.get("PUBLIC_SITE_URL", "https://huntlab.app/")
+    shadow_signals = collect_shadow_signals(
+        _optional_path(os.environ.get("NAVER_SEARCHADVISOR_EXPORT")),
+        _optional_path(os.environ.get("WHEREISPOST_SHADOW_EXPORT")),
+    )
     public_audit_data: dict[str, Any] | None = None
     public_post_metadata: list[dict] | None = None
     try:
@@ -632,6 +873,20 @@ def main() -> int:
         public_post_metadata = None
     try:
         search_rows, ga_rows, diagnostics = collect()
+        page_rows = aggregate_page_rows(diagnostics.get("search_pages", []))
+        mature_funnel = mature_content_funnel(
+            page_rows,
+            public_post_metadata,
+            diagnostics.get("search_period", {}),
+        )
+        inspection_urls = [
+            urllib.parse.urljoin(
+                public_site_url,
+                urllib.parse.quote(path.lstrip("/"), safe="/"),
+            )
+            for path in (mature_funnel or {}).get("without_impressions", [])
+        ]
+        url_inspections = collect_url_inspections(inspection_urls)
         body = render(
             search_rows,
             ga_rows,
@@ -639,6 +894,8 @@ def main() -> int:
             diagnostics=diagnostics,
             site_audit=public_audit_data,
             public_post_metadata=public_post_metadata,
+            url_inspections=url_inspections,
+            shadow_signals=shadow_signals,
         )
         body += "\n" + public_audit
         status = "COMPLETE"
