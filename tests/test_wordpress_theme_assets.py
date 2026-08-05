@@ -33,6 +33,17 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn(".huntlab-home-intro__dog", css)
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)
 
+    def test_code_blocks_keep_readable_text_and_horizontal_scroll(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
+        css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
+
+        self.assertIn("Version: 1.1.1", php)
+        self.assertIn(".single-content pre code", css)
+        self.assertIn("color: #f7f3ea !important", css)
+        self.assertIn("color: inherit !important", css)
+        self.assertIn("overflow-x: auto", css)
+        self.assertIn("white-space: pre", css)
+
     def test_category_tabs_include_huntlab_specialties(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
         for slug in (

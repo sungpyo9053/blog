@@ -46,6 +46,8 @@ class PageFacts:
     og_image: str = ""
     noindex: bool = False
     featured_alt: str | None = None
+    has_quick_summary: bool = False
+    has_article_toc: bool = False
     evidence_signals: list[str] = field(default_factory=list)
     internal_links: set[str] = field(default_factory=set)
 
@@ -63,10 +65,17 @@ class PageParser(HTMLParser):
         self.og_image = ""
         self.robots = ""
         self.featured_alt: str | None = None
+        self.has_quick_summary = False
+        self.has_article_toc = False
         self.links: set[str] = set()
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = {key.lower(): value or "" for key, value in attrs}
+        classes = set(values.get("class", "").split())
+        if "huntlab-article-quick-summary" in classes:
+            self.has_quick_summary = True
+        if "huntlab-article-toc" in classes:
+            self.has_article_toc = True
         if tag in {"script", "style", "noscript"}:
             self.ignored_depth += 1
         if tag == "title":
@@ -180,6 +189,8 @@ def inspect_page(result: FetchResult, base_url: str) -> PageFacts:
     facts.og_image = parser.og_image
     facts.noindex = "noindex" in parser.robots
     facts.featured_alt = parser.featured_alt
+    facts.has_quick_summary = parser.has_quick_summary
+    facts.has_article_toc = parser.has_article_toc
     facts.evidence_signals = [term for term in EVIDENCE_TERMS if term in visible_text]
     facts.internal_links = {
         normalized
@@ -271,6 +282,8 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
     generic_authors = [page for page in verified_posts if page["author"].strip().lower() in GENERIC_AUTHORS]
     missing_featured = [page for page in verified_posts if not page["og_image"] or page["featured_alt"] in {None, ""}]
     missing_canonical = [page for page in verified_pages if not page["canonical"]]
+    missing_quick_summary = [page for page in verified_posts if not page.get("has_quick_summary", False)]
+    missing_article_toc = [page for page in verified_posts if not page.get("has_article_toc", False)]
     evidence_review = sorted(verified_posts, key=lambda page: (len(page["evidence_signals"]), page["url"]))[:10]
     endpoint_rows = audit["endpoints"]
     heading = "#" * heading_level
@@ -289,6 +302,8 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
         f"- generic_author_posts: `{len(generic_authors)}`",
         f"- missing_featured_or_alt_posts: `{len(missing_featured)}`",
         f"- missing_canonical_pages: `{len(missing_canonical)}`",
+        f"- missing_quick_summary_posts: `{len(missing_quick_summary)}`",
+        f"- missing_article_toc_posts: `{len(missing_article_toc)}`",
         "",
         f"{subheading} 공개 엔드포인트",
         "",
@@ -304,6 +319,8 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
     lines.append("- 네트워크 오류로 확인 보류: " + (str(len(audit["unverified_urls"])) + "개"))
     lines.append("- 일반 계정명 작성자 글: " + str(len(generic_authors)) + "개")
     lines.append("- 대표 이미지 또는 ALT 누락 글: " + str(len(missing_featured)) + "개")
+    lines.append("- 20초 핵심 요약 누락 글: " + str(len(missing_quick_summary)) + "개")
+    lines.append("- 한눈에 보기 목차 누락 글: " + str(len(missing_article_toc)) + "개")
     failed_sitemaps = [item for item in audit["child_sitemaps"] if item["status"] != 200]
     if failed_sitemaps:
         lines.append("- 하위 Sitemap 조회 실패: " + str(len(failed_sitemaps)) + "개")

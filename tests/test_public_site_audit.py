@@ -11,11 +11,13 @@ class PublicSiteAuditTests(unittest.TestCase):
         self.assertEqual(sitemap_urls(xml), ["https://huntlab.app/post/"])
 
     def test_inspect_page_collects_author_media_and_evidence(self):
-        html = '''<html><head><title>Test</title><meta name="author" content="admin"><meta property="og:image" content="https://huntlab.app/a.webp"><link rel="canonical" href="https://huntlab.app/post/"></head><body><img class="wp-post-image" alt="diagram"><p>검증 환경과 실행 결과를 확인했다.</p><a href="/next/">next</a></body></html>'''.encode("utf-8")
+        html = '''<html><head><title>Test</title><meta name="author" content="admin"><meta property="og:image" content="https://huntlab.app/a.webp"><link rel="canonical" href="https://huntlab.app/post/"></head><body><img class="wp-post-image" alt="diagram"><section class="huntlab-article-quick-summary">요약</section><aside class="huntlab-article-toc">목차</aside><p>검증 환경과 실행 결과를 확인했다.</p><a href="/next/">next</a></body></html>'''.encode("utf-8")
         facts = inspect_page(FetchResult("https://huntlab.app/post/", 200, "text/html", html), "https://huntlab.app/")
         self.assertEqual(facts.author, "admin")
         self.assertEqual(facts.featured_alt, "diagram")
         self.assertIn("검증 환경", facts.evidence_signals)
+        self.assertTrue(facts.has_quick_summary)
+        self.assertTrue(facts.has_article_toc)
         self.assertIn("https://huntlab.app/next/", facts.internal_links)
 
     def test_normalize_internal_link_drops_assets_and_external_urls(self):
@@ -54,6 +56,8 @@ class PublicSiteAuditTests(unittest.TestCase):
         )
         self.assertIn("Hot Issue", report)
         self.assertIn("generic_author_posts: `1`", report)
+        self.assertIn("missing_quick_summary_posts: `1`", report)
+        self.assertIn("missing_article_toc_posts: `1`", report)
 
 
 if __name__ == "__main__":

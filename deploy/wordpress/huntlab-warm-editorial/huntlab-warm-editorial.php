@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Warm Editorial Theme
  * Description: Applies HuntLab's warm editorial palette without replacing the active WordPress theme.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: HuntLab
  */
 
