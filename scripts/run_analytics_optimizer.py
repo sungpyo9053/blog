@@ -251,7 +251,14 @@ def mature_content_funnel(
     for page in post_pages:
         published_at = str(page.get("published_at", ""))
         try:
-            published_on = date.fromisoformat(published_at[:10])
+            published_moment = datetime.fromisoformat(
+                published_at.replace("Z", "+00:00")
+            )
+            if published_moment.tzinfo is not None:
+                published_moment = published_moment.astimezone(
+                    timezone(timedelta(hours=9))
+                )
+            published_on = published_moment.date()
         except ValueError:
             continue
         if page.get("status") == 200 and published_on <= cutoff:

@@ -67,7 +67,6 @@ class PageParser(HTMLParser):
         self.canonical = ""
         self.author = ""
         self.published_at = ""
-        self._published_time_seen = False
         self.og_image = ""
         self.robots = ""
         self.featured_alt: str | None = None
@@ -108,10 +107,9 @@ class PageParser(HTMLParser):
             and "published" in classes
             and values.get("itemprop") == "datePublished"
             and values.get("datetime")
-            and not self._published_time_seen
+            and not self.published_at
         ):
             self.published_at = values["datetime"].strip()
-            self._published_time_seen = True
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
