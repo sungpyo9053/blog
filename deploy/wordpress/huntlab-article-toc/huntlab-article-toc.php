@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Article Table of Contents
  * Description: Adds a warm, accessible H2/H3 table of contents to HuntLab posts.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: HuntLab
  */
 
@@ -61,9 +61,6 @@ function huntlab_article_quick_summary( $content, $sections ) {
 
 	$steps = array();
 	foreach ( $sections as $section ) {
-		if ( 2 !== $section['level'] ) {
-			continue;
-		}
 		if ( preg_match( '/^(?:핵심 요약|참고|함께 읽)/u', $section['title'] ) ) {
 			continue;
 		}
@@ -73,7 +70,13 @@ function huntlab_article_quick_summary( $content, $sections ) {
 		}
 	}
 
-	if ( count( $paragraphs ) < 2 || count( $steps ) < 2 ) {
+	$what = isset( $paragraphs[0] ) ? $paragraphs[0] : huntlab_article_summary_text( get_the_excerpt() );
+	$why  = isset( $paragraphs[1] ) ? $paragraphs[1] : '';
+	if ( '' === $why && isset( $steps[0] ) ) {
+		$why = '이 글에서 먼저 확인할 핵심 쟁점은 “' . $steps[0] . '”입니다.';
+	}
+
+	if ( '' === $what || '' === $why || count( $steps ) < 2 ) {
 		return '';
 	}
 
@@ -81,8 +84,8 @@ function huntlab_article_quick_summary( $content, $sections ) {
 	return '<section class="huntlab-article-quick-summary" aria-labelledby="huntlab-quick-summary">'
 		. '<h2 id="huntlab-quick-summary">20초 핵심 요약</h2>'
 		. '<ul>'
-		. '<li><strong>무엇</strong><span>' . esc_html( $paragraphs[0] ) . '</span></li>'
-		. '<li><strong>왜</strong><span>' . esc_html( $paragraphs[1] ) . '</span></li>'
+		. '<li><strong>무엇</strong><span>' . esc_html( $what ) . '</span></li>'
+		. '<li><strong>왜</strong><span>' . esc_html( $why ) . '</span></li>'
 		. '<li><strong>어떻게</strong><span>' . esc_html( $how ) . ' 순서로 확인합니다.</span></li>'
 		. '</ul></section>';
 }

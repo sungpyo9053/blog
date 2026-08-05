@@ -334,6 +334,10 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
         lines += ["", f"{detail_heading} 확인 보류 URL", ""]
         for item in audit["unverified_urls"][:30]:
             lines.append(f"- `{item['error']}` {item['url']}")
+    if missing_quick_summary:
+        lines += ["", f"{detail_heading} 20초 핵심 요약 누락 글", ""]
+        for page in missing_quick_summary:
+            lines.append(f"- {page['url']}")
     lines += [
         "",
         f"{subheading} 기술 글 실증 근거 검토 후보",

@@ -58,6 +58,8 @@ class PublicSiteAuditTests(unittest.TestCase):
         self.assertIn("generic_author_posts: `1`", report)
         self.assertIn("missing_quick_summary_posts: `1`", report)
         self.assertIn("missing_article_toc_posts: `1`", report)
+        self.assertIn("20초 핵심 요약 누락 글", report)
+        self.assertIn("https://huntlab.app/post/", report)
 
 
 if __name__ == "__main__":
