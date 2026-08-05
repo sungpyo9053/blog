@@ -23,7 +23,7 @@
 - [ ] Lightsail `huntlab-blog-automation-prod` 상태와 접속 경로 확인
 - [ ] 서버 `/home/ubuntu/apps/huntlab-blog`의 변경 파일과 현재 커밋 확인
 - [ ] 사용자 파일을 건드리지 않고 `origin/main`을 fast-forward pull
-- [ ] 서버 HEAD가 `555dc9d`인지 확인
+- [ ] 서버 HEAD가 최신 `origin/main`과 일치하고 `555dc9d`를 포함하는지 확인
 - [ ] Daily Pipeline 테스트 실행
 - [ ] ML적 사고력·핵심 개념 주제 우대 문구가 서버 Harness에 존재하는지 확인
 - [ ] 새벽 1시 분석, 2시 발행, 낮 12시 재시도 timer 활성화 및 다음 실행 시각 확인
