@@ -42,9 +42,19 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         ):
             self.assertIn(slug, php)
         self.assertIn("0 === (int) $category->count", php)
-        self.assertIn("Version: 1.1.1", php)
-        self.assertIn("width:100%;padding-inline:6px;font-size:13px", php)
+        self.assertIn("Version: 1.2.0", php)
+        self.assertIn("width:100%;min-height:40px;flex-direction:column", php)
         self.assertIn("white-space:normal;overflow-wrap:anywhere", php)
+
+    def test_category_tabs_show_counts_and_recent_badges(self):
+        php = CATEGORY_TABS.read_text(encoding="utf-8")
+        self.assertIn("function huntlab_category_tabs_recent_slugs()", php)
+        self.assertIn("3 * DAY_IN_SECONDS", php)
+        self.assertIn("wp_count_posts( 'post' )", php)
+        self.assertIn("'count' => (int) $category->count", php)
+        self.assertIn("huntlab-category-tabs__count", php)
+        self.assertIn("huntlab-category-tabs__new", php)
+        self.assertIn("최근 3일 내 새 글 있음", php)
 
 
 if __name__ == "__main__":
