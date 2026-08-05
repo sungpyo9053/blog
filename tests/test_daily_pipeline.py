@@ -88,6 +88,17 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("TOP2 의무 할당은 두지 말고", planner.prompt)
         self.assertIn("후속 관점 또는 Refresh", planner.prompt)
 
+    def test_planner_uses_velog_only_as_a_guarded_discovery_signal(self):
+        planner = planner_stage("", "run-velog-signal", Path("/tmp/topics.md"))
+
+        self.assertIn("Velog 공개 트렌딩(https://velog.io/)", planner.prompt)
+        self.assertIn("한국 개발자 관심사의 보조 신호", planner.prompt)
+        self.assertIn("제목이나 구성을 복제하지 말고", planner.prompt)
+        self.assertIn("Velog 인기만으로", planner.prompt)
+        self.assertIn("Search Console 관측값", planner.prompt)
+        self.assertIn("공식 1차 자료", planner.prompt)
+        self.assertIn("Velog 신호 없음으로 계속 진행", planner.prompt)
+
     def test_planner_allows_two_technical_topics_without_category_quota(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "topics.md"
