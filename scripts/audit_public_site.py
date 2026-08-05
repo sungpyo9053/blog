@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import re
 import subprocess
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -47,6 +49,7 @@ class PageFacts:
     noindex: bool = False
     featured_alt: str | None = None
     has_quick_summary: bool = False
+    quick_summary_fields: dict[str, str] = field(default_factory=dict)
     has_article_toc: bool = False
     evidence_signals: list[str] = field(default_factory=list)
     internal_links: set[str] = field(default_factory=set)
@@ -180,8 +183,9 @@ def inspect_page(result: FetchResult, base_url: str) -> PageFacts:
     facts = PageFacts(url=result.url, status=result.status)
     if result.status != 200 or "html" not in result.content_type.lower():
         return facts
+    document = result.body.decode("utf-8", errors="replace")
     parser = PageParser(result.url)
-    parser.feed(result.body.decode("utf-8", errors="replace"))
+    parser.feed(document)
     visible_text = " ".join(parser.text_parts)
     facts.title = " ".join(parser.title_parts).strip()
     facts.canonical = parser.canonical
@@ -190,6 +194,21 @@ def inspect_page(result: FetchResult, base_url: str) -> PageFacts:
     facts.noindex = "noindex" in parser.robots
     facts.featured_alt = parser.featured_alt
     facts.has_quick_summary = parser.has_quick_summary
+    summary_match = re.search(
+        r'<section\b[^>]*class=["\'][^"\']*huntlab-article-quick-summary[^"\']*["\'][^>]*>(.*?)</section>',
+        document,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if summary_match:
+        block = summary_match.group(1)
+        for label in ("무엇", "왜", "어떻게"):
+            value_match = re.search(
+                rf'<li\b[^>]*>\s*<strong\b[^>]*>\s*{label}\s*</strong>\s*<span\b[^>]*>(.*?)</span>\s*</li>',
+                block,
+                re.IGNORECASE | re.DOTALL,
+            )
+            value = re.sub(r"<[^>]+>", " ", value_match.group(1)) if value_match else ""
+            facts.quick_summary_fields[label] = " ".join(html.unescape(value).split())
     facts.has_article_toc = parser.has_article_toc
     facts.evidence_signals = [term for term in EVIDENCE_TERMS if term in visible_text]
     facts.internal_links = {
@@ -283,6 +302,12 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
     missing_featured = [page for page in verified_posts if not page["og_image"] or page["featured_alt"] in {None, ""}]
     missing_canonical = [page for page in verified_pages if not page["canonical"]]
     missing_quick_summary = [page for page in verified_posts if not page.get("has_quick_summary", False)]
+    incomplete_quick_summary = [
+        page
+        for page in verified_posts
+        if page.get("has_quick_summary", False)
+        and any(not page.get("quick_summary_fields", {}).get(label, "").strip() for label in ("무엇", "왜", "어떻게"))
+    ]
     missing_article_toc = [page for page in verified_posts if not page.get("has_article_toc", False)]
     evidence_review = sorted(verified_posts, key=lambda page: (len(page["evidence_signals"]), page["url"]))[:10]
     endpoint_rows = audit["endpoints"]
@@ -303,6 +328,7 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
         f"- missing_featured_or_alt_posts: `{len(missing_featured)}`",
         f"- missing_canonical_pages: `{len(missing_canonical)}`",
         f"- missing_quick_summary_posts: `{len(missing_quick_summary)}`",
+        f"- incomplete_quick_summary_posts: `{len(incomplete_quick_summary)}`",
         f"- missing_article_toc_posts: `{len(missing_article_toc)}`",
         "",
         f"{subheading} 공개 엔드포인트",
@@ -320,6 +346,7 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
     lines.append("- 일반 계정명 작성자 글: " + str(len(generic_authors)) + "개")
     lines.append("- 대표 이미지 또는 ALT 누락 글: " + str(len(missing_featured)) + "개")
     lines.append("- 20초 핵심 요약 누락 글: " + str(len(missing_quick_summary)) + "개")
+    lines.append("- 20초 핵심 요약 빈 항목 글: " + str(len(incomplete_quick_summary)) + "개")
     lines.append("- 한눈에 보기 목차 누락 글: " + str(len(missing_article_toc)) + "개")
     failed_sitemaps = [item for item in audit["child_sitemaps"] if item["status"] != 200]
     if failed_sitemaps:
@@ -338,6 +365,12 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
         lines += ["", f"{detail_heading} 20초 핵심 요약 누락 글", ""]
         for page in missing_quick_summary:
             lines.append(f"- {page['url']}")
+    if incomplete_quick_summary:
+        lines += ["", f"{detail_heading} 20초 핵심 요약 빈 항목 글", ""]
+        for page in incomplete_quick_summary:
+            fields = page.get("quick_summary_fields", {})
+            missing_fields = [label for label in ("무엇", "왜", "어떻게") if not fields.get(label, "").strip()]
+            lines.append(f"- {page['url']} — {', '.join(missing_fields)}")
     lines += [
         "",
         f"{subheading} 기술 글 실증 근거 검토 후보",

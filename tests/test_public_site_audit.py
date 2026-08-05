@@ -11,12 +11,16 @@ class PublicSiteAuditTests(unittest.TestCase):
         self.assertEqual(sitemap_urls(xml), ["https://huntlab.app/post/"])
 
     def test_inspect_page_collects_author_media_and_evidence(self):
-        html = '''<html><head><title>Test</title><meta name="author" content="admin"><meta property="og:image" content="https://huntlab.app/a.webp"><link rel="canonical" href="https://huntlab.app/post/"></head><body><img class="wp-post-image" alt="diagram"><section class="huntlab-article-quick-summary">요약</section><aside class="huntlab-article-toc">목차</aside><p>검증 환경과 실행 결과를 확인했다.</p><a href="/next/">next</a></body></html>'''.encode("utf-8")
+        html = '''<html><head><title>Test</title><meta name="author" content="admin"><meta property="og:image" content="https://huntlab.app/a.webp"><link rel="canonical" href="https://huntlab.app/post/"></head><body><img class="wp-post-image" alt="diagram"><section class="huntlab-article-quick-summary"><ul><li><strong>무엇</strong><span>검사 대상</span></li><li><strong>왜</strong><span>판단 이유</span></li><li><strong>어떻게</strong><span>확인 순서</span></li></ul></section><aside class="huntlab-article-toc">목차</aside><p>검증 환경과 실행 결과를 확인했다.</p><a href="/next/">next</a></body></html>'''.encode("utf-8")
         facts = inspect_page(FetchResult("https://huntlab.app/post/", 200, "text/html", html), "https://huntlab.app/")
         self.assertEqual(facts.author, "admin")
         self.assertEqual(facts.featured_alt, "diagram")
         self.assertIn("검증 환경", facts.evidence_signals)
         self.assertTrue(facts.has_quick_summary)
+        self.assertEqual(
+            {"무엇": "검사 대상", "왜": "판단 이유", "어떻게": "확인 순서"},
+            facts.quick_summary_fields,
+        )
         self.assertTrue(facts.has_article_toc)
         self.assertIn("https://huntlab.app/next/", facts.internal_links)
 
@@ -59,7 +63,27 @@ class PublicSiteAuditTests(unittest.TestCase):
         self.assertIn("missing_quick_summary_posts: `1`", report)
         self.assertIn("missing_article_toc_posts: `1`", report)
         self.assertIn("20초 핵심 요약 누락 글", report)
+        self.assertIn("incomplete_quick_summary_posts: `0`", report)
         self.assertIn("https://huntlab.app/post/", report)
+
+    def test_report_detects_empty_quick_summary_fields(self):
+        html = '''<html><head><link rel="canonical" href="https://huntlab.app/post/"></head><body><section class="huntlab-article-quick-summary"><ul><li><strong>무엇</strong><span></span></li><li><strong>왜</strong><span>이유</span></li><li><strong>어떻게</strong><span>순서</span></li></ul></section></body></html>'''.encode("utf-8")
+        facts = inspect_page(FetchResult("https://huntlab.app/post/", 200, "text/html", html), "https://huntlab.app/")
+        report = render_markdown(
+            {
+                "base_url": "https://huntlab.app/",
+                "endpoints": {name: {"status": 200, "content_type": "text/plain", "error": ""} for name in ("robots", "sitemap", "ads_txt")},
+                "counts": {"post": 1, "page": 0, "category": 0},
+                "child_sitemaps": [],
+                "empty_categories": [],
+                "broken_internal_links": [],
+                "unverified_urls": [],
+                "pages": [facts.__dict__ | {"internal_links": []}],
+            }
+        )
+        self.assertEqual("", facts.quick_summary_fields["무엇"])
+        self.assertIn("incomplete_quick_summary_posts: `1`", report)
+        self.assertIn("https://huntlab.app/post/ — 무엇", report)
 
 
 if __name__ == "__main__":

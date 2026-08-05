@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Article Table of Contents
  * Description: Adds a warm, accessible H2/H3 table of contents to HuntLab posts.
- * Version: 1.1.2
+ * Version: 1.1.3
  * Author: HuntLab
  */
 
@@ -70,7 +70,25 @@ function huntlab_article_quick_summary( $content, $sections ) {
 		}
 	}
 
-	$what = isset( $paragraphs[0] ) ? $paragraphs[0] : huntlab_article_summary_text( get_the_excerpt() );
+	/*
+	 * Older posts often begin with an H2, so there is no introductory paragraph.
+	 * Do not request an automatic excerpt here: it applies content filters
+	 * again and can leave a recursively generated summary with an empty value.
+	 * Prefer a manual excerpt, then the first substantive paragraph in the post.
+	 */
+	$manual_excerpt = huntlab_article_summary_text( (string) get_post_field( 'post_excerpt', get_the_ID() ) );
+	if ( '' === $manual_excerpt && empty( $paragraphs ) ) {
+		preg_match_all( '/<p\b[^>]*>(.*?)<\/p>/is', $content, $content_paragraph_matches );
+		foreach ( $content_paragraph_matches[1] as $paragraph ) {
+			$text = huntlab_article_summary_text( $paragraph );
+			if ( '' !== $text && strlen( $text ) >= 24 ) {
+				$paragraphs[] = $text;
+				break;
+			}
+		}
+	}
+
+	$what = isset( $paragraphs[0] ) ? $paragraphs[0] : $manual_excerpt;
 	$why  = isset( $steps[0] )
 		? '“' . $steps[0] . '”라는 문제 또는 판단 기준을 놓치지 않기 위해서입니다.'
 		: '';
