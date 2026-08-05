@@ -164,6 +164,18 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("공식 1차 자료", planner.prompt)
         self.assertIn("Velog 신호 없음으로 계속 진행", planner.prompt)
 
+    def test_planner_broadens_ml_beyond_isolation_forest(self):
+        planner = planner_stage("", "run-ml-breadth", Path("/tmp/topics.md"))
+
+        self.assertIn("Isolation Forest 한 알고리즘에 편중하지 말고", planner.prompt)
+        self.assertIn("군집화", planner.prompt)
+        self.assertIn("차원 축소", planner.prompt)
+        self.assertIn("추천", planner.prompt)
+        self.assertIn("시계열", planner.prompt)
+        self.assertIn("신경망", planner.prompt)
+        self.assertIn("베이스라인과 대안을 비교", planner.prompt)
+        self.assertIn("TOP2 의무 할당은 두지 말고", planner.prompt)
+
     def test_planner_allows_two_technical_topics_without_category_quota(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "topics.md"

@@ -36,6 +36,9 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("demand_signal_source", text)
         self.assertIn("observed_problem_phrase", text)
         self.assertIn("user_action", text)
+        self.assertIn("Isolation Forest 같은 한 알고리즘에 편중하지 않는다", text)
+        self.assertIn("베이스라인과 대안", text)
+        self.assertIn("Velog 공개 트렌딩", text)
         self.assertIn("TOP2에는 카테고리별 의무 할당을 두지 않는다", text)
         self.assertNotIn(
             "TOP2 중 최소 1개가 Economy, Society, Politics 또는 Hot Issue",
