@@ -41,6 +41,9 @@ EDITOR_CATEGORIES = {
     "Politics",
     "Hot Issue",
     "Build Log",
+    "ML Algorithms",
+    "Harness Engineering",
+    "System Architecture",
 }
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
 REVIEW_STATUS_PATTERN = re.compile(
@@ -941,7 +944,8 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             f"run_id는 {run_id!r}입니다. "
             f"추가 키워드는 {keywords.strip() or '없음'}입니다. "
             "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 "
-            "Tech, AI, Economy, Society, Politics, Hot Issue, Build Log를 편집 범위로 삼되 "
+            "Tech, AI, ML Algorithms, Harness Engineering, System Architecture, Economy, "
+            "Society, Politics, Hot Issue, Build Log를 편집 범위로 삼되 "
             "ML 주제는 알고리즘 이름의 단순 정의보다 문제 정의, 데이터 표현, 가정, "
             "평가지표, 오류 비용, 실패 조건과 실제 적용 판단을 함께 설명할 수 있는 "
             "'ML적 사고력' 및 핵심 개념 후보를 지속적으로 우대하세요. 분류, 회귀, "

@@ -50,7 +50,8 @@ HuntLab의 목표는 `글을 만드는 시스템`에서 `검색 자산을 축적
 - `huntlab`과 명백한 운영자 테스트 검색은 비브랜드 검색 성과에서 분리한다.
 - URL이 색인되지 않은 글과 색인됐지만 노출이 없는 글을 따로 집계한다.
 - 노출 1회는 검색 진입 신호로 기록하되 성공 공식이나 지속 성과로 일반화하지 않는다.
-- 전체 비율과 함께 Tech·AI·Build Log·비기술 카테고리별 비율도 표본이 허용하는 범위에서 비교한다.
+- 전체 비율과 함께 ML Algorithms·Harness Engineering·System Architecture·Tech·AI·
+  Build Log·비기술 카테고리별 비율도 표본이 허용하는 범위에서 비교한다.
 
 보조 지표는 다음 순서로 본다.
 
@@ -249,7 +250,8 @@ Google Trends는 비기술·시사·계절성 후보의 시점과 관심 방향�
 초기 적용 원칙:
 
 - `Economy`, `Society`, `Politics`, `Hot Issue`의 한국어 후보에만 우선 적용한다.
-- `Tech`, `AI`, `Build Log`는 영문 제품명·오류 문구의 저평가 위험이 있어 검색량이
+- `ML Algorithms`, `Harness Engineering`, `System Architecture`, `Tech`, `AI`,
+  `Build Log`는 영문 제품명·오류 문구의 저평가 위험이 있어 검색량이
   없거나 낮다는 이유로 감점·탈락시키지 않는다.
 - Search Console의 실제 비브랜드 노출·클릭과 기존 글 Cannibalization 검사를 더
   높은 우선순위로 유지한다.

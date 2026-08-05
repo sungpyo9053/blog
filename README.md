@@ -28,7 +28,8 @@ Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/sour
 
 ### Topic Planner 선정 원칙
 
-`Tech`, `AI`, `Economy`, `Society`, `Politics`, `Hot Issue`, `Build Log`를
+`Tech`, `AI`, `ML Algorithms`, `Harness Engineering`, `System Architecture`,
+`Economy`, `Society`, `Politics`, `Hot Issue`, `Build Log`를
 편집 범위로 사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
 TOP2는 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를
 기준으로 선정하므로 기술 주제 두 개만 선택할 수 있습니다. 비기술 후보는

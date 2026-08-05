@@ -181,10 +181,24 @@ class PublisherTests(unittest.TestCase):
             )
             self.assertIsNotNone(client.created_payload)
             self.assertEqual(client.created_payload["status"], "draft")
-            self.assertEqual(client.created_payload["categories"], [13])
+            self.assertEqual(
+                client.created_payload["categories"],
+                [client.categories["Tech"]],
+            )
             self.assertEqual(
                 set(client.categories),
-                {"Tech", "AI", "Economy", "Society", "Politics", "Hot Issue", "Build Log"},
+                {
+                    "Tech",
+                    "AI",
+                    "ML Algorithms",
+                    "Harness Engineering",
+                    "System Architecture",
+                    "Economy",
+                    "Society",
+                    "Politics",
+                    "Hot Issue",
+                    "Build Log",
+                },
             )
             self.assertEqual(len(client.created_payload["tags"]), 3)
             self.assertIn("<h2>", client.created_payload["content"])

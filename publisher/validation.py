@@ -18,6 +18,9 @@ EDITOR_CATEGORIES = {
     "Politics",
     "Hot Issue",
     "Build Log",
+    "ML Algorithms",
+    "Harness Engineering",
+    "System Architecture",
 }
 FORBIDDEN_TERMS = (
     "100%",

@@ -10,7 +10,7 @@ tools:
 
 ## 목적
 
-Topic Planner Agent는 HuntLab 전체의 성장을 책임지는 편집장(Editor)이다. 단순한 기술 뉴스 수집기가 아니라 Tech, AI, Economy, Society, Politics, Hot Issue, Build Log 전반에서 오늘 독자에게 가장 가치 있는 콘텐츠 TOP2를 결정한다.
+Topic Planner Agent는 HuntLab 전체의 성장을 책임지는 편집장(Editor)이다. 단순한 기술 뉴스 수집기가 아니라 Tech, AI, ML Algorithms, Harness Engineering, System Architecture, Economy, Society, Politics, Hot Issue, Build Log 전반에서 오늘 독자에게 가장 가치 있는 콘텐츠 TOP2를 결정한다.
 
 이 Agent는 후보 생성, 평가, 중복 검사, TOP10 구성, TOP2 선정과 `topics.md` 작성만 담당한다. 글 작성, 본문 리서치, 이미지 생성, 품질 승인, Publisher 호출 및 WordPress 변경은 수행하지 않는다.
 
@@ -27,12 +27,16 @@ WordPress 조회는 읽기 전용이다. 인증정보를 출력하거나 산출�
 ## 편집 카테고리
 
 다음 카테고리를 편집 범위로 사용하며 전체 최소 35개 후보를 만든다. 후보의
-70% 이상은 HuntLab의 핵심 전문 분야인 `Tech`, `AI`, `Build Log`에서 구성한다.
+70% 이상은 HuntLab의 핵심 전문 분야인 `ML Algorithms`, `Harness Engineering`,
+`System Architecture`, `Tech`, `AI`, `Build Log`에서 구성한다.
 나머지 카테고리는 수량을 채우기 위해 만들지 않으며 개발자, AI, 클라우드 또는
 디지털 서비스 운영과 직접 연결되는 주제만 후보로 유지한다.
 
 - Tech
 - AI
+- ML Algorithms
+- Harness Engineering
+- System Architecture
 - Economy
 - Society
 - Politics
@@ -50,6 +54,24 @@ WordPress 조회는 읽기 전용이다. 인증정보를 출력하거나 산출�
 ### AI
 
 공식 모델·제품 문서, 연구 논문, 평가 결과와 실제 적용·검증이 가능한 주제를 우선한다. 확인되지 않은 성능 주장이나 출시 소문은 제외한다.
+
+### ML Algorithms
+
+분류, 회귀, 이상 탐지, 군집화, 추천, 시계열과 표현 학습 알고리즘을 다룬다.
+정의만 나열하지 않고 문제 정의, 데이터 표현, 핵심 가정, 평가 지표, 오류 비용,
+장단점과 실패 조건을 재현 가능한 예제나 실제 프로젝트 판단과 연결한다.
+
+### Harness Engineering
+
+AI·콘텐츠·자동화 하네스의 상태 전이, 재시도, 멱등성, 평가, Guardrail, 비용,
+관측성과 사람 승인 경계를 다룬다. 프롬프트 소개보다 실패를 막고 품질을 반복 가능하게
+만드는 시스템 계약과 검증 가능한 운영 근거를 우선한다.
+
+### System Architecture
+
+API, 큐, 캐시, 이벤트, 저장소, 네트워크와 배포 경계를 연결한 시스템 설계를 다룬다.
+구성 요소 나열보다 데이터 흐름, 확장 조건, 장애 격리, 보안, 비용과 선택하지 않은
+대안의 trade-off를 실제 구현 또는 통제된 비교와 함께 설명할 수 있는 주제를 우선한다.
 
 ### Economy
 
@@ -129,15 +151,17 @@ Analytics에서 색인·노출·CTR 저하가 관측된 기존 글과 같은 검
 
 ## TOP2 선정 원칙
 
-TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를 기준으로 가장 강한 두 후보를 선정하며 `Tech`, `AI`, `Build Log` 두 개로 구성해도 된다. 비기술 후보는 강화된 출처 규칙을 통과하고 기술 후보와 같은 품질 기준에서 경쟁력이 있을 때만 선정한다.
+TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를 기준으로 가장 강한 두 후보를 선정하며 `ML Algorithms`, `Harness Engineering`, `System Architecture`, `Tech`, `AI`, `Build Log` 두 개로 구성해도 된다. 비기술 후보는 강화된 출처 규칙을 통과하고 기술 후보와 같은 품질 기준에서 경쟁력이 있을 때만 선정한다.
 
-기본 TOP2는 Tech, AI와 Build Log에서 선정한다. Economy, Society, Politics와 Hot Issue는
+기본 TOP2는 ML Algorithms, Harness Engineering, System Architecture, Tech, AI와
+Build Log에서 선정한다. Economy, Society, Politics와 Hot Issue는
 개발자, AI, 클라우드 또는 디지털 서비스 운영과의 연결을 `reason`에 구체적으로
 설명할 수 있고 Search Console 또는 검증 가능한 검색 수요가 있을 때만 TOP2의
 최대 한 자리까지 선정한다. 단순 인기 검색어 추종이나 카테고리 균형만을 이유로
 선정하지 않는다. 연결과 수요를 증명하지 못하면 점수와 관계없이 TOP2에서 제외한다.
 
-TOP1은 안전한 직접 검증으로 고유 가치를 만들 수 있는 Tech, AI 또는 Build Log
+TOP1은 안전한 직접 검증으로 고유 가치를 만들 수 있는 ML Algorithms, Harness
+Engineering, System Architecture, Tech, AI 또는 Build Log
 후보를 우선한다. 프로젝트 내부, 격리된 임시 입력 또는 읽기 전용 공개 정보로
 검증할 수 있어야 하며 운영 서비스 변경, 유료 호출, 인증정보 노출을 요구하면
 직접 검증 가능 후보로 보지 않는다. 동등한 후보가 있다면 다음 실행 증거 묶음을

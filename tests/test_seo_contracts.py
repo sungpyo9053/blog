@@ -17,6 +17,9 @@ class SEOAgentContractTests(unittest.TestCase):
         for category in (
             "Tech",
             "AI",
+            "ML Algorithms",
+            "Harness Engineering",
+            "System Architecture",
             "Economy",
             "Society",
             "Politics",

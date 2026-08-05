@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Category Tabs
  * Description: Adds fast category navigation for desktop and mobile visitors.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: HuntLab
  */
 
@@ -25,12 +25,15 @@ function huntlab_category_tabs_items() {
 	);
 
 	$categories = array(
-		'tech'      => 'Tech',
-		'ai'        => 'AI',
-		'build-log' => 'Build Log',
-		'economy'   => 'Economy',
-		'society'   => 'Society',
-		'hot-issue' => 'Hot Issue',
+		'ml-algorithms'       => 'ML',
+		'harness-engineering' => 'Harness',
+		'system-architecture' => 'Architecture',
+		'tech'                => 'Tech',
+		'ai'                  => 'AI',
+		'build-log'           => 'Build Log',
+		'economy'             => 'Economy',
+		'society'             => 'Society',
+		'hot-issue'           => 'Hot Issue',
 	);
 
 	foreach ( $categories as $slug => $label ) {

@@ -4,6 +4,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "deploy/wordpress/huntlab-warm-editorial"
+CATEGORY_TABS = (
+    ROOT / "deploy/wordpress/huntlab-category-tabs/huntlab-category-tabs.php"
+)
 
 
 class HuntLabWarmEditorialTests(unittest.TestCase):
@@ -29,6 +32,16 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn(".huntlab-home-intro", css)
         self.assertIn(".huntlab-home-intro__dog", css)
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)
+
+    def test_category_tabs_include_huntlab_specialties(self):
+        php = CATEGORY_TABS.read_text(encoding="utf-8")
+        for slug in (
+            "ml-algorithms",
+            "harness-engineering",
+            "system-architecture",
+        ):
+            self.assertIn(slug, php)
+        self.assertIn("0 === (int) $category->count", php)
 
 
 if __name__ == "__main__":
