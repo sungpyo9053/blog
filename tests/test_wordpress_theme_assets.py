@@ -1,6 +1,8 @@
 from pathlib import Path
 import unittest
 
+from PIL import Image
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "deploy/wordpress/huntlab-warm-editorial"
@@ -72,6 +74,20 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("fetchpriority=\"high\"", php)
         self.assertIn(".huntlab-home-intro__visual", css)
         self.assertIn("body.category .post-archive-hero-section", css)
+
+    def test_huntlab_site_icon_is_square_and_search_engine_ready(self):
+        png = PLUGIN / "assets/huntlab-site-icon.png"
+        svg = PLUGIN / "assets/huntlab-site-icon.svg"
+
+        self.assertTrue(png.is_file())
+        self.assertTrue(svg.is_file())
+        with Image.open(png) as image:
+            self.assertEqual((512, 512), image.size)
+            self.assertEqual("PNG", image.format)
+
+        svg_text = svg.read_text(encoding="utf-8")
+        self.assertIn('viewBox="0 0 96 96"', svg_text)
+        self.assertIn("HuntLab의 강아지 로고", svg_text)
 
     def test_category_tabs_include_huntlab_specialties(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
