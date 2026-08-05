@@ -20,7 +20,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("add_action( 'wp_head'", php)
         self.assertIn("huntlab_warm_editorial_home_intro", php)
         self.assertIn("복잡한 기술을", php)
-        self.assertIn("is_home() || is_front_page()", php)
+        self.assertIn("is_home() || is_front_page() || is_category()", php)
 
     def test_palette_keeps_warm_surfaces_and_accessible_ink(self):
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
@@ -37,12 +37,41 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 1.1.1", php)
+        self.assertIn("Version: 1.2.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
         self.assertIn("overflow-x: auto", css)
         self.assertIn("white-space: pre", css)
+
+    def test_category_archives_have_specific_copy_and_optimized_hero_images(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
+        css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
+        image_dir = PLUGIN / "assets/categories"
+
+        expected = {
+            "ml-algorithms": "점수보다",
+            "harness-engineering": "자동화보다",
+            "system-architecture": "구성요소보다",
+            "tech": "도구보다",
+            "ai": "모델보다",
+            "build-log": "결과보다",
+            "economy": "숫자보다",
+            "society": "이슈보다",
+            "hot-issue": "속보보다",
+        }
+        for slug, copy in expected.items():
+            self.assertIn(f"'{slug}'", php)
+            self.assertIn(copy, php)
+            image = image_dir / f"{slug}.webp"
+            self.assertTrue(image.is_file(), image)
+            self.assertLess(image.stat().st_size, 150_000, image)
+
+        self.assertIn("huntlab-home-intro--category", php)
+        self.assertIn("loading=\"eager\"", php)
+        self.assertIn("fetchpriority=\"high\"", php)
+        self.assertIn(".huntlab-home-intro__visual", css)
+        self.assertIn("body.category .post-archive-hero-section", css)
 
     def test_category_tabs_include_huntlab_specialties(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
