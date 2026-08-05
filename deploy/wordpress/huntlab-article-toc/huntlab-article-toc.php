@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Article Table of Contents
  * Description: Adds a warm, accessible H2/H3 table of contents to HuntLab posts.
- * Version: 1.1.1
+ * Version: 1.1.2
  * Author: HuntLab
  */
 
@@ -71,16 +71,19 @@ function huntlab_article_quick_summary( $content, $sections ) {
 	}
 
 	$what = isset( $paragraphs[0] ) ? $paragraphs[0] : huntlab_article_summary_text( get_the_excerpt() );
-	$why  = isset( $paragraphs[1] ) ? $paragraphs[1] : '';
-	if ( '' === $why && isset( $steps[0] ) ) {
-		$why = '이 글에서 먼저 확인할 핵심 쟁점은 “' . $steps[0] . '”입니다.';
+	$why  = isset( $steps[0] )
+		? '“' . $steps[0] . '”라는 문제 또는 판단 기준을 놓치지 않기 위해서입니다.'
+		: '';
+	$how_steps = array_slice( $steps, 1, 3 );
+	if ( count( $how_steps ) < 2 ) {
+		$how_steps = $steps;
 	}
 
 	if ( '' === $what || '' === $why || count( $steps ) < 2 ) {
 		return '';
 	}
 
-	$how = implode( ' → ', $steps );
+	$how = implode( ' → ', $how_steps );
 	return '<section class="huntlab-article-quick-summary" aria-labelledby="huntlab-quick-summary">'
 		. '<h2 id="huntlab-quick-summary">20초 핵심 요약</h2>'
 		. '<ul>'
