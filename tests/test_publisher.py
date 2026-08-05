@@ -41,6 +41,8 @@ class FakeWordPressClient:
         self.tags: dict[str, int] = {}
         self.categories: dict[str, int] = {}
         self.posts: dict[int, dict[str, Any]] = {}
+        self.media: dict[int, dict[str, Any]] = {}
+        self.upload_calls: list[tuple[Path, str]] = []
         self.config = type(
             "Config",
             (),
@@ -57,6 +59,17 @@ class FakeWordPressClient:
 
     def get_post(self, post_id: int):
         return self.posts[post_id]
+
+    def get_media(self, media_id: int):
+        return self.media[media_id]
+
+    def find_media_by_source_url(self, source_url: str):
+        matches = [
+            media
+            for media in self.media.values()
+            if media.get("source_url") == source_url
+        ]
+        return matches[0] if len(matches) == 1 else None
 
     def find_term(self, taxonomy: str, name: str):
         if taxonomy == "categories" and name in self.categories:
@@ -76,8 +89,10 @@ class FakeWordPressClient:
         return {"id": category_id, "name": name}
 
     def upload_media(self, path: Path, *, alt_text: str):
+        self.upload_calls.append((path, alt_text))
+        media_id = 99 + len(self.upload_calls) - 1
         return {
-            "id": 99,
+            "id": media_id,
             "alt_text": alt_text,
             "source_url": f"https://huntlab.app/wp-content/uploads/{path.name}",
         }
@@ -378,6 +393,177 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(result.action, "Update")
             self.assertEqual(result.post_id, 195)
             self.assertEqual(result.published_url, "https://huntlab.app/?p=195")
+
+    def test_update_reuses_exact_existing_featured_and_body_media(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "thumbnail.png").write_bytes(b"featured")
+            (root / "body-1.png").write_bytes(b"body")
+            text = VALID_MARKDOWN.replace(
+                "publish_mode: draft\n",
+                "publish_mode: publish\n"
+                "run_id: run-1\n"
+                "topic_id: topic-1\n"
+                "source_id: huntlab:run-1:topic-1\n"
+                "existing_post_id: 195\n"
+                "featured_image: thumbnail.png\n"
+                "featured_image_alt: 격리 트리 구조\n",
+            ) + "\n![수도 이상 탐지 결과](body-1.png)\n"
+            path = self._write_document(root, text)
+            digest = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+            review = root / "review.md"
+            review.write_text(
+                f"APPROVED\nrun-1\ntopic-1\n{digest}\n",
+                encoding="utf-8",
+            )
+            client = FakeWordPressClient()
+            body_url = "https://huntlab.app/wp-content/uploads/body-1-10.webp"
+            client.posts[195] = {
+                "id": 195,
+                "title": {"rendered": "HuntLab Publisher 테스트"},
+                "slug": "huntlab-publisher-test",
+                "status": "publish",
+                "featured_media": 258,
+                "content": {
+                    "rendered": (
+                        '<p><img class="wp-image-259" '
+                        'src="https://huntlab.app/wp-content/uploads/body-1-10.webp" '
+                        'alt="수도 이상 탐지 결과"></p>'
+                    )
+                },
+            }
+            client.media[258] = {
+                "id": 258,
+                "source_url": "https://huntlab.app/wp-content/uploads/thumbnail-10.webp",
+                "alt_text": "격리 트리 구조",
+            }
+            client.media[259] = {
+                "id": 259,
+                "source_url": body_url,
+                "alt_text": "수도 이상 탐지 결과",
+            }
+
+            result = DraftPublisher(
+                client,
+                audit_log=root / "audit.jsonl",
+            ).publish_file(
+                path,
+                reviewer_approved=True,
+                review_path=review,
+                expected_identity={
+                    "run_id": "run-1",
+                    "topic_id": "topic-1",
+                    "source_id": "huntlab:run-1:topic-1",
+                    "category": "Tech",
+                },
+            )
+
+            self.assertEqual(result.status, "Success")
+            self.assertEqual(client.upload_calls, [])
+            self.assertEqual(client.created_payload["featured_media"], 258)
+            self.assertIn(body_url, client.created_payload["content"])
+            self.assertEqual(result.publish_summary["featured_media_id"], 258)
+            self.assertEqual(result.publish_summary["body_media_ids"], [259])
+            events = [
+                json.loads(line)
+                for line in (root / "audit.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertTrue(
+                any(event.get("event") == "featured_media_reused" for event in events)
+            )
+            self.assertTrue(
+                any(event.get("event") == "body_media_reused" for event in events)
+            )
+
+    def test_new_post_still_uploads_featured_and_body_media(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "featured.png").write_bytes(b"featured")
+            (root / "body.png").write_bytes(b"body")
+            text = VALID_MARKDOWN.replace(
+                "meta_description: HuntLab Publisher의 Draft 생성 검증 문서입니다.\n",
+                "meta_description: HuntLab Publisher의 Draft 생성 검증 문서입니다.\n"
+                "featured_image: featured.png\n"
+                "featured_image_alt: 격리 트리 구조\n",
+            ) + "\n![수도 이상 탐지 결과](body.png)\n"
+            client = FakeWordPressClient()
+
+            result = DraftPublisher(
+                client,
+                audit_log=root / "audit.jsonl",
+            ).publish_file(
+                self._write_document(root, text),
+                reviewer_approved=True,
+            )
+
+            self.assertEqual(result.status, "Success")
+            self.assertEqual(len(client.upload_calls), 2)
+            self.assertEqual(result.publish_summary["featured_media_id"], 99)
+            self.assertEqual(result.publish_summary["body_media_ids"], [100])
+
+    def test_update_uploads_when_media_suffix_is_not_numeric(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "thumbnail.png").write_bytes(b"featured")
+            (root / "body-1.png").write_bytes(b"body")
+            text = VALID_MARKDOWN.replace(
+                "publish_mode: draft\n",
+                "publish_mode: publish\n"
+                "run_id: run-1\n"
+                "topic_id: topic-1\n"
+                "source_id: huntlab:run-1:topic-1\n"
+                "existing_post_id: 195\n"
+                "featured_image: thumbnail.png\n"
+                "featured_image_alt: 격리 트리 구조\n",
+            ) + "\n![수도 이상 탐지 결과](body-1.png)\n"
+            path = self._write_document(root, text)
+            digest = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+            review = root / "review.md"
+            review.write_text(
+                f"APPROVED\nrun-1\ntopic-1\n{digest}\n",
+                encoding="utf-8",
+            )
+            client = FakeWordPressClient()
+            client.posts[195] = {
+                "id": 195,
+                "title": {"rendered": "HuntLab Publisher 테스트"},
+                "slug": "huntlab-publisher-test",
+                "status": "publish",
+                "featured_media": 258,
+                "content": {
+                    "rendered": (
+                        '<p><img src="https://huntlab.app/wp-content/uploads/body-1-old.webp" '
+                        'alt="수도 이상 탐지 결과"></p>'
+                    )
+                },
+            }
+            client.media[258] = {
+                "id": 258,
+                "source_url": "https://huntlab.app/wp-content/uploads/thumbnail-copy.webp",
+                "alt_text": "격리 트리 구조",
+            }
+
+            result = DraftPublisher(
+                client,
+                audit_log=root / "audit.jsonl",
+            ).publish_file(
+                path,
+                reviewer_approved=True,
+                review_path=review,
+                expected_identity={
+                    "run_id": "run-1",
+                    "topic_id": "topic-1",
+                    "source_id": "huntlab:run-1:topic-1",
+                    "category": "Tech",
+                },
+            )
+
+            self.assertEqual(result.status, "Success")
+            self.assertEqual(len(client.upload_calls), 2)
+            self.assertEqual(result.publish_summary["featured_media_id"], 99)
+            self.assertEqual(result.publish_summary["body_media_ids"], [100])
 
     def test_publish_rejects_mismatched_reviewer_hash(self):
         with tempfile.TemporaryDirectory() as tmp:

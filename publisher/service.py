@@ -7,8 +7,10 @@ import hashlib
 import re
 import uuid
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import markdown as markdown_lib
 
@@ -30,6 +32,81 @@ def _plain_text(value: Any) -> str:
 
 def _normalized(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+class _ImageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.images: list[dict[str, str]] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        if tag.casefold() != "img":
+            return
+        values = {name.casefold(): value or "" for name, value in attrs}
+        if values.get("src"):
+            self.images.append(values)
+
+
+def _existing_images(post: dict[str, Any]) -> list[dict[str, str]]:
+    parser = _ImageParser()
+    parser.feed(_plain_text(post.get("content")))
+    return parser.images
+
+
+def _media_stem(source_url: str) -> str:
+    return Path(unquote(urlparse(source_url).path)).stem.casefold()
+
+
+def _same_media_url(left: str, right: str) -> bool:
+    left_url = urlparse(left)
+    right_url = urlparse(right)
+    return (
+        left_url.scheme.casefold(),
+        left_url.netloc.casefold(),
+        unquote(left_url.path),
+    ) == (
+        right_url.scheme.casefold(),
+        right_url.netloc.casefold(),
+        unquote(right_url.path),
+    )
+
+
+def _is_site_media_url(source_url: str, base_url: str) -> bool:
+    source = urlparse(source_url)
+    site = urlparse(base_url)
+    return (
+        source.scheme in {"http", "https"}
+        and source.netloc.casefold() == site.netloc.casefold()
+        and "/wp-content/uploads/" in unquote(source.path)
+    )
+
+
+def _image_media_id(image: dict[str, str]) -> int | None:
+    matches = re.findall(r"(?:^|\s)wp-image-(\d+)(?:\s|$)", image.get("class", ""))
+    return int(matches[0]) if len(matches) == 1 else None
+
+
+def _matches_local_image(
+    *,
+    image_path: Path,
+    alt_text: str,
+    source_url: str,
+    existing_alt: str,
+) -> bool:
+    local_stem = image_path.stem.casefold()
+    source_stem = _media_stem(source_url)
+    stem_matches = source_stem == local_stem or bool(
+        re.fullmatch(rf"{re.escape(local_stem)}-\d+", source_stem)
+    )
+    return (
+        bool(source_url)
+        and stem_matches
+        and _normalized(existing_alt) == _normalized(alt_text)
+    )
 
 
 class AuditLogger:
@@ -194,6 +271,7 @@ class DraftPublisher:
         publish_mode = str(metadata["publish_mode"])
         existing_post_id = metadata.get("existing_post_id")
         target_post_id = int(existing_post_id) if existing_post_id is not None else None
+        target: dict[str, Any] | None = None
 
         if target_post_id is not None:
             target = self.client.get_post(target_post_id)
@@ -264,6 +342,11 @@ class DraftPublisher:
                 )
             tag_ids.append(int(term["id"]))
 
+        can_reuse_existing_media = (
+            target is not None
+            and bool(str(metadata.get("source_id", "")).strip())
+            and report.checks.get("publish_identity") == "passed"
+        )
         featured_media_id: int | None = None
         featured_image = metadata.get("featured_image")
         if featured_image:
@@ -275,21 +358,47 @@ class DraftPublisher:
                     "validation",
                     "Featured image file does not exist.",
                 )
-            media = self.client.upload_media(
-                image_path,
-                alt_text=str(metadata["featured_image_alt"]).strip(),
+            featured_alt = str(metadata["featured_image_alt"]).strip()
+            existing_featured_id = (
+                int(target.get("featured_media", 0)) if target else 0
             )
-            featured_media_id = int(media["id"])
-            self.audit.write(
-                {
-                    "audit_id": audit_id,
-                    "event": "featured_media_uploaded",
-                    "media_id": featured_media_id,
-                    "filename": image_path.name,
-                }
-            )
+            if can_reuse_existing_media and existing_featured_id:
+                existing_featured = self.client.get_media(existing_featured_id)
+                source_url = str(existing_featured.get("source_url", "")).strip()
+                existing_alt = str(existing_featured.get("alt_text", "")).strip()
+                if _matches_local_image(
+                    image_path=image_path,
+                    alt_text=featured_alt,
+                    source_url=source_url,
+                    existing_alt=existing_alt,
+                ):
+                    featured_media_id = existing_featured_id
+                    self.audit.write(
+                        {
+                            "audit_id": audit_id,
+                            "event": "featured_media_reused",
+                            "media_id": featured_media_id,
+                            "filename": image_path.name,
+                        }
+                    )
+            if featured_media_id is None:
+                media = self.client.upload_media(image_path, alt_text=featured_alt)
+                featured_media_id = int(media["id"])
+                self.audit.write(
+                    {
+                        "audit_id": audit_id,
+                        "event": "featured_media_uploaded",
+                        "media_id": featured_media_id,
+                        "filename": image_path.name,
+                    }
+                )
 
-        uploaded_body_media: dict[Path, tuple[int, str]] = {}
+        body_media: dict[Path, tuple[int, str]] = {}
+        target_images = (
+            _existing_images(target)
+            if can_reuse_existing_media and target
+            else []
+        )
 
         def upload_body_image(match: re.Match[str]) -> str:
             alt_text, source = match.groups()
@@ -298,25 +407,68 @@ class DraftPublisher:
             image_path = Path(source)
             if not image_path.is_absolute():
                 image_path = (document.source_path.parent / image_path).resolve()
-            if image_path not in uploaded_body_media:
-                media = self.client.upload_media(image_path, alt_text=alt_text.strip())
-                source_url = str(media.get("source_url", "")).strip()
-                if not source_url:
-                    raise WordPressError(
-                        "api",
-                        "WordPress media response did not include source_url.",
+            if image_path not in body_media:
+                clean_alt = alt_text.strip()
+                candidates = [
+                    image
+                    for image in target_images
+                    if _is_site_media_url(
+                        image.get("src", ""),
+                        self.client.config.base_url,
                     )
-                media_id = int(media["id"])
-                uploaded_body_media[image_path] = (media_id, source_url)
-                self.audit.write(
-                    {
-                        "audit_id": audit_id,
-                        "event": "body_media_uploaded",
-                        "media_id": media_id,
-                        "filename": image_path.name,
-                    }
-                )
-            _, source_url = uploaded_body_media[image_path]
+                    and _matches_local_image(
+                        image_path=image_path,
+                        alt_text=clean_alt,
+                        source_url=image.get("src", ""),
+                        existing_alt=image.get("alt", ""),
+                    )
+                ]
+                if len(candidates) == 1:
+                    source_url = candidates[0]["src"]
+                    existing_media_id = _image_media_id(candidates[0])
+                    existing_media = (
+                        self.client.get_media(existing_media_id)
+                        if existing_media_id is not None
+                        else self.client.find_media_by_source_url(source_url)
+                    )
+                    if (
+                        existing_media is not None
+                        and _same_media_url(
+                            str(existing_media.get("source_url", "")),
+                            source_url,
+                        )
+                        and _normalized(str(existing_media.get("alt_text", "")))
+                        == _normalized(clean_alt)
+                    ):
+                        media_id = int(existing_media["id"])
+                        body_media[image_path] = (media_id, source_url)
+                        self.audit.write(
+                            {
+                                "audit_id": audit_id,
+                                "event": "body_media_reused",
+                                "media_id": media_id,
+                                "filename": image_path.name,
+                            }
+                        )
+                if image_path not in body_media:
+                    media = self.client.upload_media(image_path, alt_text=clean_alt)
+                    source_url = str(media.get("source_url", "")).strip()
+                    if not source_url:
+                        raise WordPressError(
+                            "api",
+                            "WordPress media response did not include source_url.",
+                        )
+                    media_id = int(media["id"])
+                    body_media[image_path] = (media_id, source_url)
+                    self.audit.write(
+                        {
+                            "audit_id": audit_id,
+                            "event": "body_media_uploaded",
+                            "media_id": media_id,
+                            "filename": image_path.name,
+                        }
+                    )
+            _, source_url = body_media[image_path]
             return f"![{alt_text}]({source_url})"
 
         wordpress_markdown = LOCAL_MARKDOWN_IMAGE.sub(
@@ -373,7 +525,7 @@ class DraftPublisher:
             "tag_ids": tag_ids,
             "featured_media_id": featured_media_id,
             "body_media_ids": [
-                media_id for media_id, _ in uploaded_body_media.values()
+                media_id for media_id, _ in body_media.values()
             ],
             "completed_at": datetime.now(UTC).isoformat(),
         }
@@ -389,7 +541,7 @@ class DraftPublisher:
                 "tag_ids": tag_ids,
                 "featured_media_id": featured_media_id,
                 "body_media_ids": [
-                    media_id for media_id, _ in uploaded_body_media.values()
+                    media_id for media_id, _ in body_media.values()
                 ],
                 "published_url": published_url,
                 "edit_url": draft_url,

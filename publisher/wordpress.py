@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from .config import WordPressConfig
@@ -142,6 +142,35 @@ class WordPressClient:
         return self.request(
             "GET", f"posts/{post_id}?context=edit", expected=(200,)
         )
+
+    def get_media(self, media_id: int) -> dict[str, Any]:
+        return self.request(
+            "GET", f"media/{media_id}?context=edit", expected=(200,)
+        )
+
+    def find_media_by_source_url(self, source_url: str) -> dict[str, Any] | None:
+        filename_stem = Path(unquote(urlparse(source_url).path)).stem
+        media_items = self.request(
+            "GET",
+            f"media?{urlencode({'search': filename_stem, 'per_page': '100', 'context': 'edit'})}",
+            expected=(200,),
+        )
+        requested_url = urlparse(source_url)
+        exact = [
+            media
+            for media in media_items
+            if (
+                urlparse(str(media.get("source_url", ""))).scheme.casefold(),
+                urlparse(str(media.get("source_url", ""))).netloc.casefold(),
+                unquote(urlparse(str(media.get("source_url", ""))).path),
+            )
+            == (
+                requested_url.scheme.casefold(),
+                requested_url.netloc.casefold(),
+                unquote(requested_url.path),
+            )
+        ]
+        return exact[0] if len(exact) == 1 else None
 
     def find_term(self, taxonomy: str, name: str) -> dict[str, Any] | None:
         terms = self.request(
