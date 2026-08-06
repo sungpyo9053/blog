@@ -51,6 +51,24 @@ HuntLab의 목표는 `글을 만드는 시스템`에서 `검색 자산을 축적
 - Naver·Whereispost는 공식 지원 API 또는 소유자 제공 파일만 읽는 Shadow Mode
   인터페이스를 추가하고, 데이터가 없으면 `N/A` 유지
 
+## 8월 7일 01시 실측 반영
+
+01시 Analytics 결과를 백로그에 반영했다. 아래 항목은 분석 결과에 따른 검토 대기
+상태이며, 자동으로 기존 글을 바꾸지 않는다.
+
+- `resident-registration-survey`: 클릭 0, 노출 40, 평균 순위 11.2로
+  `ELIGIBLE_REVIEW`가 됐다. 제안 제목은
+  `2026 주민등록 사실조사 방문조사 대상과 비대면 참여 방법`이며, 변경 범위는
+  제목 하나만 허용한다. 적용 전 원제목과 메타를 백업하고, 14일 또는 1,000노출
+  중 먼저 도달하는 시점에 클릭·노출·CTR·순위를 비교한다.
+- URL Inspection에서 `Google에는 아직 알려지지 않은 URL입니다.`로 확인된
+  Next.js/WAF 글은 `ELIGIBLE_REVIEW`다. 일반 블로그 글에 Indexing API를 호출하지
+  않고, 관련성이 확인된 기존 글 한 곳에 crawlable 내부 링크 하나만 추가하는
+  변경을 수동 검토한다. 변경 전 URL·canonical·robots·sitemap 상태와 백업을
+  기록하고, Google 처리 시간을 둔 뒤 색인 상태를 재측정한다.
+- `Refresh 후보`와 `Content Gap 후보`는 아직 임계치를 충족하지 않아 추가하지
+  않는다.
+
 ## 8월 7일 확인할 데이터
 
 ### 최우선 KPI: 검색되는 글의 비율
