@@ -34,6 +34,13 @@ def active_pipeline_pid() -> int | None:
 def choose_command(log_text: str) -> list[str] | None:
     if "pipeline event=end failed=false" in log_text:
         return None
+    # A manufactured Build Log is a planner classification error, not a
+    # resumable stage failure. Re-plan at noon after the strengthened gate.
+    if "Build Log는 existing_work_record 근거만 허용합니다" in log_text:
+        return [
+            str(ROOT / ".venv/bin/python"),
+            str(ROOT / "scripts/run_daily_pipeline.py"),
+        ]
     run_ids = RUN_ID_PATTERN.findall(log_text)
     python = str(ROOT / ".venv/bin/python")
     runner = str(ROOT / "scripts/run_daily_pipeline.py")

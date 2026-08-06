@@ -100,6 +100,14 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("Harness가 분석 리포트 경로", planner.prompt)
         self.assertIn("output/analytics/latest.md", planner.prompt)
 
+    def test_planner_does_not_fabricate_build_logs_from_today_observations(self):
+        planner = planner_stage("", "run-build-log-gate", Path("/tmp/topics.md"))
+        self.assertIn(
+            "오늘 실행을 위해 새로 만든 테스트나 Search Console 관측만으로 선정할 수 없습니다",
+            planner.prompt,
+        )
+        self.assertIn("실제 작업 기록·운영 변경·실패 로그", planner.prompt)
+
         context = make_topic_context("run-analytics", "Python 운영 분석")
         writer = next(
             stage for stage in topic_stages(context) if stage.name == "Writer Agent"
@@ -714,6 +722,13 @@ class DailyRetryTests(unittest.TestCase):
 
     def test_noon_retry_starts_fresh_without_a_run(self):
         command = choose_command("pipeline event=failed reason=planner")
+        self.assertIsNotNone(command)
+        self.assertNotIn("--resume-run-id", command)
+
+    def test_noon_retry_replans_manufactured_build_log(self):
+        command = choose_command(
+            "pipeline event=failed reason=topic: Build Log는 existing_work_record 근거만 허용합니다."
+        )
         self.assertIsNotNone(command)
         self.assertNotIn("--resume-run-id", command)
 
