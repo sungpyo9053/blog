@@ -122,6 +122,11 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "- internal_link_candidates: 없음\n"
                     "- topic_cluster: AI\n"
                     "- pillar_candidate: 없음\n"
+                    "- problem_origin: official_change\n"
+                    "- editorial_thesis: 하위 호환을 검증한다\n"
+                    "- chosen_focus: content_type 추론\n"
+                    "- rejected_angle: 발행 동작은 제외\n"
+                    "- structure_mode: decision_memo\n"
                 )
             top10 = "\n".join(f"{index}. AI 후보 {index}" for index in range(1, 11))
             path.write_text(
@@ -202,6 +207,11 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "- internal_link_candidates: 없음\n"
                     "- topic_cluster: 기술 운영\n"
                     "- pillar_candidate: 향후 검토\n"
+                    "- problem_origin: real_project\n"
+                    "- editorial_thesis: 기술 문제를 실제 근거로 해결한다\n"
+                    "- chosen_focus: 구현 방법\n"
+                    "- rejected_angle: 일반론은 제외\n"
+                    "- structure_mode: problem_first\n"
                 )
             top10 = "\n".join(f"{index}. 기술 후보 {index}" for index in range(1, 11))
             path.write_text(
@@ -240,6 +250,11 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "- internal_link_candidates: 없음\n"
                     "- topic_cluster: 기술 운영\n"
                     "- pillar_candidate: 향후 검토\n"
+                    "- problem_origin: observed_search_question\n"
+                    "- editorial_thesis: 검색 의도와 제목을 맞춘다\n"
+                    "- chosen_focus: primary keyword\n"
+                    "- rejected_angle: 주변 키워드는 제외\n"
+                    "- structure_mode: field_note\n"
                 )
             top10 = "\n".join(
                 f"{index}. 기술 후보 {index}" for index in range(1, 11)
@@ -305,7 +320,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         writer = next(stage for stage in stages if stage.name == "Writer Agent")
         reviewer = next(stage for stage in stages if stage.name == "Reviewer Agent")
 
-        self.assertIn("`## 핵심 요약`", writer.prompt)
+        self.assertIn("`## 20초 핵심 요약`", writer.prompt)
         self.assertIn("`무엇`, `왜`, `어떻게`", writer.prompt)
         self.assertIn("기존 `한눈에 보기` 자동 목차", writer.prompt)
         self.assertIn("삭제하거나 대체하지 마세요", writer.prompt)
@@ -322,7 +337,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             stage for stage in topic_stages(context) if stage.name == "Writer Agent"
         )
 
-        self.assertIn("`## 핵심 요약`", writer.prompt)
+        self.assertIn("`## 20초 핵심 요약`", writer.prompt)
         self.assertIn("`무엇`, `왜`, `어떻게`", writer.prompt)
 
     def test_selected_planner_evidence_is_copied_into_topic_boundary(self):
@@ -348,6 +363,11 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "original_value_plan": "격리 전후 동작 비교",
                     "evidence_plan": "command_and_output과 failed_attempt 검증",
                     "sources": "https://example.com/source",
+                    "problem_origin": "real_project",
+                    "editorial_thesis": "격리는 권한 경계로 검증해야 한다",
+                    "chosen_focus": "egress 차단",
+                    "rejected_angle": "제품 기능 나열은 제외",
+                    "structure_mode": "problem_first",
                 },
             )
 
@@ -361,6 +381,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             )
             self.assertEqual(payload["original_value_plan"], "격리 전후 동작 비교")
             self.assertIn("command_and_output", payload["evidence_plan"])
+            self.assertEqual(payload["problem_origin"], "real_project")
+            self.assertEqual(payload["structure_mode"], "problem_first")
 
     def test_planner_context_rejects_missing_duplicate_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -404,6 +426,10 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 '  - "Security"\n'
                 '  - "Upgrade"\n'
                 "---\n\n"
+                "## 20초 핵심 요약\n\n"
+                "- **무엇:** Docker 보안 업데이트\n"
+                "- **왜:** 취약점 대응\n"
+                "- **어떻게:** 검증 후 적용\n\n"
                 "## 안전한 업그레이드\n",
                 encoding="utf-8",
             )

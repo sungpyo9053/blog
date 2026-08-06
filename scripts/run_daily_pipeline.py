@@ -357,6 +357,11 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         "internal_link_candidates",
         "topic_cluster",
         "pillar_candidate",
+        "problem_origin",
+        "editorial_thesis",
+        "chosen_focus",
+        "rejected_angle",
+        "structure_mode",
     }
     candidates: dict[str, dict[str, Any]] = {}
     for match in candidate_matches:
@@ -388,6 +393,22 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         )
         if not 3 <= len(tags) <= 4:
             raise PipelineError(f"{title}: tags는 재사용 가능한 3~4개여야 합니다.")
+        if fields["problem_origin"] not in {
+            "real_project",
+            "public_codebase",
+            "observed_search_question",
+            "controlled_lab",
+            "official_change",
+        }:
+            raise PipelineError(f"{title}: 허용되지 않은 problem_origin")
+        if fields["structure_mode"] not in {
+            "problem_first",
+            "decision_memo",
+            "experiment_diary",
+            "code_walkthrough",
+            "field_note",
+        }:
+            raise PipelineError(f"{title}: 허용되지 않은 structure_mode")
         candidates[title] = {
             **fields,
             "content_type": content_type,
@@ -475,6 +496,22 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
     duplicate_check = str(plan.get("duplicate_check", "")).strip()
     if not duplicate_check:
         raise PipelineError(f"{context.topic_id}: Planner 중복 검사 근거가 없습니다.")
+    editorial_fields = {
+        key: str(plan.get(key, "")).strip()
+        for key in (
+            "problem_origin",
+            "editorial_thesis",
+            "chosen_focus",
+            "rejected_angle",
+            "structure_mode",
+        )
+    }
+    missing_editorial = [key for key, value in editorial_fields.items() if not value]
+    if missing_editorial:
+        raise PipelineError(
+            f"{context.topic_id}: Planner 편집 방향 누락: "
+            + ", ".join(missing_editorial)
+        )
     payload = {
         "run_id": context.run_id,
         "topic_id": context.topic_id,
@@ -498,6 +535,7 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "topic_cluster": plan.get("topic_cluster", ""),
         "pillar_candidate": plan.get("pillar_candidate", ""),
         "sources": plan.get("sources", ""),
+        **editorial_fields,
     }
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -532,14 +570,14 @@ def topic_stages(context: TopicContext) -> list[Stage]:
     )
     common += editorial
     quick_view_writer = (
-        "도입 직후에 `## 핵심 요약`을 두고 `무엇`, `왜`, `어떻게`를 각각 한 개의 "
+        "도입 직후에 정확히 `## 20초 핵심 요약`을 두고 `무엇`, `왜`, `어떻게`를 각각 한 개의 "
         "짧은 항목으로 작성하세요. 독자가 20초 안에 대상, 해결 이유와 본문에서 확인할 "
         "방법을 파악해야 하며 research.md에 없는 사실을 추가하거나 도입·결론을 반복하지 "
         "마세요. WordPress의 기존 `한눈에 보기` 자동 목차는 별도 탐색 기능이므로 삭제하거나 "
         "대체하지 마세요. "
     )
     quick_view_review = (
-        "도입 직후의 `## 핵심 요약`에 근거가 확인되는 `무엇`, `왜`, `어떻게`가 각각 "
+        "도입 직후의 정확한 `## 20초 핵심 요약`에 근거가 확인되는 `무엇`, `왜`, `어떻게`가 각각 "
         "존재하고 20초 안에 이해할 수 있는지 검사하세요. 하나라도 빠지거나 본문에 없는 "
         "주장을 만들었으면 REJECT하세요. WordPress의 기존 `한눈에 보기` 자동 목차를 "
         "삭제하거나 대체하지 마세요. "
@@ -810,6 +848,23 @@ def validate_publish_contract(context: TopicContext) -> str:
             f"{context.topic_id}: Reviewer의 명시적 APPROVED 상태가 없습니다."
         )
 
+    summary = re.search(
+        r"(?ms)^## 20초 핵심 요약\s*$\n(.*?)(?=^##\s|\Z)",
+        document.markdown,
+    )
+    if summary is None:
+        raise PipelineError(f"{context.topic_id}: 정확한 `## 20초 핵심 요약`이 없습니다.")
+    missing_summary_fields = [
+        label
+        for label in ("무엇", "왜", "어떻게")
+        if not re.search(rf"(?m)(?:^|[*_\-\s]){label}(?:[*_\s]*[:：]|[*_]+)", summary.group(1))
+    ]
+    if missing_summary_fields:
+        raise PipelineError(
+            f"{context.topic_id}: 20초 핵심 요약 필드 누락: "
+            + ", ".join(missing_summary_fields)
+        )
+
     digest = hashlib.sha256(publish_path.read_bytes()).hexdigest()
     review = review_path.read_text(encoding="utf-8")
     required_tokens = (context.run_id, context.topic_id, digest)
@@ -928,6 +983,11 @@ def dry_run_topics() -> str:
                 "- internal_link_candidates: 없음\n"
                 "- topic_cluster: Dry Run\n"
                 "- pillar_candidate: 없음\n"
+                "- problem_origin: real_project\n"
+                "- editorial_thesis: 드라이런은 편집 계약을 검증해야 한다\n"
+                "- chosen_focus: 파서와 격리 경계\n"
+                "- rejected_angle: 기능 소개는 검증 목적과 달라 제외\n"
+                "- structure_mode: decision_memo\n"
                 "- sources: dry-run"
             )
     top10_items = candidates[:9] + [candidates[10]]
@@ -1040,7 +1100,12 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             "오류·문제 표현과 독자가 실행할 확인·해결 행동을 결합하세요. Search Console, "
             "실제 로그, 공식 Known Issues·Changelog 또는 반복 질문에서 확인하지 못한 "
             "장애를 창작하지 말고, 개념 이해 의도에는 오류형 제목을 강제하지 마세요. "
-            "TOP2에는 demand_signal_source, observed_problem_phrase, user_action을 기록하세요. "
+            "TOP2에는 demand_signal_source, observed_problem_phrase, user_action과 함께 "
+            "problem_origin(real_project, public_codebase, observed_search_question, controlled_lab, official_change 중 하나), "
+            "editorial_thesis(글 전체가 증명할 한 문장), chosen_focus, rejected_angle(넣지 않을 관점과 이유), "
+            "structure_mode(problem_first, decision_memo, experiment_diary, code_walkthrough, field_note 중 하나)를 기록하세요. "
+            "동등한 후보라면 실제 프로젝트·공개 코드·관측 질문에서 출발한 후보를 통제 실험보다 우선하고, "
+            "controlled_lab은 실제 선택을 바꾸는 질문에 답할 때만 선정하세요. "
             f"카테고리별 수량을 강제하지 말고 전체 후보 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
             "작성하세요. 최종 TOP2는 각 후보의 primary_keyword를 제목에 그대로 포함해야 합니다. "
             f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "

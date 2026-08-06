@@ -41,6 +41,14 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("Velog 공개 트렌딩", text)
         self.assertIn("검색 수요` 점수에 최대 1점", text)
         self.assertIn("TOP2로 선정해 실제", text)
+        for field in (
+            "problem_origin",
+            "editorial_thesis",
+            "chosen_focus",
+            "rejected_angle",
+            "structure_mode",
+        ):
+            self.assertIn(field, text)
         self.assertIn("TOP2에는 카테고리별 의무 할당을 두지 않는다", text)
         self.assertNotIn(
             "TOP2 중 최소 1개가 Economy, Society, Politics 또는 Hot Issue",
@@ -98,6 +106,9 @@ class SEOAgentContractTests(unittest.TestCase):
         ):
             self.assertIn(field, writer)
             self.assertIn(field, reviewer)
+        self.assertIn("## 20초 핵심 요약", writer)
+        self.assertIn("5~20줄", writer)
+        self.assertIn("rejected_angle", reviewer)
 
     def test_content_type_guides_are_routed_without_duplicating_common_style(self):
         planner = read("agents/topic-planner-agent.md")

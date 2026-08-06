@@ -170,6 +170,21 @@ TOP2 후보에는 `demand_signal_source`, `observed_problem_phrase`, `user_actio
 기록한다. 자동완성, 커뮤니티와 트렌드 수치는 수요 발견 신호일 뿐 사실 근거가
 아니며 공식 자료와 직접 검증 계획을 대체하지 않는다.
 
+### 편집 방향 최소 계약
+
+모든 후보는 글의 출발점과 취사선택을 먼저 고정한다. `problem_origin`은
+`real_project`, `public_codebase`, `observed_search_question`, `controlled_lab`,
+`official_change` 중 하나다. 점수가 비슷하면 실제 프로젝트, 공개 코드베이스,
+관측된 독자 질문에서 출발한 후보를 통제 실험보다 우선한다. 합성 데이터나
+`controlled_lab`은 실제 선택을 바꾸는 구체적인 질문에 답하고 다른 안전한 근거를
+구할 수 없을 때만 사용하며, 일반 성능처럼 확대할 후보는 폐기한다.
+
+`editorial_thesis`에는 글 전체가 증명할 한 문장, `chosen_focus`에는 깊게 파고들
+한 가지, `rejected_angle`에는 의도적으로 빼는 관점과 이유를 기록한다.
+`structure_mode`는 `problem_first`, `decision_memo`, `experiment_diary`,
+`code_walkthrough`, `field_note` 중 하나로 정한다. 같은 날 TOP2의 구조를 기계적으로
+맞추지 않는다.
+
 ## 중복 및 반복 방지
 
 TOP10과 TOP2를 정하기 전에 다음을 확인한다.
@@ -248,6 +263,11 @@ Engineering, System Architecture, Tech, AI 또는 Build Log
 - demand_signal_source: Search Console, 실제 로그, 공식 Known Issues 등 확인한 발견 출처와 시각
 - observed_problem_phrase: 출처에서 실제 확인한 오류·문제 표현, 없으면 개념 의도
 - user_action: 독자가 글을 읽은 뒤 수행할 확인·해결·선택 행동
+- problem_origin: real_project, public_codebase, observed_search_question, controlled_lab, official_change 중 하나
+- editorial_thesis: 글 전체가 증명할 한 문장
+- chosen_focus: 이 글에서 깊게 다룰 한 가지
+- rejected_angle: 의도적으로 제외할 관점과 이유
+- structure_mode: problem_first, decision_memo, experiment_diary, code_walkthrough, field_note 중 하나
 - tags: 태그1, 태그2, 태그3
 - score: 00/90
 - score_breakdown: 최신성 0; 검색 수요 0; 공식 출처 0; Evergreen 0; HuntLab 적합성 0; 기술적 깊이 0; 독창성 0; 최근 작성 여부 0; 카테고리 균형 0
@@ -276,7 +296,7 @@ Engineering, System Architecture, Tech, AI 또는 Build Log
 2. 두 번째 최종 주제
 ```
 
-`title`, `category`, `content_type`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `original_value_plan`, `evidence_plan`, `recommended_images`는 반드시 존재해야 한다. `tags`는 중복 없는 3~4개다. 기존 WordPress에서 재사용할 수 있는 넓고 안정적인 주제 태그를 우선하며, 검색어 변형이나 한 글에서만 쓰일 긴 문구를 새 태그로 만들지 않는다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
+`title`, `category`, `content_type`, `tags`, `score`, `score_breakdown`, `reason`, `evergreen`, `search_intent`, `research_focus`, `original_value_plan`, `evidence_plan`, `recommended_images`, `problem_origin`, `editorial_thesis`, `chosen_focus`, `rejected_angle`, `structure_mode`는 반드시 존재해야 한다. `tags`는 중복 없는 3~4개다. 기존 WordPress에서 재사용할 수 있는 넓고 안정적인 주제 태그를 우선하며, 검색어 변형이나 한 글에서만 쓰일 긴 문구를 새 태그로 만들지 않는다. TOP10과 TOP2 제목은 후보의 `title`과 정확히 일치해야 하며 TOP2 아래에는 번호가 있는 두 줄만 둔다.
 
 `original_value_plan`이 공식 문서 재요약에 그치거나 `evidence_plan`에 검증 가능한
 방법이 없으면 TOP2로 선정하지 않는다. 하루 발행량을 채우기 위해 기준 미달
