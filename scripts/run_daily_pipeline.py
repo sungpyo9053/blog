@@ -65,6 +65,7 @@ LEGACY_CONTENT_TYPE_BY_CATEGORY = {
     "Hot Issue": "current_affairs_policy",
 }
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
+RECENT_STYLE_LIMIT = 5
 REVIEW_STATUS_PATTERN = re.compile(
     r"(?im)^\s*(?:-\s*)?status\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
     r"|^\s*(APPROVED|REJECTED)\s*$"
@@ -544,10 +545,85 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
     return path
 
 
+def _plain_paragraphs(markdown: str) -> list[str]:
+    """Extract prose shape without turning previous articles into fact input."""
+    paragraphs: list[str] = []
+    for block in re.split(r"\n\s*\n", markdown):
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not lines or lines[0].startswith(
+            ("#", "- ", "* ", ">", "```", "![", "|")
+        ):
+            continue
+        text = " ".join(lines)
+        text = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", text)
+        text = re.sub(r"[`*_]", "", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            paragraphs.append(text[:500])
+    return paragraphs
+
+
+def write_recent_style_context(context: TopicContext) -> Path:
+    """Snapshot recent article shapes for repetition checks, never fact reuse."""
+    path = context.directory / "recent-style-context.json"
+    assert_owned_path(context, path)
+    candidates: list[tuple[float, Path]] = []
+    if RUNS_DIR.is_dir():
+        for publish_path in RUNS_DIR.glob("*/*/publish.md"):
+            if publish_path.parent.resolve() == context.directory.resolve():
+                continue
+            try:
+                candidates.append((publish_path.stat().st_mtime, publish_path))
+            except OSError:
+                continue
+    snapshots: list[dict[str, Any]] = []
+    for _, publish_path in sorted(candidates, reverse=True):
+        if len(snapshots) >= RECENT_STYLE_LIMIT:
+            break
+        try:
+            document = load_document(publish_path)
+        except FrontmatterError:
+            continue
+        paragraphs = _plain_paragraphs(document.markdown)
+        headings = [
+            re.sub(r"[`*_]", "", heading).strip()
+            for heading in re.findall(r"(?m)^##\s+(.+?)\s*$", document.markdown)
+        ]
+        planner_path = publish_path.parent / "planner-context.json"
+        structure_mode = ""
+        if planner_path.is_file():
+            try:
+                planner = json.loads(planner_path.read_text(encoding="utf-8"))
+                structure_mode = str(planner.get("structure_mode", "")).strip()
+            except (OSError, json.JSONDecodeError):
+                pass
+        snapshots.append(
+            {
+                "title": str(document.metadata.get("title", "")).strip(),
+                "structure_mode": structure_mode,
+                "opening_paragraphs": paragraphs[:2],
+                "h2_headings": headings,
+                "closing_paragraph": paragraphs[-1] if paragraphs else "",
+            }
+        )
+    payload = {
+        "purpose": "style_repetition_check_only",
+        "fact_reuse_allowed": False,
+        "recent_count": len(snapshots),
+        "articles": snapshots,
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def topic_stages(context: TopicContext) -> list[Stage]:
     topic = context.title
     topic_dir = context.directory
     content_type_guide = CONTENT_TYPE_GUIDES[context.content_type]
+    recent_style_context = topic_dir / "recent-style-context.json"
     common = (
         f"run_id={context.run_id!r}, topic_id={context.topic_id!r}, "
         f"topic_title={topic!r}입니다. 주제별 콘텐츠 입력과 산출물은 "
@@ -609,6 +685,11 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 common
                 + content_guidance
                 + f"입력은 {str(topic_dir / 'research.md')!r} 하나입니다. "
+                f"문체 중복 확인용 입력은 {str(recent_style_context)!r}입니다. 이 파일은 "
+                "최근 글의 도입·H2·마무리·structure_mode 비교에만 사용하고 사실, 경험, "
+                "수치나 표현을 현재 글로 가져오지 마세요. 최근 글과 같은 도입 방식, H2 "
+                "진행, 결론 형태가 겹치면 현재 problem_origin과 structure_mode에 맞게 "
+                "전개를 바꾸되 억지로 다른 사람을 연기하지 마세요. "
                 f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "
                 "파일이 있으면 검색 의도·CTA 제안만 참고하고 사실 근거는 research.md를 우선하세요. "
                 + quick_view_writer
@@ -645,6 +726,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 + f"{str(topic_dir / 'final.md')!r}를 "
                 f"{str(topic_dir / 'research.md')!r}, "
                 f"{str(topic_dir / 'planner-context.json')!r}, "
+                f"{str(recent_style_context)!r}, "
                 f"{str(PROJECT_ROOT / 'agents/reviewer.md')!r}, "
                 f"{str(PROJECT_ROOT / 'guides/style-guide.md')!r}, "
                 f"{str(content_type_guide)!r}, "
@@ -653,6 +735,10 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 f"{str(PROJECT_ROOT / 'guides/publisher-guide.md')!r} "
                 "기준으로 검토하세요. reviewer.md의 주제 유형별 고유 가치와 "
                 "실증 근거 검사를 포함한 모든 필수 검사를 적용하세요. "
+                "recent-style-context.json은 사이트 차원의 반복 검사에만 사용하세요. 최근 "
+                "글과 도입 방식, H2 진행, 마무리 형태가 실질적으로 반복됐거나 다른 글의 "
+                "경험을 현재 글의 경험처럼 옮겼으면 REJECT하세요. structure_mode가 같다는 "
+                "이유만으로 거절하지 말고 실제 문서 구조와 문장 흐름을 판단하세요. "
                 + quick_view_review
                 + "정책 문서는 읽기만 하고 주제 디렉터리로 "
                 "복사하지 마세요. "
@@ -1274,14 +1360,16 @@ def main() -> int:
                 plan for plan in selected_plans if plan["title"] == context.title
             )
             planner_context_path = write_planner_context(context, plan)
+            recent_style_context_path = write_recent_style_context(context)
             logger.info(
                 "topic=%r run_id=%s topic_id=%s directory=%s "
-                "planner_context=%s event=start",
+                "planner_context=%s recent_style_context=%s event=start",
                 context.title,
                 context.run_id,
                 context.topic_id,
                 context.directory,
                 planner_context_path,
+                recent_style_context_path,
             )
             for stage in topic_stages(context):
                 if args.resume_run_id:

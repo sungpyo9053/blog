@@ -24,6 +24,7 @@ from scripts.run_daily_pipeline import (
     validate_build_log_research_contract,
     validate_publish_contract,
     write_planner_context,
+    write_recent_style_context,
 )
 from scripts.retry_daily_pipeline import choose_command
 
@@ -476,6 +477,57 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             self.assertIn("command_and_output", payload["evidence_plan"])
             self.assertEqual(payload["problem_origin"], "real_project")
             self.assertEqual(payload["structure_mode"], "problem_first")
+
+    def test_recent_style_context_copies_shape_but_disallows_fact_reuse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runs = Path(temporary) / "runs"
+            old_topic = runs / "old-run" / "old-topic"
+            old_topic.mkdir(parents=True)
+            (old_topic / "publish.md").write_text(
+                "---\n"
+                'title: "이전 글"\n'
+                "---\n\n"
+                "관측된 오류에서 시작한 첫 문단이다.\n\n"
+                "두 번째 도입 문단이다.\n\n"
+                "## 원인을 찾았다\n\n본문이다.\n\n"
+                "## 남은 문제\n\n마지막 판단이다.\n",
+                encoding="utf-8",
+            )
+            (old_topic / "planner-context.json").write_text(
+                json.dumps({"structure_mode": "problem_first"}),
+                encoding="utf-8",
+            )
+            current_dir = runs / "new-run" / "new-topic"
+            current_dir.mkdir(parents=True)
+            context = TopicContext(
+                title="새 글",
+                run_id="new-run",
+                topic_id="new-topic",
+                directory=current_dir,
+            )
+            with patch("scripts.run_daily_pipeline.RUNS_DIR", runs):
+                path = write_recent_style_context(context)
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["purpose"], "style_repetition_check_only")
+            self.assertFalse(payload["fact_reuse_allowed"])
+            self.assertEqual(payload["recent_count"], 1)
+            self.assertEqual(
+                payload["articles"][0]["structure_mode"], "problem_first"
+            )
+            self.assertEqual(
+                payload["articles"][0]["h2_headings"],
+                ["원인을 찾았다", "남은 문제"],
+            )
+
+    def test_writer_and_reviewer_receive_recent_style_context(self):
+        context = make_topic_context("run-style", "사람다운 자동 발행")
+        stages = {stage.name: stage for stage in topic_stages(context)}
+
+        self.assertIn("recent-style-context.json", stages["Writer Agent"].prompt)
+        self.assertIn("사실, 경험", stages["Writer Agent"].prompt)
+        self.assertIn("recent-style-context.json", stages["Reviewer Agent"].prompt)
+        self.assertIn("structure_mode가 같다는", stages["Reviewer Agent"].prompt)
 
     def test_planner_context_rejects_missing_duplicate_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

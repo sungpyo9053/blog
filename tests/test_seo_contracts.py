@@ -112,6 +112,9 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("work_trigger", writer)
         self.assertIn("existing_work_record", reviewer)
         self.assertIn("문제 또는 판단 기준을 놓치지 않기", reviewer)
+        self.assertIn("recent-style-context.json", writer)
+        self.assertIn("가짜 작성자", reviewer)
+        self.assertIn("사이트 차원의 변주", style)
 
     def test_content_type_guides_are_routed_without_duplicating_common_style(self):
         planner = read("agents/topic-planner-agent.md")
