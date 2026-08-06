@@ -59,6 +59,22 @@ tools:
 - `failure_or_limit`: 실패 사례, 재현하지 못한 조건 또는 검증 한계
 - `operator_judgment`: 관측 결과를 바탕으로 한 HuntLab의 선택과 이유
 
+Build Log 또는 운영 회고는 검증 결과만 모으지 말고 `## 작업 기록`에 실제 편집
+재료를 별도로 보존한다.
+
+- `evidence_origin`: `existing_work_record`, `purpose_built_test`, `docs_only` 중 하나
+- `work_trigger`: 이 작업을 시작하게 만든 실제 증상·요청·변경
+- `actual_sequence`: 관측 → 첫 판단 → 변경 → 재검증의 실제 순서
+- `friction_or_surprise`: 막힌 지점, 틀린 예상 또는 예상 밖의 관측
+- `decision_log`: 결과를 보고 실제로 채택·보류·되돌린 선택
+- `unfinished_edge`: 아직 불편하거나 다음에 확인할 한계
+
+글을 만들 목적으로 새 테스트를 실행했으면 `purpose_built_test`다. 기존 작업 기록,
+커밋, 장애 로그나 공개 증상에서 출발했을 때만 `existing_work_record`로 기록한다.
+시간순서를 매끄럽게 만들려고 없던 실패나 고민을 추가하지 않는다. Build Log인데
+`existing_work_record`가 아니거나 위 필드 중 하나라도 근거 있게 채울 수 없으면
+`INSUFFICIENT`로 판정하고 Writer로 넘기지 않는다.
+
 검증 모드는 `direct`, `controlled_comparison`, `not_directly_tested` 가운데 정확히
 하나만 사용한다. `direct_read_only`처럼 임의의 변형값을 만들지 않는다.
 직접 검증 주제는 `verification_mode: direct`로 기록하고 다음 실행 증거 묶음을
@@ -209,6 +225,15 @@ output/[주제]/research.md
 - verification_mode: direct, controlled_comparison 또는 not_directly_tested
 - evidence:
 - limitations:
+
+## 작업 기록
+
+- evidence_origin:
+- work_trigger:
+- actual_sequence:
+- friction_or_surprise:
+- decision_log:
+- unfinished_edge:
 
 ## [주제에 맞는 소주제]
 

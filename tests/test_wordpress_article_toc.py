@@ -19,7 +19,7 @@ class HuntLabArticleTocTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-article-toc.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/article-toc.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 1.1.5", php)
+        self.assertIn("Version: 1.1.6", php)
         self.assertIn("huntlab_article_quick_summary", php)
         self.assertIn("20초 핵심 요약", php)
         self.assertIn("<strong>무엇</strong>", php)
@@ -32,7 +32,7 @@ class HuntLabArticleTocTests(unittest.TestCase):
         self.assertIn("array_slice( $characters[0], 0, $limit )", php)
         self.assertIn("if ( function_exists( 'mb_strlen' ) )", php)
         self.assertNotIn("substr( $text, 0, $limit )", php)
-        self.assertIn("문제 또는 판단 기준을 놓치지 않기 위해서", php)
+        self.assertIn("(?:20초\\s*)?핵심 요약", php)
         self.assertIn("array_slice( $steps, 1, 3 )", php)
         self.assertIn("핵심 요약", php)
         self.assertIn("huntlab-article-quick-summary", css)

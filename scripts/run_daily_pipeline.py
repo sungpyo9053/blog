@@ -573,13 +573,16 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         "도입 직후에 정확히 `## 20초 핵심 요약`을 두고 `무엇`, `왜`, `어떻게`를 각각 한 개의 "
         "짧은 항목으로 작성하세요. 독자가 20초 안에 대상, 해결 이유와 본문에서 확인할 "
         "방법을 파악해야 하며 research.md에 없는 사실을 추가하거나 도입·결론을 반복하지 "
-        "마세요. WordPress의 기존 `한눈에 보기` 자동 목차는 별도 탐색 기능이므로 삭제하거나 "
+        "마세요. 이 H2는 문서 전체에 정확히 한 번만 두고, `왜`에는 실제 손실·오작동·선택 "
+        "이유를 쓰세요. `문제 또는 판단 기준을 놓치지 않기 위해서`, `순서로 확인합니다` "
+        "같은 범용 자동 문구는 금지합니다. WordPress의 기존 `한눈에 보기` 자동 목차는 별도 탐색 기능이므로 삭제하거나 "
         "대체하지 마세요. "
     )
     quick_view_review = (
         "도입 직후의 정확한 `## 20초 핵심 요약`에 근거가 확인되는 `무엇`, `왜`, `어떻게`가 각각 "
         "존재하고 20초 안에 이해할 수 있는지 검사하세요. 하나라도 빠지거나 본문에 없는 "
-        "주장을 만들었으면 REJECT하세요. WordPress의 기존 `한눈에 보기` 자동 목차를 "
+        "주장을 만들었으면 REJECT하세요. 같은 H2가 두 번이거나 `왜`가 UI 제목을 이유로 "
+        "삼거나 범용 자동 문구를 사용해도 REJECT하세요. WordPress의 기존 `한눈에 보기` 자동 목차를 "
         "삭제하거나 대체하지 마세요. "
     )
     return [
@@ -592,6 +595,9 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 + f"Topic Planner의 TOP2 중 다음 주제만 조사하세요: {topic!r}. "
                 f"선정 근거와 검색 의도는 {str(topic_dir / 'planner-context.json')!r}에서 "
                 "읽고, 중복 검사 결과를 사실 근거로 확대 해석하지 마세요. "
+                "Build Log라면 기존 작업 기록에서 evidence_origin, work_trigger, actual_sequence, "
+                "friction_or_surprise, decision_log, unfinished_edge를 확인해 `## 작업 기록`에 "
+                "남기세요. 글을 위해 새로 만든 테스트뿐이면 existing_work_record로 꾸미지 마세요. "
                 f"다른 주제를 조사하지 말고 산출물을 "
                 f"{str(topic_dir / 'research.md')!r}에 저장하세요."
             ),
@@ -788,6 +794,55 @@ def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
             raise PipelineError(
                 f"{context.topic_id}: {stage_name} 필수 산출물 누락: {path}"
             )
+    if stage_name == "Research Agent" and context.content_type == "build_log_operations":
+        validate_build_log_research_contract(context)
+
+
+def validate_build_log_research_contract(context: TopicContext) -> None:
+    """Reject manufactured Build Logs before the Writer turns them into prose."""
+    path = context.directory / "research.md"
+    text = path.read_text(encoding="utf-8")
+    section = re.search(
+        r"(?ms)^## 작업 기록\s*$\n(.*?)(?=^##\s|\Z)",
+        text,
+    )
+    if section is None:
+        raise PipelineError(f"{context.topic_id}: Build Log 작업 기록이 없습니다.")
+    fields = {
+        key: value.strip()
+        for key, value in re.findall(
+            r"(?m)^-\s+([a-z_]+):\s*(.*?)\s*$",
+            section.group(1),
+        )
+    }
+    required_fields = {
+        "evidence_origin",
+        "work_trigger",
+        "actual_sequence",
+        "friction_or_surprise",
+        "decision_log",
+        "unfinished_edge",
+    }
+    missing = sorted(required_fields - fields.keys())
+    if missing:
+        raise PipelineError(
+            f"{context.topic_id}: Build Log 작업 기록 필드 누락: "
+            + ", ".join(missing)
+        )
+    if fields["evidence_origin"] != "existing_work_record":
+        raise PipelineError(
+            f"{context.topic_id}: Build Log는 existing_work_record 근거만 허용합니다."
+        )
+    placeholders = {"", "없음", "해당 없음", "none", "n/a", "insufficient"}
+    empty = sorted(
+        key
+        for key in required_fields - {"evidence_origin"}
+        if fields[key].strip().lower() in placeholders
+    )
+    if empty:
+        raise PipelineError(
+            f"{context.topic_id}: Build Log 실제 작업 흔적 부족: " + ", ".join(empty)
+        )
 
 
 def validate_publish_contract(context: TopicContext) -> str:
@@ -848,12 +903,16 @@ def validate_publish_contract(context: TopicContext) -> str:
             f"{context.topic_id}: Reviewer의 명시적 APPROVED 상태가 없습니다."
         )
 
-    summary = re.search(
+    summaries = list(re.finditer(
         r"(?ms)^## 20초 핵심 요약\s*$\n(.*?)(?=^##\s|\Z)",
         document.markdown,
-    )
-    if summary is None:
-        raise PipelineError(f"{context.topic_id}: 정확한 `## 20초 핵심 요약`이 없습니다.")
+    ))
+    if len(summaries) != 1:
+        raise PipelineError(
+            f"{context.topic_id}: `## 20초 핵심 요약`은 정확히 한 번이어야 합니다. "
+            f"(actual={len(summaries)})"
+        )
+    summary = summaries[0]
     missing_summary_fields = [
         label
         for label in ("무엇", "왜", "어떻게")
@@ -863,6 +922,18 @@ def validate_publish_contract(context: TopicContext) -> str:
         raise PipelineError(
             f"{context.topic_id}: 20초 핵심 요약 필드 누락: "
             + ", ".join(missing_summary_fields)
+        )
+    forbidden_summary_phrases = (
+        "문제 또는 판단 기준을 놓치지 않기 위해서",
+        "순서로 확인합니다",
+    )
+    found_forbidden = [
+        phrase for phrase in forbidden_summary_phrases if phrase in summary.group(1)
+    ]
+    if found_forbidden:
+        raise PipelineError(
+            f"{context.topic_id}: 20초 핵심 요약 자동 생성 문구 금지: "
+            + ", ".join(found_forbidden)
         )
 
     digest = hashlib.sha256(publish_path.read_bytes()).hexdigest()

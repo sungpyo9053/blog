@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Article Table of Contents
  * Description: Adds a warm, accessible H2/H3 table of contents to HuntLab posts.
- * Version: 1.1.5
+ * Version: 1.1.6
  * Author: HuntLab
  */
 
@@ -48,7 +48,7 @@ function huntlab_article_summary_text( $html, $limit = 190 ) {
  * @return string
  */
 function huntlab_article_quick_summary( $content, $sections ) {
-	if ( preg_match( '/<h2\b[^>]*>\s*(?:<[^>]+>\s*)*핵심 요약\s*(?:<\/[^>]+>\s*)*<\/h2>/iu', $content ) ) {
+	if ( preg_match( '/<h2\b[^>]*>\s*(?:<[^>]+>\s*)*(?:20초\s*)?핵심 요약\s*(?:<\/[^>]+>\s*)*<\/h2>/iu', $content ) ) {
 		return '';
 	}
 
@@ -67,7 +67,7 @@ function huntlab_article_quick_summary( $content, $sections ) {
 
 	$steps = array();
 	foreach ( $sections as $section ) {
-		if ( preg_match( '/^(?:핵심 요약|참고|함께 읽)/u', $section['title'] ) ) {
+		if ( preg_match( '/^(?:(?:20초\s*)?핵심 요약|참고|함께 읽)/u', $section['title'] ) ) {
 			continue;
 		}
 		$steps[] = $section['title'];

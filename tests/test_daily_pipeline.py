@@ -21,6 +21,7 @@ from scripts.run_daily_pipeline import (
     review_repair_stages,
     run_stage,
     topic_stages,
+    validate_build_log_research_contract,
     validate_publish_contract,
     write_planner_context,
 )
@@ -28,6 +29,33 @@ from scripts.retry_daily_pipeline import choose_command
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def _write_approved_publish(self, context: TopicContext, body: str) -> None:
+        publish = context.directory / "publish.md"
+        tags = "\n".join(f'  - "{tag}"' for tag in context.tags)
+        publish.write_text(
+            "---\n"
+            f'title: "{context.title}"\n'
+            f'run_id: "{context.run_id}"\n'
+            f'topic_id: "{context.topic_id}"\n'
+            f'source_id: "{context.source_id}"\n'
+            'publish_mode: "publish"\n'
+            f'category: "{context.category}"\n'
+            'featured_image: "./images/thumbnail.png"\n'
+            'featured_image_alt: "테스트 대표 이미지"\n'
+            "tags:\n"
+            f"{tags}\n"
+            "---\n\n"
+            f"{body}",
+            encoding="utf-8",
+        )
+        (context.directory / "images").mkdir(exist_ok=True)
+        (context.directory / "images/thumbnail.png").write_bytes(b"png")
+        digest = hashlib.sha256(publish.read_bytes()).hexdigest()
+        (context.directory / "review.md").write_text(
+            f"APPROVED\n{context.run_id}\n{context.topic_id}\n{digest}\n",
+            encoding="utf-8",
+        )
+
     def test_agent_subprocess_closes_stdin_for_noninteractive_runs(self):
         completed = subprocess.CompletedProcess(
             args=["codex"],
@@ -77,6 +105,71 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         )
         self.assertIn("Harness가 분석 리포트 경로", writer.prompt)
         self.assertIn("output/analytics/latest.md", writer.prompt)
+
+    def test_build_log_research_requires_existing_work_record(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-story" / "topic-story"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="실제 작업 기록",
+                run_id="run-story",
+                topic_id="topic-story",
+                directory=directory,
+                category="Build Log",
+                content_type="build_log_operations",
+                tags=("WordPress", "Python", "자동화"),
+            )
+            (directory / "research.md").write_text(
+                "## 작업 기록\n\n"
+                "- evidence_origin: purpose_built_test\n"
+                "- work_trigger: 글을 쓰기 위해 테스트함\n"
+                "- actual_sequence: 테스트 → 성공\n"
+                "- friction_or_surprise: 예상한 실패\n"
+                "- decision_log: 테스트 유지\n"
+                "- unfinished_edge: 통합 테스트 미확인\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(PipelineError):
+                validate_build_log_research_contract(context)
+
+            research = (directory / "research.md").read_text(encoding="utf-8")
+            (directory / "research.md").write_text(
+                research.replace("purpose_built_test", "existing_work_record"),
+                encoding="utf-8",
+            )
+            validate_build_log_research_contract(context)
+
+    def test_publish_contract_rejects_duplicate_or_generated_quick_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-summary" / "topic-summary"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="WordPress 요약 중복 테스트",
+                run_id="run-summary",
+                topic_id="topic-summary",
+                directory=directory,
+                category="Build Log",
+                tags=("WordPress", "Python", "자동화"),
+            )
+            valid = (
+                "## 20초 핵심 요약\n\n"
+                "- **무엇:** 요약 중복을 제거했다.\n"
+                "- **왜:** 같은 상자가 두 번 보여 독자가 자동 생성 오류로 오해했다.\n"
+                "- **어떻게:** 제목 인식 정규식을 고치고 공개 HTML을 다시 확인했다.\n\n"
+                "## 수정 결과\n\n한 번만 보인다.\n"
+            )
+            self._write_approved_publish(context, valid + "\n" + valid)
+            with self.assertRaises(PipelineError):
+                validate_publish_contract(context)
+
+            generated = valid.replace(
+                "같은 상자가 두 번 보여 독자가 자동 생성 오류로 오해했다.",
+                "문제 또는 판단 기준을 놓치지 않기 위해서입니다.",
+            )
+            self._write_approved_publish(context, generated)
+            with self.assertRaises(PipelineError):
+                validate_publish_contract(context)
 
     def test_harness_routes_only_selected_content_type_guide(self):
         context = make_topic_context(

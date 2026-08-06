@@ -109,6 +109,9 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("## 20초 핵심 요약", writer)
         self.assertIn("5~20줄", writer)
         self.assertIn("rejected_angle", reviewer)
+        self.assertIn("work_trigger", writer)
+        self.assertIn("existing_work_record", reviewer)
+        self.assertIn("문제 또는 판단 기준을 놓치지 않기", reviewer)
 
     def test_content_type_guides_are_routed_without_duplicating_common_style(self):
         planner = read("agents/topic-planner-agent.md")
