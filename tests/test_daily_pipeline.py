@@ -99,6 +99,10 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         planner = planner_stage("", "run-analytics", Path("/tmp/topics.md"))
         self.assertIn("Harness가 분석 리포트 경로", planner.prompt)
         self.assertIn("output/analytics/latest.md", planner.prompt)
+        self.assertIn("실제 비브랜드 검색어 또는 초기 성공 기술 글", planner.prompt)
+        self.assertIn("TOP2 중 한 자리를", planner.prompt)
+        self.assertIn("비중복 검색 의도", planner.prompt)
+        self.assertIn("할당량을 채우기 위해 억지로 만들지 말고", planner.prompt)
 
     def test_planner_does_not_fabricate_build_logs_from_today_observations(self):
         planner = planner_stage("", "run-build-log-gate", Path("/tmp/topics.md"))
