@@ -6,6 +6,7 @@ from datetime import date
 from scripts.apply_index_discovery_action import (
     add_discovery_link,
     choose_related_source,
+    normalize_url_for_compare,
     parse_report,
 )
 
@@ -51,6 +52,14 @@ class IndexDiscoveryActionTests(unittest.TestCase):
         source, shared = choose_related_source(posts, target)
         self.assertEqual(source["id"], 11)
         self.assertEqual(shared, {3})
+
+    def test_url_comparison_ignores_percent_hex_case(self):
+        upper = "https://huntlab.app/7%EC%9B%94-next-js/"
+        lower = "https://huntlab.app/7%ec%9b%94-next-js"
+        self.assertEqual(
+            normalize_url_for_compare(upper),
+            normalize_url_for_compare(lower),
+        )
 
     def test_link_is_inserted_once_into_existing_related_section(self):
         target = {

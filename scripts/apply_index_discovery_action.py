@@ -10,7 +10,7 @@ import re
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -20,6 +20,15 @@ from publisher.wordpress import WordPressClient
 
 RELATED_MARKER = "<!-- huntlab-related-links:v1 -->"
 ACTION_MARKER_PREFIX = "<!-- huntlab-index-discovery:v1:"
+
+
+def normalize_url_for_compare(value: str) -> tuple[str, str, str]:
+    """Compare equivalent HuntLab URLs independent of percent-hex casing."""
+    parsed = urlsplit(value.strip())
+    path = unquote(parsed.path)
+    if path != "/":
+        path = path.rstrip("/") + "/"
+    return parsed.scheme.lower(), parsed.netloc.lower(), path
 
 
 def parse_report(report: str, expected_date: date) -> str:
@@ -116,7 +125,16 @@ def main() -> int:
         "posts?status=publish&context=edit&per_page=100",
         expected=(200,),
     )
-    target = next((post for post in posts if post.get("link") == target_url), None)
+    normalized_target = normalize_url_for_compare(target_url)
+    target = next(
+        (
+            post
+            for post in posts
+            if normalize_url_for_compare(str(post.get("link", "")))
+            == normalized_target
+        ),
+        None,
+    )
     if target is None:
         raise SystemExit("eligible target is not a published WordPress post")
     source, shared_tags = choose_related_source(posts, target)
