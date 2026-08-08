@@ -34,7 +34,13 @@ FORBIDDEN_TERMS = (
     "최저가",
 )
 SECRET_PATTERNS = (
-    re.compile(r"(?i)(api[_ -]?key|app[_ -]?password|authorization)\s*[:=]"),
+    # A TypeScript declaration such as ``API_KEY: string;`` describes a type,
+    # not a credential assignment. Require an assignment value for key-like
+    # fields while retaining the explicit Bearer-token check below.
+    re.compile(
+        r"(?i)(api[_ -]?key|app[_ -]?password|authorization)\s*[:=]"
+        r"(?!\s*(?:string|number|boolean)\b)\s*"
+    ),
     re.compile(r"(?i)bearer\s+[a-z0-9._~+/=-]{12,}"),
 )
 SAFE_SECRET_PLACEHOLDER = re.compile(

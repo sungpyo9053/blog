@@ -298,6 +298,17 @@ class PublisherTests(unittest.TestCase):
                 {issue.code for issue in report.errors},
             )
 
+    def test_validation_allows_typescript_secret_type_declaration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN + (
+                "\n```ts\n"
+                "interface Env { API_KEY: string; }\n"
+                "```\n"
+            )
+            document = load_document(self._write_document(Path(tmp), text))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertTrue(report.passed)
+
     def test_local_body_image_is_uploaded_and_rewritten(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
