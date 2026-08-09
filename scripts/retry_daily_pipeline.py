@@ -15,8 +15,11 @@ LOG_DIR = ROOT / "logs"
 RUNS_DIR = ROOT / "output" / "runs"
 LOCK_FILE = LOG_DIR / "daily-pipeline.lock"
 RUN_ID_PATTERN = re.compile(
-    r"pipeline event=(?:start|resume) run_id="
+    r"(?m)^[^\n ]+ INFO pipeline event=(?:start|resume) run_id="
     r"([0-9]{8}T[0-9]{6}Z-[a-f0-9]{10})"
+)
+SUCCESS_PATTERN = re.compile(
+    r"(?m)^[^\n ]+ INFO pipeline event=end failed=false run_id="
 )
 
 
@@ -32,7 +35,7 @@ def active_pipeline_pid() -> int | None:
 
 
 def choose_command(log_text: str) -> list[str] | None:
-    if "pipeline event=end failed=false" in log_text:
+    if SUCCESS_PATTERN.search(log_text):
         return None
     # A manufactured Build Log is a planner classification error, not a
     # resumable stage failure. Re-plan at noon after the strengthened gate.
