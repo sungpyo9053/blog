@@ -330,7 +330,12 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             )
 
             selected = parse_topic_plan(path)
-            self.assertEqual([item["category"] for item in selected], ["Tech", "Tech"])
+        self.assertEqual([item["category"] for item in selected], ["Tech", "Tech"])
+
+    def test_planner_requests_public_signal_and_core_tracks(self):
+        planner = planner_stage("", "run-track-split", Path("/tmp/topics.md"))
+        self.assertIn("selection_track=public_signal", planner.prompt)
+        self.assertIn("selection_track=huntlab_core", planner.prompt)
 
     def test_selected_topic_requires_primary_keyword_in_title(self):
         with tempfile.TemporaryDirectory() as temporary:

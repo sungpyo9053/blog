@@ -221,6 +221,15 @@ Analytics에서 색인·노출·CTR 저하가 관측된 기존 글과 같은 검
 
 ## TOP2 선정 원칙
 
+현재 실험 기간에는 TOP2를 가능하면 두 트랙으로 구성한다. 첫 번째는 Google Trends,
+GitHub, Velog, Stack Overflow, PyPI·npm, 공식 릴리스 등 공개 데이터에서 발견한
+신호를 `demand_signal_source`와 수집일로 기록한 후보이고, 두 번째는 HuntLab의
+핵심 분야(ML Algorithms, Harness Engineering, System Architecture, Tech, AI,
+Build Log)에서 실제 로그·코드·운영 기록으로 검증할 수 있는 후보다. 각 후보에
+`selection_track: public_signal` 또는 `selection_track: huntlab_core`를 기록한다.
+두 트랙 모두 품질·중복·검증 조건을 통과할 때만 TOP2로 확정하며, 한 트랙의 근거가
+부족하면 발행량을 채우기 위해 대체 후보를 억지로 만들지 않고 Planner를 실패시킨다.
+
 TOP2에는 카테고리별 의무 할당을 두지 않는다. 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를 기준으로 가장 강한 두 후보를 선정하며 `ML Algorithms`, `Harness Engineering`, `System Architecture`, `Tech`, `AI`, `Build Log` 두 개로 구성해도 된다. 비기술 후보는 강화된 출처 규칙을 통과하고 기술 후보와 같은 품질 기준에서 경쟁력이 있을 때만 선정한다.
 
 기본 TOP2는 ML Algorithms, Harness Engineering, System Architecture, Tech, AI와
