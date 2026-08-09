@@ -337,6 +337,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("selection_track=public_signal", planner.prompt)
         self.assertIn("selection_track=huntlab_core", planner.prompt)
 
+
     def test_selected_topic_requires_primary_keyword_in_title(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "topics.md"

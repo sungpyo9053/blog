@@ -441,6 +441,12 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
                 f"{title}: TOP2 제목에 primary_keyword가 포함되어야 합니다: "
                 f"{primary_keyword}"
             )
+    tracks = [candidates[title].get("selection_track", "").strip() for title in topics]
+    if any(tracks):
+        if set(tracks) != {"public_signal", "huntlab_core"}:
+            raise PipelineError(
+                "TOP2 selection_track은 public_signal 1개와 huntlab_core 1개여야 합니다."
+            )
     return [candidates[title] for title in topics]
 
 
