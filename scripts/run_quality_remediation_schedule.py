@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
+import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.audit_public_site import audit_site, render_markdown
 
 ROOT = Path(__file__).resolve().parents[1]
