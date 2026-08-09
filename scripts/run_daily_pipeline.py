@@ -901,7 +901,7 @@ def validate_build_log_research_contract(context: TopicContext) -> None:
     if section is None:
         raise PipelineError(f"{context.topic_id}: Build Log 작업 기록이 없습니다.")
     fields = {
-        key: value.strip()
+        key: value.strip().strip("`").strip()
         for key, value in re.findall(
             r"(?m)^-\s+([a-z_]+):\s*(.*?)\s*$",
             section.group(1),

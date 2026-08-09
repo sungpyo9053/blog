@@ -134,7 +134,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             )
             (directory / "research.md").write_text(
                 "## 작업 기록\n\n"
-                "- evidence_origin: purpose_built_test\n"
+                "- evidence_origin: `purpose_built_test`\n"
                 "- work_trigger: 글을 쓰기 위해 테스트함\n"
                 "- actual_sequence: 테스트 → 성공\n"
                 "- friction_or_surprise: 예상한 실패\n"
