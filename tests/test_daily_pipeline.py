@@ -725,10 +725,18 @@ class DailyRetryTests(unittest.TestCase):
     def test_noon_retry_skips_after_daily_success(self):
         self.assertIsNone(
             choose_command(
-                "pipeline event=end failed=false run_id="
+                "2026-07-28T02:00:00+0900 INFO pipeline event=end failed=false run_id="
                 "20260728T170000Z-1234567890"
             )
         )
+
+    def test_noon_retry_does_not_mistake_nested_agent_output_for_success(self):
+        command = choose_command(
+            "2026-08-10T02:07:21+0900 INFO topic='-' agent=Topic Planner Agent "
+            "output=grep pipeline event=end failed=false run_id=old\n"
+            "2026-08-10T02:11:14+0900 ERROR pipeline event=failed reason=planner"
+        )
+        self.assertIsNotNone(command)
 
     def test_noon_retry_starts_fresh_without_a_run(self):
         command = choose_command("pipeline event=failed reason=planner")
