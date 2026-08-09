@@ -33,6 +33,15 @@ class PublicSiteAuditTests(unittest.TestCase):
             "https://huntlab.app/post/",
         )
 
+    def test_inspect_page_recognizes_standard_markdown_summary_without_plugin_wrapper(self):
+        html = '''<html><body><h2>20초 핵심 요약</h2><ul><li><strong>무엇:</strong> 대상</li><li><strong>왜:</strong> 이유</li><li><strong>어떻게:</strong> 순서</li></ul></body></html>'''.encode("utf-8")
+        facts = inspect_page(FetchResult("https://huntlab.app/post/", 200, "text/html", html), "https://huntlab.app/")
+        self.assertTrue(facts.has_quick_summary)
+        self.assertEqual(
+            {"무엇": "대상", "왜": "이유", "어떻게": "순서"},
+            facts.quick_summary_fields,
+        )
+
     def test_report_surfaces_empty_categories_and_generic_authors(self):
         report = render_markdown(
             {

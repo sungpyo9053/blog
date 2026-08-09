@@ -212,11 +212,24 @@ def inspect_page(result: FetchResult, base_url: str) -> PageFacts:
         document,
         re.IGNORECASE | re.DOTALL,
     )
+    # Published articles may contain the same grounded summary as a normal
+    # Markdown ``## 20초 핵심 요약`` heading rather than the optional plugin
+    # wrapper. Treat that canonical article structure as a real summary too;
+    # otherwise the audit reports a false omission for valid posts.
+    if summary_match is None:
+        summary_match = re.search(
+            r'<h2\b[^>]*>\s*20초\s*핵심\s*요약\s*</h2>\s*'
+            r'<ul\b[^>]*>(.*?)</ul>',
+            document,
+            re.IGNORECASE | re.DOTALL,
+        )
     if summary_match:
+        facts.has_quick_summary = True
         block = summary_match.group(1)
         for label in ("무엇", "왜", "어떻게"):
             value_match = re.search(
-                rf'<li\b[^>]*>\s*<strong\b[^>]*>\s*{label}\s*</strong>\s*<span\b[^>]*>(.*?)</span>\s*</li>',
+                rf'<li\b[^>]*>\s*<strong\b[^>]*>\s*{label}\s*:?' 
+                rf'\s*</strong>(.*?)</li>',
                 block,
                 re.IGNORECASE | re.DOTALL,
             )
