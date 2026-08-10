@@ -2,8 +2,8 @@
 
 ## 감사 범위
 
-Search Console·GA4 관측 글과 공개 본문을 대조했다. 이번 작업에서는 WordPress 공개 글을
-직접 변경하지 않고, 실제 근거가 부족한 글만 보강 대상으로 분류한다.
+Search Console·GA4 관측 글과 공개 본문을 대조했다. 근거가 약한 기존 글을 우선 보강하고,
+Reviewer 승인과 Publisher 감사 로그를 거친 뒤 공개 상태를 재검증한다.
 
 ## 확인 결과
 
@@ -15,7 +15,7 @@ Search Console·GA4 관측 글과 공개 본문을 대조했다. 이번 작업�
 - `wordpress-internal-link-backup`: 실행·실패·검증 결과와 운영 판단이 확인됨
 - `cloudflare-tunnel-connections-migration`: 실행·실패·검증 결과와 한계가 확인됨
 
-### 보강 우선 후보
+### 보강 완료 (2026-08-10)
 
 - `resident-registration-survey`: 공식 절차 설명은 충분하지만 HuntLab의 고유한 확인
   범위와 독자 행동 판단을 더 분명히 한다.
@@ -23,6 +23,15 @@ Search Console·GA4 관측 글과 공개 본문을 대조했다. 이번 작업�
   본문 가까이에 표시한다.
 - `oil-price-cap-8th`: 기준일·공급가와 소매가의 차이는 설명되어 있으므로, 공식 원문
   링크와 변경 시 재확인 지점을 더 명시한다.
+
+세 글 모두 기존 게시물 ID를 유지한 채 업데이트했으며, 새 게시물은 생성하지 않았다.
+공개 URL은 HTTP 200이고 감사 로그에 `post_updated / Success`가 남아 있다.
+
+### 관찰 대기
+
+- Search Console 재크롤링 및 색인 변화
+- 업데이트 후 클릭·노출·평균 게재순위 변화
+- 추가 보강이 필요한 문단의 실제 검색 유입 확인
 
 ## 적용 원칙
 
@@ -38,4 +47,3 @@ Search Console·GA4 관측 글과 공개 본문을 대조했다. 이번 작업�
 - Reviewer가 사실·출처·변경 범위를 승인한다.
 - 승인된 글만 기존 WordPress 게시물에 업데이트하고 공개 URL·canonical·이미지를
   재검증한다.
-
