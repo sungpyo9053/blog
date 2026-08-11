@@ -596,3 +596,18 @@ Writer 반영 후보:
 - 기술 글은 영문 오류 메시지 중심 수요와 한국어 검색량 부족 가능성이 있으므로 콘텐츠 품질과 검색 수요를 분리해 평가한다.
 - Search Console의 초기 `huntlab` 클릭은 운영자의 회사 검색 테스트가 포함돼 외부 자연 유입으로 단정하지 않는다.
 - Cloudflare에서 HTTP→HTTPS, `www`→apex 301, `Full (strict)`와 apex canonical을 적용·검증했다.
+
+## 8월 11일 후속 운영 확인
+
+- 만료된 8월 7일 일회성 색인 작업은 당시 대상 URL을 공개 WordPress 게시물로
+  찾지 못해 실패했다. 반복 발행 작업과 무관한 과거 one-shot 타이머이므로 서버에서
+  비활성화하고 실패 상태를 초기화했다.
+- 최신 Analytics의 `ELIGIBLE_REVIEW` 대상을 다시 드라이런한 뒤, 같은 태그 3개가
+  겹치는 `AI agent tool call timeout` 글(Post ID `257`)에서
+  `AI 에이전트 평가 하네스` 글(Post ID `274`)로 내부 링크 한 개만 추가했다.
+  변경 전후 본문은 서버 백업과 `logs/index-discovery-actions.jsonl` 감사 로그에
+  기록했으며 공개 페이지에서 링크와 대상 URL의 HTTP 200을 확인했다.
+- GA4 태그 `G-JRK6HNF7QT`와 `page_view`, `session_start`, `user_engagement` 이벤트가
+  실제 수집되고 있어 연결 실패로 분류하지 않는다. 표본이 작은 하루의
+  `engagedSessions=0`은 태그 재설치 근거로 사용하지 않고 다음 분석 주기와 함께
+  관찰한다.
