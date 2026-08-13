@@ -1349,8 +1349,23 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             "후보마다 기존 공개 글과 검색 의도가 겹치는지 검사하고 "
             "internal_link_candidates, topic_cluster, pillar_candidate를 기록하세요. "
             "output의 다른 파일은 수정하지 마세요. "
-            "글 작성, 본문 리서치, 이미지 생성, Publisher 호출은 하지 마세요."
+            "글 작성, 본문 리서치, 이미지 생성, Publisher 호출은 하지 마세요. "
+            "Planner의 유일한 파일 변경은 위 topics.md 생성입니다. git diff, 테스트 파일, "
+            "코드 파일, 다른 output 실행 디렉터리는 수정하지 마세요. 파일을 쓰기 전에 긴 설명을 "
+            "출력하지 말고, 후보를 만든 즉시 topics.md를 저장한 뒤 필드와 TOP2를 다시 검증하세요."
         ),
+    )
+
+
+def planner_retry_stage(stage: Stage, topics_path: Path) -> Stage:
+    """Retry a Planner that returned without its required topics artifact."""
+    return Stage(
+        stage.name,
+        stage.agent_file,
+        stage.prompt
+        + f"\n\n재시도입니다. 이전 실행은 {str(topics_path)!r}를 생성하지 못했습니다. "
+        "이번 실행에서는 다른 파일을 읽거나 수정하지 말고, 최소 35개 후보와 TOP10/TOP2를 "
+        f"즉시 {str(topics_path)!r}에 저장하세요. 저장 후에만 짧게 완료를 보고하세요.",
     )
 
 
@@ -1399,7 +1414,19 @@ def main() -> int:
                 run_id,
                 run_directory,
             )
-            run_stage(codex, planner, logger, timeout_seconds=args.timeout)
+            planner_timeout = min(args.timeout, 300)
+            run_stage(codex, planner, logger, timeout_seconds=planner_timeout)
+            if not topics_path.is_file():
+                logger.warning(
+                    "planner event=missing_topics retry=true path=%s",
+                    topics_path,
+                )
+                retry = planner_retry_stage(planner, topics_path)
+                run_stage(codex, retry, logger, timeout_seconds=planner_timeout)
+            if not topics_path.is_file():
+                raise PipelineError(
+                    f"Topic Planner가 재시도 후에도 {topics_path}를 생성하지 않았습니다."
+                )
         plans = parse_topic_plan(topics_path)
         topics = [plan["title"] for plan in plans]
         selected_plans = plans[
