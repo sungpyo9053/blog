@@ -704,7 +704,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             ),
         ),
     ]
-    if humanize_experiment_remaining() > 0:
+    if humanize_experiment_enabled():
         stages.append(
             Stage(
                 "Humanize Experiment Agent",
@@ -817,37 +817,71 @@ def topic_stages(context: TopicContext) -> list[Stage]:
     return stages
 
 
-def humanize_experiment_remaining() -> int:
-    """Return the remaining bounded shadow-mode runs; missing means disabled."""
+def read_humanize_experiment_state() -> dict[str, Any]:
     try:
         payload = json.loads(HUMANIZE_EXPERIMENT_STATE.read_text(encoding="utf-8"))
-        return max(0, int(payload.get("remaining", 0)))
+        return payload if isinstance(payload, dict) else {}
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return 0
+        return {}
+
+
+def humanize_experiment_enabled(*, now: datetime | None = None) -> bool:
+    """Return whether the humanizer is effectively ON at the current time.
+
+    The explicit ON/OFF contract takes precedence. Legacy ``remaining`` state
+    remains supported so an in-flight bounded experiment is not broken.
+    """
+    payload = read_humanize_experiment_state()
+    mode = str(payload.get("mode", "shadow")).strip().lower()
+    if payload.get("enabled") is False or mode == "off":
+        return False
+
+    if payload.get("enabled") is True or mode == "on":
+        enabled_until = str(payload.get("enabled_until", "")).strip()
+        if not enabled_until:
+            return True
+        try:
+            cutoff = datetime.fromisoformat(enabled_until)
+        except ValueError:
+            return False
+        if cutoff.tzinfo is None:
+            return False
+        current = now or datetime.now().astimezone()
+        if current.tzinfo is None:
+            current = current.astimezone()
+        return current <= cutoff
+
+    try:
+        return max(0, int(payload.get("remaining", 0))) > 0
+    except (ValueError, TypeError):
+        return False
 
 
 def humanize_experiment_mode() -> str:
-    try:
-        payload = json.loads(HUMANIZE_EXPERIMENT_STATE.read_text(encoding="utf-8"))
-        return str(payload.get("mode", "shadow"))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return "shadow"
+    return str(read_humanize_experiment_state().get("mode", "shadow")).lower()
 
 
 def consume_humanize_experiment_slot(context: TopicContext) -> None:
-    """Consume one slot only after the isolated humanizer artifact is valid."""
-    try:
-        payload = json.loads(HUMANIZE_EXPERIMENT_STATE.read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-        raise PipelineError("Humanize 실험 상태 파일을 읽을 수 없습니다.") from exc
-    remaining = max(0, int(payload.get("remaining", 0)))
-    if remaining <= 0:
+    """Record a valid humanizer artifact and consume only legacy bounded slots."""
+    payload = read_humanize_experiment_state()
+    if not payload:
+        raise PipelineError("Humanize 실험 상태 파일을 읽을 수 없습니다.")
+    mode = str(payload.get("mode", "shadow")).strip().lower()
+    if mode == "off" or payload.get("enabled") is False:
         return
     history = payload.get("history", [])
     if not isinstance(history, list):
         history = []
     history.append({"run_id": context.run_id, "topic_id": context.topic_id})
-    payload.update({"remaining": remaining - 1, "history": history})
+    payload["history"] = history
+    if mode != "on" and payload.get("enabled") is not True:
+        try:
+            remaining = max(0, int(payload.get("remaining", 0)))
+        except (ValueError, TypeError):
+            remaining = 0
+        if remaining <= 0:
+            return
+        payload["remaining"] = remaining - 1
     HUMANIZE_EXPERIMENT_STATE.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
@@ -1556,7 +1590,7 @@ def main() -> int:
                 )
                 validate_stage_artifacts(context, stage.name)
                 if stage.name == "Humanize Experiment Agent":
-                    if humanize_experiment_mode() == "manual-one-off":
+                    if humanize_experiment_mode() in {"manual-one-off", "on"}:
                         original = context.directory / "draft-original.md"
                         shutil.copy2(context.directory / "draft.md", original)
                         shutil.copy2(

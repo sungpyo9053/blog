@@ -6,6 +6,7 @@ import logging
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +15,7 @@ from scripts.run_daily_pipeline import (
     Stage,
     TopicContext,
     has_successful_publish,
+    humanize_experiment_enabled,
     make_topic_context,
     parse_topic_plan,
     planner_stage,
@@ -28,9 +30,62 @@ from scripts.run_daily_pipeline import (
 )
 from scripts.retry_daily_pipeline import choose_command
 from scripts.manual_resume_pipeline import RUN_ID_PATTERN
+from scripts.set_humanize_mode import update_state
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_humanize_on_stays_enabled_until_cutoff(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / "humanize.json"
+            state.write_text(
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "mode": "on",
+                        "enabled_until": "2026-08-31T23:59:59+09:00",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("scripts.run_daily_pipeline.HUMANIZE_EXPERIMENT_STATE", state):
+                self.assertTrue(
+                    humanize_experiment_enabled(
+                        now=datetime.fromisoformat("2026-08-31T02:00:00+09:00")
+                    )
+                )
+                self.assertFalse(
+                    humanize_experiment_enabled(
+                        now=datetime.fromisoformat("2026-09-01T00:00:00+09:00")
+                    )
+                )
+
+    def test_humanize_off_overrides_legacy_remaining(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / "humanize.json"
+            state.write_text(
+                json.dumps({"enabled": False, "mode": "off", "remaining": 2}),
+                encoding="utf-8",
+            )
+            with patch("scripts.run_daily_pipeline.HUMANIZE_EXPERIMENT_STATE", state):
+                self.assertFalse(humanize_experiment_enabled())
+
+    def test_humanize_mode_switch_preserves_history(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / "humanize.json"
+            state.write_text(
+                json.dumps({"history": [{"run_id": "old", "topic_id": "topic"}]}),
+                encoding="utf-8",
+            )
+            enabled = update_state(
+                state, "on", until=datetime.fromisoformat("2026-08-31").date()
+            )
+            self.assertTrue(enabled["enabled"])
+            self.assertEqual(enabled["enabled_until"], "2026-08-31T23:59:59+09:00")
+            disabled = update_state(state, "off")
+            self.assertFalse(disabled["enabled"])
+            self.assertNotIn("enabled_until", disabled)
+            self.assertEqual(len(disabled["history"]), 1)
+
     def test_manual_resume_run_id_contract(self):
         self.assertIsNotNone(RUN_ID_PATTERN.fullmatch("20260812T170017Z-b44c3f1172"))
         self.assertIsNone(RUN_ID_PATTERN.fullmatch("latest"))
