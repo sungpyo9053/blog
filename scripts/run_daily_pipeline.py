@@ -919,7 +919,10 @@ def review_repair_stages(
     return [
         Stage(stage.name, stage.agent_file, stage.prompt + repair_note)
         for stage in topic_stages(context)
-        if stage.name != "Publisher Agent"
+        # The repair Writer edits the already-selected draft. Re-running the
+        # humanizer would either be ignored by this repair loop or apply style
+        # twice, so only the content and review agents participate here.
+        if stage.name not in {"Humanize Experiment Agent", "Publisher Agent"}
     ]
 
 
