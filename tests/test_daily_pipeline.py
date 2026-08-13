@@ -81,9 +81,11 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             )
             self.assertTrue(enabled["enabled"])
             self.assertEqual(enabled["enabled_until"], "2026-08-31T23:59:59+09:00")
+            self.assertIn("is ON through 2026-08-31", enabled["note"])
             disabled = update_state(state, "off")
             self.assertFalse(disabled["enabled"])
             self.assertNotIn("enabled_until", disabled)
+            self.assertEqual(disabled["note"], "Scheduled pipeline humanization is OFF.")
             self.assertEqual(len(disabled["history"]), 1)
 
     def test_manual_resume_run_id_contract(self):

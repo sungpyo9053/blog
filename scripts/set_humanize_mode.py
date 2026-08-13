@@ -30,8 +30,13 @@ def update_state(path: Path, mode: str, *, until: date | None = None) -> dict:
         if until is None:
             raise ValueError("ON 모드에는 --until 날짜가 필요합니다.")
         payload["enabled_until"] = f"{until.isoformat()}T23:59:59+09:00"
+        payload["note"] = (
+            f"Scheduled pipeline humanization is ON through {until.isoformat()} "
+            "23:59:59 KST and becomes ineffective after that cutoff."
+        )
     else:
         payload.pop("enabled_until", None)
+        payload["note"] = "Scheduled pipeline humanization is OFF."
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
