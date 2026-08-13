@@ -30,6 +30,7 @@ from publisher.frontmatter import FrontmatterError, load_document
 OUTPUT_DIR = PROJECT_ROOT / "output"
 RUNS_DIR = OUTPUT_DIR / "runs"
 ANALYTICS_REPORT = OUTPUT_DIR / "analytics" / "latest.md"
+HUMANIZE_EXPERIMENT_STATE = OUTPUT_DIR / "humanize-experiment-state.json"
 LOG_DIR = PROJECT_ROOT / "logs"
 LOCK_FILE = LOG_DIR / "daily-pipeline.lock"
 TOP2_PATTERN = re.compile(r"(?m)^\s*[12]\.\s+(.+?)\s*$")
@@ -667,7 +668,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         "삼거나 범용 자동 문구를 사용해도 REJECT하세요. WordPress의 기존 `한눈에 보기` 자동 목차를 "
         "삭제하거나 대체하지 마세요. "
     )
-    return [
+    stages = [
         Stage(
             "Research Agent",
             PROJECT_ROOT / "agents/researcher.md",
@@ -702,6 +703,24 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 + f"기존 Guide를 적용해 {str(topic_dir / 'draft.md')!r}를 작성하세요."
             ),
         ),
+    ]
+    if humanize_experiment_remaining() > 0:
+        stages.append(
+            Stage(
+                "Humanize Experiment Agent",
+                PROJECT_ROOT / "guides/humanize-experiment.md",
+                (
+                    common
+                    + f"원문은 {str(topic_dir / 'draft.md')!r}입니다. 원문을 덮어쓰지 말고, "
+                    f"자연화 실험본만 {str(topic_dir / 'humanized-draft.md')!r}에 저장하세요. "
+                    "의미·사실·수치·버전·코드·로그·링크·인용·frontmatter를 변경하지 말고, "
+                    "문장 리듬과 번역투 등 문체만 최소 수정하세요. 변경이 과하면 실험본을 "
+                    "원문과 동일하게 복사하고 이유를 summary에 기록하세요. "
+                    f"실험 메타데이터는 {str(topic_dir / 'humanize-summary.md')!r}에 저장하세요."
+                ),
+            )
+        )
+    stages.extend([
         Stage(
             "Image Maker Agent",
             PROJECT_ROOT / "agents/image-maker.md",
@@ -746,6 +765,12 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "경험을 현재 글의 경험처럼 옮겼으면 REJECT하세요. structure_mode가 같다는 "
                 "이유만으로 거절하지 말고 실제 문서 구조와 문장 흐름을 판단하세요. "
                 + quick_view_review
+                + (
+                    f"Humanize Experiment Agent가 생성한 {str(topic_dir / 'humanized-draft.md')!r}와 "
+                    f"{str(topic_dir / 'humanize-summary.md')!r}가 있으면 원문 {str(topic_dir / 'draft.md')!r}과 "
+                    "나란히 비교하세요. 자연화본을 채택해도 되는지는 사실·의미·근거 보존을 먼저 판단하고, "
+                    "비교 결과를 review.md에 기록하세요. 이 실험본 때문에 자동 승인하지 마세요. "
+                )
                 + "정책 문서는 읽기만 하고 주제 디렉터리로 "
                 "복사하지 마세요. "
                 f"원문 의미를 바꾸지 않는 {str(topic_dir / 'publish.md')!r}를 "
@@ -788,7 +813,36 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "읽게 하고 값을 직접 열거나 출력하지 마세요."
             ),
         ),
-    ]
+    ])
+    return stages
+
+
+def humanize_experiment_remaining() -> int:
+    """Return the remaining bounded shadow-mode runs; missing means disabled."""
+    try:
+        payload = json.loads(HUMANIZE_EXPERIMENT_STATE.read_text(encoding="utf-8"))
+        return max(0, int(payload.get("remaining", 0)))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return 0
+
+
+def consume_humanize_experiment_slot(context: TopicContext) -> None:
+    """Consume one slot only after the isolated humanizer artifact is valid."""
+    try:
+        payload = json.loads(HUMANIZE_EXPERIMENT_STATE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise PipelineError("Humanize 실험 상태 파일을 읽을 수 없습니다.") from exc
+    remaining = max(0, int(payload.get("remaining", 0)))
+    if remaining <= 0:
+        return
+    history = payload.get("history", [])
+    if not isinstance(history, list):
+        history = []
+    history.append({"run_id": context.run_id, "topic_id": context.topic_id})
+    payload.update({"remaining": remaining - 1, "history": history})
+    HUMANIZE_EXPERIMENT_STATE.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def read_review_decision(context: TopicContext) -> str | None:
@@ -866,6 +920,11 @@ def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
     required: dict[str, tuple[Path, ...]] = {
         "Research Agent": (context.directory / "research.md",),
         "Writer Agent": (context.directory / "draft.md",),
+        "Humanize Experiment Agent": (
+            context.directory / "draft.md",
+            context.directory / "humanized-draft.md",
+            context.directory / "humanize-summary.md",
+        ),
         "Image Maker Agent": (
             context.directory / "draft.md",
             context.directory / "images/thumbnail.png",
@@ -1396,6 +1455,11 @@ def main() -> int:
                     required = {
                         "Research Agent": (context.directory / "research.md",),
                         "Writer Agent": (context.directory / "draft.md",),
+                        "Humanize Experiment Agent": (
+                            context.directory / "draft.md",
+                            context.directory / "humanized-draft.md",
+                            context.directory / "humanize-summary.md",
+                        ),
                         "Image Maker Agent": (
                             context.directory / "draft.md",
                             context.directory / "images/thumbnail.png",
@@ -1453,6 +1517,8 @@ def main() -> int:
                     topic=context.title,
                 )
                 validate_stage_artifacts(context, stage.name)
+                if stage.name == "Humanize Experiment Agent":
+                    consume_humanize_experiment_slot(context)
             publish_result = read_publish_result(context)
             results.append(publish_result)
             logger.info(
