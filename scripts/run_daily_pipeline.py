@@ -826,6 +826,14 @@ def humanize_experiment_remaining() -> int:
         return 0
 
 
+def humanize_experiment_mode() -> str:
+    try:
+        payload = json.loads(HUMANIZE_EXPERIMENT_STATE.read_text(encoding="utf-8"))
+        return str(payload.get("mode", "shadow"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return "shadow"
+
+
 def consume_humanize_experiment_slot(context: TopicContext) -> None:
     """Consume one slot only after the isolated humanizer artifact is valid."""
     try:
@@ -1545,6 +1553,21 @@ def main() -> int:
                 )
                 validate_stage_artifacts(context, stage.name)
                 if stage.name == "Humanize Experiment Agent":
+                    if humanize_experiment_mode() == "manual-one-off":
+                        original = context.directory / "draft-original.md"
+                        shutil.copy2(context.directory / "draft.md", original)
+                        shutil.copy2(
+                            context.directory / "humanized-draft.md",
+                            context.directory / "draft.md",
+                        )
+                        logger.info(
+                            "topic=%r agent=%s event=manual_one_off_selected "
+                            "original=%s selected=%s",
+                            context.title,
+                            stage.name,
+                            original,
+                            context.directory / "draft.md",
+                        )
                     consume_humanize_experiment_slot(context)
             publish_result = read_publish_result(context)
             results.append(publish_result)
