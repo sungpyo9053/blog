@@ -27,9 +27,13 @@ from scripts.run_daily_pipeline import (
     write_recent_style_context,
 )
 from scripts.retry_daily_pipeline import choose_command
+from scripts.manual_resume_pipeline import RUN_ID_PATTERN
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_manual_resume_run_id_contract(self):
+        self.assertIsNotNone(RUN_ID_PATTERN.fullmatch("20260812T170017Z-b44c3f1172"))
+        self.assertIsNone(RUN_ID_PATTERN.fullmatch("latest"))
     def _write_approved_publish(self, context: TopicContext, body: str) -> None:
         publish = context.directory / "publish.md"
         tags = "\n".join(f'  - "{tag}"' for tag in context.tags)
