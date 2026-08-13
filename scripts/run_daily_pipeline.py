@@ -68,7 +68,7 @@ LEGACY_CONTENT_TYPE_BY_CATEGORY = {
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
 RECENT_STYLE_LIMIT = 5
 REVIEW_STATUS_PATTERN = re.compile(
-    r"(?im)^\s*(?:-\s*)?status\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
+    r"(?im)^\s*(?:-\s*)?(?:status|decision)\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
     r"|^\s*(APPROVED|REJECTED)\s*$"
 )
 
@@ -1422,7 +1422,10 @@ def main() -> int:
                 run_id,
                 run_directory,
             )
-            planner_timeout = min(args.timeout, 300)
+            # Planner inspects the live WordPress corpus, Search Console/GA4
+            # snapshot and public trend signals. Five minutes was too short
+            # for that bounded read-only stage and caused false daily failures.
+            planner_timeout = min(args.timeout, 900)
             run_stage(codex, planner, logger, timeout_seconds=planner_timeout)
             if not topics_path.is_file():
                 logger.warning(
