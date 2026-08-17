@@ -50,6 +50,31 @@ class SearchSignalProviderTests(unittest.TestCase):
             self.assertEqual(result["status"], "AVAILABLE")
             self.assertEqual(len(result["rows"]), 1)
 
+    def test_whereispost_rejects_a_mismatched_total(self):
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "whereispost.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "provider": "whereispost_keywordmaster",
+                        "checked_at": "2026-08-16T16:30:00+09:00",
+                        "rows": [
+                            {
+                                "keyword": "주택청약",
+                                "pc_searches": 10,
+                                "mobile_searches": 20,
+                                "total_searches": 99,
+                                "documents": 100,
+                                "competition_ratio": 1.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SearchSignalError, "total_searches mismatch"):
+                load_whereispost_shadow(path)
+
 
 if __name__ == "__main__":
     unittest.main()

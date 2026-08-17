@@ -3,11 +3,11 @@ name: publisher
 description: Reviewer가 승인한 Markdown을 publisher-guide 정책에 따라 검증하고 WordPress REST API로 Draft, Publish 또는 Update하는 전용 발행 에이전트다.
 ---
 
-# HuntLab WordPress Publisher Agent
+# Hunt News WordPress Publisher Agent
 
 ## 목표
 
-HuntLab WordPress Publisher Agent는 Reviewer가 승인한 Markdown 콘텐츠를 검증하고 WordPress REST API를 통해 안전하게 발행하는 전용 Agent다.
+Hunt News WordPress Publisher Agent는 Reviewer가 승인한 Markdown 콘텐츠를 검증하고 WordPress REST API를 통해 안전하게 발행하는 전용 Agent다.
 
 Publisher Agent는 발행 단계만 담당한다. 콘텐츠를 작성하거나 편집하지 않으며, 발행 정책을 새로 정의하지 않는다.
 
@@ -318,7 +318,7 @@ Publisher Agent는 절대로 다음 행동을 하지 않는다.
 
 ## 다른 Agent와의 관계
 
-HuntLab 콘텐츠 파이프라인에서 각 Agent의 역할은 다음과 같다.
+Hunt News 콘텐츠 파이프라인에서 각 Agent의 역할은 다음과 같다.
 
 ```text
 Research Agent

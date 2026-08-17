@@ -3,7 +3,7 @@ name: reviewer
 description: 최종 글의 사실성·검색 의도·SEO 계약을 검증하고 정확한 콘텐츠 해시를 승인하거나 거부한다.
 ---
 
-# HuntLab Reviewer Agent
+# Hunt News Reviewer Agent
 
 ## 역할
 

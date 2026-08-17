@@ -1,7 +1,11 @@
-# HuntLab Blog Content Pipeline
+# Hunt News Content Pipeline
 
+복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명하는 `Hunt News`의
 검색 주제 기획부터 리서치, 글쓰기, 이미지 제작, 검수, WordPress 발행과
 발행 후 Search Console·GA4 분석까지 수행하는 콘텐츠 운영 시스템입니다.
+
+공개 사이트는 [huntlab.app](https://huntlab.app/)을 유지하며 기존 URL, 글,
+미디어와 검색 색인을 보존합니다.
 
 ## 구성
 
@@ -28,12 +32,14 @@ Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/sour
 
 ### Topic Planner 선정 원칙
 
-`Tech`, `AI`, `ML Algorithms`, `Harness Engineering`, `System Architecture`,
-`Economy`, `Society`, `Politics`, `Hot Issue`, `Build Log`를
-편집 범위로 사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
+`생활`, `경제`, `부동산`, `사회`, `정치`, `문화·엔터`, `IT`를 활성 편집 범위로
+사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
 TOP2는 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를
-기준으로 선정하므로 기술 주제 두 개만 선택할 수 있습니다. 비기술 후보는
-해당 카테고리의 강화된 출처 규칙과 동일한 품질 기준을 통과할 때만 경쟁합니다.
+기준으로 선정합니다. 모든 신규 후보는 Whereispost Keyword Master의 PC·모바일
+검색량, 총 검색량, 문서 수와 경쟁 비율을 기록해야 합니다. `verified` 상태이면서
+월 총 검색량이 100회 이상인 후보만 TOP2에 들어갈 수 있으며, 안전·시의성 이슈도
+이 하한선을 임의로 우회하지 않습니다. 검색량이 충분해도 생활 영향이나 공식 원문이
+부족하면 제외합니다.
 
 Planner는 Velog 공개 트렌딩과 기술 태그에서 반복되는 기술·언어·시스템
 아키텍처 관심사를 한국 개발자 수요의 보조 신호로 참고합니다. 제목이나 구성을

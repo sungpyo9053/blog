@@ -8,7 +8,7 @@ from typing import Any
 
 from publisher.frontmatter import load_document
 from publisher.service import DraftPublisher
-from publisher.validation import validate_document
+from publisher.validation import EDITOR_CATEGORIES, validate_document
 
 
 VALID_MARKDOWN = """---
@@ -39,7 +39,10 @@ class FakeWordPressClient:
     def __init__(self) -> None:
         self.created_payload: dict[str, Any] | None = None
         self.tags: dict[str, int] = {}
-        self.categories: dict[str, int] = {}
+        self.categories: dict[str, int] = {
+            name: index + 7 for index, name in enumerate(sorted(EDITOR_CATEGORIES))
+        }
+        self.create_category_calls: list[str] = []
         self.posts: dict[int, dict[str, Any]] = {}
         self.media: dict[int, dict[str, Any]] = {}
         self.upload_calls: list[tuple[Path, str]] = []
@@ -84,6 +87,7 @@ class FakeWordPressClient:
         return {"id": tag_id, "name": name}
 
     def create_category(self, name: str):
+        self.create_category_calls.append(name)
         category_id = len(self.categories) + 7
         self.categories[name] = category_id
         return {"id": category_id, "name": name}
@@ -137,6 +141,42 @@ class PublisherTests(unittest.TestCase):
                 {issue.code for issue in report.errors},
             )
 
+    def test_validation_accepts_every_active_hunt_news_category(self):
+        for category in ("생활", "경제", "부동산", "사회", "정치", "문화·엔터", "IT"):
+            with self.subTest(category=category), tempfile.TemporaryDirectory() as tmp:
+                markdown = VALID_MARKDOWN.replace("category: Tech", f"category: {category}")
+                document = load_document(self._write_document(Path(tmp), markdown))
+                report = validate_document(document, reviewer_approved=True)
+                self.assertNotIn(
+                    "unsupported_category",
+                    {issue.code for issue in report.errors},
+                )
+
+    def test_validation_rejects_category_outside_hunt_news_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            markdown = VALID_MARKDOWN.replace("category: Tech", "category: 스포츠")
+            document = load_document(self._write_document(Path(tmp), markdown))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertIn(
+                "unsupported_category",
+                {issue.code for issue in report.errors},
+            )
+
+    def test_publisher_does_not_create_a_missing_category(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = FakeWordPressClient()
+            client.categories.pop("Tech")
+            publisher = DraftPublisher(client, audit_log=root / "publisher-audit.jsonl")
+
+            result = publisher.publish_file(
+                self._write_document(root),
+                reviewer_approved=True,
+            )
+
+            self.assertEqual(result.status, "Failed")
+            self.assertEqual(client.create_category_calls, [])
+
     def test_schedule_mode_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             text = VALID_MARKDOWN.replace(
@@ -187,19 +227,9 @@ class PublisherTests(unittest.TestCase):
             )
             self.assertEqual(
                 set(client.categories),
-                {
-                    "Tech",
-                    "AI",
-                    "ML Algorithms",
-                    "Harness Engineering",
-                    "System Architecture",
-                    "Economy",
-                    "Society",
-                    "Politics",
-                    "Hot Issue",
-                    "Build Log",
-                },
+                EDITOR_CATEGORIES,
             )
+            self.assertEqual(client.create_category_calls, [])
             self.assertEqual(len(client.created_payload["tags"]), 3)
             self.assertIn("<h2>", client.created_payload["content"])
 

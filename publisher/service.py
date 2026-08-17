@@ -16,7 +16,7 @@ import markdown as markdown_lib
 
 from .frontmatter import FrontmatterError, MarkdownDocument, load_document
 from .models import PublishResult, ValidationIssue, ValidationReport
-from .validation import EDITOR_CATEGORIES, normalize_tags, validate_document
+from .validation import normalize_tags, validate_document
 from .wordpress import WordPressClient, WordPressError
 
 LOCAL_MARKDOWN_IMAGE = re.compile(
@@ -309,22 +309,13 @@ class DraftPublisher:
         report.checks["duplicate_title"] = "passed"
         report.checks["duplicate_slug"] = "passed" if slug else "not provided"
 
-        categories: dict[str, dict[str, Any]] = {}
-        for category_name in sorted(EDITOR_CATEGORIES):
-            term = self.client.find_term("categories", category_name)
-            if term is None:
-                term = self.client.create_category(category_name)
-                self.audit.write(
-                    {
-                        "audit_id": audit_id,
-                        "event": "category_created",
-                        "category_id": term.get("id"),
-                        "category_name": category_name,
-                    }
-                )
-            categories[category_name] = term
         category_value = str(metadata["category"]).strip()
-        category = categories[category_value]
+        category = self.client.find_term("categories", category_value)
+        if category is None:
+            raise WordPressError(
+                "validation",
+                f"WordPress category does not exist: {category_value}",
+            )
         category_id = int(category["id"])
 
         tag_ids: list[int] = []

@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: HuntLab Category Tabs
- * Description: Adds fast category navigation for desktop and mobile visitors.
- * Version: 1.2.0
- * Author: HuntLab
+ * Plugin Name: Hunt News Category Tabs
+ * Description: Adds fast category navigation for Hunt News readers.
+ * Version: 2.0.0
+ * Author: Hunt News
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -54,7 +54,7 @@ function huntlab_category_tabs_recent_slugs() {
 }
 
 /**
- * Return the visible HuntLab category navigation items.
+ * Return the visible Hunt News category navigation items.
  *
  * @return array<int, array{label:string,url:string,slug:string}>
  */
@@ -72,20 +72,18 @@ function huntlab_category_tabs_items() {
 	);
 
 	$categories = array(
-		'ml-algorithms'       => 'ML',
-		'harness-engineering' => 'Harness',
-		'system-architecture' => 'Architecture',
-		'tech'                => 'Tech',
-		'ai'                  => 'AI',
-		'build-log'           => 'Build Log',
-		'economy'             => 'Economy',
-		'society'             => 'Society',
-		'hot-issue'           => 'Hot Issue',
+		'life'                  => '생활',
+		'economy'               => '경제',
+		'real-estate'           => '부동산',
+		'society'               => '사회',
+		'politics'              => '정치',
+		'culture-entertainment' => '문화·엔터',
+		'it'                    => 'IT',
 	);
 
 	foreach ( $categories as $slug => $label ) {
 		$category = get_category_by_slug( $slug );
-		if ( ! $category || 0 === (int) $category->count ) {
+		if ( ! $category ) {
 			continue;
 		}
 
@@ -186,3 +184,39 @@ function huntlab_category_tabs_script() {
 	<?php
 }
 add_action( 'wp_footer', 'huntlab_category_tabs_script', 30 );
+
+/**
+ * Preserve old archive links while consolidating legacy technical categories.
+ */
+function hunt_news_redirect_legacy_categories() {
+	if ( ! is_category() ) {
+		return;
+	}
+
+	$legacy_slugs = array(
+		'tech',
+		'ai',
+		'ml-algorithms',
+		'harness-engineering',
+		'system-architecture',
+		'build-log',
+	);
+	$category     = get_queried_object();
+	$slug         = isset( $category->slug ) ? (string) $category->slug : '';
+
+	if ( ! in_array( $slug, $legacy_slugs, true ) ) {
+		return;
+	}
+
+	$it_category = get_category_by_slug( 'it' );
+	if ( ! $it_category ) {
+		return;
+	}
+
+	$target = get_category_link( $it_category->term_id );
+	if ( ! is_wp_error( $target ) ) {
+		wp_safe_redirect( $target, 301 );
+		exit;
+	}
+}
+add_action( 'template_redirect', 'hunt_news_redirect_legacy_categories', 10 );

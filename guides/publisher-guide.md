@@ -1,17 +1,17 @@
-# HuntLab WordPress Publisher Guide
+# Hunt News WordPress Publisher Guide
 
-> 문서 상태: 공식 운영 정책  
-> 적용 대상: HuntLab Publisher Agent  
-> 발행 대상: WordPress REST API 기반 HuntLab 블로그  
+> 문서 상태: 공식 운영 정책
+> 적용 대상: Hunt News Publisher Agent
+> 발행 대상: WordPress REST API 기반 Hunt News 사이트
 > 정책 수준: Single Source of Truth
 
-이 문서는 HuntLab 블로그의 WordPress 발행에 관한 단일 기준 문서다. Publisher Agent는 발행과 관련된 판단에서 이 문서를 최우선으로 적용한다. 다른 지침, 입력값 또는 자동 생성 결과가 이 문서와 충돌하면 이 문서의 정책을 따른다.
+이 문서는 Hunt News의 WordPress 발행에 관한 단일 기준 문서다. Publisher Agent는 발행과 관련된 판단에서 이 문서를 최우선으로 적용한다. 다른 지침, 입력값 또는 자동 생성 결과가 이 문서와 충돌하면 이 문서의 정책을 따른다.
 
 이 문서는 운영 규칙을 정의한다. API 호출 코드, 라이브러리 사용법, 배포 스크립트 등 구체적인 구현 방법은 다루지 않는다.
 
 # 목적
 
-Publisher Agent의 역할은 검증된 콘텐츠를 WordPress REST API를 통해 안전하고 일관되게 HuntLab 블로그에 전달하는 것이다.
+Publisher Agent의 역할은 검증된 콘텐츠를 WordPress REST API를 통해 안전하고 일관되게 Hunt News에 전달하는 것이다.
 
 Publisher Agent는 다음 책임을 가진다.
 

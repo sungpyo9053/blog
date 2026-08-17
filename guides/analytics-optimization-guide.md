@@ -27,8 +27,10 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
   사용한다. 일반 성과 데이터 API가 확인되지 않은 상태에서 로그인 화면을 자동
   조작하거나 내부 요청을 역공학하지 않는다.
 - Whereispost 키워드마스터는 공식 자동화 API와 허용 조건이 확인되기 전까지
-  화면을 크롤링하지 않는다. 사용자가 직접 확인해 제공한 JSON만 Shadow Mode로
-  읽고 TOP2 선정 결과는 바꾸지 않는다.
+  화면을 크롤링하지 않는다. 소유자 또는 소유자의 요청을 수행하는 승인된 운영자가
+  공식 UI에서 직접 확인해 제공한 JSON만 읽는다. Daily Pipeline에 명시적으로
+  전달한 행은 동일한 `primary_keyword`의 수요 검증에만 사용할 수 있으며, 자동
+  선정이나 정책·가격·시점의 사실 근거로 사용하지 않는다.
 - 입력 경로는 각각 `NAVER_SEARCHADVISOR_EXPORT`,
   `WHEREISPOST_SHADOW_EXPORT` 환경 변수로 전달한다. 예시는
   `config/search-signals/`에 있으며 실제 내보내기 파일과 인증정보는 Git에 넣지

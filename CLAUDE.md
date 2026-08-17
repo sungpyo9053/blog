@@ -1,8 +1,10 @@
-# 블로그 글 작성 자동화 시스템
+# Hunt News 콘텐츠 자동화 시스템
 
 ## 목적
 
-사용자가 준 주제를 리서치, 글쓰기, 이미지 제작, 최종 조립 서브 에이전트에 순서대로 위임해 완성된 블로그 글을 만든다. 완성된 글은 Reviewer 승인 이후 Publisher Agent가 WordPress 발행 정책에 따라 처리한다.
+복잡한 변화가 독자의 생활에 어떤 영향을 주는지 쉽게 설명하는 글을 리서치,
+글쓰기, 이미지 제작, 최종 조립 순서로 만든다. 완성된 글은 Reviewer 승인 이후
+Publisher Agent가 WordPress 발행 정책에 따라 처리한다.
 
 ## 폴더 구조
 
@@ -85,9 +87,9 @@ Publisher
 
 Reviewer의 명시적인 승인 없이는 Publisher Agent를 실행하지 않는다. 작성 또는 조립 완료 상태를 Reviewer 승인으로 간주하지 않는다.
 
-Topic Planner Agent는 Tech, AI, ML Algorithms, Harness Engineering, System Architecture,
-Economy, Society, Politics, Hot Issue, Build Log의 편집장으로서 후보 생성 → 평가 →
-TOP10 → TOP2 → `topics.md` 순서로 결정한다.
+Topic Planner Agent는 생활, 경제, 부동산, 사회, 정치, 문화·엔터, IT의 편집장으로서
+Whereispost 수요 신호, 공식 원문, 생활 영향과 기존 글 중복을 확인하고 후보 생성 →
+평가 → TOP10 → TOP2 → `topics.md` 순서로 결정한다.
 
 일일 자동 파이프라인의 Publisher는 `publish.md`에 전달된 Editor의 `category`와 `tags`를 WordPress에 반영하고 실제 Publish를 수행한다. 카테고리는 이름으로 조회하며 없으면 생성하고, Uncategorized로 대체하지 않는다. Publish는 `guides/publisher-guide.md`가 정의한 조건과 Reviewer 승인 해시 검증을 모두 만족하는 경우에만 수행한다.
 

@@ -10,7 +10,16 @@ from urllib.parse import urlparse
 from .frontmatter import MarkdownDocument
 from .models import ValidationIssue, ValidationReport
 
-EDITOR_CATEGORIES = {
+ACTIVE_EDITOR_CATEGORIES = {
+    "생활",
+    "경제",
+    "부동산",
+    "사회",
+    "정치",
+    "문화·엔터",
+    "IT",
+}
+LEGACY_EDITOR_CATEGORIES = {
     "Tech",
     "AI",
     "Economy",
@@ -22,6 +31,9 @@ EDITOR_CATEGORIES = {
     "Harness Engineering",
     "System Architecture",
 }
+# Old approved runs can still be resumed, while every newly planned run uses
+# the active Hunt News categories above.
+EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
 FORBIDDEN_TERMS = (
     "100%",
     "무조건",
@@ -141,14 +153,14 @@ def validate_document(
         _add_error(
             report,
             "missing_category",
-            "category must be a non-empty HuntLab category name.",
+            "category must be a non-empty Hunt News category name.",
             "category",
         )
     elif isinstance(category, str) and category.strip() not in EDITOR_CATEGORIES:
         _add_error(
             report,
             "unsupported_category",
-            "category must be one of the HuntLab editorial categories.",
+            "category must be one of the Hunt News editorial categories.",
             "category",
         )
 

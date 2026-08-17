@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import inspect
 import subprocess
 import tempfile
 import unittest
@@ -17,8 +18,11 @@ from scripts.run_daily_pipeline import (
     has_successful_publish,
     humanize_experiment_enabled,
     make_topic_context,
+    parse_whereispost_total_searches,
     parse_topic_plan,
+    planner_retry_stage,
     planner_stage,
+    read_whereispost_observation,
     read_review_decision,
     review_repair_stages,
     run_stage,
@@ -34,6 +38,54 @@ from scripts.set_humanize_mode import update_state
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_planner_retry_allows_required_read_only_validation(self):
+        topics_path = Path("/tmp/run/topics.md")
+        stage = Stage("Topic Planner Agent", Path("agents/topic-planner-agent.md"), "원래 지시")
+
+        retry = planner_retry_stage(stage, topics_path)
+
+        self.assertIn("읽기 전용으로 다시 확인", retry.prompt)
+        self.assertIn("유일하게 변경할 파일은 topics.md", retry.prompt)
+        self.assertNotIn("다른 파일을 읽거나 수정하지 말고", retry.prompt)
+
+    def test_planner_uses_operator_timeout_without_hidden_cap(self):
+        from scripts.run_daily_pipeline import main
+
+        source = inspect.getsource(main)
+        self.assertIn("planner_timeout = args.timeout", source)
+        self.assertNotIn("min(args.timeout, 900)", source)
+
+    def test_planner_accepts_validated_operator_whereispost_observation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            observation = Path(temporary) / "whereispost.json"
+            observation.write_text(
+                json.dumps(
+                    {
+                        "provider": "whereispost_keywordmaster",
+                        "checked_at": "2026-08-16T16:30:00+09:00",
+                        "rows": [
+                            {
+                                "keyword": "주택청약",
+                                "pc_searches": 9710,
+                                "mobile_searches": 22800,
+                                "total_searches": 32510,
+                                "documents": 1919563,
+                                "competition_ratio": 59.045,
+                                "related_keywords": ["주택청약종합저축"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            supplied = read_whereispost_observation(observation)
+            planner = planner_stage("주택청약", "run-observed", Path("/tmp/topics.md"), supplied)
+
+            self.assertIn('"keyword": "주택청약"', planner.prompt)
+            self.assertIn("수요 근거로만 사용", planner.prompt)
+            self.assertIn("공식 원문 검증을 별도로 통과", planner.prompt)
+
     def test_humanize_on_stays_enabled_until_cutoff(self):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary) / "humanize.json"
@@ -156,12 +208,32 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             )
             self.assertFalse(has_successful_publish(context))
 
+    def test_successful_update_audit_is_resume_success(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-update" / "topic-update"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="기존 글 갱신",
+                run_id="run-update",
+                topic_id="topic-update",
+                directory=directory,
+                category="Tech",
+                tags=("API",),
+            )
+            (directory / "publisher-audit.jsonl").write_text(
+                '{"event":"post_updated","status":"Success","post_id":391,'
+                '"published_url":"https://example.com/post/",'
+                '"featured_media_id":1,"body_media_ids":[2,3]}\n',
+                encoding="utf-8",
+            )
+            self.assertTrue(has_successful_publish(context))
+
     def test_harness_explicitly_injects_analytics_report_path(self):
         planner = planner_stage("", "run-analytics", Path("/tmp/topics.md"))
         self.assertIn("Harness가 분석 리포트 경로", planner.prompt)
         self.assertIn("output/analytics/latest.md", planner.prompt)
-        self.assertIn("실제 비브랜드 검색어 또는 초기 성공 기술 글", planner.prompt)
-        self.assertIn("TOP2 중 한 자리를", planner.prompt)
+        self.assertIn("실제 비브랜드 검색어 또는 초기 성공 글", planner.prompt)
+        self.assertIn("TOP2 자리를 미리 배정하지 마세요", planner.prompt)
         self.assertIn("비중복 검색 의도", planner.prompt)
         self.assertIn("할당량을 채우기 위해 억지로 만들지 말고", planner.prompt)
 
@@ -339,6 +411,76 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("공식 1차 자료", planner.prompt)
         self.assertIn("Velog 신호 없음으로 계속 진행", planner.prompt)
 
+    def test_planner_requires_whereispost_for_every_new_top2(self):
+        planner = planner_stage("", "run-whereispost-all", Path("/tmp/topics.md"))
+        self.assertIn("모든 후보는 Whereispost 키워드마스터", planner.prompt)
+        self.assertIn("수요가 확인되지 않은 후보는 TOP2로 선정하지 마세요", planner.prompt)
+        self.assertIn("whereispost_total_searches", planner.prompt)
+        self.assertIn("총 검색량 100회 미만 후보", planner.prompt)
+
+    def test_whereispost_total_searches_accepts_commas(self):
+        self.assertEqual(
+            parse_whereispost_total_searches("1,234", "검색량 후보"),
+            1234,
+        )
+
+    def test_whereispost_total_searches_rejects_non_numeric_values(self):
+        with self.assertRaisesRegex(PipelineError, "0 이상의 정수"):
+            parse_whereispost_total_searches("약 100회", "검색량 후보")
+
+    def test_active_top2_rejects_total_searches_below_minimum(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "topics.md"
+            candidates = []
+            for index in range(1, 36):
+                title = f"생활 검색 후보 {index}"
+                total_searches = 99 if index == 1 else 100
+                candidates.append(
+                    f"## {index}. {title}\n\n"
+                    f"- title: {title}\n"
+                    "- category: 생활\n"
+                    "- content_type: life_impact_explainer\n"
+                    "- tags: 생활, 검색, 확인\n"
+                    "- score: 80/90\n"
+                    "- score_breakdown: 검색 수요와 생활 영향 검증\n"
+                    "- reason: 독자의 실제 선택을 돕는다\n"
+                    "- evergreen: 중간\n"
+                    f"- primary_keyword: {title}\n"
+                    "- search_intent: 확인 방법\n"
+                    "- research_focus: 공식 원문\n"
+                    "- recommended_images: 확인 절차\n"
+                    "- duplicate_check: 중복 없음\n"
+                    "- internal_link_candidates: 없음\n"
+                    "- topic_cluster: 생활 확인\n"
+                    "- pillar_candidate: 없음\n"
+                    "- problem_origin: observed_search_question\n"
+                    "- editorial_thesis: 생활 영향을 확인한다\n"
+                    "- chosen_focus: 독자 행동\n"
+                    "- rejected_angle: 일반론 제외\n"
+                    "- structure_mode: eligibility_check\n"
+                    "- affected_reader: 해당 조건을 확인하는 독자\n"
+                    "- life_impact: 선택 전에 조건을 확인할 수 있다\n"
+                    "- effective_date: 확인 필요\n"
+                    "- reader_action: 공식 원문을 확인한다\n"
+                    "- whereispost_status: verified\n"
+                    f"- whereispost_metrics: total={total_searches}; documents=1000\n"
+                    f"- whereispost_total_searches: {total_searches}\n"
+                )
+            top10 = "\n".join(
+                f"{index}. 생활 검색 후보 {index}" for index in range(1, 11)
+            )
+            path.write_text(
+                "# Topic Candidates\n\n"
+                + "\n".join(candidates)
+                + "\n## TOP10\n\n"
+                + top10
+                + "\n\n## TOP2\n\n1. 생활 검색 후보 1\n2. 생활 검색 후보 2\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(PipelineError, "최소 100회"):
+                parse_topic_plan(path)
+
     def test_planner_broadens_ml_beyond_isolation_forest(self):
         planner = planner_stage("", "run-ml-breadth", Path("/tmp/topics.md"))
 
@@ -393,10 +535,12 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             selected = parse_topic_plan(path)
         self.assertEqual([item["category"] for item in selected], ["Tech", "Tech"])
 
-    def test_planner_requests_public_signal_and_core_tracks(self):
+    def test_planner_uses_demand_and_evidence_without_forced_tracks(self):
         planner = planner_stage("", "run-track-split", Path("/tmp/topics.md"))
-        self.assertIn("selection_track=public_signal", planner.prompt)
-        self.assertIn("selection_track=huntlab_core", planner.prompt)
+        self.assertIn("Whereispost 수요", planner.prompt)
+        self.assertIn("공식 원문", planner.prompt)
+        self.assertIn("카테고리 할당량으로 채우지 말고", planner.prompt)
+        self.assertNotIn("selection_track=public_signal", planner.prompt)
 
 
     def test_selected_topic_requires_primary_keyword_in_title(self):

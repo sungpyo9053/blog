@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the HuntLab daily TOP2 blog pipeline with fail-fast logging."""
+"""Run the Hunt News daily TOP2 pipeline with fail-fast logging."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from publisher.frontmatter import FrontmatterError, load_document
+from scripts.search_signal_providers import SearchSignalError, load_whereispost_shadow
 
 
 OUTPUT_DIR = PROJECT_ROOT / "output"
@@ -34,7 +35,16 @@ HUMANIZE_EXPERIMENT_STATE = OUTPUT_DIR / "humanize-experiment-state.json"
 LOG_DIR = PROJECT_ROOT / "logs"
 LOCK_FILE = LOG_DIR / "daily-pipeline.lock"
 TOP2_PATTERN = re.compile(r"(?m)^\s*[12]\.\s+(.+?)\s*$")
-EDITOR_CATEGORIES = {
+ACTIVE_EDITOR_CATEGORIES = {
+    "생활",
+    "경제",
+    "부동산",
+    "사회",
+    "정치",
+    "문화·엔터",
+    "IT",
+}
+LEGACY_EDITOR_CATEGORIES = {
     "Tech",
     "AI",
     "Economy",
@@ -46,12 +56,15 @@ EDITOR_CATEGORIES = {
     "Harness Engineering",
     "System Architecture",
 }
+EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
 CONTENT_TYPE_GUIDES = {
     "tutorial_troubleshooting": PROJECT_ROOT / "guides/content-types/tutorial-troubleshooting.md",
     "concept_architecture": PROJECT_ROOT / "guides/content-types/concept-architecture.md",
+    "system_design_case": PROJECT_ROOT / "guides/content-types/system-design-case.md",
     "ai_ml_experiment": PROJECT_ROOT / "guides/content-types/ai-ml-experiment.md",
     "build_log_operations": PROJECT_ROOT / "guides/content-types/build-log-operations.md",
     "current_affairs_policy": PROJECT_ROOT / "guides/content-types/current-affairs-policy.md",
+    "life_impact_explainer": PROJECT_ROOT / "guides/content-types/life-impact-explainer.md",
 }
 LEGACY_CONTENT_TYPE_BY_CATEGORY = {
     "Tech": "tutorial_troubleshooting",
@@ -64,8 +77,16 @@ LEGACY_CONTENT_TYPE_BY_CATEGORY = {
     "Society": "current_affairs_policy",
     "Politics": "current_affairs_policy",
     "Hot Issue": "current_affairs_policy",
+    "생활": "life_impact_explainer",
+    "경제": "life_impact_explainer",
+    "부동산": "life_impact_explainer",
+    "사회": "life_impact_explainer",
+    "정치": "life_impact_explainer",
+    "문화·엔터": "life_impact_explainer",
+    "IT": "tutorial_troubleshooting",
 }
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
+MIN_WHEREISPOST_TOTAL_SEARCHES = 100
 RECENT_STYLE_LIMIT = 5
 REVIEW_STATUS_PATTERN = re.compile(
     r"(?im)^\s*(?:-\s*)?(?:status|decision)\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
@@ -75,6 +96,15 @@ REVIEW_STATUS_PATTERN = re.compile(
 
 class PipelineError(RuntimeError):
     """Raised when a stage cannot safely continue."""
+
+
+def parse_whereispost_total_searches(value: str, title: str) -> int:
+    normalized = value.replace(",", "").strip()
+    if not re.fullmatch(r"\d+", normalized):
+        raise PipelineError(
+            f"{title}: whereispost_total_searches는 0 이상의 정수여야 합니다."
+        )
+    return int(normalized)
 
 
 @dataclass(frozen=True)
@@ -390,6 +420,31 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
         ]
         if content_type not in CONTENT_TYPE_GUIDES:
             raise PipelineError(f"{title}: 허용되지 않은 content_type: {content_type}")
+        if category in ACTIVE_EDITOR_CATEGORIES:
+            demand_fields = {
+                "whereispost_status",
+                "whereispost_metrics",
+                "whereispost_total_searches",
+            }
+            missing_demand = sorted(demand_fields - fields.keys())
+            if missing_demand:
+                raise PipelineError(
+                    f"{title}: Whereispost 필드 누락: {', '.join(missing_demand)}"
+                )
+        if content_type == "life_impact_explainer":
+            impact_fields = {
+                "affected_reader",
+                "life_impact",
+                "effective_date",
+                "reader_action",
+                "whereispost_status",
+                "whereispost_metrics",
+            }
+            missing_impact = sorted(impact_fields - fields.keys())
+            if missing_impact:
+                raise PipelineError(
+                    f"{title}: 생활 영향 필드 누락: {', '.join(missing_impact)}"
+                )
         tags = tuple(
             dict.fromkeys(tag.strip() for tag in fields["tags"].split(",") if tag.strip())
         )
@@ -409,6 +464,10 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
             "experiment_diary",
             "code_walkthrough",
             "field_note",
+            "impact_timeline",
+            "household_case",
+            "before_after",
+            "eligibility_check",
         }:
             raise PipelineError(f"{title}: 허용되지 않은 structure_mode")
         candidates[title] = {
@@ -416,6 +475,12 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
             "content_type": content_type,
             "tags": tags,
         }
+        if category in ACTIVE_EDITOR_CATEGORIES:
+            candidates[title]["whereispost_total_searches"] = (
+                parse_whereispost_total_searches(
+                    fields["whereispost_total_searches"], title
+                )
+            )
 
     top10_marker = re.search(r"(?m)^## TOP10\s*$", text)
     if top10_marker is None or top10_marker.start() > marker.start():
@@ -442,6 +507,17 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
                 f"{title}: TOP2 제목에 primary_keyword가 포함되어야 합니다: "
                 f"{primary_keyword}"
             )
+        if candidates[title]["category"] in ACTIVE_EDITOR_CATEGORIES:
+            if candidates[title].get("whereispost_status", "").strip() != "verified":
+                raise PipelineError(
+                    f"{title}: TOP2는 Whereispost 수요 확인이 완료되어야 합니다."
+                )
+            total_searches = candidates[title]["whereispost_total_searches"]
+            if total_searches < MIN_WHEREISPOST_TOTAL_SEARCHES:
+                raise PipelineError(
+                    f"{title}: TOP2 Whereispost 총 검색량은 최소 "
+                    f"{MIN_WHEREISPOST_TOTAL_SEARCHES}회여야 합니다: {total_searches}"
+                )
     tracks = [candidates[title].get("selection_track", "").strip() for title in topics]
     if any(tracks):
         if set(tracks) != {"public_signal", "huntlab_core"}:
@@ -543,6 +619,8 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "topic_cluster": plan.get("topic_cluster", ""),
         "pillar_candidate": plan.get("pillar_candidate", ""),
         "sources": plan.get("sources", ""),
+        "existing_post_id": plan.get("existing_post_id", ""),
+        "existing_slug": plan.get("existing_slug", ""),
         **editorial_fields,
     }
     path.write_text(
@@ -788,6 +866,10 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 f"REJECTED를 {str(topic_dir / 'review.md')!r}에 기록하세요. "
                 "planner-context.json의 기존 WordPress 제목·Draft 중복 검사 결과를 "
                 "검토 기록에 근거로 반영하세요. "
+                "planner-context.json에 existing_post_id와 existing_slug가 있으면 기존 공개 글의 "
+                "안전한 갱신 요청입니다. 두 값을 publish.md Frontmatter에 각각 정수 "
+                "existing_post_id와 문자열 slug로 정확히 넣고, 기존 글 제목과 slug가 모두 "
+                "일치하지 않으면 REJECT하세요. "
                 "현재 research.md와 기존 공개 글 목록에 관련 내부 링크 후보가 없으면 그 사실을 기록하고 억지로 링크를 만들지 마세요. "
                 "REJECTED이면 0이 아닌 종료 상태로 끝내세요."
             ),
@@ -808,8 +890,10 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 f"{context.run_id!r} --expected-topic-id {context.topic_id!r} "
                 f"--expected-source-id {context.source_id!r} --expected-category "
                 f"{context.category!r} 명령을 실행하세요. "
-                "publish_mode가 publish가 아니면 실패하세요. schedule과 기존 "
-                "공개글 변경은 수행하지 마세요. .env는 Publisher 스크립트만 "
+                "publish_mode가 publish가 아니면 실패하세요. schedule 변경은 수행하지 마세요. "
+                "기존 공개 글 갱신은 Reviewer가 승인한 existing_post_id와 slug가 publish.md에 있고 "
+                "Publisher 스크립트가 기존 제목과 slug의 정확한 일치를 확인한 경우에만 허용합니다. "
+                ".env는 Publisher 스크립트만 "
                 "읽게 하고 값을 직접 열거나 출력하지 마세요."
             ),
         ),
@@ -1153,10 +1237,15 @@ def read_publish_result(context: TopicContext) -> dict[str, Any]:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if event.get("event") == "post_published" and event.get("status") == "Success":
+        if (
+            event.get("event") in {"post_published", "post_updated"}
+            and event.get("status") == "Success"
+        ):
             events.append(event)
     if not events:
-        raise PipelineError(f"{context.topic_id}: 성공한 Publish 기록이 없습니다.")
+        raise PipelineError(
+            f"{context.topic_id}: 성공한 Publish 또는 Update 기록이 없습니다."
+        )
     event = events[-1]
     post_id = int(event["post_id"])
     return {
@@ -1179,11 +1268,19 @@ def has_successful_publish(context: TopicContext) -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="HuntLab TOP2 daily pipeline")
+    parser = argparse.ArgumentParser(description="Hunt News TOP2 daily pipeline")
     parser.add_argument(
         "--keywords",
         default="",
         help="Topic Planner에 전달할 쉼표 구분 추가 키워드",
+    )
+    parser.add_argument(
+        "--whereispost-observation",
+        type=Path,
+        help=(
+            "공식 Keyword Master 화면에서 운영자가 직접 확인한 JSON. "
+            "검증된 동일 키워드의 수요 근거로만 Planner에 전달"
+        ),
     )
     parser.add_argument(
         "--timeout",
@@ -1223,7 +1320,7 @@ def build_parser() -> argparse.ArgumentParser:
 def dry_run_topics() -> str:
     candidates: list[str] = []
     number = 0
-    for category in sorted(EDITOR_CATEGORIES):
+    for category in sorted(ACTIVE_EDITOR_CATEGORIES):
         for index in range(1, 6):
             number += 1
             title = f"{category} Dry Run 후보 {index}"
@@ -1329,7 +1426,35 @@ def validate_dry_run(
     return 0
 
 
-def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
+def read_whereispost_observation(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        payload = load_whereispost_shadow(path)
+    except SearchSignalError as exc:
+        raise PipelineError(f"Whereispost 관측 파일이 올바르지 않습니다: {exc}") from exc
+    rows = payload.get("rows", [])
+    if not rows:
+        raise PipelineError("Whereispost 관측 파일에 rows가 없습니다.")
+    for index, row in enumerate(rows, 1):
+        if "total_searches" not in row or "competition_ratio" not in row:
+            raise PipelineError(
+                f"Whereispost 관측 행 {index}에 total_searches 또는 "
+                "competition_ratio가 없습니다."
+            )
+    return json.dumps(
+        {"checked_at": payload["checked_at"], "rows": rows},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def planner_stage(
+    keywords: str,
+    run_id: str,
+    topics_path: Path,
+    whereispost_observation: str = "",
+) -> Stage:
     return Stage(
         "Topic Planner Agent",
         PROJECT_ROOT / "agents/topic-planner-agent.md",
@@ -1337,60 +1462,82 @@ def planner_stage(keywords: str, run_id: str, topics_path: Path) -> Stage:
             f"현재 날짜는 {date.today().isoformat()}입니다. "
             f"run_id는 {run_id!r}입니다. "
             f"추가 키워드는 {keywords.strip() or '없음'}입니다. "
-            "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 "
-            "Tech, AI, ML Algorithms, Harness Engineering, System Architecture, Economy, "
-            "Society, Politics, Hot Issue, Build Log를 편집 범위로 삼되 "
-            "Build Log는 오늘 실행을 위해 새로 만든 테스트나 Search Console 관측만으로 선정할 수 없습니다. "
-            "오늘 실행 시작 전부터 존재하는 HuntLab의 실제 작업 기록·운영 변경·실패 로그가 확인되고, "
-            "그 기록의 경로와 기존 작업 사실을 후보 근거에 명시할 때만 Build Log로 분류하세요. "
-            "그런 기존 기록이 없으면 같은 주제를 Build Log로 포장하지 말고 ML Algorithms, Harness Engineering, "
-            "System Architecture, Tech 또는 AI의 검증 가능한 후보를 선택하세요. "
-            "ML 주제는 알고리즘 이름의 단순 정의보다 문제 정의, 데이터 표현, 가정, "
-            "평가지표, 오류 비용, 실패 조건과 실제 적용 판단을 함께 설명할 수 있는 "
-            "'ML적 사고력' 및 핵심 개념 후보를 지속적으로 우대하세요. 분류, 회귀, "
-            "이상 탐지, 추천, 시계열, 검증, 데이터 누수와 드리프트처럼 재사용 가능한 "
-            "개념을 실제 프로젝트나 재현 가능한 예제와 연결하세요. Isolation Forest 한 "
-            "알고리즘에 편중하지 말고 선형·트리·부스팅·커널·거리 기반·확률 모델, 군집화, "
-            "차원 축소, 추천, 시계열, 신경망과 여러 이상 탐지 계열을 폭넓게 탐색하세요. "
-            "최근 ML 글과 같은 알고리즘 계열은 새 비교 실험이나 실패 조건이 없으면 후순위로 "
-            "내리고, 같은 데이터에서 베이스라인과 대안을 비교할 수 있는 후보를 우대하세요. "
-            "기술 편집 후보에서 다양한 ML Algorithms를 적극 발굴하되 발행량을 위한 TOP2 "
-            "의무 할당은 두지 말고 기존 글과 검색 의도가 겹치면 후속 관점 또는 Refresh를 "
-            "우선하세요. "
-            "Velog 공개 트렌딩(https://velog.io/)과 관련 기술 태그 페이지를 읽을 수 있으면 "
-            "한국 개발자 관심사의 보조 신호로만 참고하세요. 반복해서 등장하는 기술, 프로그래밍 "
-            "언어, 시스템 아키텍처의 실제 문제를 후보로 바꾸되 Velog 글의 제목이나 구성을 "
-            "복제하지 말고, Search Console 관측값·명확한 검색 의도·공식 1차 자료·HuntLab의 "
-            "직접 검증 가능성을 별도로 확인하세요. 공개 트렌딩과 서로 다른 관련 태그·인기 "
-            "글에서 같은 주제 흐름이 2회 이상 확인되면 관측 URL과 날짜를 남기고 검색 수요 "
-            "점수에 최대 1점의 보조 가산점을 줄 수 있습니다. 나머지 품질 조건도 통과하면 "
-            "TOP2로 선정해 실제 발행할 수 있지만 Velog 인기만으로 TOP2를 선정하지 마세요. "
-            "접근할 수 없거나 반복 신호를 확인하지 못하면 추정하지 말고 Velog 신호 없음으로 "
-            "계속 진행하세요. 참고한 후보는 reason 또는 sources에 관측 날짜, 페이지 URL과 "
-            "발견한 주제 흐름을 기록하세요. "
-            "기술 후보의 Primary Keyword는 가능한 경우 제품·기술명, 실제로 관측된 "
-            "오류·문제 표현과 독자가 실행할 확인·해결 행동을 결합하세요. Search Console, "
-            "실제 로그, 공식 Known Issues·Changelog 또는 반복 질문에서 확인하지 못한 "
-            "장애를 창작하지 말고, 개념 이해 의도에는 오류형 제목을 강제하지 마세요. "
+            + (
+                "추가 키워드가 있으면 그 키워드를 제목에 포함한 후보를 최소 1개 만들고, "
+                "검색 의도와 근거가 충족되면 TOP2에 우선 배정하세요. 키워드가 시스템 설계·아키텍처라면 "
+                "category=System Architecture, content_type=system_design_case를 사용하세요. "
+                if keywords.strip()
+                else ""
+            )
+            + (
+                "Harness가 공식 Keyword Master 화면에서 운영자가 직접 확인한 관측값을 "
+                f"제공합니다: {whereispost_observation}. 이 값은 같은 primary_keyword 후보의 "
+                "whereispost_status를 verified로 판정하는 수요 근거로만 사용하세요. 다른 키워드로 "
+                "확장하거나 정책·가격·시점의 사실 근거로 사용하지 말고, TOP2 선정은 중복 검사와 "
+                "공식 원문 검증을 별도로 통과해야 합니다. "
+                if whereispost_observation
+                else ""
+            )
+            + "Hunt News는 복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명하는 사이트입니다. "
+            "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 생활, 경제, 부동산, 사회, 정치, "
+            "문화·엔터, IT를 활성 카테고리로 사용하세요. 생활 영향 후보는 "
+            "content_type=life_impact_explainer를 사용하고, IT의 설치·실험·시스템 설계 글만 "
+            "검색 의도에 맞는 기존 기술 content_type을 사용하세요. "
+            "후보는 발표명이나 보도자료 제목이 아니라 독자가 검색하는 질문에서 시작해야 합니다. "
+            "무엇이 바뀌었는지, 언제부터인지, 누가 대상인지, 내 돈·시간·일·권리·소비·선택이 "
+            "얼마나 달라지는지, 지금 무엇을 확인할지를 한 제목과 research_focus로 연결하세요. "
+            "예: '9차 석유 최고가격 발표'가 아니라 '9차 석유 최고가격 얼마? 내일부터 주유소 "
+            "가격은 어떻게 달라지나', '건강보험료 개편안 발표'가 아니라 '건강보험료 개편되면 "
+            "월급 400만원 직장인은 얼마나 더 내나', '기준금리 동결'이 아니라 '기준금리 동결되면 "
+            "내 주담대 금리는 언제 내려가나'처럼 구체화합니다. 숫자와 시점은 공식 산식과 원문으로 "
+            "검증할 수 있을 때만 사용하세요. "
+            "모든 후보는 Whereispost 키워드마스터(https://whereispost.com/keyword)를 먼저 확인해 PC·모바일·총 "
+            "검색량, 문서 수, 경쟁 비율과 관련 키워드를 whereispost_metrics에 기록하고, 총 검색량은 "
+            "쉼표 없는 정수 whereispost_total_searches로도 별도 기록하세요. 총 검색량 100회 미만 후보는 "
+            "TOP2로 선정하지 마세요. 접근할 수 "
+            "없거나 결과가 잠겨 있으면 값을 추정하지 말고 whereispost_status=unavailable로 기록하세요. "
+            "Whereispost는 수요 선별 신호일 뿐 정책·가격·날짜의 사실 근거가 아니며, 핵심 사실은 정부, "
+            "공공기관, 중앙은행, 법령, 공시 또는 당사자 원문으로 다시 확인하세요. "
+            "Whereispost에서 수요가 확인되지 않은 후보는 TOP2로 선정하지 마세요. 생활 영향 후보에는 affected_reader, life_impact, effective_date, reader_action, "
+            "whereispost_status, whereispost_metrics, whereispost_total_searches를 반드시 기록하세요. "
+            "정치 글은 진영 논평보다 법·정책·"
+            "예산·권리의 생활 영향을 다루세요. 폐지·신설·개편처럼 찬반이 갈리면 현행 제도와 실제 변경안, "
+            "현재 절차, 찬성 측의 주장·근거·전제, 반대 측의 주장·근거·전제, 확인된 사실과 아직 예측인 "
+            "부분을 나누고 안전·권리·세금·행정 절차의 변화를 설명하세요. 근거 없는 주장을 분량을 맞추려고 "
+            "확인된 사실과 같은 무게로 다루지 마세요. 문화·엔터 글은 사생활·루머보다 요금·계약·플랫폼·관람·소비 "
+            "변화를 다루세요. 부동산 글은 전월세·청약·대출 규제·세금·정비사업의 계약·현금흐름·거주 영향을 "
+            "공식 원문으로 설명하고 집값 단정이나 매수·매도 추천은 하지 마세요. 기존 기술 글과 연결되는 IT 후보도 기술 자체보다 일반 사용자의 경험과 "
+            "선택 변화가 명확할 때 우대하세요. 기존 글과 검색 의도가 겹치면 신규 증산보다 Refresh를 "
+            "우선하세요. Build Log는 실제 작업 기록·운영 변경·실패 로그가 있을 때만 사용하며 오늘 실행을 "
+            "위해 새로 만든 테스트나 Search Console 관측만으로 선정할 수 없습니다. "
+            "IT의 ML 후보는 Isolation Forest 한 알고리즘에 편중하지 말고 분류·회귀·군집화·차원 축소·추천·"
+            "시계열·신경망을 폭넓게 검토해 문제 정의, 평가지표, 베이스라인과 대안을 비교하고 실제 적용 판단을 "
+            "남기세요. ML적 사고력은 후보 품질 기준이지만 TOP2 의무 할당은 두지 말고, 중복 주제는 후속 관점 "
+            "또는 Refresh로 처리하세요. 확인하지 못한 장애를 창작하지 말고 실제 관측 문구만 사용하세요. "
+            "Velog 공개 트렌딩(https://velog.io/)은 "
+            "한국 개발자 관심사의 보조 신호로만 사용하세요. 제목이나 구성을 복제하지 말고 같은 주제 흐름이 "
+            "2회 이상 관측될 때 검색 수요 점수에 최대 1점만 반영하며, 공식 1차 자료와 Search Console 관측값을 "
+            "대체할 수 없습니다. Velog 인기만으로 TOP2로 선정해 실제 발행하지 말고, 접근할 수 없으면 Velog "
+            "신호 없음으로 계속 진행하세요. "
             "TOP2에는 demand_signal_source, observed_problem_phrase, user_action과 함께 "
             "problem_origin(real_project, public_codebase, observed_search_question, controlled_lab, official_change 중 하나), "
             "editorial_thesis(글 전체가 증명할 한 문장), chosen_focus, rejected_angle(넣지 않을 관점과 이유), "
-            "structure_mode(problem_first, decision_memo, experiment_diary, code_walkthrough, field_note 중 하나)를 기록하세요. "
+            "structure_mode(problem_first, decision_memo, experiment_diary, code_walkthrough, field_note, "
+            "impact_timeline, household_case, before_after, eligibility_check 중 하나)를 기록하세요. "
             "동등한 후보라면 실제 프로젝트·공개 코드·관측 질문에서 출발한 후보를 통제 실험보다 우선하고, "
             "controlled_lab은 실제 선택을 바꾸는 질문에 답할 때만 선정하세요. "
             f"카테고리별 수량을 강제하지 말고 전체 후보 35개 이상, TOP10과 TOP2를 {str(topics_path)!r}에 "
             "작성하세요. 최종 TOP2는 각 후보의 primary_keyword를 제목에 그대로 포함해야 합니다. "
             f"Harness가 분석 리포트 경로 {str(ANALYTICS_REPORT)!r}를 명시적으로 제공합니다. "
             "파일이 있으면 검색어·CTR·조회수 관측값, Refresh 후보와 Content Gap 제안만 참고하고, 데이터가 없으면 "
-            "추측하지 마세요. 리포트가 COMPLETE이고 실제 비브랜드 검색어 또는 초기 성공 기술 글이 있으면, "
-            "현재도 유효한 문제·직접 검증 근거·비중복 검색 의도를 모두 확인한 후 TOP2 중 한 자리를 "
-            "그 검증된 기술 클러스터의 후속 문제 해결 후보에 우선 배정하세요. 적합한 후보가 없으면 "
-            "할당량을 채우기 위해 억지로 만들지 말고 전체 후보 중 품질이 가장 높은 주제를 선택하세요. "
+            "추측하지 마세요. 리포트가 COMPLETE이고 실제 비브랜드 검색어 또는 초기 성공 글이 있으면, "
+            "현재도 유효한 문제·공식 또는 직접 검증 근거·비중복 검색 의도를 확인해 강한 후보로 평가하되 "
+            "TOP2 자리를 미리 배정하지 마세요. 적합한 후보가 없으면 할당량을 채우기 위해 억지로 만들지 "
+            "말고 전체 후보 중 품질이 가장 높은 주제를 선택하세요. "
             "성공 글의 제목이나 본문 구성을 복제하지 말고 검색 의도와 문제 유형만 후속 후보 근거로 사용하세요. "
-            "이번 실험의 TOP2는 가능하면 selection_track=public_signal(공개 데이터에서 발견한 후보) "
-            "1개와 selection_track=huntlab_core(HuntLab 핵심 분야의 실제 검증 후보) 1개로 구성하세요. "
-            "각 후보에 신호 출처·수집일 또는 실제 로그·코드·운영 기록 경로를 남기고, 두 트랙 중 하나의 "
-            "근거가 없으면 발행량을 채우기 위해 대체하지 말고 Planner를 실패시키세요. "
+            "TOP2는 카테고리 할당량으로 채우지 말고 Whereispost 수요, 생활 영향의 구체성, 공식 원문, "
+            "비중복 검색 의도와 설명 가능성이 가장 강한 후보를 고르세요. 근거가 부족하면 두 편을 "
+            "억지로 채우지 말고 Planner를 실패시키세요. "
             "후보마다 기존 공개 글과 검색 의도가 겹치는지 검사하고 "
             "internal_link_candidates, topic_cluster, pillar_candidate를 기록하세요. "
             "output의 다른 파일은 수정하지 마세요. "
@@ -1409,8 +1556,11 @@ def planner_retry_stage(stage: Stage, topics_path: Path) -> Stage:
         stage.agent_file,
         stage.prompt
         + f"\n\n재시도입니다. 이전 실행은 {str(topics_path)!r}를 생성하지 못했습니다. "
-        "이번 실행에서는 다른 파일을 읽거나 수정하지 말고, 최소 35개 후보와 TOP10/TOP2를 "
-        f"즉시 {str(topics_path)!r}에 저장하세요. 저장 후에만 짧게 완료를 보고하세요.",
+        "원래 지시에 명시된 가이드, 기존 WordPress 글, output 기록과 수요 신호는 "
+        "필요한 범위에서 읽기 전용으로 다시 확인하세요. 다른 파일이나 외부 시스템은 수정하지 "
+        "말고, 검증을 통과한 최소 35개 후보와 TOP10/TOP2를 "
+        f"{str(topics_path)!r}에 저장하세요. 유일하게 변경할 파일은 topics.md이며, "
+        "저장 후에만 짧게 완료를 보고하세요.",
     )
 
 
@@ -1453,16 +1603,25 @@ def main() -> int:
             run_directory = RUNS_DIR / run_id
             run_directory.mkdir(parents=True, exist_ok=False)
             topics_path = run_directory / "topics.md"
-            planner = planner_stage(args.keywords, run_id, topics_path)
+            whereispost_observation = read_whereispost_observation(
+                args.whereispost_observation
+            )
+            planner = planner_stage(
+                args.keywords,
+                run_id,
+                topics_path,
+                whereispost_observation,
+            )
             logger.info(
                 "pipeline event=start run_id=%s run_directory=%s",
                 run_id,
                 run_directory,
             )
-            # Planner inspects the live WordPress corpus, Search Console/GA4
-            # snapshot and public trend signals. Five minutes was too short
-            # for that bounded read-only stage and caused false daily failures.
-            planner_timeout = min(args.timeout, 900)
+            # Planner inspects the live WordPress corpus, 35+ candidates,
+            # official sources and demand signals. It must honor the same
+            # operator-selected ceiling as the evidence-heavy topic stages;
+            # a hidden 15-minute cap caused valid planning runs to time out.
+            planner_timeout = args.timeout
             run_stage(codex, planner, logger, timeout_seconds=planner_timeout)
             if not topics_path.is_file():
                 logger.warning(

@@ -14,14 +14,27 @@ CATEGORY_TABS = (
 class HuntLabWarmEditorialTests(unittest.TestCase):
     def test_plugin_loads_a_versioned_local_stylesheet(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
-        self.assertIn("Plugin Name: HuntLab Warm Editorial Theme", php)
+        self.assertIn("Plugin Name: Hunt News Warm Editorial Theme", php)
         self.assertIn("wp_enqueue_style", php)
         self.assertIn("assets/warm-editorial.css", php)
         self.assertIn("filemtime", php)
         self.assertIn("huntlab-warm-editorial-late-overrides", php)
         self.assertIn("add_action( 'wp_head'", php)
         self.assertIn("huntlab_warm_editorial_home_intro", php)
-        self.assertIn("복잡한 기술을", php)
+        self.assertIn("복잡한 변화가", php)
+        self.assertIn("hunt-news-life-impact-hero.webp", php)
+        self.assertIn("뉴스를 읽고도 남는 세 가지", php)
+        self.assertIn("'label'       => '경제'", php)
+        self.assertIn("'label'       => '사회'", php)
+        self.assertIn("Hunt News 콘텐츠 원칙", php)
+        self.assertIn("hunt_news_translate_archive_labels", php)
+        self.assertIn("hunt_news_remove_legacy_category_hero", php)
+        self.assertIn("remove_action( 'kadence_hero_header', 'Kadence\\\\hero_title' )", php)
+        self.assertIn("'Read More'       => '더 읽기'", php)
+        self.assertIn("'Continue'        => '계속 읽기'", php)
+        self.assertIn("'Page navigation' => '페이지 탐색'", php)
+        self.assertIn("'Similar Posts'   => '비슷한 글'", php)
+        self.assertIn("'Comment *'              => '댓글 *'", php)
         self.assertIn("is_home() || is_front_page() || is_category()", php)
 
     def test_palette_keeps_warm_surfaces_and_accessible_ink(self):
@@ -32,14 +45,15 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("--huntlab-terracotta: #a95f49", css)
         self.assertIn(".huntlab-category-tabs__link.is-active", css)
         self.assertIn(".huntlab-home-intro", css)
-        self.assertIn(".huntlab-home-intro__dog", css)
+        self.assertIn(".hunt-news-reading-guide", css)
+        self.assertIn(".hunt-news-category-grid", css)
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)
 
     def test_code_blocks_keep_readable_text_and_horizontal_scroll(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 1.2.0", php)
+        self.assertIn("Version: 2.0.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -87,18 +101,24 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
 
         svg_text = svg.read_text(encoding="utf-8")
         self.assertIn('viewBox="0 0 96 96"', svg_text)
-        self.assertIn("HuntLab의 강아지 로고", svg_text)
+        self.assertIn("Hunt News의 강아지 로고", svg_text)
 
-    def test_category_tabs_include_huntlab_specialties(self):
+    def test_category_tabs_include_hunt_news_sections(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
         for slug in (
-            "ml-algorithms",
-            "harness-engineering",
-            "system-architecture",
+            "life",
+            "economy",
+            "real-estate",
+            "society",
+            "politics",
+            "culture-entertainment",
+            "it",
         ):
             self.assertIn(slug, php)
-        self.assertIn("0 === (int) $category->count", php)
-        self.assertIn("Version: 1.2.0", php)
+        self.assertNotIn("0 === (int) $category->count", php)
+        self.assertIn("Version: 2.0.0", php)
+        self.assertIn("hunt_news_redirect_legacy_categories", php)
+        self.assertIn("wp_safe_redirect( $target, 301 )", php)
         self.assertIn("width:100%;min-height:40px;flex-direction:column", php)
         self.assertIn("white-space:normal;overflow-wrap:anywhere", php)
 

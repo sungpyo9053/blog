@@ -62,6 +62,22 @@ def load_whereispost_shadow(path: Path | None) -> dict[str, Any]:
     for index, row in enumerate(rows, 1):
         if not isinstance(row, dict) or not required.issubset(row):
             raise SearchSignalError(f"whereispost row {index} is incomplete")
+        if not str(row["keyword"]).strip():
+            raise SearchSignalError(f"whereispost row {index} keyword is empty")
+        for field in ("pc_searches", "mobile_searches", "documents"):
+            if not isinstance(row[field], int) or row[field] < 0:
+                raise SearchSignalError(f"whereispost row {index} {field} is invalid")
+        if "total_searches" in row and row["total_searches"] != (
+            row["pc_searches"] + row["mobile_searches"]
+        ):
+            raise SearchSignalError(f"whereispost row {index} total_searches mismatch")
+        if "competition_ratio" in row and (
+            not isinstance(row["competition_ratio"], (int, float))
+            or row["competition_ratio"] < 0
+        ):
+            raise SearchSignalError(
+                f"whereispost row {index} competition_ratio is invalid"
+            )
     return {**payload, "status": "AVAILABLE", "rows": rows}
 
 

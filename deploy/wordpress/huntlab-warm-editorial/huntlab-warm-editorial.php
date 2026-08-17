@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: HuntLab Warm Editorial Theme
- * Description: Applies HuntLab's warm editorial palette without replacing the active WordPress theme.
- * Version: 1.2.0
- * Author: HuntLab
+ * Plugin Name: Hunt News Warm Editorial Theme
+ * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
+ * Version: 2.0.0
+ * Author: Hunt News
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -26,12 +26,63 @@ function huntlab_warm_editorial_enqueue_styles() {
 add_action( 'wp_enqueue_scripts', 'huntlab_warm_editorial_enqueue_styles', 100 );
 
 /**
+ * The Hunt News category hero owns the archive H1, so suppress Kadence's
+ * duplicate category hero before it renders server-side.
+ */
+function hunt_news_remove_legacy_category_hero() {
+	if ( is_category() ) {
+		remove_action( 'kadence_hero_header', 'Kadence\\hero_title' );
+	}
+}
+add_action( 'wp', 'hunt_news_remove_legacy_category_hero', 20 );
+
+/**
  * Return category-specific editorial context for the archive hero.
  *
  * @return array<string, array{label:string,title:string,description:string,promises:array<int,string>,image:string,alt:string}>
  */
 function huntlab_warm_editorial_category_intros() {
 	return array(
+		'life'                => array(
+			'label'       => '생활',
+			'title'       => '발표보다,<br>내 일상의 변화를.',
+			'description' => '교통, 주거, 건강, 교육과 소비 변화가 누구에게 언제 적용되고 지금 무엇을 확인해야 하는지 설명합니다.',
+			'promises'    => array( '적용 대상', '시행일', '내가 할 일' ),
+			'image'       => 'hot-issue.webp',
+			'alt'         => '공식 문서의 변화가 시간선을 따라 가정과 일상으로 전달되는 과정을 표현한 미니어처',
+		),
+		'politics'            => array(
+			'label'       => '정치',
+			'title'       => '진영보다,<br>쟁점과 생활 영향을.',
+			'description' => '법안과 정책 원문, 찬반의 근거와 전제를 나누고 내 권리·안전·세금에 무엇이 달라지는지 설명합니다.',
+			'promises'    => array( '원문', '찬반 근거', '생활 영향' ),
+			'image'       => 'society.webp',
+			'alt'         => '서로 다른 주장과 공식 문서가 검증 관문을 지나 시민 생활로 이어지는 정치 쟁점 미니어처',
+		),
+		'real-estate'         => array(
+			'label'       => '부동산',
+			'title'       => '전망보다,<br>내 계약과 주거를.',
+			'description' => '전월세, 청약, 대출 규제와 세금 변화가 누구에게 언제 적용되는지 조건별로 설명합니다.',
+			'promises'    => array( '계약 조건', '현금흐름', '거주 선택' ),
+			'image'       => 'economy.webp',
+			'alt'         => '주택과 계약서, 대출 계산표가 가계의 현금흐름으로 연결되는 부동산 변화 미니어처',
+		),
+		'culture-entertainment' => array(
+			'label'       => '문화·엔터',
+			'title'       => '화제보다,<br>내 소비와 선택을.',
+			'description' => '구독료, 티켓, 계약과 플랫폼 변화가 보고 듣고 즐기는 방식에 어떤 차이를 만드는지 설명합니다.',
+			'promises'    => array( '요금', '계약', '소비 선택' ),
+			'image'       => 'build-log.webp',
+			'alt'         => '콘텐츠 카드와 티켓, 플랫폼 장치가 소비자의 선택으로 이어지는 문화 엔터 미니어처',
+		),
+		'it'                  => array(
+			'label'       => 'IT',
+			'title'       => '기술 이름보다,<br>내가 겪는 변화를.',
+			'description' => 'AI와 플랫폼, 앱과 서비스의 작동 원리를 사용자 행동에서 시작해 쉬운 말로 설명합니다.',
+			'promises'    => array( '사용자 경험', '작동 원리', '선택 기준' ),
+			'image'       => 'tech.webp',
+			'alt'         => '휴대전화와 서비스 모듈, 데이터 흐름이 연결된 IT 생활 변화 미니어처',
+		),
 		'ml-algorithms'       => array(
 			'label'       => 'ML Algorithms',
 			'title'       => '점수보다,<br>의사결정 구조를.',
@@ -81,7 +132,7 @@ function huntlab_warm_editorial_category_intros() {
 			'alt'         => '변경 전후 모듈과 공구, 로그 카드, 측정 계기가 놓인 개발 작업대 도자기 미니어처',
 		),
 		'economy'             => array(
-			'label'       => 'Economy',
+			'label'       => '경제',
 			'title'       => '숫자보다,<br>생활에 닿는 의미를.',
 			'description' => '공식 통계의 기준과 맥락을 확인하고, 숫자의 변화가 가계와 기업의 선택에 미치는 영향을 설명합니다.',
 			'promises'    => array( '공식 통계', '맥락', '생활 영향' ),
@@ -89,7 +140,7 @@ function huntlab_warm_editorial_category_intros() {
 			'alt'         => '경제 데이터 토큰이 가계와 기업, 공공 부문을 거쳐 측정 계기로 흐르는 도자기 미니어처',
 		),
 		'society'             => array(
-			'label'       => 'Society',
+			'label'       => '사회',
 			'title'       => '이슈보다,<br>제도와 실제 영향을.',
 			'description' => '공식 자료와 적용 조건을 확인하고, 제도의 변화가 사람과 일상에 닿는 과정을 정리합니다.',
 			'promises'    => array( '공식 자료', '사실 확인', '실제 적용' ),
@@ -131,11 +182,11 @@ function huntlab_warm_editorial_home_intro() {
 	?>
 	<section id="huntlab-home-intro" class="huntlab-home-intro<?php echo $is_category ? ' huntlab-home-intro--category' : ''; ?>" aria-labelledby="huntlab-home-intro-title">
 		<div class="huntlab-home-intro__copy">
-			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'HuntLab · ' . $intro['label'] ) : 'HuntLab · 직접 해보고 기록하는 기술 블로그'; ?></p>
-			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '복잡한 기술을,<br>오래 써먹을 수 있게.'; ?></h1>
-			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '실행 결과와 실패 기록을 바탕으로 AI, 개발, 클라우드 운영에서 실제로 필요한 판단을 정리합니다.'; ?></p>
-			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'HuntLab 콘텐츠 원칙' ); ?>">
-				<?php foreach ( $is_category ? $intro['promises'] : array( '직접 실행', '실패도 기록', '운영 판단까지' ) as $promise ) : ?>
+			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt News · 내 생활을 바꾸는 변화 설명서'; ?></p>
+			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '복잡한 변화가,<br>내 생활에 닿는 순간.'; ?></h1>
+			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '정책, 경제, 부동산, 사회, 정치, 문화·엔터와 IT의 변화를 어려운 말 대신 실제 대상·금액·시점·내가 할 일로 설명합니다.'; ?></p>
+			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'Hunt News 콘텐츠 원칙' ); ?>">
+				<?php foreach ( $is_category ? $intro['promises'] : array( '얼마나 달라지나', '언제부터 적용되나', '나는 무엇을 하나' ) as $promise ) : ?>
 					<li><?php echo esc_html( $promise ); ?></li>
 				<?php endforeach; ?>
 			</ul>
@@ -145,12 +196,9 @@ function huntlab_warm_editorial_home_intro() {
 				<img src="<?php echo esc_url( plugins_url( 'assets/categories/' . $intro['image'], __FILE__ ) ); ?>" width="1000" height="563" alt="<?php echo esc_attr( $intro['alt'] ); ?>" loading="eager" decoding="async" fetchpriority="high">
 			</figure>
 		<?php else : ?>
-			<div class="huntlab-home-intro__dog" aria-hidden="true">
-				<span class="huntlab-home-intro__dog-body"></span>
-				<span class="huntlab-home-intro__dog-head"></span>
-				<span class="huntlab-home-intro__dog-ear"></span>
-				<span class="huntlab-home-intro__dog-tail"></span>
-			</div>
+			<figure class="huntlab-home-intro__visual huntlab-home-intro__visual--home">
+				<img src="<?php echo esc_url( plugins_url( 'assets/hunt-news-life-impact-hero.webp', __FILE__ ) ); ?>" width="1600" height="900" alt="정책과 경제 변화가 휴대전화, 달력, 지갑, 교통과 주유 같은 일상으로 이어지는 미니어처" loading="eager" decoding="async" fetchpriority="high">
+			</figure>
 		<?php endif; ?>
 	</section>
 	<script id="huntlab-home-intro-position">
@@ -159,6 +207,54 @@ function huntlab_warm_editorial_home_intro() {
 	<?php
 }
 add_action( 'wp_body_open', 'huntlab_warm_editorial_home_intro', 25 );
+
+/**
+ * Explain the editorial promise and offer category-first discovery on home.
+ */
+function hunt_news_home_sections() {
+	if ( is_admin() || ! ( is_home() || is_front_page() ) ) {
+		return;
+	}
+
+	$categories = array(
+		'life'                  => array( '생활', '교통·주거·건강·교육·소비' ),
+		'economy'               => array( '경제', '금리·물가·세금·보험료' ),
+		'real-estate'           => array( '부동산', '전월세·청약·대출·세금' ),
+		'society'               => array( '사회', '노동·복지·안전·제도' ),
+		'politics'              => array( '정치', '법안·정책·찬반 쟁점' ),
+		'culture-entertainment' => array( '문화·엔터', '콘텐츠·공연·플랫폼·계약' ),
+		'it'                    => array( 'IT', 'AI·앱·플랫폼·작동 원리' ),
+	);
+	?>
+	<section id="hunt-news-reading-guide" class="hunt-news-reading-guide" aria-labelledby="hunt-news-reading-guide-title">
+		<h2 id="hunt-news-reading-guide-title">뉴스를 읽고도 남는 세 가지</h2>
+		<div class="hunt-news-reading-guide__steps">
+			<article><span>1</span><h3>무엇이 바뀌었나</h3><p>발표 제목이 아니라 실제 변경점과 현재 단계를 확인합니다.</p></article>
+			<article><span>2</span><h3>나에게 무엇이 달라지나</h3><p>대상, 금액, 시점과 예외를 내 생활 조건에 맞춰 설명합니다.</p></article>
+			<article><span>3</span><h3>지금 무엇을 하면 되나</h3><p>확인할 문서, 신청·선택 시점과 아직 기다려야 할 부분을 나눕니다.</p></article>
+		</div>
+		<h2 class="hunt-news-reading-guide__categories-title">분야별로 보기</h2>
+		<nav class="hunt-news-category-grid" aria-label="Hunt News 분야별 글">
+			<?php foreach ( $categories as $slug => $data ) :
+				$category = get_category_by_slug( $slug );
+				if ( ! $category ) {
+					continue;
+				}
+				$url = get_category_link( $category->term_id );
+				if ( is_wp_error( $url ) ) {
+					continue;
+				}
+				?>
+				<a href="<?php echo esc_url( $url ); ?>"><strong><?php echo esc_html( $data[0] ); ?></strong><span><?php echo esc_html( $data[1] ); ?></span><em><?php echo esc_html( (string) $category->count ); ?>개</em></a>
+			<?php endforeach; ?>
+		</nav>
+	</section>
+	<script id="hunt-news-home-sections-position">
+	document.addEventListener('DOMContentLoaded',function(){var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(section&&main&&main.parentNode){main.parentNode.insertBefore(section,main);var heading=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>새로 확인한 변화</p><h2>지금 알아둘 이야기</h2>';main.parentNode.insertBefore(heading,main);}});
+	</script>
+	<?php
+}
+add_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
 
 /**
  * The existing HuntLab navigation and brand plugins print their styles inline.
@@ -176,3 +272,37 @@ function huntlab_warm_editorial_late_brand_overrides() {
 	<?php
 }
 add_action( 'wp_head', 'huntlab_warm_editorial_late_brand_overrides', 100 );
+
+/**
+ * Localize the small set of Kadence archive labels still visible in English.
+ *
+ * @param string $translated Translated text.
+ * @param string $text       Source text.
+ * @return string
+ */
+function hunt_news_translate_archive_labels( $translated, $text ) {
+	$labels = array(
+		'By'              => '작성자',
+		'Read More'       => '더 읽기',
+		'Continue'        => '계속 읽기',
+		'Page navigation' => '페이지 탐색',
+		'Next Page'       => '다음 페이지',
+		'Previous Page'   => '이전 페이지',
+		'Open menu'       => '메뉴 열기',
+		'Previous'        => '이전 글',
+		'Next'            => '다음 글',
+		'Similar Posts'   => '비슷한 글',
+		'Post Tags:'      => '글 태그:',
+		'Go to last slide'       => '마지막 슬라이드로 이동',
+		'Select a slide to show' => '표시할 슬라이드 선택',
+		'Go to slide %d'         => '%d번 슬라이드로 이동',
+		'Leave a comment...'     => '댓글을 남겨주세요…',
+		'Comment *'              => '댓글 *',
+		'Name'                   => '이름',
+		'Email'                  => '이메일',
+		'Website'                => '웹사이트',
+	);
+
+	return isset( $labels[ $text ] ) ? $labels[ $text ] : $translated;
+}
+add_filter( 'gettext', 'hunt_news_translate_archive_labels', 20, 2 );

@@ -15,16 +15,13 @@ class SEOAgentContractTests(unittest.TestCase):
     def test_topic_planner_has_editor_and_search_contract(self):
         text = read("agents/topic-planner-agent.md")
         for category in (
-            "Tech",
-            "AI",
-            "ML Algorithms",
-            "Harness Engineering",
-            "System Architecture",
-            "Economy",
-            "Society",
-            "Politics",
-            "Hot Issue",
-            "Build Log",
+            "생활",
+            "경제",
+            "부동산",
+            "사회",
+            "정치",
+            "문화·엔터",
+            "IT",
         ):
             self.assertIn(category, text)
         self.assertIn("전체 최소 35개", text)
@@ -36,10 +33,12 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("demand_signal_source", text)
         self.assertIn("observed_problem_phrase", text)
         self.assertIn("user_action", text)
-        self.assertIn("Isolation Forest 같은 한 알고리즘에 편중하지 않는다", text)
-        self.assertIn("베이스라인과 대안", text)
-        self.assertIn("Velog 공개 트렌딩", text)
-        self.assertIn("검색 수요` 점수에 최대 1점", text)
+        self.assertIn("Whereispost", text)
+        self.assertIn("PC·모바일·총 검색량", text)
+        self.assertIn("문서 수", text)
+        self.assertIn("경쟁 비율", text)
+        self.assertIn("생활 영향", text)
+        self.assertIn("공식 원문", text)
         self.assertIn("TOP2로 선정해 실제", text)
         for field in (
             "problem_origin",
@@ -79,15 +78,15 @@ class SEOAgentContractTests(unittest.TestCase):
             self.assertIn(field, text)
         self.assertIn("소문자 영문·숫자·하이픈", text)
 
-    def test_style_guide_and_agents_use_technical_blog_contract(self):
+    def test_style_guide_and_agents_use_hunt_news_contract(self):
         style = read("guides/style-guide.md")
         writer = read("agents/writer.md")
         reviewer = read("agents/reviewer.md")
         for field in (
-            "HuntLab WordPress 기술 블로그 문체 가이드",
-            "기술·AI 제품 또는 아키텍처 해설",
-            "설치·튜토리얼·장애 해결",
-            "Build Log·개발 경험",
+            "Hunt News WordPress 설명형 콘텐츠 문체 가이드",
+            "복잡한 변화가",
+            "돈·시간·일·권리·소비·선택",
+            "그래서 내 생활에 무엇이 달라지는가",
             "검증 범위와 판단",
             "AI가 쓴 티를 줄이는 규칙",
             "한눈에 보기는 선택 사항",
@@ -127,6 +126,7 @@ class SEOAgentContractTests(unittest.TestCase):
             "ai_ml_experiment",
             "build_log_operations",
             "current_affairs_policy",
+            "life_impact_explainer",
         ):
             self.assertIn(content_type, planner)
             self.assertIn(content_type, index)
@@ -273,7 +273,7 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
 
     def test_editorial_policy_exposes_author_and_verification_contract(self):
         text = read("guides/editorial-policy.md")
-        self.assertIn("HuntLab 편집팀", text)
+        self.assertIn("Hunt News 편집팀", text)
         self.assertIn("작성자와 운영 환경", text)
         self.assertIn("Reviewer 승인", text)
 
@@ -315,10 +315,13 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
             self.assertIn(term, writer)
             self.assertIn(term, reviewer)
 
-    def test_topic_planner_prioritizes_core_categories(self):
+    def test_topic_planner_prioritizes_life_impact_without_category_quota(self):
         text = read("agents/topic-planner-agent.md")
-        self.assertIn("70% 이상", text)
-        self.assertIn("TOP2의\n최대 한 자리", text)
+        self.assertIn("생활, 경제, 부동산, 사회, 정치, 문화·엔터", text)
+        self.assertIn("카테고리별 의무 할당을 두지 않는다", text)
+        self.assertIn("Whereispost 수요", text)
+        self.assertIn("공식\n원문", text)
+        self.assertNotIn("TOP2의\n최대 한 자리", text)
 
 
 if __name__ == "__main__":
