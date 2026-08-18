@@ -35,11 +35,11 @@ Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/sour
 `생활`, `경제`, `부동산`, `사회`, `정치`, `문화·엔터`, `IT`를 활성 편집 범위로
 사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
 TOP2는 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를
-기준으로 선정합니다. 모든 신규 후보는 Whereispost Keyword Master의 PC·모바일
-검색량, 총 검색량, 문서 수와 경쟁 비율을 기록해야 합니다. `verified` 상태이면서
-월 총 검색량이 100회 이상인 후보만 TOP2에 들어갈 수 있으며, 안전·시의성 이슈도
-이 하한선을 임의로 우회하지 않습니다. 검색량이 충분해도 생활 영향이나 공식 원문이
-부족하면 제외합니다.
+기준으로 선정합니다. Whereispost 수집기는 2시간마다 소량의 키워드를 정상 브라우저
+화면으로 조회해 PC·모바일 검색량, 총 검색량, 문서 수와 경쟁 비율을 캐시에 누적합니다.
+광고 잠금이나 인증 실패가 발생하면 우회하지 않고 마지막 정상 캐시를 보존합니다.
+Planner는 캐시를 수요 점수의 참고값으로만 사용하며 캐시가 없거나 100회 미만이어도
+공식 원문, 시의성, 생활 영향과 비중복 검색 의도가 충분하면 TOP2로 선정할 수 있습니다.
 
 Planner는 Velog 공개 트렌딩과 기술 태그에서 반복되는 기술·언어·시스템
 아키텍처 관심사를 한국 개발자 수요의 보조 신호로 참고합니다. 제목이나 구성을
@@ -94,7 +94,9 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 다음 systemd unit을 사용합니다.
 
 - `deploy/huntlab-daily-pipeline.service`
-- `deploy/huntlab-daily-pipeline.timer`: 매일 07:30 KST
+- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Whereispost 캐시 참고
+- `deploy/huntlab-whereispost-collector.service`
+- `deploy/huntlab-whereispost-collector.timer`: 00:30부터 2시간 간격, 회당 3개 누적 수집
 - `deploy/huntlab-daily-retry.service`
 - `deploy/huntlab-daily-retry.timer`: 매일 17:00 KST 실패 점검
 - `deploy/huntlab-analytics-optimizer.service`
@@ -109,11 +111,11 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 
 17시 재시도는 당일 실패 실행을 점검하고 안전하게 재개할 수 있는 경우만
 처리합니다. 정상 발행된 글을 다시 발행하지 않습니다.
-두 뉴스 타이머는 `Persistent=false`로 운영해 서버 재시작이나 타이머 재배포가
+뉴스·수집 타이머는 `Persistent=false`로 운영해 서버 재시작이나 타이머 재배포가
 편집 창을 놓친 기사를 임의의 늦은 시간에 즉시 발행하지 않도록 합니다.
 
 Analytics Optimizer는 Search Console 데이터 지연과 API 호출 비용을 고려해
-매일 01:00 KST에 한 번 실행합니다. 생성된 최신 리포트는 같은 날 07:30
+매일 01:00 KST에 한 번 실행합니다. 생성된 최신 리포트는 같은 날 02:00
 Topic Planner가 읽습니다.
 
 ## Analytics·SEO Lifecycle

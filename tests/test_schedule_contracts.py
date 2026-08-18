@@ -9,12 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ScheduleContractTests(unittest.TestCase):
-    def test_production_pipeline_runs_at_0730_kst(self):
+    def test_production_pipeline_runs_at_0200_kst(self):
         timer = (ROOT / "deploy/huntlab-daily-pipeline.timer").read_text(
             encoding="utf-8"
         )
-        self.assertIn("OnCalendar=*-*-* 07:30:00 Asia/Seoul", timer)
-        self.assertNotIn("OnCalendar=*-*-* 02:00:00", timer)
+        self.assertIn("OnCalendar=*-*-* 02:00:00 Asia/Seoul", timer)
+        self.assertNotIn("OnCalendar=*-*-* 07:30:00", timer)
         self.assertIn("Persistent=false", timer)
 
     def test_retry_runs_at_1700_kst(self):
@@ -24,10 +24,26 @@ class ScheduleContractTests(unittest.TestCase):
         self.assertIn("OnCalendar=*-*-* 17:00:00 Asia/Seoul", timer)
         self.assertIn("Persistent=false", timer)
 
+    def test_whereispost_collector_runs_every_two_hours_at_minute_30(self):
+        timer = (ROOT / "deploy/huntlab-whereispost-collector.timer").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "OnCalendar=*-*-* 00,02,04,06,08,10,12,14,16,18,20,22:30:00 Asia/Seoul",
+            timer,
+        )
+        self.assertIn("Persistent=false", timer)
+
+        service = (ROOT / "deploy/huntlab-daily-pipeline.service").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--use-whereispost-cache", service)
+        self.assertNotIn("--require-whereispost-cache", service)
+
     def test_legacy_macos_schedule_matches_production_start(self):
         with (ROOT / "deploy/com.huntlab.daily-pipeline.plist").open("rb") as handle:
             schedule = plistlib.load(handle)["StartCalendarInterval"]
-        self.assertEqual(schedule, {"Hour": 7, "Minute": 30})
+        self.assertEqual(schedule, {"Hour": 2, "Minute": 0})
 
 
 if __name__ == "__main__":

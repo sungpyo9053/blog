@@ -86,6 +86,19 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             self.assertIn("수요 근거로만 사용", planner.prompt)
             self.assertIn("공식 원문 검증을 별도로 통과", planner.prompt)
 
+    def test_cache_mode_forbids_live_whereispost_lookup(self):
+        planner = planner_stage(
+            "",
+            "run-cache",
+            Path("/tmp/topics.md"),
+            '{"checked_at":"2026-08-17T15:00:00+09:00","rows":[]}',
+            whereispost_cache_mode=True,
+        )
+
+        self.assertIn("수요 캐시만 보조 신호로 소비", planner.prompt)
+        self.assertIn("Whereispost 웹사이트를 열거나 실시간으로 다시 조회하지 마세요", planner.prompt)
+        self.assertIn("related_keywords", planner.prompt)
+
     def test_humanize_on_stays_enabled_until_cutoff(self):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary) / "humanize.json"
@@ -411,12 +424,11 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("공식 1차 자료", planner.prompt)
         self.assertIn("Velog 신호 없음으로 계속 진행", planner.prompt)
 
-    def test_planner_requires_whereispost_for_every_new_top2(self):
+    def test_planner_uses_whereispost_as_optional_demand_signal(self):
         planner = planner_stage("", "run-whereispost-all", Path("/tmp/topics.md"))
-        self.assertIn("모든 후보는 Whereispost 키워드마스터", planner.prompt)
-        self.assertIn("수요가 확인되지 않은 후보는 TOP2로 선정하지 마세요", planner.prompt)
+        self.assertIn("Harness가 제공한 Whereispost 수요 캐시", planner.prompt)
+        self.assertIn("절대 탈락 조건은 아닙니다", planner.prompt)
         self.assertIn("whereispost_total_searches", planner.prompt)
-        self.assertIn("총 검색량 100회 미만 후보", planner.prompt)
 
     def test_whereispost_total_searches_accepts_commas(self):
         self.assertEqual(
@@ -428,7 +440,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(PipelineError, "0 이상의 정수"):
             parse_whereispost_total_searches("약 100회", "검색량 후보")
 
-    def test_active_top2_rejects_total_searches_below_minimum(self):
+    def test_active_top2_allows_unavailable_or_low_cache_signal(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "topics.md"
             candidates = []
@@ -478,8 +490,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(PipelineError, "최소 100회"):
-                parse_topic_plan(path)
+            parsed = parse_topic_plan(path)
+            self.assertEqual(parsed[0]["whereispost_total_searches"], 99)
 
     def test_planner_broadens_ml_beyond_isolation_forest(self):
         planner = planner_stage("", "run-ml-breadth", Path("/tmp/topics.md"))

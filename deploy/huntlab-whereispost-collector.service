@@ -1,5 +1,5 @@
 [Unit]
-Description=HuntLab daily blog content pipeline
+Description=Collect bounded Whereispost demand signals for Hunt News
 Wants=network-online.target
 After=network-online.target
 
@@ -8,7 +8,6 @@ Type=oneshot
 User=ubuntu
 WorkingDirectory=/home/ubuntu/apps/huntlab-blog
 Environment=HOME=/home/ubuntu
-Environment=CODEX_HOME=/home/ubuntu/.codex
 Environment=PATH=/home/ubuntu/apps/huntlab-blog/.venv/bin:/usr/local/bin:/usr/bin:/bin
 UMask=0077
 NoNewPrivileges=true
@@ -21,9 +20,6 @@ RestrictSUIDSGID=true
 LockPersonality=true
 RestrictRealtime=true
 SystemCallArchitectures=native
-ExecStart=/home/ubuntu/apps/huntlab-blog/.venv/bin/python /home/ubuntu/apps/huntlab-blog/scripts/run_daily_pipeline.py --use-whereispost-cache
-StandardOutput=append:/home/ubuntu/apps/huntlab-blog/logs/systemd-daily.out.log
-StandardError=append:/home/ubuntu/apps/huntlab-blog/logs/systemd-daily.err.log
-
-[Install]
-WantedBy=multi-user.target
+ExecStart=/usr/bin/xvfb-run -a /home/ubuntu/apps/huntlab-blog/.venv/bin/python /home/ubuntu/apps/huntlab-blog/scripts/collect_whereispost_cache.py --batch-size 3 --show-browser
+StandardOutput=append:/home/ubuntu/apps/huntlab-blog/logs/systemd-whereispost.out.log
+StandardError=append:/home/ubuntu/apps/huntlab-blog/logs/systemd-whereispost.err.log

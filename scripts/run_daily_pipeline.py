@@ -25,6 +25,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from publisher.frontmatter import FrontmatterError, load_document
+from scripts.manage_whereispost_cache import DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE
 from scripts.search_signal_providers import SearchSignalError, load_whereispost_shadow
 
 
@@ -86,7 +87,6 @@ LEGACY_CONTENT_TYPE_BY_CATEGORY = {
     "IT": "tutorial_troubleshooting",
 }
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
-MIN_WHEREISPOST_TOTAL_SEARCHES = 100
 RECENT_STYLE_LIMIT = 5
 REVIEW_STATUS_PATTERN = re.compile(
     r"(?im)^\s*(?:-\s*)?(?:status|decision)\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
@@ -507,17 +507,6 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
                 f"{title}: TOP2 제목에 primary_keyword가 포함되어야 합니다: "
                 f"{primary_keyword}"
             )
-        if candidates[title]["category"] in ACTIVE_EDITOR_CATEGORIES:
-            if candidates[title].get("whereispost_status", "").strip() != "verified":
-                raise PipelineError(
-                    f"{title}: TOP2는 Whereispost 수요 확인이 완료되어야 합니다."
-                )
-            total_searches = candidates[title]["whereispost_total_searches"]
-            if total_searches < MIN_WHEREISPOST_TOTAL_SEARCHES:
-                raise PipelineError(
-                    f"{title}: TOP2 Whereispost 총 검색량은 최소 "
-                    f"{MIN_WHEREISPOST_TOTAL_SEARCHES}회여야 합니다: {total_searches}"
-                )
     tracks = [candidates[title].get("selection_track", "").strip() for title in topics]
     if any(tracks):
         if set(tracks) != {"public_signal", "huntlab_core"}:
@@ -1283,6 +1272,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--use-whereispost-cache",
+        action="store_true",
+        help=(
+            "Whereispost 캐시를 보조 수요 신호로 사용하고 실시간 조회는 금지. "
+            "캐시가 없거나 올바르지 않아도 파이프라인은 계속 진행"
+        ),
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=3600,
@@ -1433,7 +1430,7 @@ def read_whereispost_observation(path: Path | None) -> str:
         payload = load_whereispost_shadow(path)
     except SearchSignalError as exc:
         raise PipelineError(f"Whereispost 관측 파일이 올바르지 않습니다: {exc}") from exc
-    rows = payload.get("rows", [])
+    rows = [row for row in payload.get("rows", []) if not row.get("consumed", False)]
     if not rows:
         raise PipelineError("Whereispost 관측 파일에 rows가 없습니다.")
     for index, row in enumerate(rows, 1):
@@ -1454,6 +1451,7 @@ def planner_stage(
     run_id: str,
     topics_path: Path,
     whereispost_observation: str = "",
+    whereispost_cache_mode: bool = False,
 ) -> Stage:
     return Stage(
         "Topic Planner Agent",
@@ -1478,6 +1476,16 @@ def planner_stage(
                 if whereispost_observation
                 else ""
             )
+            + (
+                "이 실행은 백그라운드 수집기가 누적한 30일 평균 수요 캐시만 보조 신호로 소비합니다. "
+                "Whereispost 웹사이트를 열거나 실시간으로 다시 조회하지 마세요. 캐시에 있는 정확한 "
+                "keyword 행만 verified로 사용할 수 있고 related_keywords는 별도 조회 없이 verified로 "
+                "확장할 수 없습니다. 캐시에 없는 후보는 whereispost_status=unavailable로 기록하되, "
+                "그 이유만으로 제외하지 마세요. 캐시는 검색 수요 점수의 참고값일 뿐이며 공개 글·Draft 중복, "
+                "공식 원문, 시의성과 생활 영향이 더 강한 후보를 TOP2로 선정하세요. "
+                if whereispost_cache_mode
+                else ""
+            )
             + "Hunt News는 복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명하는 사이트입니다. "
             "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 생활, 경제, 부동산, 사회, 정치, "
             "문화·엔터, IT를 활성 카테고리로 사용하세요. 생활 영향 후보는 "
@@ -1491,14 +1499,14 @@ def planner_stage(
             "월급 400만원 직장인은 얼마나 더 내나', '기준금리 동결'이 아니라 '기준금리 동결되면 "
             "내 주담대 금리는 언제 내려가나'처럼 구체화합니다. 숫자와 시점은 공식 산식과 원문으로 "
             "검증할 수 있을 때만 사용하세요. "
-            "모든 후보는 Whereispost 키워드마스터(https://whereispost.com/keyword)를 먼저 확인해 PC·모바일·총 "
-            "검색량, 문서 수, 경쟁 비율과 관련 키워드를 whereispost_metrics에 기록하고, 총 검색량은 "
-            "쉼표 없는 정수 whereispost_total_searches로도 별도 기록하세요. 총 검색량 100회 미만 후보는 "
-            "TOP2로 선정하지 마세요. 접근할 수 "
-            "없거나 결과가 잠겨 있으면 값을 추정하지 말고 whereispost_status=unavailable로 기록하세요. "
+            "Harness가 제공한 Whereispost 수요 캐시에 동일한 primary_keyword가 있으면 PC·모바일·총 검색량, 문서 수, "
+            "경쟁 비율을 whereispost_metrics에 기록하고 총 검색량은 쉼표 없는 정수 "
+            "whereispost_total_searches로도 기록하세요. 동일 키워드가 없으면 값을 추정하지 말고 "
+            "whereispost_status=unavailable, whereispost_total_searches=0으로 기록하세요. 캐시 부재나 100회 미만은 "
+            "감점 요소이지만 TOP2의 절대 탈락 조건은 아닙니다. "
             "Whereispost는 수요 선별 신호일 뿐 정책·가격·날짜의 사실 근거가 아니며, 핵심 사실은 정부, "
             "공공기관, 중앙은행, 법령, 공시 또는 당사자 원문으로 다시 확인하세요. "
-            "Whereispost에서 수요가 확인되지 않은 후보는 TOP2로 선정하지 마세요. 생활 영향 후보에는 affected_reader, life_impact, effective_date, reader_action, "
+            "생활 영향 후보에는 affected_reader, life_impact, effective_date, reader_action, "
             "whereispost_status, whereispost_metrics, whereispost_total_searches를 반드시 기록하세요. "
             "정치 글은 진영 논평보다 법·정책·"
             "예산·권리의 생활 영향을 다루세요. 폐지·신설·개편처럼 찬반이 갈리면 현행 제도와 실제 변경안, "
@@ -1535,7 +1543,7 @@ def planner_stage(
             "TOP2 자리를 미리 배정하지 마세요. 적합한 후보가 없으면 할당량을 채우기 위해 억지로 만들지 "
             "말고 전체 후보 중 품질이 가장 높은 주제를 선택하세요. "
             "성공 글의 제목이나 본문 구성을 복제하지 말고 검색 의도와 문제 유형만 후속 후보 근거로 사용하세요. "
-            "TOP2는 카테고리 할당량으로 채우지 말고 Whereispost 수요, 생활 영향의 구체성, 공식 원문, "
+            "TOP2는 카테고리 할당량으로 채우지 말고 캐시 수요 신호를 참고하되 생활 영향의 구체성, 공식 원문, "
             "비중복 검색 의도와 설명 가능성이 가장 강한 후보를 고르세요. 근거가 부족하면 두 편을 "
             "억지로 채우지 말고 Planner를 실패시키세요. "
             "후보마다 기존 공개 글과 검색 의도가 겹치는지 검사하고 "
@@ -1603,14 +1611,27 @@ def main() -> int:
             run_directory = RUNS_DIR / run_id
             run_directory.mkdir(parents=True, exist_ok=False)
             topics_path = run_directory / "topics.md"
-            whereispost_observation = read_whereispost_observation(
-                args.whereispost_observation
-            )
+            observation_path = args.whereispost_observation
+            if args.use_whereispost_cache and observation_path is None:
+                observation_path = DEFAULT_WHEREISPOST_CACHE
+            try:
+                whereispost_observation = read_whereispost_observation(
+                    observation_path
+                )
+            except PipelineError as exc:
+                if not args.use_whereispost_cache:
+                    raise
+                logger.warning(
+                    "whereispost_cache status=UNAVAILABLE continuing=true reason=%s",
+                    exc,
+                )
+                whereispost_observation = ""
             planner = planner_stage(
                 args.keywords,
                 run_id,
                 topics_path,
                 whereispost_observation,
+                whereispost_cache_mode=args.use_whereispost_cache,
             )
             logger.info(
                 "pipeline event=start run_id=%s run_directory=%s",

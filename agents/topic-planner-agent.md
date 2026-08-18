@@ -161,20 +161,20 @@ HuntLab의 실제 프로젝트와 운영 경험을 적극 활용한다. ReviewDr
 
 ## Whereispost 수요 선별 계약
 
-모든 신규 후보는 분야와 글 유형에 상관없이 Whereispost 키워드마스터
-(`https://whereispost.com/keyword`)를 먼저 확인한다. PC 검색량, 모바일 검색량,
-총 검색량, 문서 수, 경쟁 비율과 관련
-키워드를 관측 날짜와 함께 기록한다. 이 값은 검색 수요와 제목 표현을 고르는 보조
-신호이며 정책·가격·시점의 사실 근거가 아니다.
+백그라운드 수집기가 제공한 Whereispost 키워드마스터 캐시를 검색 수요와 제목 표현을
+고르는 보조 신호로 사용한다. 캐시에 동일한 primary_keyword가 있으면 PC 검색량,
+모바일 검색량, 총 검색량, 문서 수, 경쟁 비율을 관측 날짜와 함께 기록한다. 이 값은
+정책·가격·시점의 사실 근거가 아니다.
 
-접근할 수 없거나 광고·로그인·유료 기능에 막히면 우회하거나 추정하지 않고
-`whereispost_status: unavailable`로 기록한다. 검색량이 많아도 생활 영향을
-구체화할 수 없거나 공식 원문이 부족하면 TOP2에서 제외한다.
+캐시에 동일한 키워드가 없으면 직접 사이트를 열거나 값을 추정하지 않고
+`whereispost_status: unavailable`, `whereispost_total_searches: 0`으로 기록한다.
+검색량이 많아도 생활 영향을 구체화할 수 없거나 공식 원문이 부족하면 TOP2에서 제외한다.
 
 모든 후보는 `whereispost_status`와 `whereispost_metrics`를 반드시 기록하며,
 총 검색량은 쉼표 없는 정수 `whereispost_total_searches`로도 별도 기록한다.
-TOP2는 `whereispost_status: verified`이고 `whereispost_total_searches`가 100 이상인
-후보만 허용한다. 검색량 하한선은 시의성·안전 이슈를 이유로 임의 우회하지 않는다.
+캐시에서 총 검색량 100 이상이 확인된 후보는 수요 점수에서 우대한다. 캐시가 없거나
+100회 미만인 사실은 감점 요소지만 절대 탈락 조건은 아니다. 공식 원문, 시의성,
+생활 영향과 비중복 검색 의도가 충분하면 TOP2로 선정할 수 있다.
 `life_impact_explainer`
 후보는 다음 생활 영향 필드도 반드시 기록한다.
 
