@@ -94,9 +94,9 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 다음 systemd unit을 사용합니다.
 
 - `deploy/huntlab-daily-pipeline.service`
-- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST
+- `deploy/huntlab-daily-pipeline.timer`: 매일 07:30 KST
 - `deploy/huntlab-daily-retry.service`
-- `deploy/huntlab-daily-retry.timer`: 매일 12:00 KST 실패 점검
+- `deploy/huntlab-daily-retry.timer`: 매일 17:00 KST 실패 점검
 - `deploy/huntlab-analytics-optimizer.service`
 - `deploy/huntlab-analytics-optimizer.timer`: 매일 01:00 KST
 
@@ -107,11 +107,11 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 .venv/bin/playwright install --with-deps chromium
 ```
 
-12시 재시도는 당일 실패 실행을 점검하고 안전하게 재개할 수 있는 경우만
+17시 재시도는 당일 실패 실행을 점검하고 안전하게 재개할 수 있는 경우만
 처리합니다. 정상 발행된 글을 다시 발행하지 않습니다.
 
 Analytics Optimizer는 Search Console 데이터 지연과 API 호출 비용을 고려해
-매일 01:00 KST에 한 번 실행합니다. 생성된 최신 리포트는 같은 날 02:00
+매일 01:00 KST에 한 번 실행합니다. 생성된 최신 리포트는 같은 날 07:30
 Topic Planner가 읽습니다.
 
 ## Analytics·SEO Lifecycle

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retry the daily pipeline at noon only when today's 02:00 run did not succeed."""
+"""Retry at 17:00 KST only when today's 07:30 editorial run did not succeed."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def choose_command(log_text: str) -> list[str] | None:
     if SUCCESS_PATTERN.search(log_text):
         return None
     # A manufactured Build Log is a planner classification error, not a
-    # resumable stage failure. Re-plan at noon after the strengthened gate.
+    # resumable stage failure. Re-plan at the 17:00 check after the strengthened gate.
     if "Build Log는 existing_work_record 근거만 허용합니다" in log_text:
         return [
             str(ROOT / ".venv/bin/python"),
