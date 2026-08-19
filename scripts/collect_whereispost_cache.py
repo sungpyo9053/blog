@@ -171,6 +171,27 @@ async def page_is_locked(page: Any) -> bool:
     return await page.get_by_text(LOCK_TEXT, exact=False).count() > 0
 
 
+async def submit_search(page: Any, keyword: str) -> str:
+    """Submit a keyword before waiting for the site's lazy Turnstile flow."""
+    await page.locator("#keyword").fill(keyword)
+    await page.get_by_role("button", name="검색").click()
+    try:
+        await page.wait_for_function(
+            """(keyword) => {
+              if (document.body.innerText.includes('짧은 광고 보기')) return true;
+              const cells = [...document.querySelectorAll('#result tbody tr:first-child td')];
+              return cells.length >= 7 && cells[1].innerText.trim() === keyword;
+            }""",
+            keyword,
+            timeout=20_000,
+        )
+    except Exception as exc:
+        if await page_is_locked(page):
+            return "LOCKED"
+        raise CollectorError(f"result timeout for {keyword}") from exc
+    return "LOCKED" if await page_is_locked(page) else "RESULT"
+
+
 async def collect_batch(
     keywords: list[str], profile_dir: Path, *, headless: bool = True
 ) -> tuple[list[dict[str, Any]], list[str], str]:
@@ -191,37 +212,17 @@ async def collect_batch(
             await page.goto(DEFAULT_URL, wait_until="domcontentloaded", timeout=30_000)
             if await page_is_locked(page):
                 raise CollectorLocked("ad unlock is required")
-            try:
-                await page.wait_for_function(
-                    """() => {
-                      const value = document.querySelector('[name="cf-turnstile-response"]')?.value;
-                      return Boolean(value && value.length > 20);
-                    }""",
-                    timeout=20_000,
-                )
-            except Exception as exc:
-                raise CollectorError("Turnstile did not become ready") from exc
 
             for index, keyword in enumerate(keywords):
                 if await page_is_locked(page):
                     return observations, keywords[index:], "LOCKED"
-                await page.locator("#keyword").fill(keyword)
-                await page.get_by_role("button", name="검색").click()
                 try:
-                    await page.wait_for_function(
-                        """(keyword) => {
-                          if (document.body.innerText.includes('짧은 광고 보기')) return true;
-                          const cells = [...document.querySelectorAll('#result tbody tr:first-child td')];
-                          return cells.length >= 7 && cells[1].innerText.trim() === keyword;
-                        }""",
-                        keyword,
-                        timeout=20_000,
-                    )
-                except Exception as exc:
+                    search_status = await submit_search(page, keyword)
+                except CollectorError:
                     if observations:
                         return observations, keywords[index:], "UNAVAILABLE"
-                    raise CollectorError(f"result timeout for {keyword}") from exc
-                if await page_is_locked(page):
+                    raise
+                if search_status == "LOCKED":
                     return observations, keywords[index:], "LOCKED"
                 raw = await page.evaluate(
                     """() => ({

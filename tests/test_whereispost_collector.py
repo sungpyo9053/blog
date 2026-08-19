@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 from scripts.collect_whereispost_cache import (
     CollectorError,
@@ -10,6 +11,7 @@ from scripts.collect_whereispost_cache import (
     load_seed_keywords,
     merge_rows,
     parse_dom_result,
+    submit_search,
 )
 
 
@@ -83,6 +85,49 @@ class WhereispostCollectorTests(unittest.TestCase):
             datetime.fromisoformat("2026-08-18T19:00:00+09:00"),
         )
         self.assertEqual(rows[0]["total_searches"], 300)
+
+
+class WhereispostBrowserFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_search_is_submitted_before_waiting_for_lazy_result(self):
+        events = []
+        page = Mock()
+        keyword_input = Mock()
+        keyword_input.fill = AsyncMock(
+            side_effect=lambda value: events.append(("fill", value))
+        )
+        search_button = Mock()
+        search_button.click = AsyncMock(side_effect=lambda: events.append(("click", None)))
+        lock_text = Mock()
+        lock_text.count = AsyncMock(return_value=0)
+        page.locator.return_value = keyword_input
+        page.get_by_role.return_value = search_button
+        page.get_by_text.return_value = lock_text
+        page.wait_for_function = AsyncMock(
+            side_effect=lambda *args, **kwargs: events.append(("wait", args[1]))
+        )
+
+        status = await submit_search(page, "주택청약")
+
+        self.assertEqual(status, "RESULT")
+        self.assertEqual(
+            events,
+            [("fill", "주택청약"), ("click", None), ("wait", "주택청약")],
+        )
+
+    async def test_ad_unlock_after_search_is_reported_as_locked(self):
+        page = Mock()
+        keyword_input = Mock()
+        keyword_input.fill = AsyncMock()
+        search_button = Mock()
+        search_button.click = AsyncMock()
+        lock_text = Mock()
+        lock_text.count = AsyncMock(return_value=1)
+        page.locator.return_value = keyword_input
+        page.get_by_role.return_value = search_button
+        page.get_by_text.return_value = lock_text
+        page.wait_for_function = AsyncMock()
+
+        self.assertEqual(await submit_search(page, "주택청약"), "LOCKED")
 
 
 if __name__ == "__main__":
