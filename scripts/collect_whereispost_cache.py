@@ -182,7 +182,7 @@ async def submit_search(page: Any, keyword: str) -> str:
               const cells = [...document.querySelectorAll('#result tbody tr:first-child td')];
               return cells.length >= 7 && cells[1].innerText.trim() === keyword;
             }""",
-            keyword,
+            arg=keyword,
             timeout=20_000,
         )
     except Exception as exc:

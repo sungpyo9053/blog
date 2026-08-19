@@ -102,9 +102,12 @@ class WhereispostBrowserFlowTests(unittest.IsolatedAsyncioTestCase):
         page.locator.return_value = keyword_input
         page.get_by_role.return_value = search_button
         page.get_by_text.return_value = lock_text
-        page.wait_for_function = AsyncMock(
-            side_effect=lambda *args, **kwargs: events.append(("wait", args[1]))
-        )
+        async def wait_for_function(expression, *, arg, timeout):
+            self.assertIn("짧은 광고 보기", expression)
+            self.assertEqual(timeout, 20_000)
+            events.append(("wait", arg))
+
+        page.wait_for_function = AsyncMock(side_effect=wait_for_function)
 
         status = await submit_search(page, "주택청약")
 
