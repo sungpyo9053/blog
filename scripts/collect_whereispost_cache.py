@@ -168,7 +168,37 @@ def parse_dom_result(result: dict[str, Any], keyword: str, observed_at: str) -> 
 
 
 async def page_is_locked(page: Any) -> bool:
-    return await page.get_by_text(LOCK_TEXT, exact=False).count() > 0
+    lock_text = page.get_by_text(LOCK_TEXT, exact=False)
+    count = await lock_text.count()
+    for index in range(count):
+        if await lock_text.nth(index).is_visible():
+            return True
+    return False
+
+
+async def browser_state(page: Any) -> dict[str, Any]:
+    """Return bounded, non-sensitive diagnostics for collector failures."""
+    state = await page.evaluate(
+        """() => {
+          const token = document.querySelector('[name="cf-turnstile-response"]')?.value || '';
+          const visible = element => {
+            const style = window.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' &&
+              Number(style.opacity || 1) > 0 && rect.width > 0 && rect.height > 0;
+          };
+          const dialogs = [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')];
+          return {
+            token_length: token.length,
+            result_rows: document.querySelectorAll('#result tbody tr').length,
+            visible_lock: dialogs.some(dialog =>
+              visible(dialog) && dialog.innerText.includes('짧은 광고 보기')
+            ),
+            keyword_enabled: !document.querySelector('#keyword')?.disabled
+          };
+        }"""
+    )
+    return state if isinstance(state, dict) else {}
 
 
 async def submit_search(page: Any, keyword: str) -> str:
@@ -178,7 +208,16 @@ async def submit_search(page: Any, keyword: str) -> str:
     try:
         await page.wait_for_function(
             """(keyword) => {
-              if (document.body.innerText.includes('짧은 광고 보기')) return true;
+              const visible = element => {
+                const style = window.getComputedStyle(element);
+                const rect = element.getBoundingClientRect();
+                return style.display !== 'none' && style.visibility !== 'hidden' &&
+                  Number(style.opacity || 1) > 0 && rect.width > 0 && rect.height > 0;
+              };
+              const dialogs = [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')];
+              if (dialogs.some(dialog =>
+                visible(dialog) && dialog.innerText.includes('짧은 광고 보기')
+              )) return true;
               const cells = [...document.querySelectorAll('#result tbody tr:first-child td')];
               return cells.length >= 7 && cells[1].innerText.trim() === keyword;
             }""",
@@ -188,7 +227,14 @@ async def submit_search(page: Any, keyword: str) -> str:
     except Exception as exc:
         if await page_is_locked(page):
             return "LOCKED"
-        raise CollectorError(f"result timeout for {keyword}") from exc
+        state = await browser_state(page)
+        raise CollectorError(
+            f"result timeout for {keyword}; browser_state="
+            f"token:{state.get('token_length', 0)},"
+            f"rows:{state.get('result_rows', 0)},"
+            f"lock:{str(bool(state.get('visible_lock'))).lower()},"
+            f"input:{str(bool(state.get('keyword_enabled'))).lower()}"
+        ) from exc
     return "LOCKED" if await page_is_locked(page) else "RESULT"
 
 

@@ -10,6 +10,7 @@ from scripts.collect_whereispost_cache import (
     build_queue,
     load_seed_keywords,
     merge_rows,
+    page_is_locked,
     parse_dom_result,
     submit_search,
 )
@@ -88,6 +89,30 @@ class WhereispostCollectorTests(unittest.TestCase):
 
 
 class WhereispostBrowserFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_hidden_unlock_copy_is_not_reported_as_locked(self):
+        page = Mock()
+        lock_text = Mock()
+        hidden = Mock()
+        hidden.is_visible = AsyncMock(return_value=False)
+        lock_text.count = AsyncMock(return_value=1)
+        lock_text.nth.return_value = hidden
+        page.get_by_text.return_value = lock_text
+
+        self.assertFalse(await page_is_locked(page))
+
+    async def test_visible_unlock_copy_is_reported_as_locked(self):
+        page = Mock()
+        lock_text = Mock()
+        hidden = Mock()
+        hidden.is_visible = AsyncMock(return_value=False)
+        visible = Mock()
+        visible.is_visible = AsyncMock(return_value=True)
+        lock_text.count = AsyncMock(return_value=2)
+        lock_text.nth.side_effect = [hidden, visible]
+        page.get_by_text.return_value = lock_text
+
+        self.assertTrue(await page_is_locked(page))
+
     async def test_search_is_submitted_before_waiting_for_lazy_result(self):
         events = []
         page = Mock()
@@ -124,7 +149,10 @@ class WhereispostBrowserFlowTests(unittest.IsolatedAsyncioTestCase):
         search_button = Mock()
         search_button.click = AsyncMock()
         lock_text = Mock()
+        visible = Mock()
+        visible.is_visible = AsyncMock(return_value=True)
         lock_text.count = AsyncMock(return_value=1)
+        lock_text.nth.return_value = visible
         page.locator.return_value = keyword_input
         page.get_by_role.return_value = search_button
         page.get_by_text.return_value = lock_text
