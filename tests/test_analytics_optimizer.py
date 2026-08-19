@@ -13,6 +13,8 @@ from scripts.run_analytics_optimizer import (
     measurement_warnings,
     mature_content_funnel,
     render,
+    select_index_checkpoint_urls,
+    update_index_checkpoint_state,
     write_reports,
 )
 
@@ -280,6 +282,48 @@ class AnalyticsOptimizerTests(unittest.TestCase):
             self.assertEqual(latest.read_text(encoding="utf-8"), "daily report\n")
             self.assertEqual(dated.read_text(encoding="utf-8"), "daily report\n")
             self.assertEqual(list(report_dir.glob(".*.tmp")), [])
+
+    def test_fresh_posts_get_24h_then_72h_index_checkpoints(self):
+        now = datetime(2026, 8, 19, 1, 0, tzinfo=timezone.utc)
+        posts = [
+            {
+                "link": "https://huntlab.app/new/",
+                "status": "publish",
+                "date": "2026-08-17T13:00:00+00:00",
+            }
+        ]
+
+        first = select_index_checkpoint_urls(posts, {}, now)
+        self.assertEqual(first[0]["checkpoint"], "24h")
+        state = update_index_checkpoint_state(
+            {},
+            first,
+            [{"url": first[0]["url"], "status": "COMPLETE", "verdict": "FAIL"}],
+            now,
+        )
+        self.assertIn("24h", state["urls"][first[0]["url"]]["checkpoints"])
+
+        later = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
+        second = select_index_checkpoint_urls(posts, state, later)
+        self.assertEqual(second[0]["checkpoint"], "72h")
+
+    def test_incomplete_checkpoint_is_retried(self):
+        now = datetime(2026, 8, 19, 1, 0, tzinfo=timezone.utc)
+        posts = [
+            {
+                "link": "https://huntlab.app/new/",
+                "status": "publish",
+                "date": "2026-08-18T00:00:00+00:00",
+            }
+        ]
+        selected = select_index_checkpoint_urls(posts, {}, now)
+        state = update_index_checkpoint_state(
+            {},
+            selected,
+            [{"url": selected[0]["url"], "status": "INCOMPLETE"}],
+            now,
+        )
+        self.assertEqual(select_index_checkpoint_urls(posts, state, now), selected)
 
 
 if __name__ == "__main__":

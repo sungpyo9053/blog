@@ -140,9 +140,19 @@ Search Console·GA4 읽기 전용 인증으로 `output/analytics/latest.md`를 �
 Daily Pipeline을 직접 호출하지 않습니다.
 같은 보고서를 `output/analytics/YYYY-MM-DD.md`에도 저장해 일별 비교 기록을
 보존하며, `latest.md`는 항상 다음 파이프라인이 읽을 최신 보고서로 유지합니다.
+새 글은 발행 약 24시간 뒤와 72시간 뒤에 URL Inspection 읽기 검사를 한 번씩
+받습니다. 완료된 체크포인트는
+`output/analytics/index-recovery-state.json`에 저장하고, 일시적인 API 실패는
+완료로 기록하지 않아 다음 01:00 실행에서 재시도합니다. 일반 블로그 글을
+Indexing API로 제출하지 않으며, 색인되지 않은 글에는 검토된 관련 글에서
+문맥상 맞는 내부 링크 한 개만 추가할 수 있습니다.
 분석 결과만으로 추가 발행이나 기존 글 Update를 실행하지 않습니다. 인증이
 없거나 데이터가 부족하면 `INCOMPLETE` 또는 데이터 없음으로 기록하고 성과를
 추정하지 않습니다.
+
+홈은 히어로 바로 다음에 최신 글을 먼저 보여주고, 읽기 가이드와 분야별 탐색은
+글 목록 뒤에 배치합니다. AIOSEO JSON-LD의 Article 작성자·발행자와 WebSite
+발행자는 `Hunt News 편집팀` Organization으로 통일합니다.
 
 Topic Planner는 Keyword Cannibalization, 내부 링크 후보, Topic Cluster와
 Pillar 후보를 기록합니다. Reviewer는 공개 URL, 앵커 문맥, 대표 이미지와

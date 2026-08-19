@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 2.0.0
+ * Version: 2.1.0
  * Author: Hunt News
  */
 
@@ -182,7 +182,7 @@ function huntlab_warm_editorial_home_intro() {
 	?>
 	<section id="huntlab-home-intro" class="huntlab-home-intro<?php echo $is_category ? ' huntlab-home-intro--category' : ''; ?>" aria-labelledby="huntlab-home-intro-title">
 		<div class="huntlab-home-intro__copy">
-			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt News · 내 생활을 바꾸는 변화 설명서'; ?></p>
+			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt News · 생활 변화 설명서'; ?></p>
 			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '복잡한 변화가,<br>내 생활에 닿는 순간.'; ?></h1>
 			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '정책, 경제, 부동산, 사회, 정치, 문화·엔터와 IT의 변화를 어려운 말 대신 실제 대상·금액·시점·내가 할 일로 설명합니다.'; ?></p>
 			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'Hunt News 콘텐츠 원칙' ); ?>">
@@ -250,7 +250,7 @@ function hunt_news_home_sections() {
 		</nav>
 	</section>
 	<script id="hunt-news-home-sections-position">
-	document.addEventListener('DOMContentLoaded',function(){var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(section&&main&&main.parentNode){main.parentNode.insertBefore(section,main);var heading=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>새로 확인한 변화</p><h2>지금 알아둘 이야기</h2>';main.parentNode.insertBefore(heading,main);}});
+	document.addEventListener('DOMContentLoaded',function(){var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(section&&main&&main.parentNode){var heading=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>새로 확인한 변화</p><h2>지금 알아둘 이야기</h2>';main.parentNode.insertBefore(heading,main);main.parentNode.insertBefore(section,main.nextSibling);}});
 	</script>
 	<?php
 }
@@ -272,6 +272,58 @@ function huntlab_warm_editorial_late_brand_overrides() {
 	<?php
 }
 add_action( 'wp_head', 'huntlab_warm_editorial_late_brand_overrides', 100 );
+
+/**
+ * Keep the editorial byline and AIOSEO knowledge graph on one organization.
+ * AIOSEO documents `aioseo_schema_output` as its supported graph filter.
+ *
+ * @param array $graphs AIOSEO JSON-LD graph nodes.
+ * @return array
+ */
+function hunt_news_editorial_organization_schema( $graphs ) {
+	if ( ! is_array( $graphs ) ) {
+		return $graphs;
+	}
+
+	$organization_id = home_url( '/#organization' );
+	$organization     = array(
+		'@type'       => 'Organization',
+		'@id'         => $organization_id,
+		'name'        => 'Hunt News 편집팀',
+		'url'         => home_url( '/' ),
+		'description' => '복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명합니다.',
+		'logo'        => array(
+			'@type' => 'ImageObject',
+			'url'   => plugins_url( 'assets/huntlab-site-icon.png', __FILE__ ),
+		),
+	);
+	$filtered         = array();
+
+	foreach ( $graphs as $graph ) {
+		if ( ! is_array( $graph ) ) {
+			$filtered[] = $graph;
+			continue;
+		}
+		$type  = isset( $graph['@type'] ) ? (array) $graph['@type'] : array();
+		$id    = isset( $graph['@id'] ) ? (string) $graph['@id'] : '';
+		$is_old_identity = in_array( 'Person', $type, true ) && false !== strpos( $id, '#person' );
+		if ( $is_old_identity ) {
+			continue;
+		}
+		if ( array_intersect( array( 'Article', 'BlogPosting', 'NewsArticle' ), $type ) ) {
+			$graph['author']    = array( '@id' => $organization_id );
+			$graph['publisher'] = array( '@id' => $organization_id );
+		}
+		if ( in_array( 'WebSite', $type, true ) ) {
+			$graph['publisher'] = array( '@id' => $organization_id );
+		}
+		$filtered[] = $graph;
+	}
+
+	$filtered[] = $organization;
+	return $filtered;
+}
+add_filter( 'aioseo_schema_output', 'hunt_news_editorial_organization_schema', 20 );
 
 /**
  * Localize the small set of Kadence archive labels still visible in English.

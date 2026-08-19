@@ -23,6 +23,7 @@ from scripts.search_signal_providers import collect_shadow_signals
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIR = ROOT / "output" / "analytics"
 LOG_DIR = ROOT / "logs"
+INDEX_RECOVERY_STATE = REPORT_DIR / "index-recovery-state.json"
 
 
 def _credentials():
@@ -122,6 +123,98 @@ def collect_url_inspections(urls: list[str]) -> list[dict[str, Any]]:
                 }
             )
     return results
+
+
+def select_index_checkpoint_urls(
+    public_posts: list[dict],
+    state: dict[str, Any],
+    now: datetime,
+    *,
+    limit: int = 10,
+) -> list[dict[str, str]]:
+    """Select new posts once around 24h and again around 72h after publication."""
+    candidates: list[tuple[datetime, dict[str, str]]] = []
+    records = state.get("urls", {}) if isinstance(state, dict) else {}
+    for post in public_posts:
+        if post.get("status", "publish") != "publish":
+            continue
+        url = str(post.get("link", "")).strip()
+        published_text = str(post.get("date", "")).strip()
+        if not url or not published_text:
+            continue
+        try:
+            published_at = datetime.fromisoformat(published_text.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=now.tzinfo)
+        age_hours = (now.astimezone(published_at.tzinfo) - published_at).total_seconds() / 3600
+        if age_hours < 24 or age_hours > 24 * 7:
+            continue
+        checkpoints = records.get(url, {}).get("checkpoints", {})
+        checkpoint = "72h" if age_hours >= 72 else "24h"
+        if checkpoint in checkpoints:
+            continue
+        candidates.append(
+            (
+                published_at,
+                {
+                    "url": url,
+                    "checkpoint": checkpoint,
+                    "published_at": published_at.isoformat(),
+                },
+            )
+        )
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [item for _, item in candidates[:limit]]
+
+
+def update_index_checkpoint_state(
+    state: dict[str, Any],
+    selected: list[dict[str, str]],
+    inspections: list[dict[str, Any]],
+    now: datetime,
+) -> dict[str, Any]:
+    """Persist only completed inspections so transient API failures retry later."""
+    updated = json.loads(json.dumps(state)) if isinstance(state, dict) else {}
+    updated["version"] = 1
+    updated["updated_at"] = now.isoformat()
+    records = updated.setdefault("urls", {})
+    inspected = {str(item.get("url", "")): item for item in inspections}
+    for candidate in selected:
+        result = inspected.get(candidate["url"], {})
+        if result.get("status") != "COMPLETE":
+            continue
+        record = records.setdefault(
+            candidate["url"],
+            {"published_at": candidate["published_at"], "checkpoints": {}},
+        )
+        record.setdefault("checkpoints", {})[candidate["checkpoint"]] = {
+            "inspected_at": now.isoformat(),
+            "verdict": result.get("verdict", "VERDICT_UNSPECIFIED"),
+            "coverage_state": result.get("coverage_state", ""),
+            "last_crawl_time": result.get("last_crawl_time", ""),
+        }
+    return updated
+
+
+def read_index_checkpoint_state(path: Path = INDEX_RECOVERY_STATE) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def write_index_checkpoint_state(
+    state: dict[str, Any], path: Path = INDEX_RECOVERY_STATE
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    temporary.replace(path)
 
 
 def aug7_review_decisions(
@@ -568,6 +661,7 @@ def render(
     site_audit: dict[str, Any] | None = None,
     public_post_metadata: list[dict] | None = None,
     url_inspections: list[dict[str, Any]] | None = None,
+    index_checkpoints: list[dict[str, str]] | None = None,
     shadow_signals: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     refresh, gaps = analyze(search_rows)
@@ -790,6 +884,13 @@ def render(
     )
 
     lines += ["", "### Google URL Inspection", ""]
+    if index_checkpoints:
+        labels = ", ".join(
+            f"{item['checkpoint']}:{normalize_page_path(item['url'])}"
+            for item in index_checkpoints
+        )
+        lines.append(f"- fresh_post_checkpoints: `{labels}`")
+        lines.append("")
     if inspections:
         lines.extend(
             [
@@ -879,14 +980,26 @@ def main() -> int:
             public_post_metadata,
             diagnostics.get("search_period", {}),
         )
-        inspection_urls = [
+        checkpoint_state = read_index_checkpoint_state()
+        index_checkpoints = select_index_checkpoint_urls(
+            public_post_metadata or [], checkpoint_state, now
+        )
+        checkpoint_urls = [item["url"] for item in index_checkpoints]
+        mature_urls = [
             urllib.parse.urljoin(
                 public_site_url,
                 urllib.parse.quote(path.lstrip("/"), safe="/"),
             )
             for path in (mature_funnel or {}).get("without_impressions", [])
         ]
+        inspection_urls = checkpoint_urls + [
+            url for url in mature_urls if url not in checkpoint_urls
+        ][: max(10 - len(checkpoint_urls), 0)]
         url_inspections = collect_url_inspections(inspection_urls)
+        checkpoint_state = update_index_checkpoint_state(
+            checkpoint_state, index_checkpoints, url_inspections, now
+        )
+        write_index_checkpoint_state(checkpoint_state)
         body = render(
             search_rows,
             ga_rows,
@@ -895,6 +1008,7 @@ def main() -> int:
             site_audit=public_audit_data,
             public_post_metadata=public_post_metadata,
             url_inspections=url_inspections,
+            index_checkpoints=index_checkpoints,
             shadow_signals=shadow_signals,
         )
         body += "\n" + public_audit

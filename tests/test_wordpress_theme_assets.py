@@ -53,12 +53,24 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 2.0.0", php)
+        self.assertIn("Version: 2.1.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
         self.assertIn("overflow-x: auto", css)
         self.assertIn("white-space: pre", css)
+
+    def test_home_prioritizes_latest_posts_and_unifies_schema_identity(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
+        css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
+
+        self.assertIn("main.parentNode.insertBefore(section,main.nextSibling)", php)
+        self.assertIn("Hunt News · 생활 변화 설명서", php)
+        self.assertIn("aioseo_schema_output", php)
+        self.assertIn("Organization", php)
+        self.assertIn("Hunt News 편집팀", php)
+        self.assertIn("aspect-ratio: 2 / 1", css)
+        self.assertIn("white-space: nowrap", css)
 
     def test_category_archives_have_specific_copy_and_optimized_hero_images(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
