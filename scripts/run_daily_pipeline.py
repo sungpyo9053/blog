@@ -26,7 +26,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from publisher.frontmatter import FrontmatterError, load_document
 from scripts.manage_whereispost_cache import DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE
-from scripts.search_signal_providers import SearchSignalError, load_whereispost_shadow
+from scripts.search_signal_providers import (
+    DEFAULT_GOOGLE_TRENDS_CACHE,
+    SearchSignalError,
+    load_google_trends_cache,
+    load_whereispost_shadow,
+)
 
 
 OUTPUT_DIR = PROJECT_ROOT / "output"
@@ -1272,6 +1277,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--use-google-trends-cache",
+        action="store_true",
+        help=(
+            "시간별 Google Trends 한국 RSS 캐시를 주력 시의성 신호로 사용. "
+            "캐시가 없거나 올바르지 않아도 파이프라인은 계속 진행"
+        ),
+    )
+    parser.add_argument(
         "--use-whereispost-cache",
         action="store_true",
         help=(
@@ -1335,6 +1348,13 @@ def dry_run_topics() -> str:
                 "- evergreen: 중간\n"
                 f"- primary_keyword: {title}\n"
                 "- demand_signal_source: dry-run fixture\n"
+                "- whereispost_status: unavailable\n"
+                "- whereispost_metrics: cache unavailable\n"
+                "- whereispost_total_searches: 0\n"
+                "- affected_reader: 자동화 계약을 확인하는 운영자\n"
+                "- life_impact: 검증 실패를 발행 전에 발견\n"
+                "- effective_date: 즉시\n"
+                "- reader_action: 드라이런 결과 확인\n"
                 "- observed_problem_phrase: 자동화 계약 검증\n"
                 "- user_action: 드라이런 결과 확인\n"
                 "- search_intent: 자동화 검증\n"
@@ -1446,12 +1466,50 @@ def read_whereispost_observation(path: Path | None) -> str:
     )
 
 
+def read_google_trends_observation(path: Path | None) -> str:
+    try:
+        payload = load_google_trends_cache(path)
+    except SearchSignalError as exc:
+        raise PipelineError(f"Google Trends 캐시가 올바르지 않습니다: {exc}") from exc
+    rows = payload.get("rows", [])
+    if not rows:
+        raise PipelineError("Google Trends 캐시에 rows가 없습니다.")
+    try:
+        checked_at = datetime.fromisoformat(str(payload["checked_at"]))
+    except (KeyError, ValueError) as exc:
+        raise PipelineError("Google Trends checked_at 형식이 올바르지 않습니다.") from exc
+    if checked_at.tzinfo is None:
+        raise PipelineError("Google Trends checked_at에 시간대가 없습니다.")
+    age_seconds = (datetime.now(UTC) - checked_at.astimezone(UTC)).total_seconds()
+    if age_seconds < -300 or age_seconds > 6 * 60 * 60:
+        raise PipelineError("Google Trends 캐시가 6시간보다 오래되었습니다.")
+    recent_rows = sorted(
+        rows,
+        key=lambda row: (
+            str(row.get("last_seen_at", "")), int(row.get("approx_traffic", 0))
+        ),
+        reverse=True,
+    )[:60]
+    return json.dumps(
+        {
+            "provider": payload["provider"],
+            "geo": payload["geo"],
+            "checked_at": payload["checked_at"],
+            "rows": recent_rows,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
 def planner_stage(
     keywords: str,
     run_id: str,
     topics_path: Path,
     whereispost_observation: str = "",
     whereispost_cache_mode: bool = False,
+    google_trends_observation: str = "",
+    google_trends_cache_mode: bool = False,
 ) -> Stage:
     return Stage(
         "Topic Planner Agent",
@@ -1466,6 +1524,21 @@ def planner_stage(
                 "category=System Architecture, content_type=system_design_case를 사용하세요. "
                 if keywords.strip()
                 else ""
+            )
+            + (
+                "이 실행의 주력 시의성 신호는 매시간 누적한 Google Trends 한국 RSS 캐시입니다: "
+                f"{google_trends_observation}. topic, approx_traffic, published_at, first_seen_at, "
+                "last_seen_at과 관련 기사 목록을 후보 발견과 급상승 강도 판단에 사용하세요. RSS 기사와 "
+                "검색량 표시는 사실 근거가 아니므로 그대로 인용하지 말고, TOP10 전에 핵심 사실을 공식 "
+                "원문 하나 또는 서로 독립적인 신뢰 출처 두 개 이상으로 다시 확인하세요. 출처가 부족한 "
+                "연예인 이름, 단순 사건명, 종목 코드는 검색량이 높아도 제외하세요. "
+                if google_trends_observation
+                else (
+                    "Google Trends 캐시가 없으면 실시간 검색량을 추정하지 말고 다른 공식 변화와 Search "
+                    "Console 관측으로 계속 진행하세요. "
+                    if google_trends_cache_mode
+                    else ""
+                )
             )
             + (
                 "Harness가 공식 Keyword Master 화면에서 운영자가 직접 확인한 관측값을 "
@@ -1527,6 +1600,11 @@ def planner_stage(
             "2회 이상 관측될 때 검색 수요 점수에 최대 1점만 반영하며, 공식 1차 자료와 Search Console 관측값을 "
             "대체할 수 없습니다. Velog 인기만으로 TOP2로 선정해 실제 발행하지 말고, 접근할 수 없으면 Velog "
             "신호 없음으로 계속 진행하세요. "
+            "검색 수요 점수는 Google Trends의 최근성·급상승 강도를 우선 반영하고, Analytics 리포트의 "
+            "실제 Search Console 검색어와 같은 검색 의도 또는 인접 주제로 연결되면 최대 1점만 가산하세요. "
+            "Whereispost 30일 평균은 장기 수요 참고값으로만 사용하고 Google Trends 시의성이나 공식 근거를 "
+            "뒤집는 필수 조건으로 사용하지 마세요. 각 TOP2의 demand_signal_source에는 사용한 Trends 관측 "
+            "시각, Search Console 연결 여부, Whereispost 사용 여부를 구분해 기록하세요. "
             "TOP2에는 demand_signal_source, observed_problem_phrase, user_action과 함께 "
             "problem_origin(real_project, public_codebase, observed_search_question, controlled_lab, official_change 중 하나), "
             "editorial_thesis(글 전체가 증명할 한 문장), chosen_focus, rejected_angle(넣지 않을 관점과 이유), "
@@ -1626,12 +1704,25 @@ def main() -> int:
                     exc,
                 )
                 whereispost_observation = ""
+            google_trends_observation = ""
+            if args.use_google_trends_cache:
+                try:
+                    google_trends_observation = read_google_trends_observation(
+                        DEFAULT_GOOGLE_TRENDS_CACHE
+                    )
+                except PipelineError as exc:
+                    logger.warning(
+                        "google_trends_cache status=UNAVAILABLE continuing=true reason=%s",
+                        exc,
+                    )
             planner = planner_stage(
                 args.keywords,
                 run_id,
                 topics_path,
                 whereispost_observation,
                 whereispost_cache_mode=args.use_whereispost_cache,
+                google_trends_observation=google_trends_observation,
+                google_trends_cache_mode=args.use_google_trends_cache,
             )
             logger.info(
                 "pipeline event=start run_id=%s run_directory=%s",

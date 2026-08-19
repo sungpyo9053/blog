@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 
 from scripts.search_signal_providers import (
     SearchSignalError,
+    load_google_trends_cache,
     load_naver_searchadvisor,
     load_whereispost_shadow,
 )
@@ -16,6 +17,35 @@ class SearchSignalProviderTests(unittest.TestCase):
     def test_missing_optional_exports_are_na_not_zero(self):
         self.assertEqual(load_naver_searchadvisor(None)["status"], "N/A")
         self.assertEqual(load_whereispost_shadow(None)["status"], "N/A")
+        self.assertEqual(load_google_trends_cache(None)["status"], "N/A")
+
+    def test_google_trends_cache_is_loaded(self):
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trends.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "provider": "google_trends_kr_rss",
+                        "geo": "KR",
+                        "checked_at": "2026-08-19T01:10:00+00:00",
+                        "rows": [
+                            {
+                                "topic": "민방위",
+                                "normalized_topic": "민방위",
+                                "approx_traffic": 10000,
+                                "published_at": "2026-08-19T00:00:00+00:00",
+                                "first_seen_at": "2026-08-19T01:10:00+00:00",
+                                "last_seen_at": "2026-08-19T01:10:00+00:00",
+                                "news_items": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = load_google_trends_cache(path)
+            self.assertEqual(result["status"], "AVAILABLE")
+            self.assertEqual(result["rows"][0]["approx_traffic"], 10000)
 
     def test_whereispost_requires_complete_manual_rows(self):
         with TemporaryDirectory() as temporary:

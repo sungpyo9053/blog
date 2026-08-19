@@ -7,7 +7,7 @@ import inspect
 import subprocess
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +22,7 @@ from scripts.run_daily_pipeline import (
     parse_topic_plan,
     planner_retry_stage,
     planner_stage,
+    read_google_trends_observation,
     read_whereispost_observation,
     read_review_decision,
     review_repair_stages,
@@ -429,6 +430,48 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("Harness가 제공한 Whereispost 수요 캐시", planner.prompt)
         self.assertIn("절대 탈락 조건은 아닙니다", planner.prompt)
         self.assertIn("whereispost_total_searches", planner.prompt)
+
+    def test_planner_uses_google_trends_as_primary_freshness_signal(self):
+        observation = '{"checked_at":"2026-08-19T01:10:00+00:00","rows":[]}'
+        planner = planner_stage(
+            "",
+            "run-google-trends",
+            Path("/tmp/topics.md"),
+            google_trends_observation=observation,
+            google_trends_cache_mode=True,
+        )
+        self.assertIn("주력 시의성 신호", planner.prompt)
+        self.assertIn("공식 원문 하나 또는 서로 독립적인 신뢰 출처 두 개 이상", planner.prompt)
+        self.assertIn("Search Console 검색어", planner.prompt)
+        self.assertIn("최대 1점만 가산", planner.prompt)
+        self.assertIn("Whereispost 30일 평균은 장기 수요 참고값", planner.prompt)
+
+    def test_google_trends_cache_must_be_recent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "trends.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "provider": "google_trends_kr_rss",
+                        "geo": "KR",
+                        "checked_at": (datetime.now(UTC) - timedelta(hours=7)).isoformat(),
+                        "rows": [
+                            {
+                                "topic": "민방위",
+                                "normalized_topic": "민방위",
+                                "approx_traffic": 10000,
+                                "published_at": datetime.now(UTC).isoformat(),
+                                "first_seen_at": datetime.now(UTC).isoformat(),
+                                "last_seen_at": datetime.now(UTC).isoformat(),
+                                "news_items": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(PipelineError, "6시간보다 오래"):
+                read_google_trends_observation(path)
 
     def test_whereispost_total_searches_accepts_commas(self):
         self.assertEqual(

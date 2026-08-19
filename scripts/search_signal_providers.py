@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_GOOGLE_TRENDS_CACHE = (
+    PROJECT_ROOT / "output/search-signals/google-trends-kr.json"
+)
+
+
 class SearchSignalError(ValueError):
     """Raised when an optional shadow-mode export is malformed."""
 
@@ -78,6 +84,44 @@ def load_whereispost_shadow(path: Path | None) -> dict[str, Any]:
             raise SearchSignalError(
                 f"whereispost row {index} competition_ratio is invalid"
             )
+    return {**payload, "status": "AVAILABLE", "rows": rows}
+
+
+def load_google_trends_cache(path: Path | None) -> dict[str, Any]:
+    """Load the bounded, public Google Trends Korea RSS cache."""
+    if path is None or not path.is_file():
+        return {
+            "provider": "google_trends_kr_rss",
+            "status": "N/A",
+            "reason": "hourly_cache_unavailable",
+            "rows": [],
+        }
+    payload = _load_json(path)
+    if payload.get("provider") != "google_trends_kr_rss":
+        raise SearchSignalError("Google Trends provider mismatch")
+    if payload.get("geo") != "KR" or not str(payload.get("checked_at", "")).strip():
+        raise SearchSignalError("Google Trends geo and checked_at are required")
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        raise SearchSignalError("Google Trends rows must be a list")
+    required = {
+        "topic",
+        "normalized_topic",
+        "approx_traffic",
+        "published_at",
+        "first_seen_at",
+        "last_seen_at",
+        "news_items",
+    }
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict) or not required.issubset(row):
+            raise SearchSignalError(f"Google Trends row {index} is incomplete")
+        if not str(row["topic"]).strip():
+            raise SearchSignalError(f"Google Trends row {index} topic is empty")
+        if not isinstance(row["approx_traffic"], int) or row["approx_traffic"] < 0:
+            raise SearchSignalError(f"Google Trends row {index} traffic is invalid")
+        if not isinstance(row["news_items"], list):
+            raise SearchSignalError(f"Google Trends row {index} news_items is invalid")
     return {**payload, "status": "AVAILABLE", "rows": rows}
 
 

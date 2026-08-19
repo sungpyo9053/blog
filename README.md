@@ -35,10 +35,16 @@ Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/sour
 `생활`, `경제`, `부동산`, `사회`, `정치`, `문화·엔터`, `IT`를 활성 편집 범위로
 사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
 TOP2는 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를
-기준으로 선정합니다. Whereispost 수집기는 2시간마다 소량의 키워드를 정상 브라우저
+기준으로 선정합니다. Google Trends 한국 RSS 수집기는 매시간 급상승 검색어, 대략적인
+검색량, 발생 시각과 관련 기사를 48시간 캐시에 누적합니다. Planner는 이를 주력
+시의성 신호로 사용하지만 관련 기사 자체를 사실 근거로 간주하지 않으며, 공식 원문
+하나 또는 독립 출처 두 개 이상을 다시 확인합니다. 같은 검색 의도가 Search Console의
+실제 HuntLab 검색어와 연결되면 적합성 가산점을 최대 1점만 적용합니다.
+
+Whereispost 수집기는 2시간마다 소량의 키워드를 정상 브라우저
 화면으로 조회해 PC·모바일 검색량, 총 검색량, 문서 수와 경쟁 비율을 캐시에 누적합니다.
 광고 잠금이나 인증 실패가 발생하면 우회하지 않고 마지막 정상 캐시를 보존합니다.
-Planner는 캐시를 수요 점수의 참고값으로만 사용하며 캐시가 없거나 100회 미만이어도
+Planner는 이 캐시를 장기 수요 참고값으로만 사용하며 캐시가 없거나 100회 미만이어도
 공식 원문, 시의성, 생활 영향과 비중복 검색 의도가 충분하면 TOP2로 선정할 수 있습니다.
 
 Planner는 Velog 공개 트렌딩과 기술 태그에서 반복되는 기술·언어·시스템
@@ -94,7 +100,9 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 다음 systemd unit을 사용합니다.
 
 - `deploy/huntlab-daily-pipeline.service`
-- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Whereispost 캐시 참고
+- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Trends·Search Console·Whereispost 캐시 참고
+- `deploy/huntlab-google-trends-collector.service`
+- `deploy/huntlab-google-trends-collector.timer`: 매시간 10분, 한국 급상승 RSS 누적
 - `deploy/huntlab-whereispost-collector.service`
 - `deploy/huntlab-whereispost-collector.timer`: 00:30부터 2시간 간격, 회당 3개 누적 수집
 - `deploy/huntlab-daily-retry.service`

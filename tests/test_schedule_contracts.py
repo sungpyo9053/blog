@@ -40,6 +40,18 @@ class ScheduleContractTests(unittest.TestCase):
         self.assertIn("--use-whereispost-cache", service)
         self.assertNotIn("--require-whereispost-cache", service)
 
+    def test_google_trends_collector_runs_hourly_and_daily_pipeline_consumes_it(self):
+        timer = (ROOT / "deploy/huntlab-google-trends-collector.timer").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("OnCalendar=*-*-* *:10:00 Asia/Seoul", timer)
+        self.assertIn("Persistent=false", timer)
+
+        service = (ROOT / "deploy/huntlab-daily-pipeline.service").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--use-google-trends-cache", service)
+
     def test_legacy_macos_schedule_matches_production_start(self):
         with (ROOT / "deploy/com.huntlab.daily-pipeline.plist").open("rb") as handle:
             schedule = plistlib.load(handle)["StartCalendarInterval"]
