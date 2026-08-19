@@ -6,6 +6,7 @@ import logging
 import inspect
 import subprocess
 import tempfile
+import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,6 +16,7 @@ from scripts.run_daily_pipeline import (
     PipelineError,
     Stage,
     TopicContext,
+    build_parser,
     has_successful_publish,
     humanize_experiment_enabled,
     make_topic_context,
@@ -26,7 +28,9 @@ from scripts.run_daily_pipeline import (
     read_whereispost_observation,
     read_review_decision,
     review_repair_stages,
+    run_selected_topics,
     run_stage,
+    run_topic_pipeline,
     topic_stages,
     validate_build_log_research_contract,
     validate_publish_contract,
@@ -39,6 +43,40 @@ from scripts.set_humanize_mode import update_state
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_top2_preparation_defaults_to_two_workers(self):
+        self.assertEqual(build_parser().parse_args([]).topic_workers, 2)
+
+    def test_selected_topics_run_concurrently_and_keep_result_order(self):
+        barrier = threading.Barrier(2)
+        active_threads: list[str] = []
+
+        def fake_run(codex, context, plan, logger, **kwargs):
+            active_threads.append(threading.current_thread().name)
+            barrier.wait(timeout=2)
+            return {"post_id": plan["post_id"]}
+
+        with patch(
+            "scripts.run_daily_pipeline.run_topic_pipeline",
+            side_effect=fake_run,
+        ):
+            results = run_selected_topics(
+                "codex",
+                [object(), object()],
+                [{"post_id": 1}, {"post_id": 2}],
+                logging.getLogger("parallel-test"),
+                timeout_seconds=30,
+                resume=False,
+                workers=2,
+            )
+
+        self.assertEqual(results, [{"post_id": 1}, {"post_id": 2}])
+        self.assertEqual(len(set(active_threads)), 2)
+
+    def test_wordpress_publish_remains_serialized(self):
+        source = inspect.getsource(run_topic_pipeline)
+        self.assertIn("with publish_lock:", source)
+        self.assertIn("run_review_repair_cycle", source)
+
     def test_planner_retry_allows_required_read_only_validation(self):
         topics_path = Path("/tmp/run/topics.md")
         stage = Stage("Topic Planner Agent", Path("agents/topic-planner-agent.md"), "원래 지시")

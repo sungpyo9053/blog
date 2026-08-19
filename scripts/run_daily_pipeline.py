@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import logging
@@ -14,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import time
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -1299,6 +1301,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Agent별 제한 시간(초, 기본 3600)",
     )
     parser.add_argument(
+        "--topic-workers",
+        type=int,
+        choices=(1, 2),
+        default=2,
+        help="TOP2 준비 단계를 병렬 처리할 작업자 수(기본 2)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
@@ -1650,6 +1659,185 @@ def planner_retry_stage(stage: Stage, topics_path: Path) -> Stage:
     )
 
 
+def run_topic_pipeline(
+    codex: str,
+    context: TopicContext,
+    plan: dict[str, Any],
+    logger: logging.Logger,
+    *,
+    timeout_seconds: int,
+    resume: bool,
+    publish_lock: threading.Lock,
+    humanize_lock: threading.Lock,
+) -> dict[str, Any]:
+    """Prepare one isolated topic; serialize shared state and WordPress writes."""
+    if resume:
+        if context.directory.exists():
+            assert_owned_path(context, context.directory)
+        else:
+            context.directory.mkdir(parents=False, exist_ok=False)
+    else:
+        context.directory.mkdir(parents=False, exist_ok=False)
+    planner_context_path = write_planner_context(context, plan)
+    recent_style_context_path = write_recent_style_context(context)
+    logger.info(
+        "topic=%r run_id=%s topic_id=%s directory=%s "
+        "planner_context=%s recent_style_context=%s event=start",
+        context.title,
+        context.run_id,
+        context.topic_id,
+        context.directory,
+        planner_context_path,
+        recent_style_context_path,
+    )
+    for stage in topic_stages(context):
+        if resume:
+            required = {
+                "Research Agent": (context.directory / "research.md",),
+                "Writer Agent": (context.directory / "draft.md",),
+                "Humanize Experiment Agent": (
+                    context.directory / "draft.md",
+                    context.directory / "humanized-draft.md",
+                    context.directory / "humanize-summary.md",
+                ),
+                "Image Maker Agent": (
+                    context.directory / "draft.md",
+                    context.directory / "images/thumbnail.png",
+                ),
+                "Assembler Agent": (
+                    context.directory / "final.md",
+                    context.directory / "final.html",
+                ),
+                "Reviewer Agent": (
+                    context.directory / "publish.md",
+                    context.directory / "review.md",
+                ),
+                "Publisher Agent": (context.directory / "publisher-audit.jsonl",),
+            }.get(stage.name, ())
+            reviewer_approved = False
+            if stage.name == "Reviewer Agent":
+                reviewer_approved = read_review_decision(context) == "APPROVED"
+            can_skip = required and all(path.is_file() for path in required)
+            if stage.name == "Reviewer Agent" and not reviewer_approved:
+                can_skip = False
+            if stage.name == "Publisher Agent":
+                can_skip = has_successful_publish(context)
+            if can_skip:
+                logger.info(
+                    "topic=%r run_id=%s topic_id=%s agent=%s event=resume_skip",
+                    context.title,
+                    context.run_id,
+                    context.topic_id,
+                    stage.name,
+                )
+                continue
+        if stage.name == "Publisher Agent":
+            with publish_lock:
+                run_review_repair_cycle(
+                    codex,
+                    context,
+                    logger,
+                    timeout_seconds=timeout_seconds,
+                )
+                digest = validate_publish_contract(context)
+                logger.info(
+                    "topic=%r run_id=%s topic_id=%s "
+                    "event=publisher_contract_passed publish_sha256=%s "
+                    "publish_path=%s",
+                    context.title,
+                    context.run_id,
+                    context.topic_id,
+                    digest,
+                    context.directory / "publish.md",
+                )
+                run_stage(
+                    codex,
+                    stage,
+                    logger,
+                    timeout_seconds=timeout_seconds,
+                    topic=context.title,
+                )
+        else:
+            run_stage(
+                codex,
+                stage,
+                logger,
+                timeout_seconds=timeout_seconds,
+                topic=context.title,
+            )
+        validate_stage_artifacts(context, stage.name)
+        if stage.name == "Humanize Experiment Agent":
+            if humanize_experiment_mode() in {"manual-one-off", "on"}:
+                original = context.directory / "draft-original.md"
+                shutil.copy2(context.directory / "draft.md", original)
+                shutil.copy2(
+                    context.directory / "humanized-draft.md",
+                    context.directory / "draft.md",
+                )
+                logger.info(
+                    "topic=%r agent=%s event=manual_one_off_selected "
+                    "original=%s selected=%s",
+                    context.title,
+                    stage.name,
+                    original,
+                    context.directory / "draft.md",
+                )
+            with humanize_lock:
+                consume_humanize_experiment_slot(context)
+    publish_result = read_publish_result(context)
+    logger.info(
+        "topic=%r run_id=%s topic_id=%s event=post_published "
+        "post_id=%s url=%s image_count=%s",
+        context.title,
+        context.run_id,
+        context.topic_id,
+        publish_result["post_id"],
+        publish_result["url"],
+        publish_result["image_count"],
+    )
+    logger.info(
+        "topic=%r run_id=%s topic_id=%s event=end failed=false",
+        context.title,
+        context.run_id,
+        context.topic_id,
+    )
+    return publish_result
+
+
+def run_selected_topics(
+    codex: str,
+    contexts: list[TopicContext],
+    plans: list[dict[str, Any]],
+    logger: logging.Logger,
+    *,
+    timeout_seconds: int,
+    resume: bool,
+    workers: int,
+) -> list[dict[str, Any]]:
+    """Run isolated TOP2 work concurrently while preserving result order."""
+    publish_lock = threading.Lock()
+    humanize_lock = threading.Lock()
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(workers, len(contexts)),
+        thread_name_prefix="huntlab-topic",
+    ) as executor:
+        futures = [
+            executor.submit(
+                run_topic_pipeline,
+                codex,
+                context,
+                plan,
+                logger,
+                timeout_seconds=timeout_seconds,
+                resume=resume,
+                publish_lock=publish_lock,
+                humanize_lock=humanize_lock,
+            )
+            for context, plan in zip(contexts, plans)
+        ]
+        return [future.result() for future in futures]
+
+
 def main() -> int:
     args = build_parser().parse_args()
     logger = configure_logger(date.today())
@@ -1772,132 +1960,15 @@ def main() -> int:
             [context.topic_id for context in contexts],
         )
 
-        results: list[dict[str, Any]] = []
-        for context in contexts:
-            if args.resume_run_id:
-                if context.directory.exists():
-                    assert_owned_path(context, context.directory)
-                else:
-                    context.directory.mkdir(parents=False, exist_ok=False)
-            else:
-                context.directory.mkdir(parents=False, exist_ok=False)
-            plan = next(
-                plan for plan in selected_plans if plan["title"] == context.title
-            )
-            planner_context_path = write_planner_context(context, plan)
-            recent_style_context_path = write_recent_style_context(context)
-            logger.info(
-                "topic=%r run_id=%s topic_id=%s directory=%s "
-                "planner_context=%s recent_style_context=%s event=start",
-                context.title,
-                context.run_id,
-                context.topic_id,
-                context.directory,
-                planner_context_path,
-                recent_style_context_path,
-            )
-            for stage in topic_stages(context):
-                if args.resume_run_id:
-                    required = {
-                        "Research Agent": (context.directory / "research.md",),
-                        "Writer Agent": (context.directory / "draft.md",),
-                        "Humanize Experiment Agent": (
-                            context.directory / "draft.md",
-                            context.directory / "humanized-draft.md",
-                            context.directory / "humanize-summary.md",
-                        ),
-                        "Image Maker Agent": (
-                            context.directory / "draft.md",
-                            context.directory / "images/thumbnail.png",
-                        ),
-                        "Assembler Agent": (
-                            context.directory / "final.md",
-                            context.directory / "final.html",
-                        ),
-                        "Reviewer Agent": (
-                            context.directory / "publish.md",
-                            context.directory / "review.md",
-                        ),
-                        "Publisher Agent": (context.directory / "publisher-audit.jsonl",),
-                    }.get(stage.name, ())
-                    reviewer_approved = False
-                    if stage.name == "Reviewer Agent":
-                        reviewer_approved = read_review_decision(context) == "APPROVED"
-                    can_skip = required and all(path.is_file() for path in required)
-                    if stage.name == "Reviewer Agent" and not reviewer_approved:
-                        can_skip = False
-                    if stage.name == "Publisher Agent":
-                        can_skip = has_successful_publish(context)
-                    if can_skip:
-                        logger.info(
-                            "topic=%r run_id=%s topic_id=%s agent=%s event=resume_skip",
-                            context.title,
-                            context.run_id,
-                            context.topic_id,
-                            stage.name,
-                        )
-                        continue
-                if stage.name == "Publisher Agent":
-                    run_review_repair_cycle(
-                        codex,
-                        context,
-                        logger,
-                        timeout_seconds=args.timeout,
-                    )
-                    digest = validate_publish_contract(context)
-                    logger.info(
-                        "topic=%r run_id=%s topic_id=%s "
-                        "event=publisher_contract_passed publish_sha256=%s "
-                        "publish_path=%s",
-                        context.title,
-                        context.run_id,
-                        context.topic_id,
-                        digest,
-                        context.directory / "publish.md",
-                    )
-                run_stage(
-                    codex,
-                    stage,
-                    logger,
-                    timeout_seconds=args.timeout,
-                    topic=context.title,
-                )
-                validate_stage_artifacts(context, stage.name)
-                if stage.name == "Humanize Experiment Agent":
-                    if humanize_experiment_mode() in {"manual-one-off", "on"}:
-                        original = context.directory / "draft-original.md"
-                        shutil.copy2(context.directory / "draft.md", original)
-                        shutil.copy2(
-                            context.directory / "humanized-draft.md",
-                            context.directory / "draft.md",
-                        )
-                        logger.info(
-                            "topic=%r agent=%s event=manual_one_off_selected "
-                            "original=%s selected=%s",
-                            context.title,
-                            stage.name,
-                            original,
-                            context.directory / "draft.md",
-                        )
-                    consume_humanize_experiment_slot(context)
-            publish_result = read_publish_result(context)
-            results.append(publish_result)
-            logger.info(
-                "topic=%r run_id=%s topic_id=%s event=post_published "
-                "post_id=%s url=%s image_count=%s",
-                context.title,
-                context.run_id,
-                context.topic_id,
-                publish_result["post_id"],
-                publish_result["url"],
-                publish_result["image_count"],
-            )
-            logger.info(
-                "topic=%r run_id=%s topic_id=%s event=end failed=false",
-                context.title,
-                context.run_id,
-                context.topic_id,
-            )
+        results = run_selected_topics(
+            codex,
+            contexts,
+            selected_plans,
+            logger,
+            timeout_seconds=args.timeout,
+            resume=bool(args.resume_run_id),
+            workers=args.topic_workers,
+        )
         logger.info(
             "pipeline event=end failed=false run_id=%s topics=%r posts=%r "
             "duration_seconds=%.3f",

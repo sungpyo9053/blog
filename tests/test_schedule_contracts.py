@@ -51,6 +51,7 @@ class ScheduleContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("--use-google-trends-cache", service)
+        self.assertIn("--topic-workers 2", service)
 
     def test_legacy_macos_schedule_matches_production_start(self):
         with (ROOT / "deploy/com.huntlab.daily-pipeline.plist").open("rb") as handle:
