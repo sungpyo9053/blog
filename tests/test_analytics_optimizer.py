@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -14,6 +14,7 @@ from scripts.run_analytics_optimizer import (
     mature_content_funnel,
     render,
     select_index_checkpoint_urls,
+    select_mature_recovery_urls,
     update_index_checkpoint_state,
     write_reports,
 )
@@ -283,7 +284,7 @@ class AnalyticsOptimizerTests(unittest.TestCase):
             self.assertEqual(dated.read_text(encoding="utf-8"), "daily report\n")
             self.assertEqual(list(report_dir.glob(".*.tmp")), [])
 
-    def test_fresh_posts_get_24h_then_72h_index_checkpoints(self):
+    def test_fresh_posts_get_24h_72h_then_7d_index_checkpoints(self):
         now = datetime(2026, 8, 19, 1, 0, tzinfo=timezone.utc)
         posts = [
             {
@@ -306,6 +307,65 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         later = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
         second = select_index_checkpoint_urls(posts, state, later)
         self.assertEqual(second[0]["checkpoint"], "72h")
+        state = update_index_checkpoint_state(
+            state,
+            second,
+            [{"url": second[0]["url"], "status": "COMPLETE", "verdict": "FAIL"}],
+            later,
+        )
+        week_later = datetime(2026, 8, 25, 15, 0, tzinfo=timezone.utc)
+        third = select_index_checkpoint_urls(posts, state, week_later)
+        self.assertEqual(third[0]["checkpoint"], "7d")
+
+    def test_mature_recovery_rotates_and_persists_full_inspection(self):
+        now = datetime(2026, 8, 20, 1, 0, tzinfo=timezone.utc)
+        urls = [f"https://huntlab.app/post-{index}/" for index in range(12)]
+        first = select_mature_recovery_urls(urls, {}, now, limit=10)
+        self.assertEqual(len(first), 10)
+        state = update_index_checkpoint_state(
+            {},
+            [],
+            [
+                {
+                    "url": url,
+                    "status": "COMPLETE",
+                    "verdict": "NEUTRAL",
+                    "coverage_state": "Discovered - currently not indexed",
+                    "indexing_state": "INDEXING_ALLOWED",
+                    "sitemaps": ["https://huntlab.app/post-sitemap.xml"],
+                }
+                for url in first
+            ],
+            now,
+            recovery_urls=first,
+        )
+
+        second = select_mature_recovery_urls(
+            urls, state, now + timedelta(days=1), limit=10
+        )
+        self.assertEqual(second, urls[10:])
+        snapshot = state["urls"][first[0]]["latest"]
+        self.assertEqual(snapshot["indexing_state"], "INDEXING_ALLOWED")
+        self.assertEqual(snapshot["sitemaps"], ["https://huntlab.app/post-sitemap.xml"])
+
+    def test_measurement_warning_distinguishes_tag_collection_from_session_classification(self):
+        warnings = measurement_warnings(
+            {
+                "ga4_summary": {
+                    "yesterday": {
+                        "screenPageViews": "17",
+                        "engagedSessions": "0",
+                        "userEngagementDuration": "425",
+                    },
+                    "last7days": {},
+                },
+                "ga4_events": [{"eventName": "user_engagement", "eventCount": "16"}],
+            },
+            [],
+        )
+
+        self.assertIn("태그 누락보다", warnings[0])
+        self.assertIn("huntlab_engaged_read", warnings[0])
 
     def test_incomplete_checkpoint_is_retried(self):
         now = datetime(2026, 8, 19, 1, 0, tzinfo=timezone.utc)

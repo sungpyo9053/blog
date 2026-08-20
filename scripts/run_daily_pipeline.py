@@ -16,6 +16,8 @@ import subprocess
 import sys
 import time
 import threading
+import urllib.parse
+import urllib.request
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -51,6 +53,15 @@ ACTIVE_EDITOR_CATEGORIES = {
     "정치",
     "문화·엔터",
     "IT",
+}
+ACTIVE_CATEGORY_SLUGS = {
+    "life": "생활",
+    "economy": "경제",
+    "real-estate": "부동산",
+    "society": "사회",
+    "politics": "정치",
+    "culture-entertainment": "문화·엔터",
+    "it": "IT",
 }
 LEGACY_EDITOR_CATEGORIES = {
     "Tech",
@@ -1511,6 +1522,39 @@ def read_google_trends_observation(path: Path | None) -> str:
     )
 
 
+def read_public_category_distribution(base_url: str, *, timeout: float = 10.0) -> str:
+    """Read active public category counts for a bounded portfolio-balance signal."""
+    endpoint = urllib.parse.urljoin(
+        base_url.rstrip("/") + "/",
+        "wp-json/wp/v2/categories?per_page=100&hide_empty=false&_fields=slug,count",
+    )
+    request = urllib.request.Request(
+        endpoint,
+        headers={"User-Agent": "HuntNewsPlanner/1.0 (+https://huntlab.app/)"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            rows = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return ""
+    counts: dict[str, int] = {}
+    for row in rows if isinstance(rows, list) else []:
+        slug = str(row.get("slug", "")) if isinstance(row, dict) else ""
+        if slug not in ACTIVE_CATEGORY_SLUGS:
+            continue
+        try:
+            counts[ACTIVE_CATEGORY_SLUGS[slug]] = max(int(row.get("count", 0)), 0)
+        except (TypeError, ValueError):
+            continue
+    if not counts:
+        return ""
+    return json.dumps(
+        {"total": sum(counts.values()), "counts": counts},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
 def planner_stage(
     keywords: str,
     run_id: str,
@@ -1519,6 +1563,7 @@ def planner_stage(
     whereispost_cache_mode: bool = False,
     google_trends_observation: str = "",
     google_trends_cache_mode: bool = False,
+    category_distribution: str = "",
 ) -> Stage:
     return Stage(
         "Topic Planner Agent",
@@ -1569,7 +1614,16 @@ def planner_stage(
                 else ""
             )
             + "Hunt News는 복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명하는 사이트입니다. "
-            "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 생활, 경제, 부동산, 사회, 정치, "
+            + (
+                "Harness가 현재 공개 카테고리 분포를 읽기 전용으로 제공합니다: "
+                f"{category_distribution}. 이 값은 후보 품질을 대체하는 할당량이 아니라 카테고리 균형 "
+                "점수의 관측 근거입니다. 한 카테고리가 전체의 60%를 넘으면 그 카테고리에는 균형 가산점을 "
+                "주지 말고, 공식 근거·검색 수요·생활 영향·비중복 조건을 모두 통과한 저대표 카테고리 후보에만 "
+                "카테고리 균형 점수를 우대하세요. 약한 후보를 비율 때문에 TOP2에 넣지는 마세요. "
+                if category_distribution
+                else "공개 카테고리 분포를 읽지 못하면 비율을 추정하지 말고 기존 글의 최근 편중만 정성적으로 평가하세요. "
+            )
+            + "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 생활, 경제, 부동산, 사회, 정치, "
             "문화·엔터, IT를 활성 카테고리로 사용하세요. 생활 영향 후보는 "
             "content_type=life_impact_explainer를 사용하고, IT의 설치·실험·시스템 설계 글만 "
             "검색 의도에 맞는 기존 기술 content_type을 사용하세요. "
@@ -1911,6 +1965,9 @@ def main() -> int:
                 whereispost_cache_mode=args.use_whereispost_cache,
                 google_trends_observation=google_trends_observation,
                 google_trends_cache_mode=args.use_google_trends_cache,
+                category_distribution=read_public_category_distribution(
+                    os.environ.get("PUBLIC_SITE_URL", "https://huntlab.app/")
+                ),
             )
             logger.info(
                 "pipeline event=start run_id=%s run_directory=%s",

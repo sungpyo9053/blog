@@ -10,7 +10,7 @@ import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from scripts.run_daily_pipeline import (
     PipelineError,
@@ -21,6 +21,7 @@ from scripts.run_daily_pipeline import (
     humanize_experiment_enabled,
     make_topic_context,
     parse_whereispost_total_searches,
+    read_public_category_distribution,
     parse_topic_plan,
     planner_retry_stage,
     planner_stage,
@@ -483,6 +484,35 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("Search Console 검색어", planner.prompt)
         self.assertIn("최대 1점만 가산", planner.prompt)
         self.assertIn("Whereispost 30일 평균은 장기 수요 참고값", planner.prompt)
+
+    def test_planner_uses_live_category_distribution_without_forcing_quota(self):
+        planner = planner_stage(
+            "",
+            "run-category-balance",
+            Path("/tmp/topics.md"),
+            category_distribution='{"total":91,"counts":{"IT":70,"생활":6}}',
+        )
+
+        self.assertIn("한 카테고리가 전체의 60%를 넘으면", planner.prompt)
+        self.assertIn("저대표 카테고리 후보", planner.prompt)
+        self.assertIn("약한 후보를 비율 때문에 TOP2에 넣지는 마세요", planner.prompt)
+
+    @patch("scripts.run_daily_pipeline.urllib.request.urlopen")
+    def test_category_distribution_reads_only_active_public_categories(self, urlopen):
+        response = MagicMock()
+        response.read.return_value = json.dumps(
+            [
+                {"slug": "it", "count": 70},
+                {"slug": "life", "count": 6},
+                {"slug": "legacy", "count": 99},
+            ]
+        ).encode("utf-8")
+        urlopen.return_value.__enter__.return_value = response
+
+        payload = json.loads(read_public_category_distribution("https://huntlab.app/"))
+
+        self.assertEqual(payload["total"], 76)
+        self.assertEqual(payload["counts"], {"IT": 70, "생활": 6})
 
     def test_google_trends_cache_must_be_recent(self):
         with tempfile.TemporaryDirectory() as temporary:

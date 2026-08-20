@@ -24,6 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIR = ROOT / "output" / "analytics"
 LOG_DIR = ROOT / "logs"
 INDEX_RECOVERY_STATE = REPORT_DIR / "index-recovery-state.json"
+INDEX_INSPECTION_LIMIT = 10
+INDEX_RECOVERY_COOLDOWN = timedelta(days=7)
 
 
 def _credentials():
@@ -132,7 +134,7 @@ def select_index_checkpoint_urls(
     *,
     limit: int = 10,
 ) -> list[dict[str, str]]:
-    """Select new posts once around 24h and again around 72h after publication."""
+    """Select new posts around 24h, 72h and 7d after publication."""
     candidates: list[tuple[datetime, dict[str, str]]] = []
     records = state.get("urls", {}) if isinstance(state, dict) else {}
     for post in public_posts:
@@ -149,10 +151,12 @@ def select_index_checkpoint_urls(
         if published_at.tzinfo is None:
             published_at = published_at.replace(tzinfo=now.tzinfo)
         age_hours = (now.astimezone(published_at.tzinfo) - published_at).total_seconds() / 3600
-        if age_hours < 24 or age_hours > 24 * 7:
+        if age_hours < 24 or age_hours > 24 * 14:
             continue
         checkpoints = records.get(url, {}).get("checkpoints", {})
-        checkpoint = "72h" if age_hours >= 72 else "24h"
+        checkpoint = "7d" if age_hours >= 24 * 7 else (
+            "72h" if age_hours >= 72 else "24h"
+        )
         if checkpoint in checkpoints:
             continue
         candidates.append(
@@ -169,15 +173,49 @@ def select_index_checkpoint_urls(
     return [item for _, item in candidates[:limit]]
 
 
+def select_mature_recovery_urls(
+    urls: list[str],
+    state: dict[str, Any],
+    now: datetime,
+    *,
+    limit: int = INDEX_INSPECTION_LIMIT,
+    cooldown: timedelta = INDEX_RECOVERY_COOLDOWN,
+) -> list[str]:
+    """Rotate through mature no-impression URLs instead of rechecking the same ten."""
+    if limit <= 0:
+        return []
+    records = state.get("urls", {}) if isinstance(state, dict) else {}
+    candidates: list[tuple[datetime, int, str]] = []
+    never = datetime.min.replace(tzinfo=timezone.utc)
+    for position, url in enumerate(dict.fromkeys(urls)):
+        inspected_text = str(records.get(url, {}).get("recovery_last_inspected_at", ""))
+        inspected_at = never
+        if inspected_text:
+            try:
+                inspected_at = datetime.fromisoformat(inspected_text.replace("Z", "+00:00"))
+                if inspected_at.tzinfo is None:
+                    inspected_at = inspected_at.replace(tzinfo=now.tzinfo)
+            except ValueError:
+                inspected_at = never
+        comparable = inspected_at.astimezone(now.tzinfo) if inspected_at != never else never
+        if comparable != never and now - comparable < cooldown:
+            continue
+        candidates.append((comparable, position, url))
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return [url for _, _, url in candidates[:limit]]
+
+
 def update_index_checkpoint_state(
     state: dict[str, Any],
     selected: list[dict[str, str]],
     inspections: list[dict[str, Any]],
     now: datetime,
+    *,
+    recovery_urls: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Persist only completed inspections so transient API failures retry later."""
+    """Persist full completed inspections so transient API failures retry later."""
     updated = json.loads(json.dumps(state)) if isinstance(state, dict) else {}
-    updated["version"] = 1
+    updated["version"] = 2
     updated["updated_at"] = now.isoformat()
     records = updated.setdefault("urls", {})
     inspected = {str(item.get("url", "")): item for item in inspections}
@@ -189,12 +227,42 @@ def update_index_checkpoint_state(
             candidate["url"],
             {"published_at": candidate["published_at"], "checkpoints": {}},
         )
-        record.setdefault("checkpoints", {})[candidate["checkpoint"]] = {
+        snapshot = {
             "inspected_at": now.isoformat(),
             "verdict": result.get("verdict", "VERDICT_UNSPECIFIED"),
             "coverage_state": result.get("coverage_state", ""),
+            "indexing_state": result.get("indexing_state", ""),
+            "robots_txt_state": result.get("robots_txt_state", ""),
+            "page_fetch_state": result.get("page_fetch_state", ""),
             "last_crawl_time": result.get("last_crawl_time", ""),
+            "user_canonical": result.get("user_canonical", ""),
+            "google_canonical": result.get("google_canonical", ""),
+            "sitemaps": result.get("sitemaps", []),
         }
+        record.setdefault("checkpoints", {})[candidate["checkpoint"]] = snapshot
+        record["latest"] = snapshot
+    for url in recovery_urls or []:
+        result = inspected.get(url, {})
+        if result.get("status") != "COMPLETE":
+            continue
+        record = records.setdefault(url, {"checkpoints": {}})
+        snapshot = {
+            "inspected_at": now.isoformat(),
+            "verdict": result.get("verdict", "VERDICT_UNSPECIFIED"),
+            "coverage_state": result.get("coverage_state", ""),
+            "indexing_state": result.get("indexing_state", ""),
+            "robots_txt_state": result.get("robots_txt_state", ""),
+            "page_fetch_state": result.get("page_fetch_state", ""),
+            "last_crawl_time": result.get("last_crawl_time", ""),
+            "user_canonical": result.get("user_canonical", ""),
+            "google_canonical": result.get("google_canonical", ""),
+            "sitemaps": result.get("sitemaps", []),
+        }
+        record["recovery_last_inspected_at"] = now.isoformat()
+        history = record.setdefault("recovery_checks", [])
+        history.append(snapshot)
+        record["recovery_checks"] = history[-4:]
+        record["latest"] = snapshot
     return updated
 
 
@@ -403,6 +471,20 @@ def collect() -> tuple[list[dict], list[dict], dict[str, Any]]:
         ("sessions", "engagedSessions"),
         limit=20,
     )
+    event_rows = analytics_query(
+        "yesterday",
+        "yesterday",
+        ("eventName",),
+        ("eventCount",),
+        limit=50,
+    )
+    host_rows = analytics_query(
+        "yesterday",
+        "yesterday",
+        ("hostName",),
+        ("sessions", "engagedSessions", "screenPageViews", "userEngagementDuration"),
+        limit=20,
+    )
     diagnostics: dict[str, Any] = {
         "search_period": {"start": start.isoformat(), "end": end.isoformat()},
         "search_totals": search_totals[0] if search_totals else {},
@@ -411,6 +493,8 @@ def collect() -> tuple[list[dict], list[dict], dict[str, Any]]:
         "search_pages": search_pages,
         "ga4_summary": summary,
         "ga4_channels": channel_rows,
+        "ga4_events": event_rows,
+        "ga4_hosts": host_rows,
     }
     return search_rows, ga_rows, diagnostics
 
@@ -604,10 +688,23 @@ def measurement_warnings(
     if _number(yesterday.get("screenPageViews")) >= 2 and _number(
         yesterday.get("engagedSessions")
     ) == 0:
-        warnings.append(
-            "어제 페이지뷰가 2회 이상인데 참여 세션이 0입니다. "
-            "GA4 event/session 설정 또는 내부 테스트 트래픽을 확인하세요."
-        )
+        events = {
+            str(row.get("eventName", "")): _number(row.get("eventCount"))
+            for row in diagnostics.get("ga4_events", [])
+        }
+        if events.get("user_engagement", 0) > 0 or _number(
+            yesterday.get("userEngagementDuration")
+        ) > 0:
+            warnings.append(
+                "GA4가 user_engagement와 참여 시간을 수집하지만 참여 세션은 0입니다. "
+                "태그 누락보다 속성의 참여 세션 판정·필터 또는 자동 트래픽 가능성을 우선 확인하고, "
+                "huntlab_engaged_read를 보조 실독 신호로 사용하세요."
+            )
+        else:
+            warnings.append(
+                "어제 페이지뷰가 2회 이상인데 user_engagement와 참여 세션이 모두 0입니다. "
+                "GA4 태그 실행·동의 설정 또는 내부 테스트 트래픽을 확인하세요."
+            )
     overall_sessions = _number(last7.get("sessions"))
     channel_sessions = sum(
         _number(row.get("sessions")) for row in diagnostics.get("ga4_channels", [])
@@ -662,6 +759,7 @@ def render(
     public_post_metadata: list[dict] | None = None,
     url_inspections: list[dict[str, Any]] | None = None,
     index_checkpoints: list[dict[str, str]] | None = None,
+    index_recovery_urls: list[str] | None = None,
     shadow_signals: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     refresh, gaps = analyze(search_rows)
@@ -772,6 +870,17 @@ def render(
         lines.extend(f"- {warning}" for warning in warnings)
     else:
         lines.append("- 자동 진단에서 명확한 측정 이상 없음")
+    event_counts = {
+        str(row.get("eventName", "")): _number(row.get("eventCount"))
+        for row in diagnostics.get("ga4_events", [])
+    }
+    lines.extend(
+        [
+            f"- yesterday_user_engagement_events: `{event_counts.get('user_engagement', 0):.0f}`",
+            f"- yesterday_huntlab_engaged_read_events: `{event_counts.get('huntlab_engaged_read', 0):.0f}`",
+            f"- yesterday_observed_hosts: `{', '.join(str(row.get('hostName', '')) for row in diagnostics.get('ga4_hosts', []) if row.get('hostName')) or 'N/A'}`",
+        ]
+    )
     lines += [
         "",
         "## Search Console 유입",
@@ -891,6 +1000,10 @@ def render(
         )
         lines.append(f"- fresh_post_checkpoints: `{labels}`")
         lines.append("")
+    if index_recovery_urls:
+        labels = ", ".join(normalize_page_path(url) for url in index_recovery_urls)
+        lines.append(f"- mature_recovery_checks: `{labels}`")
+        lines.append("")
     if inspections:
         lines.extend(
             [
@@ -992,12 +1105,20 @@ def main() -> int:
             )
             for path in (mature_funnel or {}).get("without_impressions", [])
         ]
-        inspection_urls = checkpoint_urls + [
-            url for url in mature_urls if url not in checkpoint_urls
-        ][: max(10 - len(checkpoint_urls), 0)]
+        recovery_urls = select_mature_recovery_urls(
+            [url for url in mature_urls if url not in checkpoint_urls],
+            checkpoint_state,
+            now,
+            limit=max(INDEX_INSPECTION_LIMIT - len(checkpoint_urls), 0),
+        )
+        inspection_urls = checkpoint_urls + recovery_urls
         url_inspections = collect_url_inspections(inspection_urls)
         checkpoint_state = update_index_checkpoint_state(
-            checkpoint_state, index_checkpoints, url_inspections, now
+            checkpoint_state,
+            index_checkpoints,
+            url_inspections,
+            now,
+            recovery_urls=recovery_urls,
         )
         write_index_checkpoint_state(checkpoint_state)
         body = render(
@@ -1009,6 +1130,7 @@ def main() -> int:
             public_post_metadata=public_post_metadata,
             url_inspections=url_inspections,
             index_checkpoints=index_checkpoints,
+            index_recovery_urls=recovery_urls,
             shadow_signals=shadow_signals,
         )
         body += "\n" + public_audit

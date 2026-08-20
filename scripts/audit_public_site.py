@@ -7,6 +7,8 @@ import html
 import json
 import re
 import subprocess
+import threading
+import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,6 +18,11 @@ from pathlib import Path
 from typing import Iterable
 
 USER_AGENT = "HuntLabPublicAudit/1.0 (+https://huntlab.app/)"
+REQUEST_INTERVAL_SECONDS = 0.25
+FETCH_ATTEMPTS = 3
+FETCH_BACKOFF_SECONDS = 0.75
+_FETCH_GATE = threading.Lock()
+_NEXT_FETCH_AT = 0.0
 GENERIC_AUTHORS = {"admin", "administrator", "user"}
 EVIDENCE_TERMS = (
     "검증 환경",
@@ -27,6 +34,15 @@ EVIDENCE_TERMS = (
     "로그",
     "한계",
 )
+ACTIVE_CATEGORY_SLUGS = {
+    "life",
+    "economy",
+    "real-estate",
+    "society",
+    "politics",
+    "culture-entertainment",
+    "it",
+}
 
 
 @dataclass
@@ -124,10 +140,29 @@ class PageParser(HTMLParser):
             self.text_parts.append(data.strip())
 
 
-def fetch(url: str, *, timeout: float = 6.0, method: str = "GET") -> FetchResult:
+def _wait_for_request_slot(interval: float = REQUEST_INTERVAL_SECONDS) -> None:
+    """Serialize audit starts so a full crawl does not trip the public CDN."""
+    global _NEXT_FETCH_AT
+    with _FETCH_GATE:
+        now = time.monotonic()
+        if _NEXT_FETCH_AT > now:
+            time.sleep(_NEXT_FETCH_AT - now)
+        _NEXT_FETCH_AT = time.monotonic() + max(interval, 0.0)
+
+
+def fetch(
+    url: str,
+    *,
+    timeout: float = 6.0,
+    method: str = "GET",
+    attempts: int = FETCH_ATTEMPTS,
+    request_interval: float = REQUEST_INTERVAL_SECONDS,
+) -> FetchResult:
     marker = b"\n__HUNTLAB_AUDIT_META__"
     last_error = ""
-    for _attempt in range(2):
+    last_result: FetchResult | None = None
+    for attempt in range(max(attempts, 1)):
+        _wait_for_request_slot(request_interval)
         try:
             completed = subprocess.run(
                 [
@@ -150,19 +185,27 @@ def fetch(url: str, *, timeout: float = 6.0, method: str = "GET") -> FetchResult
             body, separator, metadata = completed.stdout.rpartition(marker)
             if not separator:
                 last_error = "CurlMetadataError"
+                if attempt + 1 < max(attempts, 1):
+                    time.sleep(FETCH_BACKOFF_SECONDS * (2 ** attempt))
                 continue
             status_text, content_type, effective_url = metadata.decode("utf-8", errors="replace").split("\t", 2)
             status = int(status_text)
-            return FetchResult(
+            result = FetchResult(
                 url=effective_url,
                 status=status,
                 content_type=content_type,
                 body=body if method == "GET" else b"",
                 error="" if completed.returncode == 0 and status < 400 else "CurlHTTPError",
             )
+            last_result = result
+            retryable = status in {0, 403, 408, 425, 429} or status >= 500
+            if not retryable or attempt + 1 >= max(attempts, 1):
+                return result
         except (OSError, ValueError) as exc:
             last_error = type(exc).__name__
-    return FetchResult(url=url, status=0, error=last_error)
+        if attempt + 1 < max(attempts, 1):
+            time.sleep(FETCH_BACKOFF_SECONDS * (2 ** attempt))
+    return last_result or FetchResult(url=url, status=0, error=last_error)
 
 
 def sitemap_urls(xml_body: bytes) -> list[str]:
@@ -248,7 +291,7 @@ def inspect_page(result: FetchResult, base_url: str) -> PageFacts:
 def _parallel_fetch(urls: Iterable[str], timeout: float, *, method: str = "GET") -> list[FetchResult]:
     ordered_urls = list(dict.fromkeys(urls))
     results: dict[str, FetchResult] = {}
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {executor.submit(fetch, url, timeout=timeout, method=method): url for url in ordered_urls}
         for future in as_completed(futures):
             results[futures[future]] = future.result()
@@ -301,7 +344,14 @@ def audit_site(base_url: str, *, timeout: float = 6.0) -> dict:
         except (UnicodeDecodeError, json.JSONDecodeError):
             categories = []
 
+    complete = (
+        sitemap_result.status == 200
+        and bool(child_sitemaps)
+        and all(result.status == 200 for result in child_results)
+        and not unverified_urls
+    )
     return {
+        "status": "COMPLETE" if complete else "INCOMPLETE",
         "base_url": base_url,
         "endpoints": {
             name: {"status": result.status, "content_type": result.content_type, "error": result.error}
@@ -312,7 +362,22 @@ def audit_site(base_url: str, *, timeout: float = 6.0) -> dict:
             {"url": result.url, "status": result.status, "error": result.error}
             for result in child_results
         ],
-        "empty_categories": sorted(category.get("name", "") for category in categories if category.get("count") == 0),
+        "empty_categories": sorted(
+            category.get("name", "")
+            for category in categories
+            if category.get("count") == 0
+            and (
+                not category.get("slug")
+                or category.get("slug") in ACTIVE_CATEGORY_SLUGS
+            )
+        ),
+        "legacy_empty_categories": sorted(
+            category.get("name", "")
+            for category in categories
+            if category.get("count") == 0
+            and category.get("slug")
+            and category.get("slug") not in ACTIVE_CATEGORY_SLUGS
+        ),
         "broken_internal_links": broken_links,
         "unverified_urls": unverified_urls,
         "pages": [facts.__dict__ | {"internal_links": sorted(facts.internal_links)} for facts in pages],
@@ -343,6 +408,7 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
     lines = [
         f"{heading} Public Site Quality Audit",
         "",
+        f"- status: `{audit.get('status', 'INCOMPLETE')}`",
         f"- base_url: `{audit['base_url']}`",
         f"- posts: `{audit['counts']['post']}`",
         f"- pages: `{audit['counts']['page']}`",
@@ -350,6 +416,7 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
         f"- broken_internal_links: `{len(audit['broken_internal_links'])}`",
         f"- unverified_urls: `{len(audit['unverified_urls'])}`",
         f"- empty_categories: `{len(audit['empty_categories'])}`",
+        f"- legacy_empty_categories: `{len(audit.get('legacy_empty_categories', []))}`",
         f"- generic_author_posts: `{len(generic_authors)}`",
         f"- missing_featured_or_alt_posts: `{len(missing_featured)}`",
         f"- missing_canonical_pages: `{len(missing_canonical)}`",
@@ -367,6 +434,10 @@ def render_markdown(audit: dict, *, heading_level: int = 1) -> str:
         lines.append(f"| {name} | {item['status']} | {item['content_type'].replace('|', '\\|')} |")
     lines += ["", f"{subheading} 즉시 확인 항목", ""]
     lines.append("- 빈 카테고리: " + (", ".join(audit["empty_categories"]) or "없음"))
+    lines.append(
+        "- 리디렉션용 빈 레거시 카테고리: "
+        + (", ".join(audit.get("legacy_empty_categories", [])) or "없음")
+    )
     lines.append("- 깨진 내부 링크: " + (str(len(audit["broken_internal_links"])) + "개"))
     lines.append("- 네트워크 오류로 확인 보류: " + (str(len(audit["unverified_urls"])) + "개"))
     lines.append("- 일반 계정명 작성자 글: " + str(len(generic_authors)) + "개")
@@ -415,14 +486,15 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--timeout", type=float, default=6.0)
     args = parser.parse_args()
-    report = render_markdown(audit_site(args.base_url, timeout=args.timeout))
+    audit = audit_site(args.base_url, timeout=args.timeout)
+    report = render_markdown(audit)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(report, encoding="utf-8")
         print(args.output)
     else:
         print(report, end="")
-    return 0
+    return 0 if audit.get("status") == "COMPLETE" else 2
 
 
 if __name__ == "__main__":

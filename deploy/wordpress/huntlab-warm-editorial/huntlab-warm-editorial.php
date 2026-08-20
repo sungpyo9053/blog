@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 2.1.0
+ * Version: 2.2.0
  * Author: Hunt News
  */
 
@@ -255,6 +255,46 @@ function hunt_news_home_sections() {
 	<?php
 }
 add_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
+
+/**
+ * Record a conservative real-reading signal independently of GA4's session
+ * classification. The event fires once after 30 visible seconds and 25% depth.
+ */
+function huntlab_warm_editorial_engaged_read_signal() {
+	if ( is_admin() ) {
+		return;
+	}
+	?>
+	<script id="huntlab-engaged-read-signal">
+	(function(){
+		if(window.__huntlabEngagedReadInstalled){return;}
+		window.__huntlabEngagedReadInstalled=true;
+		var activeMs=0,maxDepth=0,fired=false;
+		function measureDepth(){
+			var height=Math.max(document.documentElement.scrollHeight,document.body?document.body.scrollHeight:0,1);
+			maxDepth=Math.max(maxDepth,Math.min(100,((window.scrollY+window.innerHeight)/height)*100));
+		}
+		measureDepth();
+		window.addEventListener('scroll',measureDepth,{passive:true});
+		window.setInterval(function(){
+			if(fired||document.visibilityState!=='visible'){return;}
+			activeMs+=1000;
+			measureDepth();
+			if(activeMs<30000||maxDepth<25){return;}
+			var tracker=window.gtag||window.__gtagTracker;
+			if(typeof tracker!=='function'){return;}
+			tracker('event','huntlab_engaged_read',{
+				engagement_time_msec:activeMs,
+				read_depth_percent:Math.round(maxDepth),
+				transport_type:'beacon'
+			});
+			fired=true;
+		},1000);
+	})();
+	</script>
+	<?php
+}
+add_action( 'wp_footer', 'huntlab_warm_editorial_engaged_read_signal', 100 );
 
 /**
  * The existing HuntLab navigation and brand plugins print their styles inline.

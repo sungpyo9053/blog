@@ -35,7 +35,11 @@ Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/sour
 `생활`, `경제`, `부동산`, `사회`, `정치`, `문화·엔터`, `IT`를 활성 편집 범위로
 사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
 TOP2는 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를
-기준으로 선정합니다. Google Trends 한국 RSS 수집기는 매시간 급상승 검색어, 대략적인
+기준으로 선정합니다. Harness는 실행 직전 공개 WordPress 카테고리 분포도 읽어
+한 카테고리가 전체의 60%를 넘으면 그 카테고리의 균형 가산점을 제거합니다.
+저대표 분야는 다른 품질 조건을 모두 통과한 경우에만 균형 점수를 우대하며,
+카테고리 비율 때문에 약한 후보를 강제 발행하지 않습니다.
+Google Trends 한국 RSS 수집기는 매시간 급상승 검색어, 대략적인
 검색량, 발생 시각과 관련 기사를 48시간 캐시에 누적합니다. Planner는 이를 주력
 시의성 신호로 사용하지만 관련 기사 자체를 사실 근거로 간주하지 않으며, 공식 원문
 하나 또는 독립 출처 두 개 이상을 다시 확인합니다. 같은 검색 의도가 Search Console의
@@ -144,10 +148,12 @@ Search Console·GA4 읽기 전용 인증으로 `output/analytics/latest.md`를 �
 Daily Pipeline을 직접 호출하지 않습니다.
 같은 보고서를 `output/analytics/YYYY-MM-DD.md`에도 저장해 일별 비교 기록을
 보존하며, `latest.md`는 항상 다음 파이프라인이 읽을 최신 보고서로 유지합니다.
-새 글은 발행 약 24시간 뒤와 72시간 뒤에 URL Inspection 읽기 검사를 한 번씩
+새 글은 발행 약 24시간, 72시간과 7일 뒤에 URL Inspection 읽기 검사를 한 번씩
 받습니다. 완료된 체크포인트는
 `output/analytics/index-recovery-state.json`에 저장하고, 일시적인 API 실패는
-완료로 기록하지 않아 다음 01:00 실행에서 재시도합니다. 일반 블로그 글을
+완료로 기록하지 않아 다음 01:00 실행에서 재시도합니다. 검색 노출이 없는 성숙
+글은 같은 10개만 반복하지 않고 7일 재검사 간격으로 순환하며, verdict·coverage·
+indexing state·canonical·sitemap을 함께 저장합니다. 일반 블로그 글을
 Indexing API로 제출하지 않으며, 색인되지 않은 글에는 검토된 관련 글에서
 문맥상 맞는 내부 링크 한 개만 추가할 수 있습니다.
 분석 결과만으로 추가 발행이나 기존 글 Update를 실행하지 않습니다. 인증이
@@ -155,7 +161,12 @@ Indexing API로 제출하지 않으며, 색인되지 않은 글에는 검토된 
 추정하지 않습니다.
 
 홈은 히어로 바로 다음에 최신 글을 먼저 보여주고, 읽기 가이드와 분야별 탐색은
-글 목록 뒤에 배치합니다. AIOSEO JSON-LD의 Article 작성자·발행자와 WebSite
+글 목록 뒤에 배치합니다. 모바일 히어로는 첫 최신 글이 더 빨리 보이도록 압축합니다.
+GA4의 기본 참여 세션과 별도로 화면이 보이는 상태에서 30초 이상 머물고 본문의
+25% 이상을 읽은 경우 `huntlab_engaged_read`를 한 번 기록해 실제 읽기 신호를
+교차 확인합니다. 공개 전수 감사는 CDN 제한을 피하도록 요청 시작 간격, 지수
+백오프와 제한된 동시성을 적용하며 일부 Sitemap을 읽지 못하면 `INCOMPLETE`로
+실패시킵니다. AIOSEO JSON-LD의 Article 작성자·발행자와 WebSite
 발행자는 `Hunt News 편집팀` Organization으로 통일합니다.
 
 Topic Planner는 Keyword Cannibalization, 내부 링크 후보, Topic Cluster와

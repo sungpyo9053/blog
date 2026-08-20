@@ -1,11 +1,35 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from scripts.audit_public_site import FetchResult, inspect_page, normalize_internal_link, render_markdown, sitemap_urls
+from scripts.audit_public_site import FetchResult, fetch, inspect_page, normalize_internal_link, render_markdown, sitemap_urls
 
 
 class PublicSiteAuditTests(unittest.TestCase):
+    @patch("scripts.audit_public_site.time.sleep")
+    @patch("scripts.audit_public_site.subprocess.run")
+    def test_fetch_retries_cloudflare_throttle_with_backoff(self, run, sleep):
+        run.side_effect = [
+            SimpleNamespace(
+                stdout=b"blocked\n__HUNTLAB_AUDIT_META__429\ttext/html\thttps://huntlab.app/",
+                returncode=0,
+            ),
+            SimpleNamespace(
+                stdout=b"ok\n__HUNTLAB_AUDIT_META__200\ttext/html\thttps://huntlab.app/",
+                returncode=0,
+            ),
+        ]
+
+        result = fetch(
+            "https://huntlab.app/", attempts=2, request_interval=0
+        )
+
+        self.assertEqual(result.status, 200)
+        self.assertEqual(result.body, b"ok")
+        sleep.assert_called_once_with(0.75)
+
     def test_sitemap_urls_handles_namespaces(self):
         xml = b'''<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"><url><loc>https://huntlab.app/post/</loc><image:image><image:loc>https://huntlab.app/image.webp</image:loc></image:image></url></urlset>'''
         self.assertEqual(sitemap_urls(xml), ["https://huntlab.app/post/"])
