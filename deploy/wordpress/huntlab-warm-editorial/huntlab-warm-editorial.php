@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 2.2.0
+ * Version: 2.3.0
  * Author: Hunt News
  */
 
@@ -276,6 +276,20 @@ function huntlab_warm_editorial_engaged_read_signal() {
 		}
 		measureDepth();
 		window.addEventListener('scroll',measureDepth,{passive:true});
+		document.addEventListener('click',function(event){
+			var link=event.target.closest('main a[href],.huntlab-related-articles a[href],.entry-related a[href]');
+			if(!link){return;}
+			var destination;
+			try{destination=new URL(link.href,window.location.href);}catch(error){return;}
+			if(destination.origin!==window.location.origin||destination.pathname===window.location.pathname){return;}
+			var tracker=window.gtag||window.__gtagTracker;
+			if(typeof tracker!=='function'){return;}
+			tracker('event','huntlab_internal_click',{
+				link_path:destination.pathname,
+				link_area:link.closest('.huntlab-related-articles,.entry-related')?'related':'content',
+				transport_type:'beacon'
+			});
+		});
 		window.setInterval(function(){
 			if(fired||document.visibilityState!=='visible'){return;}
 			activeMs+=1000;

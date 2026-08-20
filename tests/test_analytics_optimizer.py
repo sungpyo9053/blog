@@ -6,9 +6,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from scripts.run_analytics_optimizer import (
+    allocate_index_inspection_targets,
     aggregate_page_rows,
     analyze,
     aug7_review_decisions,
+    build_ctr_experiment_queue,
+    build_index_recovery_queue,
     known_query_breakdown,
     measurement_warnings,
     mature_content_funnel,
@@ -347,6 +350,157 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         snapshot = state["urls"][first[0]]["latest"]
         self.assertEqual(snapshot["indexing_state"], "INDEXING_ALLOWED")
         self.assertEqual(snapshot["sitemaps"], ["https://huntlab.app/post-sitemap.xml"])
+
+    def test_index_inspection_reserves_six_fresh_and_four_recovery_slots(self):
+        now = datetime(2026, 8, 20, 1, 0, tzinfo=timezone.utc)
+        posts = [
+            {
+                "link": f"https://huntlab.app/fresh-{index}/",
+                "status": "publish",
+                "date": "2026-08-18T13:00:00+00:00",
+            }
+            for index in range(10)
+        ]
+        mature_urls = [
+            f"https://huntlab.app/mature-{index}/" for index in range(10)
+        ]
+
+        fresh, recovery = allocate_index_inspection_targets(
+            posts, mature_urls, {}, now
+        )
+
+        self.assertEqual(len(fresh), 6)
+        self.assertEqual(len(recovery), 4)
+        self.assertEqual(len({item["url"] for item in fresh} | set(recovery)), 10)
+
+    def test_index_inspection_fills_unused_fresh_slots_with_recovery(self):
+        now = datetime(2026, 8, 20, 1, 0, tzinfo=timezone.utc)
+        posts = [
+            {
+                "link": f"https://huntlab.app/fresh-{index}/",
+                "status": "publish",
+                "date": "2026-08-18T13:00:00+00:00",
+            }
+            for index in range(2)
+        ]
+        mature_urls = [
+            f"https://huntlab.app/mature-{index}/" for index in range(10)
+        ]
+
+        fresh, recovery = allocate_index_inspection_targets(
+            posts, mature_urls, {}, now
+        )
+
+        self.assertEqual(len(fresh), 2)
+        self.assertEqual(len(recovery), 8)
+
+    def test_index_recovery_queue_uses_observed_related_sources_only(self):
+        now = datetime(2026, 8, 20, 1, 0, tzinfo=timezone.utc)
+        posts = [
+            {
+                "id": 1,
+                "link": "https://huntlab.app/target/",
+                "title": {"rendered": "대상"},
+                "status": "publish",
+                "date": "2026-08-01T02:00:00",
+                "categories": [3],
+                "tags": [7],
+            },
+            {
+                "id": 2,
+                "link": "https://huntlab.app/source/",
+                "title": {"rendered": "관련 출처"},
+                "status": "publish",
+                "date": "2026-08-02T02:00:00",
+                "categories": [3],
+                "tags": [7],
+            },
+            {
+                "id": 3,
+                "link": "https://huntlab.app/unrelated/",
+                "title": {"rendered": "무관"},
+                "status": "publish",
+                "date": "2026-08-03T02:00:00",
+                "categories": [9],
+                "tags": [10],
+            },
+        ]
+
+        queue = build_index_recovery_queue(
+            posts,
+            ["/target/"],
+            [{"page": "/source/", "clicks": 1, "impressions": 40}],
+            {},
+            now,
+        )
+
+        self.assertEqual(queue["status"], "REVIEW_REQUIRED")
+        self.assertFalse(queue["automatic_content_mutation"])
+        self.assertEqual(queue["items"][0]["recommended_sources"][0]["post_id"], 2)
+
+    def test_ctr_queue_requires_enough_impressions_and_actionable_position(self):
+        now = datetime(2026, 8, 20, 1, 0, tzinfo=timezone.utc)
+        queue = build_ctr_experiment_queue(
+            [
+                {
+                    "keys": ["핵심 검색어", "https://huntlab.app/candidate/"],
+                    "impressions": 35,
+                }
+            ],
+            [
+                {
+                    "page": "/candidate/",
+                    "clicks": 0,
+                    "impressions": 40,
+                    "ctr": 0,
+                    "position": 11,
+                },
+                {
+                    "page": "/too-low/",
+                    "clicks": 0,
+                    "impressions": 5,
+                    "ctr": 0,
+                    "position": 11,
+                },
+            ],
+            [
+                {
+                    "id": 4,
+                    "link": "https://huntlab.app/candidate/",
+                    "title": {"rendered": "후보"},
+                    "status": "publish",
+                }
+            ],
+            now,
+        )
+
+        self.assertEqual(len(queue["items"]), 1)
+        self.assertEqual(queue["items"][0]["top_query"], "핵심 검색어")
+        self.assertEqual(queue["items"][0]["change_contract"], "title_or_meta_one_at_a_time")
+
+    def test_render_reports_read_to_internal_click_funnel_and_queues(self):
+        body = render(
+            [],
+            [],
+            datetime(2026, 8, 20, 1, 0, tzinfo=timezone.utc),
+            diagnostics={
+                "ga4_events": [
+                    {"eventName": "page_view", "eventCount": "20"},
+                    {"eventName": "huntlab_engaged_read", "eventCount": "5"},
+                    {"eventName": "huntlab_internal_click", "eventCount": "2"},
+                ]
+            },
+            index_checkpoints=[{"url": "https://huntlab.app/fresh/", "checkpoint": "24h"}],
+            index_recovery_urls=["https://huntlab.app/mature/"],
+            index_recovery_queue={"items": [{"target_url": "https://huntlab.app/mature/", "recommended_sources": [{}]}]},
+            ctr_experiment_queue={"items": [{"url": "https://huntlab.app/candidate/", "top_query": "검색어", "baseline": {"impressions": 40, "ctr": 0.01, "position": 9}}]},
+        )
+
+        self.assertIn("yesterday_engaged_read_per_page_view: `25.0%`", body)
+        self.assertIn("yesterday_internal_click_per_engaged_read: `40.0%`", body)
+        self.assertIn("inspection_slot_allocation: `fresh=1, mature_recovery=1`", body)
+        self.assertIn("색인 회복 내부링크 검토 큐", body)
+        self.assertIn("CTR 단일변수 실험 검토 큐", body)
 
     def test_measurement_warning_distinguishes_tag_collection_from_session_classification(self):
         warnings = measurement_warnings(

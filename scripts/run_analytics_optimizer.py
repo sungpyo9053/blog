@@ -26,6 +26,10 @@ LOG_DIR = ROOT / "logs"
 INDEX_RECOVERY_STATE = REPORT_DIR / "index-recovery-state.json"
 INDEX_INSPECTION_LIMIT = 10
 INDEX_RECOVERY_COOLDOWN = timedelta(days=7)
+FRESH_INSPECTION_QUOTA = 6
+RECOVERY_INSPECTION_QUOTA = 4
+INDEX_RECOVERY_QUEUE = REPORT_DIR / "index-recovery-queue.json"
+CTR_EXPERIMENT_QUEUE = REPORT_DIR / "ctr-experiment-queue.json"
 
 
 def _credentials():
@@ -203,6 +207,43 @@ def select_mature_recovery_urls(
         candidates.append((comparable, position, url))
     candidates.sort(key=lambda item: (item[0], item[1]))
     return [url for _, _, url in candidates[:limit]]
+
+
+def allocate_index_inspection_targets(
+    public_posts: list[dict],
+    mature_urls: list[str],
+    state: dict[str, Any],
+    now: datetime,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Reserve daily capacity for both fresh checkpoints and mature recovery."""
+    all_checkpoints = select_index_checkpoint_urls(
+        public_posts, state, now, limit=INDEX_INSPECTION_LIMIT
+    )
+    checkpoints = all_checkpoints[:FRESH_INSPECTION_QUOTA]
+    checkpoint_urls = {item["url"] for item in checkpoints}
+    eligible_recovery = [url for url in mature_urls if url not in checkpoint_urls]
+    all_recovery = select_mature_recovery_urls(
+        eligible_recovery,
+        state,
+        now,
+        limit=INDEX_INSPECTION_LIMIT,
+    )
+    recovery_urls = all_recovery[:RECOVERY_INSPECTION_QUOTA]
+
+    remaining = INDEX_INSPECTION_LIMIT - len(checkpoints) - len(recovery_urls)
+    if remaining > 0:
+        extra_checkpoints = [
+            item for item in all_checkpoints if item["url"] not in checkpoint_urls
+        ][:remaining]
+        checkpoints.extend(extra_checkpoints)
+        checkpoint_urls.update(item["url"] for item in extra_checkpoints)
+        remaining = INDEX_INSPECTION_LIMIT - len(checkpoints) - len(recovery_urls)
+    if remaining > 0:
+        recovery_urls.extend(
+            url for url in all_recovery if url not in recovery_urls
+        )
+        recovery_urls = recovery_urls[: INDEX_INSPECTION_LIMIT - len(checkpoints)]
+    return checkpoints, recovery_urls
 
 
 def update_index_checkpoint_state(
@@ -576,7 +617,7 @@ def collect_public_posts(base_url: str, *, timeout: float = 10.0) -> list[dict]:
             {
                 "per_page": 100,
                 "page": page,
-                "_fields": "date,link,slug,status",
+                "_fields": "id,date,link,slug,status,title,categories,tags",
             }
         )
         result = fetch(f"{endpoint}?{query}", timeout=timeout)
@@ -646,6 +687,170 @@ def mature_content_funnel(
         "click_rate": len(clicked) / eligible if eligible else None,
         "fresh": max(len(public_posts) - eligible, 0),
     }
+
+
+def _rendered_title(post: dict[str, Any]) -> str:
+    value = post.get("title", "")
+    if isinstance(value, dict):
+        value = value.get("rendered", "")
+    return str(value).strip()
+
+
+def build_index_recovery_queue(
+    public_posts: list[dict],
+    mature_paths: list[str],
+    page_rows: list[dict],
+    state: dict[str, Any],
+    now: datetime,
+) -> dict[str, Any]:
+    """Build a review-only queue with evidence-backed internal-link sources."""
+    metrics = {str(row.get("page", "")): row for row in page_rows}
+    posts_by_path = {
+        normalize_page_path(str(post.get("link", ""))): post
+        for post in public_posts
+        if post.get("status", "publish") == "publish"
+    }
+    items: list[dict[str, Any]] = []
+    for path in mature_paths:
+        target = posts_by_path.get(path)
+        if not target:
+            continue
+        target_categories = {int(value) for value in target.get("categories", [])}
+        target_tags = {int(value) for value in target.get("tags", [])}
+        ranked_sources: list[tuple[float, dict[str, Any]]] = []
+        for source_path, source in posts_by_path.items():
+            if source_path == path:
+                continue
+            shared_categories = target_categories & {
+                int(value) for value in source.get("categories", [])
+            }
+            shared_tags = target_tags & {int(value) for value in source.get("tags", [])}
+            if not shared_categories and not shared_tags:
+                continue
+            source_metrics = metrics.get(source_path, {})
+            impressions = _number(source_metrics.get("impressions"))
+            clicks = _number(source_metrics.get("clicks"))
+            if impressions <= 0:
+                continue
+            score = clicks * 1000 + impressions + len(shared_tags) * 100 + len(shared_categories) * 25
+            ranked_sources.append(
+                (
+                    score,
+                    {
+                        "post_id": int(source.get("id", 0)),
+                        "title": _rendered_title(source),
+                        "url": str(source.get("link", "")),
+                        "shared_tag_ids": sorted(shared_tags),
+                        "shared_category_ids": sorted(shared_categories),
+                        "search_clicks": clicks,
+                        "search_impressions": impressions,
+                    },
+                )
+            )
+        ranked_sources.sort(key=lambda item: item[0], reverse=True)
+        record = state.get("urls", {}).get(str(target.get("link", "")), {})
+        latest = record.get("latest", {})
+        items.append(
+            {
+                "target_post_id": int(target.get("id", 0)),
+                "target_title": _rendered_title(target),
+                "target_url": str(target.get("link", "")),
+                "published_at": str(target.get("date", "")),
+                "inspection_verdict": latest.get("verdict", "NOT_INSPECTED"),
+                "coverage_state": latest.get("coverage_state", ""),
+                "last_inspected_at": latest.get("inspected_at", ""),
+                "recommended_sources": [item for _, item in ranked_sources[:3]],
+                "action": "review_one_contextual_internal_link",
+                "automatic_content_mutation": False,
+            }
+        )
+    items.sort(
+        key=lambda item: (
+            not bool(item["recommended_sources"]),
+            item["last_inspected_at"] or "",
+            item["published_at"],
+        )
+    )
+    return {
+        "version": 1,
+        "generated_at": now.isoformat(),
+        "status": "REVIEW_REQUIRED",
+        "automatic_content_mutation": False,
+        "items": items,
+    }
+
+
+def build_ctr_experiment_queue(
+    search_rows: list[dict],
+    page_rows: list[dict],
+    public_posts: list[dict],
+    now: datetime,
+) -> dict[str, Any]:
+    """Queue one-variable CTR experiments without changing public titles."""
+    public_by_path = {
+        normalize_page_path(str(post.get("link", ""))): post
+        for post in public_posts
+        if post.get("status", "publish") == "publish"
+    }
+    top_queries: dict[str, dict[str, Any]] = {}
+    for row in search_rows:
+        keys = row.get("keys", [])
+        if len(keys) < 2:
+            continue
+        path = normalize_page_path(str(keys[1]))
+        current = top_queries.get(path)
+        if current is None or _number(row.get("impressions")) > _number(
+            current.get("impressions")
+        ):
+            top_queries[path] = {
+                "query": str(keys[0]),
+                "impressions": _number(row.get("impressions")),
+            }
+    items: list[dict[str, Any]] = []
+    for row in page_rows:
+        path = str(row.get("page", ""))
+        post = public_by_path.get(path)
+        impressions = _number(row.get("impressions"))
+        clicks = _number(row.get("clicks"))
+        ctr = _number(row.get("ctr"))
+        position = _number(row.get("position"))
+        if not post or impressions < 30 or ctr >= 0.02 or not (5 <= position <= 20):
+            continue
+        items.append(
+            {
+                "post_id": int(post.get("id", 0)),
+                "title": _rendered_title(post),
+                "url": str(post.get("link", "")),
+                "top_query": top_queries.get(path, {}).get("query", ""),
+                "baseline": {
+                    "clicks": clicks,
+                    "impressions": impressions,
+                    "ctr": ctr,
+                    "position": position,
+                },
+                "change_contract": "title_or_meta_one_at_a_time",
+                "stop_rule": "14_days_or_1000_impressions",
+                "status": "REVIEW_REQUIRED",
+            }
+        )
+    items.sort(key=lambda item: item["baseline"]["impressions"], reverse=True)
+    return {
+        "version": 1,
+        "generated_at": now.isoformat(),
+        "status": "REVIEW_REQUIRED",
+        "automatic_content_mutation": False,
+        "items": items,
+    }
+
+
+def write_json_atomic(payload: dict[str, Any], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def known_query_breakdown(diagnostics: dict[str, Any]) -> dict[str, float]:
@@ -760,6 +965,8 @@ def render(
     url_inspections: list[dict[str, Any]] | None = None,
     index_checkpoints: list[dict[str, str]] | None = None,
     index_recovery_urls: list[str] | None = None,
+    index_recovery_queue: dict[str, Any] | None = None,
+    ctr_experiment_queue: dict[str, Any] | None = None,
     shadow_signals: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     refresh, gaps = analyze(search_rows)
@@ -874,10 +1081,21 @@ def render(
         str(row.get("eventName", "")): _number(row.get("eventCount"))
         for row in diagnostics.get("ga4_events", [])
     }
+    page_view_events = event_counts.get("page_view", 0)
+    engaged_read_events = event_counts.get("huntlab_engaged_read", 0)
+    internal_click_events = event_counts.get("huntlab_internal_click", 0)
+    read_rate = engaged_read_events / page_view_events if page_view_events else None
+    next_click_rate = (
+        internal_click_events / engaged_read_events if engaged_read_events else None
+    )
     lines.extend(
         [
+            f"- yesterday_page_view_events: `{page_view_events:.0f}`",
             f"- yesterday_user_engagement_events: `{event_counts.get('user_engagement', 0):.0f}`",
-            f"- yesterday_huntlab_engaged_read_events: `{event_counts.get('huntlab_engaged_read', 0):.0f}`",
+            f"- yesterday_huntlab_engaged_read_events: `{engaged_read_events:.0f}`",
+            f"- yesterday_huntlab_internal_click_events: `{internal_click_events:.0f}`",
+            f"- yesterday_engaged_read_per_page_view: `{read_rate:.1%}`" if read_rate is not None else "- yesterday_engaged_read_per_page_view: `N/A`",
+            f"- yesterday_internal_click_per_engaged_read: `{next_click_rate:.1%}`" if next_click_rate is not None else "- yesterday_internal_click_per_engaged_read: `N/A`",
             f"- yesterday_observed_hosts: `{', '.join(str(row.get('hostName', '')) for row in diagnostics.get('ga4_hosts', []) if row.get('hostName')) or 'N/A'}`",
         ]
     )
@@ -993,6 +1211,10 @@ def render(
     )
 
     lines += ["", "### Google URL Inspection", ""]
+    lines.append(
+        "- inspection_slot_allocation: "
+        f"`fresh={len(index_checkpoints or [])}, mature_recovery={len(index_recovery_urls or [])}`"
+    )
     if index_checkpoints:
         labels = ", ".join(
             f"{item['checkpoint']}:{normalize_page_path(item['url'])}"
@@ -1025,6 +1247,35 @@ def render(
             )
     else:
         lines.append("- URL Inspection 데이터 없음")
+
+    recovery_items = (index_recovery_queue or {}).get("items", [])
+    lines += ["", "### 색인 회복 내부링크 검토 큐", ""]
+    lines.append(f"- review_candidates: `{len(recovery_items)}`")
+    lines.append("- automatic_content_mutation: `false`")
+    for item in recovery_items[:10]:
+        lines.append(
+            f"- `{normalize_page_path(item.get('target_url', ''))}`: "
+            f"추천 출처 `{len(item.get('recommended_sources', []))}`개; "
+            f"inspection=`{item.get('inspection_verdict', 'NOT_INSPECTED')}`"
+        )
+    if not recovery_items:
+        lines.append("- 검토 후보 없음")
+
+    ctr_items = (ctr_experiment_queue or {}).get("items", [])
+    lines += ["", "### CTR 단일변수 실험 검토 큐", ""]
+    lines.append(f"- review_candidates: `{len(ctr_items)}`")
+    lines.append("- automatic_content_mutation: `false`")
+    for item in ctr_items[:10]:
+        baseline = item.get("baseline", {})
+        lines.append(
+            f"- `{normalize_page_path(item.get('url', ''))}`: "
+            f"노출 `{_number(baseline.get('impressions')):.0f}`, "
+            f"CTR `{_number(baseline.get('ctr')):.1%}`, "
+            f"순위 `{_number(baseline.get('position')):.1f}`; "
+            f"query=`{item.get('top_query') or 'N/A'}`"
+        )
+    if not ctr_items:
+        lines.append("- 검토 후보 없음")
 
     lines += ["", "### Naver·Whereispost Shadow Mode", ""]
     for label, signal in (shadow_signals or {}).items():
@@ -1094,10 +1345,6 @@ def main() -> int:
             diagnostics.get("search_period", {}),
         )
         checkpoint_state = read_index_checkpoint_state()
-        index_checkpoints = select_index_checkpoint_urls(
-            public_post_metadata or [], checkpoint_state, now
-        )
-        checkpoint_urls = [item["url"] for item in index_checkpoints]
         mature_urls = [
             urllib.parse.urljoin(
                 public_site_url,
@@ -1105,12 +1352,13 @@ def main() -> int:
             )
             for path in (mature_funnel or {}).get("without_impressions", [])
         ]
-        recovery_urls = select_mature_recovery_urls(
-            [url for url in mature_urls if url not in checkpoint_urls],
+        index_checkpoints, recovery_urls = allocate_index_inspection_targets(
+            public_post_metadata or [],
+            mature_urls,
             checkpoint_state,
             now,
-            limit=max(INDEX_INSPECTION_LIMIT - len(checkpoint_urls), 0),
         )
+        checkpoint_urls = [item["url"] for item in index_checkpoints]
         inspection_urls = checkpoint_urls + recovery_urls
         url_inspections = collect_url_inspections(inspection_urls)
         checkpoint_state = update_index_checkpoint_state(
@@ -1121,6 +1369,21 @@ def main() -> int:
             recovery_urls=recovery_urls,
         )
         write_index_checkpoint_state(checkpoint_state)
+        index_recovery_queue = build_index_recovery_queue(
+            public_post_metadata or [],
+            (mature_funnel or {}).get("without_impressions", []),
+            page_rows,
+            checkpoint_state,
+            now,
+        )
+        ctr_experiment_queue = build_ctr_experiment_queue(
+            search_rows,
+            page_rows,
+            public_post_metadata or [],
+            now,
+        )
+        write_json_atomic(index_recovery_queue, INDEX_RECOVERY_QUEUE)
+        write_json_atomic(ctr_experiment_queue, CTR_EXPERIMENT_QUEUE)
         body = render(
             search_rows,
             ga_rows,
@@ -1131,6 +1394,8 @@ def main() -> int:
             url_inspections=url_inspections,
             index_checkpoints=index_checkpoints,
             index_recovery_urls=recovery_urls,
+            index_recovery_queue=index_recovery_queue,
+            ctr_experiment_queue=ctr_experiment_queue,
             shadow_signals=shadow_signals,
         )
         body += "\n" + public_audit

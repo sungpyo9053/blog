@@ -53,7 +53,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 2.2.0", php)
+        self.assertIn("Version: 2.3.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -80,6 +80,9 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("activeMs<30000", php)
         self.assertIn("maxDepth<25", php)
         self.assertIn("window.gtag||window.__gtagTracker", php)
+        self.assertIn("huntlab_internal_click", php)
+        self.assertIn("destination.origin!==window.location.origin", php)
+        self.assertIn("link_area", php)
 
     def test_category_archives_have_specific_copy_and_optimized_hero_images(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")

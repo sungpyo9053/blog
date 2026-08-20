@@ -61,6 +61,10 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
 - 다음 Planner/Writer 사이클에 전달할 검색 의도와 상업 키워드
 - URL별 Refresh 후보와 관측 근거
 - 기존 글로 해결되지 않는 Content Gap 후보
+- 신규 6개·성숙 회복 4개를 우선 배분한 URL Inspection 점검 결과
+- `index-recovery-queue.json`의 문맥상 관련 내부링크 출처 후보
+- `ctr-experiment-queue.json`의 제목 또는 Meta 단일변수 실험 후보
+- GA4 `page_view` → `huntlab_engaged_read` → `huntlab_internal_click` 퍼널
 - 데이터 부족·API 실패·측정 누락
 
 분석 결과는 다음 글쓰기 사이클에서 참고 자료로 제공할 수 있지만, 기존 Guide의

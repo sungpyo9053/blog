@@ -149,11 +149,17 @@ Daily Pipeline을 직접 호출하지 않습니다.
 같은 보고서를 `output/analytics/YYYY-MM-DD.md`에도 저장해 일별 비교 기록을
 보존하며, `latest.md`는 항상 다음 파이프라인이 읽을 최신 보고서로 유지합니다.
 새 글은 발행 약 24시간, 72시간과 7일 뒤에 URL Inspection 읽기 검사를 한 번씩
-받습니다. 완료된 체크포인트는
+받습니다. 하루 10개 점검 슬롯은 신규 체크포인트 6개와 검색 노출이 없는 성숙 글
+회복 점검 4개로 우선 배분하고, 한쪽 큐가 비면 다른 쪽이 남는 슬롯을 사용합니다.
+완료된 체크포인트는
 `output/analytics/index-recovery-state.json`에 저장하고, 일시적인 API 실패는
 완료로 기록하지 않아 다음 01:00 실행에서 재시도합니다. 검색 노출이 없는 성숙
 글은 같은 10개만 반복하지 않고 7일 재검사 간격으로 순환하며, verdict·coverage·
-indexing state·canonical·sitemap을 함께 저장합니다. 일반 블로그 글을
+indexing state·canonical·sitemap을 함께 저장합니다. 회복 대상의 관련 내부링크
+출처 후보는 `output/analytics/index-recovery-queue.json`, 노출 30 이상·CTR 2%
+미만·평균 순위 5~20위 글의 단일변수 실험 후보는
+`output/analytics/ctr-experiment-queue.json`에 저장합니다. 두 큐는 검토용이며
+공개 글을 자동 수정하지 않습니다. 일반 블로그 글을
 Indexing API로 제출하지 않으며, 색인되지 않은 글에는 검토된 관련 글에서
 문맥상 맞는 내부 링크 한 개만 추가할 수 있습니다.
 분석 결과만으로 추가 발행이나 기존 글 Update를 실행하지 않습니다. 인증이
@@ -163,8 +169,9 @@ Indexing API로 제출하지 않으며, 색인되지 않은 글에는 검토된 
 홈은 히어로 바로 다음에 최신 글을 먼저 보여주고, 읽기 가이드와 분야별 탐색은
 글 목록 뒤에 배치합니다. 모바일 히어로는 첫 최신 글이 더 빨리 보이도록 압축합니다.
 GA4의 기본 참여 세션과 별도로 화면이 보이는 상태에서 30초 이상 머물고 본문의
-25% 이상을 읽은 경우 `huntlab_engaged_read`를 한 번 기록해 실제 읽기 신호를
-교차 확인합니다. 공개 전수 감사는 CDN 제한을 피하도록 요청 시작 간격, 지수
+25% 이상을 읽은 경우 `huntlab_engaged_read`를 한 번 기록하고, 본문이나 관련 글의
+내부 링크 클릭은 `huntlab_internal_click`로 기록해 페이지뷰 → 실독 → 다음 글 이동
+퍼널을 교차 확인합니다. 공개 전수 감사는 CDN 제한을 피하도록 요청 시작 간격, 지수
 백오프와 제한된 동시성을 적용하며 일부 Sitemap을 읽지 못하면 `INCOMPLETE`로
 실패시킵니다. AIOSEO JSON-LD의 Article 작성자·발행자와 WebSite
 발행자는 `Hunt News 편집팀` Organization으로 통일합니다.
