@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import date
@@ -8,6 +10,28 @@ from scripts.report_news_worthiness_shadow import aggregate, load_window
 
 
 class NewsWorthinessReportTest(unittest.TestCase):
+    def test_script_entrypoint_can_import_project_modules(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/report_news_worthiness_shadow.py",
+                "--start",
+                "2026-08-22",
+                "--end",
+                "2026-08-22",
+                "--runs-dir",
+                "/tmp/nonexistent-hunt-news-shadow-runs",
+                "--output-dir",
+                "/tmp/hunt-news-shadow-entrypoint-test",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertNotIn("ModuleNotFoundError", result.stderr)
+
     def test_window_separates_success_empty_and_error(self):
         with tempfile.TemporaryDirectory() as temporary:
             runs = Path(temporary)
