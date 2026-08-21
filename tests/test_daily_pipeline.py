@@ -30,6 +30,7 @@ from scripts.run_daily_pipeline import (
     read_review_decision,
     review_repair_stages,
     run_selected_topics,
+    run_news_worthiness_shadow,
     run_stage,
     run_topic_pipeline,
     topic_stages,
@@ -44,6 +45,98 @@ from scripts.set_humanize_mode import update_state
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_shadow_success_and_empty_results_preserve_legacy_canonical_bytes(self):
+        eligible = {
+            "title": "정책 적용일 확인",
+            "category": "생활",
+            "primary_keyword": "정책 적용일",
+            "effective_date": "2026-08-22",
+            "problem_origin": "official_change",
+            "topic_cluster": "정책",
+            "score_breakdown": "최신성 9; 공식 출처 9; HuntLab 적합성 8; 기술적 깊이 7; 독창성 8",
+            "affected_reader": "신청자",
+            "life_impact": "조건 변경",
+            "reader_action": "공고 확인",
+            "research_focus": "시행일 확인",
+            "editorial_thesis": "다음 행동 설명",
+            "duplicate_check": "중복 없음",
+            "whereispost_total_searches": 100,
+            "sources": "https://example.go.kr/a, https://news.example.com/a",
+            "nested": {"values": [1, 2]},
+        }
+        cases = (
+            {"candidates": [eligible], "top2": [eligible]},
+            {"candidates": [], "top2": [{"title": "Legacy A"}, {"title": "Legacy B"}]},
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            for index, document in enumerate(cases):
+                with self.subTest(index=index):
+                    before = json.dumps(
+                        document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                    ).encode()
+                    path = run_news_worthiness_shadow(
+                        Path(temporary) / str(index),
+                        document,
+                        logging.getLogger("test.shadow.success"),
+                    )
+                    after = json.dumps(
+                        document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                    ).encode()
+                    self.assertIsNotNone(path)
+                    self.assertTrue(path.is_file())
+                    self.assertEqual(after, before)
+
+    def test_shadow_component_failures_do_not_change_legacy_top2(self):
+        legacy = [{"title": "Legacy A"}, {"title": "Legacy B"}]
+        document = {
+            "candidates": [{"title": "Malformed"}],
+            "top2": legacy,
+        }
+        legacy_bytes = json.dumps(document, ensure_ascii=False, sort_keys=True).encode()
+        failure_points = (
+            "scripts.news_worthiness.CandidateEvaluator.evaluate",
+            "scripts.news_worthiness.NewsWorthinessScorer.score",
+            "scripts.news_worthiness.TopicReranker.rank",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            for failure_point in failure_points:
+                with self.subTest(failure_point=failure_point):
+                    run_directory = Path(temporary) / failure_point.rsplit(".", 2)[-2]
+                    with patch(failure_point, side_effect=RuntimeError("shadow failure")):
+                        result = run_news_worthiness_shadow(
+                            run_directory,
+                            document,
+                            logging.getLogger("test.shadow"),
+                        )
+                    self.assertIsNone(result)
+                    self.assertEqual(
+                        json.dumps(document, ensure_ascii=False, sort_keys=True).encode(),
+                        legacy_bytes,
+                    )
+                    self.assertTrue(
+                        (run_directory / "news-worthiness-shadow-error.json").is_file()
+                    )
+
+    def test_shadow_artifact_failure_does_not_change_legacy_top2(self):
+        legacy = [{"title": "Legacy A"}, {"title": "Legacy B"}]
+        document = {"candidates": [], "top2": legacy}
+        legacy_bytes = json.dumps(document, ensure_ascii=False, sort_keys=True).encode()
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch(
+                "scripts.run_daily_pipeline.write_shadow_diff",
+                side_effect=OSError("read only"),
+            ):
+                result = run_news_worthiness_shadow(
+                    Path(temporary),
+                    document,
+                    logging.getLogger("test.shadow.write"),
+                )
+        self.assertIsNone(result)
+        self.assertEqual(
+            json.dumps(document, ensure_ascii=False, sort_keys=True).encode(),
+            legacy_bytes,
+        )
+
     def test_top2_preparation_defaults_to_two_workers(self):
         self.assertEqual(build_parser().parse_args([]).topic_workers, 2)
 

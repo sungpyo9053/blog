@@ -16,6 +16,7 @@
 - `scripts/run_daily_pipeline.py`: TOP2 실행 Harness
 - `tests/`: 단계 간 계약과 Publisher 회귀 테스트
 - `output/runs/[run_id]/[topic_id]/`: 격리된 실행 산출물(Git 제외)
+- `output/runs/[run_id]/news-worthiness-shadow.json`: legacy TOP2와 비교하는 비발행 Shadow 랭킹 산출물
 
 ## Workflow
 

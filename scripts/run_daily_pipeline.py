@@ -14,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import threading
 import urllib.parse
@@ -30,6 +31,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from publisher.frontmatter import FrontmatterError, load_document
 from scripts.manage_whereispost_cache import DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE
+from scripts.news_worthiness import (
+    build_shadow_diff,
+    make_shadow_input_snapshot,
+    write_shadow_diff,
+)
 from scripts.search_signal_providers import (
     DEFAULT_GOOGLE_TRENDS_CACHE,
     SearchSignalError,
@@ -373,7 +379,7 @@ def parse_top2(path: Path) -> list[str]:
     return [item["title"] for item in parse_topic_plan(path)]
 
 
-def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
+def parse_topic_plan_document(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise PipelineError(f"Topic Planner가 {path}를 생성하지 않았습니다.")
     text = path.read_text(encoding="utf-8")
@@ -531,7 +537,67 @@ def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
             raise PipelineError(
                 "TOP2 selection_track은 public_signal 1개와 huntlab_core 1개여야 합니다."
             )
-    return [candidates[title] for title in topics]
+    return {
+        "candidates": list(candidates.values()),
+        "top10": [candidates[title] for title in top10],
+        "top2": [candidates[title] for title in topics],
+    }
+
+
+def parse_topic_plan(path: Path) -> list[dict[str, Any]]:
+    return parse_topic_plan_document(path)["top2"]
+
+
+def run_news_worthiness_shadow(
+    run_directory: Path,
+    document: dict[str, Any],
+    logger: logging.Logger,
+) -> Path | None:
+    """Write Shadow comparison data without changing or blocking legacy TOP2."""
+    output_path = run_directory / "news-worthiness-shadow.json"
+    legacy_snapshot = tuple(str(item.get("title", "")) for item in document.get("top2", []))
+    try:
+        candidate_snapshot, legacy_snapshot = make_shadow_input_snapshot(
+            document["candidates"], document["top2"]
+        )
+        payload = build_shadow_diff(candidate_snapshot, legacy_snapshot)
+        write_shadow_diff(output_path, payload)
+    except Exception as exc:  # Shadow is a read-only observer and must fail open.
+        error_path = run_directory / "news-worthiness-shadow-error.json"
+        error_payload = {
+            "selection_mode": "shadow",
+            "status": "failed",
+            "continuing": True,
+            "error_type": type(exc).__name__,
+            "legacy_top2": list(legacy_snapshot),
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
+        try:
+            write_shadow_diff(error_path, error_payload)
+        except Exception as artifact_exc:
+            logger.warning(
+                "shadow_ranking event=error_artifact_failed continuing=true "
+                "path=%s reason_type=%s",
+                error_path,
+                type(artifact_exc).__name__,
+            )
+        logger.warning(
+            "shadow_ranking event=failed continuing=true run_directory=%s "
+            "reason_type=%s error_artifact=%s",
+            run_directory,
+            type(exc).__name__,
+            error_path,
+        )
+        return None
+    logger.info(
+        "shadow_ranking event=end failed=false mode=shadow legacy_top2=%r "
+        "shadow_top2=%r overlap_count=%d artifact=%s",
+        payload["legacy_top2"],
+        payload["shadow_top2"],
+        payload["overlap_count"],
+        output_path,
+    )
+    return output_path
 
 
 def make_run_id() -> str:
@@ -1428,7 +1494,14 @@ def validate_dry_run(
     synthetic_path = LOG_DIR / ".topics-dry-run.md"
     try:
         synthetic_path.write_text(dry_run_topics(), encoding="utf-8")
-        plans = parse_topic_plan(synthetic_path)
+        document = parse_topic_plan_document(synthetic_path)
+        plans = document["top2"]
+        with tempfile.TemporaryDirectory(prefix="hunt-news-shadow-dry-run-") as temporary:
+            shadow_path = run_news_worthiness_shadow(
+                Path(temporary), document, logger
+            )
+            if shadow_path is None or not shadow_path.is_file():
+                raise PipelineError("Shadow ranking dry-run 산출물을 만들지 못했습니다.")
     finally:
         synthetic_path.unlink(missing_ok=True)
     logger.info("dry_run event=top2 topics=%r", [plan["title"] for plan in plans])
@@ -1991,7 +2064,11 @@ def main() -> int:
                 raise PipelineError(
                     f"Topic Planner가 재시도 후에도 {topics_path}를 생성하지 않았습니다."
                 )
-        plans = parse_topic_plan(topics_path)
+        plan_document = parse_topic_plan_document(topics_path)
+        plans = plan_document["top2"]
+        # Shadow ranking is observability-only. Failure cannot replace, reorder,
+        # or block the legacy TOP2 and therefore cannot affect 02:00 publishing.
+        run_news_worthiness_shadow(run_directory, plan_document, logger)
         topics = [plan["title"] for plan in plans]
         selected_plans = plans[
             args.start_rank - 1 : args.start_rank - 1 + args.limit
