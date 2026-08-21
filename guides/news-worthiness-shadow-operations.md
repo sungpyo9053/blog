@@ -46,6 +46,11 @@ TopicReranker`의 Shadow 운영 및 production 승격 기준에 대한 운영 SS
 조건 충족은 자동 전환 권한이 아니다. 운영자가 평가 보고서를 검토하고 production
 승격을 명시적으로 승인한 뒤, 별도 코드·설정 변경과 회귀 테스트·배포를 수행한다.
 
+`weights_version=hunt-news.v1`은 2026-08-22부터 2026-09-04까지 동결한다.
+명백한 격리·재현성·계약 버그만 수정하며 랭킹 품질 선호는 사례로 축적해 Offline
+Replay에서 한 번에 비교한다. 2026-09-04 05:00 KST의 일회성 systemd timer가
+14일 비교 Markdown·JSON을 생성하며 production 자동 승격은 수행하지 않는다.
+
 ## 즉시 중단 조건
 
 - Shadow가 legacy TOP2 또는 발행 입력을 변경한 경우

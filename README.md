@@ -114,6 +114,7 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 - `deploy/huntlab-daily-retry.timer`: 매일 17:00 KST 실패 점검
 - `deploy/huntlab-analytics-optimizer.service`
 - `deploy/huntlab-analytics-optimizer.timer`: 매일 01:00 KST
+- `deploy/huntlab-news-worthiness-report.timer`: 2026-09-04 05:00 KST에 14일 Shadow 비교 리포트 1회 생성
 
 서버 시간대는 `Asia/Seoul`로 설정합니다. Playwright를 처음 설치한 뒤에는
 다음 명령으로 Chromium 런타임을 준비합니다.
