@@ -689,6 +689,80 @@ def mature_content_funnel(
     }
 
 
+def hunt_news_performance_funnel(diagnostics: dict[str, Any]) -> dict[str, Any]:
+    """Normalize observed metrics into responsibility stages without cross-source joins."""
+    search_available = "search_period" in diagnostics and "search_totals" in diagnostics
+    ga4_events_available = "ga4_events" in diagnostics
+    search_totals = diagnostics.get("search_totals", {})
+    event_counts = {
+        str(row.get("eventName", "")): _number(row.get("eventCount"))
+        for row in diagnostics.get("ga4_events", [])
+    }
+
+    def tracked_event(name: str) -> float | None:
+        if not ga4_events_available:
+            return None
+        return event_counts.get(name, 0.0)
+
+    impressions = _number(search_totals.get("impressions")) if search_available else None
+    clicks = _number(search_totals.get("clicks")) if search_available else None
+    ctr = (
+        clicks / impressions
+        if clicks is not None and impressions
+        else 0.0 if search_available else None
+    )
+    position = (
+        _number(search_totals.get("position"))
+        if search_available and impressions and "position" in search_totals
+        else None
+    )
+
+    return {
+        "contract_version": "hunt-news-performance-funnel.v1",
+        "cross_source_conversion": None,
+        "indexing": {
+            "source": None,
+            "owner": "Technical SEO",
+            "status": "N/A",
+        },
+        "impression": {
+            "source": "Search Console" if search_available else None,
+            "owner": "Collector / Scorer / Search intent",
+            "impressions": impressions,
+            "visible_queries": len(diagnostics.get("search_queries", []))
+            if search_available
+            else None,
+            "average_position": position,
+        },
+        "click": {
+            "source": "Search Console" if search_available else None,
+            "owner": "Title / Snippet",
+            "clicks": clicks,
+            "ctr": ctr,
+        },
+        "engagement": {
+            "source": "GA4 yesterday" if ga4_events_available else None,
+            "owner": "Writer / Reviewer",
+            "page_view": tracked_event("page_view"),
+            "huntlab_engaged_read": tracked_event("huntlab_engaged_read"),
+            "huntlab_internal_click": tracked_event("huntlab_internal_click"),
+            # These events are not currently instrumented or joined. Their absence
+            # must remain unknown rather than becoming an observed zero.
+            "article_complete": None,
+            "share": None,
+            "return_visit": None,
+        },
+    }
+
+
+def _funnel_value(value: Any, *, percent: bool = False) -> str:
+    if value is None:
+        return "N/A"
+    if percent:
+        return f"{_number(value):.1%}"
+    return f"{_number(value):.0f}"
+
+
 def _rendered_title(post: dict[str, Any]) -> str:
     value = post.get("title", "")
     if isinstance(value, dict):
@@ -995,6 +1069,10 @@ def render(
         if period
         else "최근 7일"
     )
+    performance_funnel = hunt_news_performance_funnel(diagnostics)
+    impression_stage = performance_funnel["impression"]
+    click_stage = performance_funnel["click"]
+    engagement_stage = performance_funnel["engagement"]
     lines = [
         "# Analytics Optimization Report",
         "",
@@ -1004,6 +1082,41 @@ def render(
         f"- search_console_rows: `{len(search_rows)}`",
         f"- ga4_rows: `{len(ga_rows)}`",
         "- automatic_pipeline: `disabled_review_required`",
+        "",
+        "## Hunt News 성과 Funnel V1",
+        "",
+        f"- contract_version: `{performance_funnel['contract_version']}`",
+        "- cross_source_conversion: `N/A` — Search Console과 GA4를 동일 모집단으로 간주하지 않음",
+        "- zero_semantics: `측정되었으나 발생하지 않음`",
+        "- na_semantics: `측정 자체가 없거나 연결할 수 없음`",
+        "",
+        "| 책임 단계 | 측정 시스템 | 관측값 | 책임 영역 |",
+        "|---|---|---|---|",
+        "| INDEXING | N/A | N/A | Technical SEO |",
+        "| IMPRESSION | {source} | impressions={impressions}, visible_queries={queries}, average_position={position} | Collector / Scorer / Search intent |".format(
+            source=impression_stage["source"] or "N/A",
+            impressions=_funnel_value(impression_stage["impressions"]),
+            queries=_funnel_value(impression_stage["visible_queries"]),
+            position=(
+                f"{impression_stage['average_position']:.1f}"
+                if impression_stage["average_position"] is not None
+                else "N/A"
+            ),
+        ),
+        "| CLICK | {source} | clicks={clicks}, CTR={ctr} | Title / Snippet |".format(
+            source=click_stage["source"] or "N/A",
+            clicks=_funnel_value(click_stage["clicks"]),
+            ctr=_funnel_value(click_stage["ctr"], percent=True),
+        ),
+        "| ENGAGEMENT | {source} | page_view={views}, engaged_read={reads}, internal_click={internal}; article_complete=N/A, share=N/A, return_visit=N/A | Writer / Reviewer |".format(
+            source=engagement_stage["source"] or "N/A",
+            views=_funnel_value(engagement_stage["page_view"]),
+            reads=_funnel_value(engagement_stage["huntlab_engaged_read"]),
+            internal=_funnel_value(engagement_stage["huntlab_internal_click"]),
+        ),
+        "",
+        "단계는 같은 진단 언어로만 묶는다. Search Console의 impression→click과 "
+        "GA4의 page_view→engaged_read 사이에는 전환율을 계산하지 않는다.",
         "",
         "## 콘텐츠 검색 퍼널 기준점",
         "",
@@ -1077,23 +1190,34 @@ def render(
         lines.extend(f"- {warning}" for warning in warnings)
     else:
         lines.append("- 자동 진단에서 명확한 측정 이상 없음")
+    ga4_events_available = "ga4_events" in diagnostics
     event_counts = {
         str(row.get("eventName", "")): _number(row.get("eventCount"))
         for row in diagnostics.get("ga4_events", [])
     }
-    page_view_events = event_counts.get("page_view", 0)
-    engaged_read_events = event_counts.get("huntlab_engaged_read", 0)
-    internal_click_events = event_counts.get("huntlab_internal_click", 0)
-    read_rate = engaged_read_events / page_view_events if page_view_events else None
+    page_view_events = event_counts.get("page_view", 0) if ga4_events_available else None
+    engaged_read_events = (
+        event_counts.get("huntlab_engaged_read", 0) if ga4_events_available else None
+    )
+    internal_click_events = (
+        event_counts.get("huntlab_internal_click", 0) if ga4_events_available else None
+    )
+    read_rate = (
+        engaged_read_events / page_view_events
+        if page_view_events and engaged_read_events is not None
+        else None
+    )
     next_click_rate = (
-        internal_click_events / engaged_read_events if engaged_read_events else None
+        internal_click_events / engaged_read_events
+        if engaged_read_events and internal_click_events is not None
+        else None
     )
     lines.extend(
         [
-            f"- yesterday_page_view_events: `{page_view_events:.0f}`",
-            f"- yesterday_user_engagement_events: `{event_counts.get('user_engagement', 0):.0f}`",
-            f"- yesterday_huntlab_engaged_read_events: `{engaged_read_events:.0f}`",
-            f"- yesterday_huntlab_internal_click_events: `{internal_click_events:.0f}`",
+            f"- yesterday_page_view_events: `{_funnel_value(page_view_events)}`",
+            f"- yesterday_user_engagement_events: `{_funnel_value(event_counts.get('user_engagement', 0) if ga4_events_available else None)}`",
+            f"- yesterday_huntlab_engaged_read_events: `{_funnel_value(engaged_read_events)}`",
+            f"- yesterday_huntlab_internal_click_events: `{_funnel_value(internal_click_events)}`",
             f"- yesterday_engaged_read_per_page_view: `{read_rate:.1%}`" if read_rate is not None else "- yesterday_engaged_read_per_page_view: `N/A`",
             f"- yesterday_internal_click_per_engaged_read: `{next_click_rate:.1%}`" if next_click_rate is not None else "- yesterday_internal_click_per_engaged_read: `N/A`",
             f"- yesterday_observed_hosts: `{', '.join(str(row.get('hostName', '')) for row in diagnostics.get('ga4_hosts', []) if row.get('hostName')) or 'N/A'}`",

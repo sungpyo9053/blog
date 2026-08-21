@@ -13,6 +13,7 @@ from scripts.run_analytics_optimizer import (
     build_ctr_experiment_queue,
     build_index_recovery_queue,
     known_query_breakdown,
+    hunt_news_performance_funnel,
     measurement_warnings,
     mature_content_funnel,
     render,
@@ -24,10 +25,45 @@ from scripts.run_analytics_optimizer import (
 
 
 class AnalyticsOptimizerTests(unittest.TestCase):
+    def test_performance_funnel_preserves_zero_and_na_semantics(self):
+        funnel = hunt_news_performance_funnel(
+            {
+                "search_period": {"start": "2026-08-13", "end": "2026-08-19"},
+                "search_totals": {
+                    "impressions": "0",
+                    "clicks": "0",
+                    "position": "0",
+                },
+                "search_queries": [],
+                "ga4_events": [],
+            }
+        )
+
+        self.assertEqual(funnel["impression"]["impressions"], 0)
+        self.assertEqual(funnel["click"]["clicks"], 0)
+        self.assertEqual(funnel["click"]["ctr"], 0)
+        self.assertEqual(funnel["engagement"]["page_view"], 0)
+        self.assertEqual(funnel["engagement"]["huntlab_engaged_read"], 0)
+        self.assertIsNone(funnel["indexing"]["source"])
+        self.assertIsNone(funnel["engagement"]["article_complete"])
+        self.assertIsNone(funnel["engagement"]["share"])
+        self.assertIsNone(funnel["engagement"]["return_visit"])
+        self.assertIsNone(funnel["cross_source_conversion"])
+
+    def test_performance_funnel_is_na_when_measurement_input_is_missing(self):
+        funnel = hunt_news_performance_funnel({})
+
+        self.assertIsNone(funnel["impression"]["impressions"])
+        self.assertIsNone(funnel["click"]["clicks"])
+        self.assertIsNone(funnel["engagement"]["page_view"])
+
     def test_render_keeps_public_audit_independent(self):
         body = render([], [], datetime(2026, 8, 3, tzinfo=timezone.utc))
         self.assertIn("Analytics Optimization Report", body)
         self.assertNotIn("Public Site Quality Audit", body)
+        self.assertIn("| INDEXING | N/A | N/A | Technical SEO |", body)
+        self.assertIn("page_view=N/A", body)
+        self.assertIn("cross_source_conversion: `N/A`", body)
 
     def test_aug7_review_selects_one_title_and_one_discovery_action(self):
         decision = aug7_review_decisions(
@@ -498,6 +534,9 @@ class AnalyticsOptimizerTests(unittest.TestCase):
 
         self.assertIn("yesterday_engaged_read_per_page_view: `25.0%`", body)
         self.assertIn("yesterday_internal_click_per_engaged_read: `40.0%`", body)
+        self.assertIn("page_view=20, engaged_read=5, internal_click=2", body)
+        self.assertIn("article_complete=N/A, share=N/A, return_visit=N/A", body)
+        self.assertIn("GA4의 page_view→engaged_read 사이에는 전환율을 계산하지 않는다", body)
         self.assertIn("inspection_slot_allocation: `fresh=1, mature_recovery=1`", body)
         self.assertIn("색인 회복 내부링크 검토 큐", body)
         self.assertIn("CTR 단일변수 실험 검토 큐", body)

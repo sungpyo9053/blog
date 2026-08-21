@@ -41,6 +41,13 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
 
 ## 분석 기준
 
+- 성과 진단 언어는 `INDEXING → IMPRESSION → CLICK → ENGAGEMENT`로 통일한다.
+- `0`은 측정했으나 발생하지 않은 값, `N/A`는 측정 자체가 없거나 연결할 수 없는
+  값이다. 둘을 상호 변환하거나 결측치를 학습용 0으로 대체하지 않는다.
+- Search Console의 impression→click과 GA4의 page_view→engaged_read는 서로 다른
+  데이터 소스와 집계 기준을 사용하므로 동일 모집단의 연속 전환율로 계산하지 않는다.
+- 현재 INDEXING은 전체 발행 글과 URL Inspection 표본을 연결한 지표가 없으므로
+  Funnel에서는 `N/A`로 둔다. 개별 URL Inspection 결과는 별도 운영 표본이다.
 - 노출은 높고 CTR이 낮으면 제목·Meta Description 개선안을 제안한다.
 - 클릭은 있으나 참여가 낮으면 첫 화면·목차·내부 링크 개선안을 제안한다.
 - 검색 의도와 CTA가 어긋나면 CTA를 관련 글·공식 문서·무료 체험·문의 중 하나로 조정한다.
@@ -65,6 +72,8 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
 - `index-recovery-queue.json`의 문맥상 관련 내부링크 출처 후보
 - `ctr-experiment-queue.json`의 제목 또는 Meta 단일변수 실험 후보
 - GA4 `page_view` → `huntlab_engaged_read` → `huntlab_internal_click` 퍼널
+- `hunt-news-performance-funnel.v1` 책임 단계와 `0`/`N/A` 의미
+- 미계측 `article_complete`, `share`, `return_visit`은 `N/A`
 - 데이터 부족·API 실패·측정 누락
 
 분석 결과는 다음 글쓰기 사이클에서 참고 자료로 제공할 수 있지만, 기존 Guide의
