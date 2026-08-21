@@ -122,6 +122,10 @@ class PipelineError(RuntimeError):
     """Raised when a stage cannot safely continue."""
 
 
+class ContentQualityRejection(PipelineError):
+    """A candidate failed an evidence or Reviewer gate and may be replaced safely."""
+
+
 def parse_whereispost_total_searches(value: str, title: str) -> int:
     normalized = value.replace(",", "").strip()
     if not re.fullmatch(r"\d+", normalized):
@@ -833,7 +837,10 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "friction_or_surprise, decision_log, unfinished_edge를 확인해 `## 작업 기록`에 "
                 "남기세요. 글을 위해 새로 만든 테스트뿐이면 existing_work_record로 꾸미지 마세요. "
                 f"다른 주제를 조사하지 말고 산출물을 "
-                f"{str(topic_dir / 'research.md')!r}에 저장하세요."
+                f"{str(topic_dir / 'research.md')!r}에 저장하세요. 문서 상단에 "
+                "`- status: READY` 또는 `- status: INSUFFICIENT`를 정확히 하나 "
+                "기록하고, 핵심 공식 원문이나 완료 조건이 부족하면 반드시 "
+                "INSUFFICIENT로 판정하세요."
             ),
         ),
         Stage(
@@ -1151,6 +1158,30 @@ def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
         validate_build_log_research_contract(context)
 
 
+def validate_research_readiness(context: TopicContext) -> None:
+    """Stop insufficient research before Writer while supporting older artifacts."""
+    path = context.directory / "research.md"
+    assert_owned_path(context, path)
+    text = path.read_text(encoding="utf-8")
+    explicit = re.search(
+        r"(?im)^\s*(?:[-*]\s*)?status\s*:\s*`?(READY|INSUFFICIENT)`?\s*$",
+        text,
+    )
+    if explicit and explicit.group(1).upper() == "INSUFFICIENT":
+        raise ContentQualityRejection(
+            f"{context.topic_id}: Research가 INSUFFICIENT로 판정했습니다."
+        )
+    if explicit:
+        return
+    if re.search(
+        r"(?im)^.*\bINSUFFICIENT\b.*(?:Writer|Publisher|넘길 수 없음).*$",
+        text,
+    ):
+        raise ContentQualityRejection(
+            f"{context.topic_id}: legacy Research가 INSUFFICIENT로 판정했습니다."
+        )
+
+
 def validate_build_log_research_contract(context: TopicContext) -> None:
     """Reject manufactured Build Logs before the Writer turns them into prose."""
     path = context.directory / "research.md"
@@ -1250,7 +1281,9 @@ def validate_publish_contract(context: TopicContext) -> str:
 
     decision = read_review_decision(context)
     if decision == "REJECTED":
-        raise PipelineError(f"{context.topic_id}: Reviewer가 발행을 거절했습니다.")
+        raise ContentQualityRejection(
+            f"{context.topic_id}: Reviewer가 발행을 거절했습니다."
+        )
     if decision != "APPROVED":
         raise PipelineError(
             f"{context.topic_id}: Reviewer의 명시적 APPROVED 상태가 없습니다."
@@ -1805,6 +1838,18 @@ def run_topic_pipeline(
             context.directory.mkdir(parents=False, exist_ok=False)
     else:
         context.directory.mkdir(parents=False, exist_ok=False)
+    if resume and has_successful_publish(context):
+        publish_result = read_publish_result(context)
+        logger.info(
+            "topic=%r run_id=%s topic_id=%s event=resume_published_skip "
+            "post_id=%s url=%s",
+            context.title,
+            context.run_id,
+            context.topic_id,
+            publish_result["post_id"],
+            publish_result["url"],
+        )
+        return publish_result
     planner_context_path = write_planner_context(context, plan)
     recent_style_context_path = write_recent_style_context(context)
     logger.info(
@@ -1850,6 +1895,9 @@ def run_topic_pipeline(
             if stage.name == "Publisher Agent":
                 can_skip = has_successful_publish(context)
             if can_skip:
+                validate_stage_artifacts(context, stage.name)
+                if stage.name == "Research Agent":
+                    validate_research_readiness(context)
                 logger.info(
                     "topic=%r run_id=%s topic_id=%s agent=%s event=resume_skip",
                     context.title,
@@ -1893,6 +1941,8 @@ def run_topic_pipeline(
                 topic=context.title,
             )
         validate_stage_artifacts(context, stage.name)
+        if stage.name == "Research Agent":
+            validate_research_readiness(context)
         if stage.name == "Humanize Experiment Agent":
             if humanize_experiment_mode() in {"manual-one-off", "on"}:
                 original = context.directory / "draft-original.md"
@@ -1963,6 +2013,151 @@ def run_selected_topics(
             for context, plan in zip(contexts, plans)
         ]
         return [future.result() for future in futures]
+
+
+def quality_fallback_plans(
+    top10: list[dict[str, Any]], legacy_top2: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return legacy TOP10 order after TOP2 without consulting Shadow ranking."""
+    selected = {str(plan.get("title", "")) for plan in legacy_top2}
+    return [plan for plan in top10 if str(plan.get("title", "")) not in selected]
+
+
+def _write_publication_fallback_artifact(
+    run_directory: Path, payload: dict[str, Any]
+) -> Path:
+    run_directory.mkdir(parents=True, exist_ok=True)
+    destination = run_directory / "publication-fallback.json"
+    temporary = run_directory / ".publication-fallback.json.tmp"
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(destination)
+    return destination
+
+
+def run_topics_with_quality_fallback(
+    codex: str,
+    contexts: list[TopicContext],
+    plans: list[dict[str, Any]],
+    fallback_plans: list[dict[str, Any]],
+    logger: logging.Logger,
+    *,
+    timeout_seconds: int,
+    resume: bool,
+    workers: int,
+) -> list[dict[str, Any]]:
+    """Backfill only evidence/Reviewer rejections, preserving both ranking outputs."""
+    publish_lock = threading.Lock()
+    humanize_lock = threading.Lock()
+    results: list[dict[str, Any]] = []
+    rejected: list[dict[str, str]] = []
+    replacements: list[dict[str, Any]] = []
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(workers, len(contexts)),
+        thread_name_prefix="huntlab-topic",
+    ) as executor:
+        futures = [
+            executor.submit(
+                run_topic_pipeline,
+                codex,
+                context,
+                plan,
+                logger,
+                timeout_seconds=timeout_seconds,
+                resume=resume,
+                publish_lock=publish_lock,
+                humanize_lock=humanize_lock,
+            )
+            for context, plan in zip(contexts, plans)
+        ]
+        for context, future in zip(contexts, futures):
+            try:
+                results.append(future.result())
+            except ContentQualityRejection as exc:
+                rejected.append(
+                    {
+                        "topic_id": context.topic_id,
+                        "title": context.title,
+                        "reason": str(exc),
+                    }
+                )
+                logger.warning(
+                    "topic=%r topic_id=%s event=quality_rejected "
+                    "fallback_eligible=true reason=%s",
+                    context.title,
+                    context.topic_id,
+                    exc,
+                )
+
+    needed = len(contexts) - len(results)
+    for plan in fallback_plans:
+        if needed <= 0:
+            break
+        context = make_topic_context(
+            contexts[0].run_id,
+            str(plan["title"]),
+            category=str(plan["category"]),
+            content_type=str(plan["content_type"]),
+            tags=tuple(plan["tags"]),
+            reason=str(plan["reason"]),
+            research_focus=str(plan["research_focus"]),
+        )
+        try:
+            result = run_topic_pipeline(
+                codex,
+                context,
+                plan,
+                logger,
+                timeout_seconds=timeout_seconds,
+                resume=context.directory.exists(),
+                publish_lock=publish_lock,
+                humanize_lock=humanize_lock,
+            )
+        except ContentQualityRejection as exc:
+            rejected.append(
+                {
+                    "topic_id": context.topic_id,
+                    "title": context.title,
+                    "reason": str(exc),
+                }
+            )
+            logger.warning(
+                "topic=%r topic_id=%s event=fallback_quality_rejected reason=%s",
+                context.title,
+                context.topic_id,
+                exc,
+            )
+            continue
+        results.append(result)
+        replacements.append(
+            {
+                "topic_id": context.topic_id,
+                "title": context.title,
+                "post_id": result.get("post_id"),
+                "url": result.get("url"),
+            }
+        )
+        needed -= 1
+
+    artifact = {
+        "contract_version": "publication-fallback.v1",
+        "legacy_top2": [context.title for context in contexts],
+        "shadow_selection_used": False,
+        "rejected": rejected,
+        "replacements": replacements,
+        "published_count": len(results),
+        "target_count": len(contexts),
+        "complete": len(results) == len(contexts),
+    }
+    _write_publication_fallback_artifact(contexts[0].directory.parent, artifact)
+    if len(results) != len(contexts):
+        raise PipelineError(
+            f"품질 기준을 통과한 발행 결과가 {len(results)}/{len(contexts)}건입니다."
+        )
+    return results
 
 
 def main() -> int:
@@ -2094,15 +2289,27 @@ def main() -> int:
             [context.topic_id for context in contexts],
         )
 
-        results = run_selected_topics(
-            codex,
-            contexts,
-            selected_plans,
-            logger,
-            timeout_seconds=args.timeout,
-            resume=bool(args.resume_run_id),
-            workers=args.topic_workers,
-        )
+        if args.start_rank == 1 and args.limit == 2:
+            results = run_topics_with_quality_fallback(
+                codex,
+                contexts,
+                selected_plans,
+                quality_fallback_plans(plan_document["top10"], plans),
+                logger,
+                timeout_seconds=args.timeout,
+                resume=bool(args.resume_run_id),
+                workers=args.topic_workers,
+            )
+        else:
+            results = run_selected_topics(
+                codex,
+                contexts,
+                selected_plans,
+                logger,
+                timeout_seconds=args.timeout,
+                resume=bool(args.resume_run_id),
+                workers=args.topic_workers,
+            )
         logger.info(
             "pipeline event=end failed=false run_id=%s topics=%r posts=%r "
             "duration_seconds=%.3f",

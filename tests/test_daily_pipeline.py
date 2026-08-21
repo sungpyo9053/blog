@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from scripts.run_daily_pipeline import (
+    ContentQualityRejection,
     PipelineError,
     Stage,
     TopicContext,
@@ -23,6 +24,7 @@ from scripts.run_daily_pipeline import (
     parse_whereispost_total_searches,
     read_public_category_distribution,
     parse_topic_plan,
+    quality_fallback_plans,
     planner_retry_stage,
     planner_stage,
     read_google_trends_observation,
@@ -30,12 +32,14 @@ from scripts.run_daily_pipeline import (
     read_review_decision,
     review_repair_stages,
     run_selected_topics,
+    run_topics_with_quality_fallback,
     run_news_worthiness_shadow,
     run_stage,
     run_topic_pipeline,
     topic_stages,
     validate_build_log_research_contract,
     validate_publish_contract,
+    validate_research_readiness,
     write_planner_context,
     write_recent_style_context,
 )
@@ -45,6 +49,156 @@ from scripts.set_humanize_mode import update_state
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_research_insufficient_is_a_fallback_eligible_quality_rejection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run" / "topic"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="근거 부족 후보",
+                run_id="run",
+                topic_id="topic",
+                directory=directory,
+            )
+            (directory / "research.md").write_text(
+                "# Research\n\n- status: INSUFFICIENT\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ContentQualityRejection):
+                validate_research_readiness(context)
+
+    def test_quality_fallback_uses_legacy_top10_order_not_shadow(self):
+        top10 = [{"title": title} for title in ("A", "B", "C", "D")]
+
+        self.assertEqual(
+            [item["title"] for item in quality_fallback_plans(top10, top10[:2])],
+            ["C", "D"],
+        )
+
+    def test_quality_rejection_backfills_and_writes_separate_artifact(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_directory = Path(temporary) / "run"
+            first = TopicContext("A", "run", "topic-a", run_directory / "topic-a")
+            second = TopicContext("B", "run", "topic-b", run_directory / "topic-b")
+            plans = [
+                {"title": "A"},
+                {"title": "B"},
+            ]
+            fallback = {
+                "title": "C",
+                "category": "생활",
+                "content_type": "life_impact_explainer",
+                "tags": ("하나", "둘", "셋"),
+                "reason": "차순위",
+                "research_focus": "공식 원문",
+            }
+
+            def fake_run(_codex, context, _plan, _logger, **_kwargs):
+                if context.title == "B":
+                    raise ContentQualityRejection("research insufficient")
+                return {
+                    "post_id": 1 if context.title == "A" else 2,
+                    "url": f"https://huntlab.app/{context.title.lower()}/",
+                    "image_count": 1,
+                }
+
+            with patch(
+                "scripts.run_daily_pipeline.run_topic_pipeline",
+                side_effect=fake_run,
+            ):
+                results = run_topics_with_quality_fallback(
+                    "codex",
+                    [first, second],
+                    plans,
+                    [fallback],
+                    logging.getLogger("fallback-test"),
+                    timeout_seconds=1,
+                    resume=False,
+                    workers=2,
+                )
+
+            self.assertEqual([item["post_id"] for item in results], [1, 2])
+            artifact = json.loads(
+                (run_directory / "publication-fallback.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertTrue(artifact["complete"])
+            self.assertFalse(artifact["shadow_selection_used"])
+            self.assertEqual(artifact["legacy_top2"], ["A", "B"])
+            self.assertEqual(artifact["replacements"][0]["title"], "C")
+
+    def test_operational_failure_does_not_switch_candidates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_directory = Path(temporary) / "run"
+            contexts = [
+                TopicContext("A", "run", "topic-a", run_directory / "topic-a"),
+                TopicContext("B", "run", "topic-b", run_directory / "topic-b"),
+            ]
+            fallback = {
+                "title": "C",
+                "category": "생활",
+                "content_type": "life_impact_explainer",
+                "tags": ("하나", "둘", "셋"),
+                "reason": "차순위",
+                "research_focus": "공식 원문",
+            }
+
+            def fake_run(_codex, context, _plan, _logger, **_kwargs):
+                if context.title == "B":
+                    raise PipelineError("Publisher network failure")
+                return {"post_id": 1, "url": "https://huntlab.app/a/", "image_count": 1}
+
+            with patch(
+                "scripts.run_daily_pipeline.run_topic_pipeline",
+                side_effect=fake_run,
+            ) as mocked:
+                with self.assertRaisesRegex(PipelineError, "network failure"):
+                    run_topics_with_quality_fallback(
+                        "codex",
+                        contexts,
+                        [{"title": "A"}, {"title": "B"}],
+                        [fallback],
+                        logging.getLogger("fallback-operational-test"),
+                        timeout_seconds=1,
+                        resume=False,
+                        workers=2,
+                    )
+
+            self.assertEqual(
+                [call.args[1].title for call in mocked.call_args_list], ["A", "B"]
+            )
+
+    def test_resume_published_topic_skips_all_content_stages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run" / "topic-a"
+            directory.mkdir(parents=True)
+            context = TopicContext("A", "run", "topic-a", directory)
+            published = {
+                "post_id": 560,
+                "url": "https://huntlab.app/a/",
+                "image_count": 2,
+            }
+
+            with (
+                patch("scripts.run_daily_pipeline.has_successful_publish", return_value=True),
+                patch("scripts.run_daily_pipeline.read_publish_result", return_value=published),
+                patch("scripts.run_daily_pipeline.run_stage") as run_stage_mock,
+            ):
+                result = run_topic_pipeline(
+                    "codex",
+                    context,
+                    {},
+                    logging.getLogger("resume-published-test"),
+                    timeout_seconds=1,
+                    resume=True,
+                    publish_lock=threading.Lock(),
+                    humanize_lock=threading.Lock(),
+                )
+
+            self.assertEqual(result, published)
+            run_stage_mock.assert_not_called()
+
     def test_shadow_success_and_empty_results_preserve_legacy_canonical_bytes(self):
         eligible = {
             "title": "정책 적용일 확인",

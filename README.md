@@ -31,6 +31,14 @@
 Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/source 식별자,
 카테고리·태그와 대표 이미지 계약이 모두 일치해야 공개 발행합니다.
 
+Research는 `READY` 또는 `INSUFFICIENT`를 명시하며, `INSUFFICIENT`는 Writer 전에
+중단합니다. Research 근거 부족 또는 Reviewer 최종 거절처럼 콘텐츠 품질 문제인
+경우에만 legacy TOP10의 차순위 후보를 순서대로 검증해 일일 2건을 보충합니다.
+Shadow TOP2는 보충 후보로 사용하지 않으며 기존 Shadow artifact도 수정하지 않습니다.
+보충 과정은 별도 `publication-fallback.json`에 기록합니다. Publisher·네트워크·
+인증 오류는 후보 품질 문제가 아니므로 다른 후보로 우회하지 않고 기존 재시도
+정책을 유지합니다.
+
 ### Topic Planner 선정 원칙
 
 `생활`, `경제`, `부동산`, `사회`, `정치`, `문화·엔터`, `IT`를 활성 편집 범위로
