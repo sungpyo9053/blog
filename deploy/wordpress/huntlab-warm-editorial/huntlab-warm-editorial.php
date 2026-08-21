@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 2.3.0
+ * Version: 2.3.1
  * Author: Hunt News
  */
 
@@ -346,6 +346,7 @@ function hunt_news_editorial_organization_schema( $graphs ) {
 		'name'        => 'Hunt News 편집팀',
 		'url'         => home_url( '/' ),
 		'description' => '복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명합니다.',
+		'sameAs'      => array( 'https://github.com/sungpyo9053/blog' ),
 		'logo'        => array(
 			'@type' => 'ImageObject',
 			'url'   => plugins_url( 'assets/huntlab-site-icon.png', __FILE__ ),
@@ -378,6 +379,37 @@ function hunt_news_editorial_organization_schema( $graphs ) {
 	return $filtered;
 }
 add_filter( 'aioseo_schema_output', 'hunt_news_editorial_organization_schema', 20 );
+
+/**
+ * Link the public editorial byline to the page that explains responsibility,
+ * verification and corrections instead of an opaque account archive.
+ *
+ * @param string $url Existing author URL.
+ * @return string
+ */
+function hunt_news_editorial_author_link( $url ) {
+	if ( is_admin() ) {
+		return $url;
+	}
+	return home_url( '/about/' );
+}
+add_filter( 'author_link', 'hunt_news_editorial_author_link', 20 );
+add_filter( 'kadence_author_use_profile_link', '__return_false', 20 );
+
+/**
+ * Keep the visible byline aligned with the public organization identity.
+ *
+ * @param string $name Existing author display name.
+ * @return string
+ */
+function hunt_news_editorial_author_name( $name ) {
+	if ( is_admin() ) {
+		return $name;
+	}
+	return 'Hunt News 편집팀';
+}
+add_filter( 'the_author', 'hunt_news_editorial_author_name', 20 );
+add_filter( 'get_the_author_display_name', 'hunt_news_editorial_author_name', 20 );
 
 /**
  * Localize the small set of Kadence archive labels still visible in English.

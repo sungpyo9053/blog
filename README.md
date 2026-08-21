@@ -14,6 +14,8 @@
 - `guides/`: 문체, Google SEO, 이미지, 발행, 분석·수익화 정책
 - `publisher/`: WordPress REST API 검증·업로드·발행 모듈
 - `scripts/run_daily_pipeline.py`: TOP2 실행 Harness
+- `scripts/update_adsense_readiness.py`: 개인정보·소개·문의 페이지를 백업 후 갱신하는 plan/apply 도구
+- `scripts/audit_content_repetition.py`: 공통 UI 제목을 제외하고 도입·H2 흐름·결론의 실질 중복을 점검
 - `tests/`: 단계 간 계약과 Publisher 회귀 테스트
 - `output/runs/[run_id]/[topic_id]/`: 격리된 실행 산출물(Git 제외)
 - `output/runs/[run_id]/news-worthiness-shadow.json`: legacy TOP2와 비교하는 비발행 Shadow 랭킹 산출물
@@ -215,3 +217,11 @@ git diff --check
 ```
 
 실행 산출물과 인증정보는 Git에 커밋하지 않습니다.
+
+AdSense 신뢰 페이지는 먼저 변경 계획과 백업을 만들고 명시적 apply로 반영합니다.
+
+```bash
+./.venv/bin/python scripts/update_adsense_readiness.py
+./.venv/bin/python scripts/update_adsense_readiness.py --apply --yes
+./.venv/bin/python scripts/audit_content_repetition.py
+```

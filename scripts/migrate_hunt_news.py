@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from publisher.config import WordPressConfig
 from publisher.wordpress import WordPressClient
+from scripts.update_adsense_readiness import ABOUT_HTML
 
 
 ACTIVE_CATEGORIES = {
@@ -200,20 +201,6 @@ def ensure_categories(
             )
         ids[slug] = int(row["id"])
     return ids
-
-
-ABOUT_HTML = """
-<p><strong>Hunt News는 복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명합니다.</strong></p>
-<p>정책, 경제, 부동산, 사회, 정치, 문화·엔터와 IT의 변화를 발표 제목으로 끝내지 않습니다. 무엇이 바뀌었는지, 누구에게 언제부터 적용되는지, 내 돈·시간·일·권리·소비·선택에는 무엇이 달라지는지, 지금 무엇을 확인해야 하는지까지 이어서 설명합니다.</p>
-<h2>우리가 확인하는 것</h2>
-<ul><li>정부·공공기관·법령·공시·당사자 원문</li><li>적용 대상, 시행일, 예외와 아직 확정되지 않은 부분</li><li>금액 계산의 공식 산식과 입력 조건</li><li>찬반 쟁점의 주장, 근거, 전제와 확인된 사실의 차이</li></ul>
-<h2>주제는 어떻게 고르나</h2>
-<p>Whereispost의 PC·모바일 검색량, 문서 수와 경쟁 비율은 사람들이 실제로 궁금해하는 표현을 찾는 수요 신호로 사용합니다. 해당 수치를 사실 근거로 쓰지는 않으며, 본문의 정책·가격·시점은 공식 원문으로 다시 검증합니다.</p>
-<h2>AI는 어디까지 사용하나</h2>
-<p>AI는 조사 정리와 초안 작성을 보조합니다. Research가 원문과 한계를 남기고, Writer가 그 범위 안에서 설명하며, Reviewer가 사실·용어·생활 영향·이미지·발행 계약을 승인한 글만 공개합니다. 확인하지 못한 경험이나 숫자는 만들지 않습니다.</p>
-<h2>기존 기술 글</h2>
-<p>HuntLab에서 발행한 기존 기술 글은 삭제하지 않고 IT 카테고리에 보존합니다. 앞으로는 기술 자체보다 일반 사용자가 겪는 변화와 선택을 먼저 설명하고, 필요한 독자에게 작동 원리와 시스템 설계를 깊이 보기로 연결합니다.</p>
-""".strip()
 
 
 def apply_migration(

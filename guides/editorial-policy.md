@@ -10,8 +10,9 @@ HuntLab은 AI를 조사 정리와 초안 작성의 보조 도구로 사용한다
 
 ## 작성과 검수
 
-- Topic Planner가 모든 신규 후보의 Whereispost 수요 신호, 검색 의도, 기존 글 중복과 Hunt News
-  생활 영향 적합성을 확인한다.
+- Topic Planner가 매시간 누적한 Google Trends 한국 RSS, Search Console의 실제 검색
+  의도, Whereispost의 시점이 확인된 장기 참고 캐시, 기존 글 중복과 Hunt News 생활
+  영향 적합성을 확인한다. 어느 수요 신호도 정책·가격·시점의 사실 근거로 사용하지 않는다.
 - Researcher가 공식 문서와 1차 자료를 우선 조사하고 출처, 확인일과 한계를 남긴다.
 - Writer는 Research에 기록된 사실과 경험만 사용하며 가상의 테스트나 후기를 만들지 않는다.
 - Reviewer가 사실성, 검색 의도, 고유 가치, 이미지와 발행 계약을 모두 통과한 글만 승인한다.
@@ -39,6 +40,7 @@ HuntLab은 AI를 조사 정리와 초안 작성의 보조 도구로 사용한다
 ## 작성자와 운영 환경
 
 - 공개 작성자명은 일반 계정명 `admin` 대신 `Hunt News 편집팀`을 사용한다.
+- 공개 작성자 링크는 운영·검수·정정 책임을 설명하는 `/about/`으로 연결한다.
 - Hunt News 편집팀은 Python·FastAPI, AWS Lightsail, Cloudflare, WordPress와 AI
   콘텐츠 자동화 시스템을 직접 구축·운영하며 그 과정에서 확인한 범위만 경험으로 쓴다.
 - 공개 가능한 검증 환경은 Ubuntu 24.04, Python 3.12, WordPress REST API와
