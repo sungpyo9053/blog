@@ -156,9 +156,11 @@ Search Console·GA4 읽기 전용 인증으로 `output/analytics/latest.md`를 �
 같은 실행에서 공개 `robots.txt`, Sitemap, `ads.txt`, 빈 카테고리, 깨진 내부 링크,
 일반 작성자명과 대표 이미지·ALT도 읽기 전용으로 점검합니다.
 보고서의 `Hunt News 성과 Funnel V1`은 관측값을 `INDEXING → IMPRESSION → CLICK
-→ ENGAGEMENT`라는 공통 진단 언어로 재배치합니다. 현재 `INDEXING`과 계측되지
-않은 `article_complete`, `share`, `return_visit`은 `N/A`이며, 실제로 측정했지만
-발생하지 않은 값만 `0`으로 기록합니다. Search Console의 impression→click과
+→ ENGAGEMENT`라는 공통 진단 언어로 재배치합니다. `INDEXING`은 완료된 URL
+Inspection 표본의 `indexed`·`not_indexed`·`inconclusive`를 별도로 표시하고,
+표본이 없을 때만 `N/A`로 둡니다. `article_complete`, `share`, `return_visit`도
+GA4에서 측정하며 실제로 측정했지만 발생하지 않은 값은 `0`으로 기록합니다.
+Search Console의 impression→click과
 GA4의 page_view→engaged_read는 데이터 소스와 모집단이 다르므로 서로를 잇는
 전환율을 계산하지 않습니다.
 정규 Harness가 해당 파일 경로를 다음 Planner와 Writer 프롬프트에 명시적으로
@@ -189,7 +191,9 @@ Indexing API로 제출하지 않으며, 색인되지 않은 글에는 검토된 
 GA4의 기본 참여 세션과 별도로 화면이 보이는 상태에서 30초 이상 머물고 본문의
 25% 이상을 읽은 경우 `huntlab_engaged_read`를 한 번 기록하고, 본문이나 관련 글의
 내부 링크 클릭은 `huntlab_internal_click`로 기록해 페이지뷰 → 실독 → 다음 글 이동
-퍼널을 교차 확인합니다. 공개 전수 감사는 CDN 제한을 피하도록 요청 시작 간격, 지수
+퍼널을 교차 확인합니다. 기사 끝까지 45초 이상 읽으면 `huntlab_article_complete`,
+공유 또는 링크 복사 성공 시 `huntlab_article_share`, 6시간~30일 안에 다시 방문하면
+`huntlab_return_visit`을 기록합니다. 공개 전수 감사는 CDN 제한을 피하도록 요청 시작 간격, 지수
 백오프와 제한된 동시성을 적용하며 일부 Sitemap을 읽지 못하면 `INCOMPLETE`로
 실패시킵니다. AIOSEO JSON-LD의 Article 작성자·발행자와 WebSite
 발행자는 `Hunt News 편집팀` Organization으로 통일합니다.

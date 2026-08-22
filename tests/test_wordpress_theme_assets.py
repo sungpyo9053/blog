@@ -53,7 +53,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 2.3.1", php)
+        self.assertIn("Version: 2.4.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -82,12 +82,19 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
 
         self.assertIn("huntlab_engaged_read", php)
         self.assertIn("document.visibilityState!=='visible'", php)
-        self.assertIn("activeMs<30000", php)
-        self.assertIn("maxDepth<25", php)
+        self.assertIn("activeMs>=30000", php)
+        self.assertIn("maxDepth>=25", php)
         self.assertIn("window.gtag||window.__gtagTracker", php)
         self.assertIn("huntlab_internal_click", php)
         self.assertIn("destination.origin!==window.location.origin", php)
         self.assertIn("link_area", php)
+        self.assertIn("huntlab_article_complete", php)
+        self.assertIn("huntlab_article_share", php)
+        self.assertIn("huntlab_return_visit", php)
+        self.assertIn("data-huntlab-share", php)
+        self.assertIn("분야 더 보기", php)
+        self.assertIn("get_category_link", php)
+        self.assertIn("activeMs>=45000", php)
 
     def test_category_archives_have_specific_copy_and_optimized_hero_images(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
@@ -145,11 +152,12 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         ):
             self.assertIn(slug, php)
         self.assertNotIn("0 === (int) $category->count", php)
-        self.assertIn("Version: 2.0.0", php)
+        self.assertIn("Version: 2.0.1", php)
         self.assertIn("hunt_news_redirect_legacy_categories", php)
         self.assertIn("wp_safe_redirect( $target, 301 )", php)
         self.assertIn("width:100%;min-height:40px;flex-direction:column", php)
         self.assertIn("white-space:normal;overflow-wrap:anywhere", php)
+        self.assertIn("min-height:44px", php)
 
     def test_category_tabs_show_counts_and_recent_badges(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")

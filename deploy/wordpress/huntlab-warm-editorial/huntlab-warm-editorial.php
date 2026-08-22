@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 2.3.1
+ * Version: 2.4.0
  * Author: Hunt News
  */
 
@@ -257,6 +257,39 @@ function hunt_news_home_sections() {
 add_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
 
 /**
+ * Add one explicit, measurable share action after article content.
+ * The event is recorded only after the native share sheet or link copy succeeds.
+ *
+ * @param string $content Filtered post content.
+ * @return string
+ */
+function hunt_news_article_share_action( $content ) {
+	if ( is_admin() || ! is_singular( 'post' ) || ! in_the_loop() || ! is_main_query() ) {
+		return $content;
+	}
+
+	$category_action = '';
+	$categories      = get_the_category();
+	if ( ! empty( $categories ) ) {
+		$category_url = get_category_link( $categories[0]->term_id );
+		if ( ! is_wp_error( $category_url ) ) {
+			$category_action = '<a class="hunt-news-share__category" href="'
+				. esc_url( $category_url ) . '">' . esc_html( $categories[0]->name )
+				. ' 분야 더 보기</a>';
+		}
+	}
+
+	return $content . '<aside class="hunt-news-share" aria-labelledby="hunt-news-share-title">'
+		. '<div><h2 id="hunt-news-share-title">이 설명이 도움 됐나요?</h2>'
+		. '<p>같은 변화가 필요한 사람에게 기사 링크를 전할 수 있습니다.</p></div>'
+		. '<div class="hunt-news-share__actions">' . $category_action
+		. '<button type="button" class="hunt-news-share__button" data-huntlab-share>기사 공유하기</button></div>'
+		. '<p class="hunt-news-share__status" data-huntlab-share-status aria-live="polite"></p>'
+		. '</aside>';
+}
+add_filter( 'the_content', 'hunt_news_article_share_action', 30 );
+
+/**
  * Record a conservative real-reading signal independently of GA4's session
  * classification. The event fires once after 30 visible seconds and 25% depth.
  */
@@ -269,40 +302,72 @@ function huntlab_warm_editorial_engaged_read_signal() {
 	(function(){
 		if(window.__huntlabEngagedReadInstalled){return;}
 		window.__huntlabEngagedReadInstalled=true;
-		var activeMs=0,maxDepth=0,fired=false;
+		var activeMs=0,maxDepth=0,engagedFired=false,completeFired=false;
+		function tracker(){return window.gtag||window.__gtagTracker;}
+		function send(name,params){var track=tracker();if(typeof track==='function'){track('event',name,params||{});return true;}return false;}
 		function measureDepth(){
 			var height=Math.max(document.documentElement.scrollHeight,document.body?document.body.scrollHeight:0,1);
 			maxDepth=Math.max(maxDepth,Math.min(100,((window.scrollY+window.innerHeight)/height)*100));
 		}
+		function articleIsComplete(){
+			var article=document.querySelector('main article');
+			if(!article){return false;}
+			var bottom=article.getBoundingClientRect().bottom+window.scrollY;
+			return window.scrollY+window.innerHeight>=bottom-80;
+		}
 		measureDepth();
 		window.addEventListener('scroll',measureDepth,{passive:true});
-		document.addEventListener('click',function(event){
+		document.addEventListener('click',async function(event){
+			var shareButton=event.target.closest('[data-huntlab-share]');
+			if(shareButton){
+				var status=document.querySelector('[data-huntlab-share-status]');
+				try{
+					if(navigator.share){
+						await navigator.share({title:document.title,url:window.location.href});
+					}else{
+						await navigator.clipboard.writeText(window.location.href);
+						if(status){status.textContent='기사 링크를 복사했습니다.';}
+					}
+					send('huntlab_article_share',{method:navigator.share?'native':'copy',transport_type:'beacon'});
+				}catch(error){
+					if(error&&error.name!=='AbortError'&&status){status.textContent='공유하지 못했습니다. 주소창의 링크를 복사해 주세요.';}
+				}
+				return;
+			}
 			var link=event.target.closest('main a[href],.huntlab-related-articles a[href],.entry-related a[href]');
 			if(!link){return;}
 			var destination;
 			try{destination=new URL(link.href,window.location.href);}catch(error){return;}
 			if(destination.origin!==window.location.origin||destination.pathname===window.location.pathname){return;}
-			var tracker=window.gtag||window.__gtagTracker;
-			if(typeof tracker!=='function'){return;}
-			tracker('event','huntlab_internal_click',{
+			send('huntlab_internal_click',{
 				link_path:destination.pathname,
 				link_area:link.closest('.huntlab-related-articles,.entry-related')?'related':'content',
 				transport_type:'beacon'
 			});
 		});
+		try{
+			var visitKey='huntlab_last_visit_at';
+			var previous=parseInt(localStorage.getItem(visitKey)||'0',10);
+			var now=Date.now();
+			localStorage.setItem(visitKey,String(now));
+			if(previous&&now-previous>=21600000&&now-previous<=2592000000){
+				send('huntlab_return_visit',{days_since_last_visit:Math.max(1,Math.round((now-previous)/86400000)),transport_type:'beacon'});
+			}
+		}catch(error){}
 		window.setInterval(function(){
-			if(fired||document.visibilityState!=='visible'){return;}
+			if(document.visibilityState!=='visible'){return;}
 			activeMs+=1000;
 			measureDepth();
-			if(activeMs<30000||maxDepth<25){return;}
-			var tracker=window.gtag||window.__gtagTracker;
-			if(typeof tracker!=='function'){return;}
-			tracker('event','huntlab_engaged_read',{
+			if(!engagedFired&&activeMs>=30000&&maxDepth>=25&&send('huntlab_engaged_read',{
 				engagement_time_msec:activeMs,
 				read_depth_percent:Math.round(maxDepth),
 				transport_type:'beacon'
-			});
-			fired=true;
+			})){engagedFired=true;}
+			if(!completeFired&&activeMs>=45000&&articleIsComplete()&&send('huntlab_article_complete',{
+				engagement_time_msec:activeMs,
+				read_depth_percent:Math.round(maxDepth),
+				transport_type:'beacon'
+			})){completeFired=true;}
 		},1000);
 	})();
 	</script>

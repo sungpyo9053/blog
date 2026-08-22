@@ -689,7 +689,10 @@ def mature_content_funnel(
     }
 
 
-def hunt_news_performance_funnel(diagnostics: dict[str, Any]) -> dict[str, Any]:
+def hunt_news_performance_funnel(
+    diagnostics: dict[str, Any],
+    url_inspections: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Normalize observed metrics into responsibility stages without cross-source joins."""
     search_available = "search_period" in diagnostics and "search_totals" in diagnostics
     ga4_events_available = "ga4_events" in diagnostics
@@ -698,6 +701,20 @@ def hunt_news_performance_funnel(diagnostics: dict[str, Any]) -> dict[str, Any]:
         str(row.get("eventName", "")): _number(row.get("eventCount"))
         for row in diagnostics.get("ga4_events", [])
     }
+    completed_inspections = [
+        item
+        for item in (url_inspections or [])
+        if item.get("status") == "COMPLETE"
+    ]
+    indexed_count = sum(
+        item.get("verdict") == "PASS" for item in completed_inspections
+    )
+    not_indexed_count = sum(
+        item.get("verdict") == "FAIL" for item in completed_inspections
+    )
+    inconclusive_count = (
+        len(completed_inspections) - indexed_count - not_indexed_count
+    )
 
     def tracked_event(name: str) -> float | None:
         if not ga4_events_available:
@@ -721,9 +738,21 @@ def hunt_news_performance_funnel(diagnostics: dict[str, Any]) -> dict[str, Any]:
         "contract_version": "hunt-news-performance-funnel.v1",
         "cross_source_conversion": None,
         "indexing": {
-            "source": None,
+            "source": "Search Console URL Inspection"
+            if completed_inspections
+            else None,
             "owner": "Technical SEO",
-            "status": "N/A",
+            "status": "MEASURED" if completed_inspections else "N/A",
+            "sampled_urls": len(completed_inspections)
+            if completed_inspections
+            else None,
+            "indexed": indexed_count if completed_inspections else None,
+            "not_indexed": not_indexed_count
+            if completed_inspections
+            else None,
+            "inconclusive": inconclusive_count
+            if completed_inspections
+            else None,
         },
         "impression": {
             "source": "Search Console" if search_available else None,
@@ -746,11 +775,9 @@ def hunt_news_performance_funnel(diagnostics: dict[str, Any]) -> dict[str, Any]:
             "page_view": tracked_event("page_view"),
             "huntlab_engaged_read": tracked_event("huntlab_engaged_read"),
             "huntlab_internal_click": tracked_event("huntlab_internal_click"),
-            # These events are not currently instrumented or joined. Their absence
-            # must remain unknown rather than becoming an observed zero.
-            "article_complete": None,
-            "share": None,
-            "return_visit": None,
+            "article_complete": tracked_event("huntlab_article_complete"),
+            "share": tracked_event("huntlab_article_share"),
+            "return_visit": tracked_event("huntlab_return_visit"),
         },
     }
 
@@ -1069,7 +1096,10 @@ def render(
         if period
         else "최근 7일"
     )
-    performance_funnel = hunt_news_performance_funnel(diagnostics)
+    performance_funnel = hunt_news_performance_funnel(
+        diagnostics, url_inspections=url_inspections
+    )
+    indexing_stage = performance_funnel["indexing"]
     impression_stage = performance_funnel["impression"]
     click_stage = performance_funnel["click"]
     engagement_stage = performance_funnel["engagement"]
@@ -1092,7 +1122,13 @@ def render(
         "",
         "| 책임 단계 | 측정 시스템 | 관측값 | 책임 영역 |",
         "|---|---|---|---|",
-        "| INDEXING | N/A | N/A | Technical SEO |",
+        "| INDEXING | {source} | sampled={sampled}, indexed={indexed}, not_indexed={not_indexed}, inconclusive={inconclusive} | Technical SEO |".format(
+            source=indexing_stage["source"] or "N/A",
+            sampled=_funnel_value(indexing_stage["sampled_urls"]),
+            indexed=_funnel_value(indexing_stage["indexed"]),
+            not_indexed=_funnel_value(indexing_stage["not_indexed"]),
+            inconclusive=_funnel_value(indexing_stage["inconclusive"]),
+        ),
         "| IMPRESSION | {source} | impressions={impressions}, visible_queries={queries}, average_position={position} | Collector / Scorer / Search intent |".format(
             source=impression_stage["source"] or "N/A",
             impressions=_funnel_value(impression_stage["impressions"]),
@@ -1108,11 +1144,14 @@ def render(
             clicks=_funnel_value(click_stage["clicks"]),
             ctr=_funnel_value(click_stage["ctr"], percent=True),
         ),
-        "| ENGAGEMENT | {source} | page_view={views}, engaged_read={reads}, internal_click={internal}; article_complete=N/A, share=N/A, return_visit=N/A | Writer / Reviewer |".format(
+        "| ENGAGEMENT | {source} | page_view={views}, engaged_read={reads}, internal_click={internal}; article_complete={complete}, share={share}, return_visit={return_visit} | Writer / Reviewer |".format(
             source=engagement_stage["source"] or "N/A",
             views=_funnel_value(engagement_stage["page_view"]),
             reads=_funnel_value(engagement_stage["huntlab_engaged_read"]),
             internal=_funnel_value(engagement_stage["huntlab_internal_click"]),
+            complete=_funnel_value(engagement_stage["article_complete"]),
+            share=_funnel_value(engagement_stage["share"]),
+            return_visit=_funnel_value(engagement_stage["return_visit"]),
         ),
         "",
         "단계는 같은 진단 언어로만 묶는다. Search Console의 impression→click과 "

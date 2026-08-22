@@ -45,10 +45,27 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertEqual(funnel["engagement"]["page_view"], 0)
         self.assertEqual(funnel["engagement"]["huntlab_engaged_read"], 0)
         self.assertIsNone(funnel["indexing"]["source"])
-        self.assertIsNone(funnel["engagement"]["article_complete"])
-        self.assertIsNone(funnel["engagement"]["share"])
-        self.assertIsNone(funnel["engagement"]["return_visit"])
+        self.assertEqual(funnel["engagement"]["article_complete"], 0)
+        self.assertEqual(funnel["engagement"]["share"], 0)
+        self.assertEqual(funnel["engagement"]["return_visit"], 0)
         self.assertIsNone(funnel["cross_source_conversion"])
+
+    def test_performance_funnel_distinguishes_measured_indexing_from_na(self):
+        funnel = hunt_news_performance_funnel(
+            {},
+            [
+                {"status": "COMPLETE", "verdict": "PASS"},
+                {"status": "COMPLETE", "verdict": "FAIL"},
+                {"status": "COMPLETE", "verdict": "NEUTRAL"},
+                {"status": "INCOMPLETE", "verdict": "PASS"},
+            ],
+        )
+
+        self.assertEqual(funnel["indexing"]["status"], "MEASURED")
+        self.assertEqual(funnel["indexing"]["sampled_urls"], 3)
+        self.assertEqual(funnel["indexing"]["indexed"], 1)
+        self.assertEqual(funnel["indexing"]["not_indexed"], 1)
+        self.assertEqual(funnel["indexing"]["inconclusive"], 1)
 
     def test_performance_funnel_is_na_when_measurement_input_is_missing(self):
         funnel = hunt_news_performance_funnel({})
@@ -61,9 +78,26 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         body = render([], [], datetime(2026, 8, 3, tzinfo=timezone.utc))
         self.assertIn("Analytics Optimization Report", body)
         self.assertNotIn("Public Site Quality Audit", body)
-        self.assertIn("| INDEXING | N/A | N/A | Technical SEO |", body)
+        self.assertIn(
+            "| INDEXING | N/A | sampled=N/A, indexed=N/A, not_indexed=N/A, inconclusive=N/A | Technical SEO |",
+            body,
+        )
         self.assertIn("page_view=N/A", body)
         self.assertIn("cross_source_conversion: `N/A`", body)
+
+    def test_render_uses_completed_url_inspections_in_indexing_stage(self):
+        body = render(
+            [],
+            [],
+            datetime(2026, 8, 3, tzinfo=timezone.utc),
+            url_inspections=[
+                {"status": "COMPLETE", "verdict": "PASS"},
+                {"status": "COMPLETE", "verdict": "FAIL"},
+            ],
+        )
+
+        self.assertIn("Search Console URL Inspection", body)
+        self.assertIn("sampled=2, indexed=1, not_indexed=1, inconclusive=0", body)
 
     def test_aug7_review_selects_one_title_and_one_discovery_action(self):
         decision = aug7_review_decisions(
@@ -535,7 +569,7 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertIn("yesterday_engaged_read_per_page_view: `25.0%`", body)
         self.assertIn("yesterday_internal_click_per_engaged_read: `40.0%`", body)
         self.assertIn("page_view=20, engaged_read=5, internal_click=2", body)
-        self.assertIn("article_complete=N/A, share=N/A, return_visit=N/A", body)
+        self.assertIn("article_complete=0, share=0, return_visit=0", body)
         self.assertIn("GA4의 page_view→engaged_read 사이에는 전환율을 계산하지 않는다", body)
         self.assertIn("inspection_slot_allocation: `fresh=1, mature_recovery=1`", body)
         self.assertIn("색인 회복 내부링크 검토 큐", body)
