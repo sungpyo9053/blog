@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 2.8.1
+ * Version: 3.1.0
  * Author: Hunt News
  */
 
@@ -212,10 +212,11 @@ add_action( 'wp_body_open', 'huntlab_warm_editorial_home_intro', 25 );
  * Return the posts with the most verified reads during the latest seven days.
  * Counts come from the same 30-second and 25%-depth signal sent to GA4.
  *
- * @param int $limit Maximum number of rows.
+ * @param int $limit       Maximum number of rows.
+ * @param int $days_window Number of UTC calendar days to include.
  * @return array<int, array{post:WP_Post,count:int}>
  */
-function hunt_news_popular_rows( $limit = 10 ) {
+function hunt_news_popular_rows( $limit = 10, $days_window = 7 ) {
 	$stats  = get_option( 'hunt_news_popular_reads', array() );
 	$days   = isset( $stats['days'] ) && is_array( $stats['days'] ) ? $stats['days'] : array();
 	$totals = array();
@@ -223,7 +224,8 @@ function hunt_news_popular_rows( $limit = 10 ) {
 	$today_key = gmdate( 'Y-m-d', $today );
 	$yesterday_key = gmdate( 'Y-m-d', $today - DAY_IN_SECONDS );
 
-	for ( $offset = 0; $offset < 7; $offset++ ) {
+	$days_window = max( 1, min( 7, absint( $days_window ) ) );
+	for ( $offset = 0; $offset < $days_window; $offset++ ) {
 		$key = gmdate( 'Y-m-d', $today - ( $offset * DAY_IN_SECONDS ) );
 		if ( empty( $days[ $key ] ) || ! is_array( $days[ $key ] ) ) {
 			continue;
@@ -265,27 +267,50 @@ function hunt_news_popular_rows( $limit = 10 ) {
  * Render an honest, compact popularity board without substituting latest posts.
  */
 function hunt_news_render_popular_news() {
-	$rows  = hunt_news_popular_rows();
-	$stats = get_option( 'hunt_news_popular_reads', array() );
+	$realtime_rows = hunt_news_popular_rows( 10, 1 );
+	$weekly_rows   = hunt_news_popular_rows( 10, 7 );
+	$stats         = get_option( 'hunt_news_popular_reads', array() );
 	?>
 	<section id="hunt-news-popular" class="hunt-news-popular" aria-labelledby="hunt-news-popular-title">
-		<header class="hunt-news-popular__header">
-			<h2 id="hunt-news-popular-title" class="screen-reader-text">우리 인기뉴스</h2>
-			<div class="hunt-news-popular__tabs" aria-hidden="true"><strong>실시간 인기</strong><span>최근 7일</span></div>
-		</header>
-		<?php if ( $rows ) : ?>
-			<ol class="hunt-news-popular__list">
-				<?php foreach ( $rows as $index => $row ) : ?>
-					<?php $short_title = wp_html_excerpt( wp_strip_all_tags( get_the_title( $row['post'] ) ), 34, '…' ); ?>
-					<?php $trend_label = 'up' === $row['trend'] ? '상승' : ( 'down' === $row['trend'] ? '하락' : '변동 없음' ); ?>
-					<?php $trend_arrow = 'up' === $row['trend'] ? '↑' : ( 'down' === $row['trend'] ? '↓' : '→' ); ?>
-					<li><a href="<?php echo esc_url( get_permalink( $row['post'] ) ); ?>" aria-label="<?php echo esc_attr( get_the_title( $row['post'] ) . ', ' . $trend_label ); ?>"><strong><?php echo esc_html( (string) ( $index + 1 ) ); ?></strong><span><?php echo esc_html( $short_title ); ?></span><em class="hunt-news-popular__trend hunt-news-popular__trend--<?php echo esc_attr( $row['trend'] ); ?>" aria-hidden="true"><?php echo esc_html( $trend_arrow ); ?></em></a></li>
-				<?php endforeach; ?>
-			</ol>
-		<?php else : ?>
-			<p class="hunt-news-popular__empty">실제 읽기 데이터를 집계하고 있습니다.</p>
-		<?php endif; ?>
-		<p class="hunt-news-popular__updated">GA4 조회와 30초 이상·25% 이상 읽은 신호 반영<?php echo ! empty( $stats['updated_at'] ) ? ' · ' . esc_html( wp_date( 'm월 d일 H:i', strtotime( $stats['updated_at'] ) ) ) . ' 갱신' : ''; ?></p>
+		<button type="button" class="hunt-news-popular__toggle" aria-expanded="false" aria-controls="hunt-news-popular-panel"><span>인기뉴스</span><b aria-hidden="true">‹</b></button>
+		<div id="hunt-news-popular-panel" class="hunt-news-popular__panel">
+			<header class="hunt-news-popular__header">
+				<h2 id="hunt-news-popular-title" class="screen-reader-text">우리 인기뉴스</h2>
+				<div class="hunt-news-popular__tabs" role="tablist" aria-label="인기뉴스 집계 기간">
+					<button type="button" id="hunt-news-popular-tab-realtime" class="hunt-news-popular__tab is-active" role="tab" aria-selected="true" aria-controls="hunt-news-popular-realtime" tabindex="0" data-popular-tab="realtime">실시간 인기</button>
+					<button type="button" id="hunt-news-popular-tab-weekly" class="hunt-news-popular__tab" role="tab" aria-selected="false" aria-controls="hunt-news-popular-weekly" tabindex="-1" data-popular-tab="weekly">최근 7일</button>
+				</div>
+			</header>
+			<div id="hunt-news-popular-realtime" class="hunt-news-popular__tabpanel" role="tabpanel" aria-labelledby="hunt-news-popular-tab-realtime" data-popular-panel="realtime">
+			<?php if ( $realtime_rows ) : ?>
+				<ol class="hunt-news-popular__list">
+					<?php foreach ( $realtime_rows as $index => $row ) : ?>
+						<?php $short_title = wp_html_excerpt( wp_strip_all_tags( get_the_title( $row['post'] ) ), 34, '…' ); ?>
+						<?php $trend_label = 'up' === $row['trend'] ? '상승' : ( 'down' === $row['trend'] ? '하락' : '변동 없음' ); ?>
+						<?php $trend_arrow = 'up' === $row['trend'] ? '↑' : ( 'down' === $row['trend'] ? '↓' : '→' ); ?>
+						<li><a href="<?php echo esc_url( get_permalink( $row['post'] ) ); ?>" aria-label="<?php echo esc_attr( get_the_title( $row['post'] ) . ', ' . $trend_label ); ?>"><strong><?php echo esc_html( (string) ( $index + 1 ) ); ?></strong><span><?php echo esc_html( $short_title ); ?></span><em class="hunt-news-popular__trend hunt-news-popular__trend--<?php echo esc_attr( $row['trend'] ); ?>" aria-hidden="true"><?php echo esc_html( $trend_arrow ); ?></em></a></li>
+					<?php endforeach; ?>
+				</ol>
+			<?php else : ?>
+				<p class="hunt-news-popular__empty">오늘의 실제 읽기 데이터를 집계하고 있습니다.</p>
+			<?php endif; ?>
+			</div>
+			<div id="hunt-news-popular-weekly" class="hunt-news-popular__tabpanel" role="tabpanel" aria-labelledby="hunt-news-popular-tab-weekly" data-popular-panel="weekly" hidden>
+			<?php if ( $weekly_rows ) : ?>
+				<ol class="hunt-news-popular__list">
+					<?php foreach ( $weekly_rows as $index => $row ) : ?>
+						<?php $short_title = wp_html_excerpt( wp_strip_all_tags( get_the_title( $row['post'] ) ), 34, '…' ); ?>
+						<?php $trend_label = 'up' === $row['trend'] ? '상승' : ( 'down' === $row['trend'] ? '하락' : '변동 없음' ); ?>
+						<?php $trend_arrow = 'up' === $row['trend'] ? '↑' : ( 'down' === $row['trend'] ? '↓' : '→' ); ?>
+						<li><a href="<?php echo esc_url( get_permalink( $row['post'] ) ); ?>" aria-label="<?php echo esc_attr( get_the_title( $row['post'] ) . ', ' . $trend_label ); ?>"><strong><?php echo esc_html( (string) ( $index + 1 ) ); ?></strong><span><?php echo esc_html( $short_title ); ?></span><em class="hunt-news-popular__trend hunt-news-popular__trend--<?php echo esc_attr( $row['trend'] ); ?>" aria-hidden="true"><?php echo esc_html( $trend_arrow ); ?></em></a></li>
+					<?php endforeach; ?>
+				</ol>
+			<?php else : ?>
+				<p class="hunt-news-popular__empty">최근 7일의 실제 읽기 데이터를 집계하고 있습니다.</p>
+			<?php endif; ?>
+			</div>
+			<p class="hunt-news-popular__updated">GA4 조회와 30초 이상·25% 이상 읽은 신호 반영<?php echo ! empty( $stats['updated_at'] ) ? ' · ' . esc_html( wp_date( 'm월 d일 H:i', strtotime( $stats['updated_at'] ) ) ) . ' 갱신' : ''; ?></p>
+		</div>
 	</section>
 	<?php
 }
@@ -364,11 +389,7 @@ function hunt_news_home_sections() {
 		<a class="hunt-news-home-notices__primary" href="<?php echo esc_url( home_url( '/about/' ) ); ?>"><strong>오늘의 변화</strong><span>대상·금액·시점·내가 할 일부터 빠르게 확인하세요</span><b aria-hidden="true">→</b></a>
 		<a class="hunt-news-home-notices__secondary" href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>"><span>공식 원문과 실제 적용 단계를 나눠 설명합니다</span><b aria-hidden="true">→</b></a>
 	</aside>
-	<?php
-	if ( ! $is_category ) {
-		hunt_news_render_popular_news();
-	}
-	?>
+	<?php hunt_news_render_popular_news(); ?>
 	<?php if ( ! $is_category ) : ?>
 	<section id="hunt-news-reading-guide" class="hunt-news-reading-guide" aria-labelledby="hunt-news-reading-guide-title">
 		<h2 id="hunt-news-reading-guide-title">뉴스를 읽고도 남는 세 가지</h2>
@@ -395,7 +416,7 @@ function hunt_news_home_sections() {
 	</section>
 	<?php endif; ?>
 	<script id="hunt-news-home-sections-position">
-	document.addEventListener('DOMContentLoaded',function(){var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var heading=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News</p><h2>최신 뉴스</h2>';if(notices){main.parentNode.insertBefore(notices,main);}if(popular){main.parentNode.insertBefore(popular,main);}main.parentNode.insertBefore(heading,main);if(section){main.insertAdjacentElement('afterend',section);}}});
+	document.addEventListener('DOMContentLoaded',function(){var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News</p><h2>최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}if(section){shell.insertAdjacentElement('afterend',section);}}if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
 	</script>
 	<?php
 }
