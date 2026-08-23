@@ -109,10 +109,10 @@ def add_reviewed_case_links(content: str, targets: list[dict[str, Any]]) -> str:
     return content.rstrip() + "\n\n" + section
 
 
-def _backup_path(kind: str, timestamp: datetime) -> Path:
+def _backup_path(kind: str, timestamp: datetime, *, resource: str) -> Path:
     directory = ROOT / "output" / "search-review-backups"
     directory.mkdir(parents=True, exist_ok=True)
-    return directory / f"{timestamp:%Y%m%dT%H%M%SZ}-{kind}.json"
+    return directory / f"{timestamp:%Y%m%dT%H%M%S%fZ}-{resource}-{kind}.json"
 
 
 def _append_audit(entry: dict[str, Any]) -> None:
@@ -149,7 +149,9 @@ def apply_internal_links(
     if not apply or updated == original:
         return action
 
-    backup = _backup_path("internal-links", timestamp)
+    backup = _backup_path(
+        "internal-links", timestamp, resource=f"post-{source_id}"
+    )
     backup.write_text(
         json.dumps(
             {
@@ -223,7 +225,9 @@ def apply_title_experiment(
     if not apply:
         return action
 
-    backup = _backup_path("title-experiment", timestamp)
+    backup = _backup_path(
+        "title-experiment", timestamp, resource=f"post-{post_id}"
+    )
     backup.write_text(
         json.dumps(
             {
