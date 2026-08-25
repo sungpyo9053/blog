@@ -30,6 +30,8 @@ FRESH_INSPECTION_QUOTA = 6
 RECOVERY_INSPECTION_QUOTA = 4
 INDEX_RECOVERY_QUEUE = REPORT_DIR / "index-recovery-queue.json"
 CTR_EXPERIMENT_QUEUE = REPORT_DIR / "ctr-experiment-queue.json"
+SEARCH_REVIEW_AUDIT = LOG_DIR / "search-review-actions.jsonl"
+TITLE_EXPERIMENT_MAX_AGE = timedelta(days=14)
 
 NOT_INDEXED_COVERAGE_MARKERS = (
     "발견됨 - 현재 색인이 생성되지 않음",
@@ -927,6 +929,7 @@ def build_ctr_experiment_queue(
     page_rows: list[dict],
     public_posts: list[dict],
     now: datetime,
+    active_experiments: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Queue one-variable CTR experiments without changing public titles."""
     public_by_path = {
@@ -958,9 +961,14 @@ def build_ctr_experiment_queue(
         position = _number(row.get("position"))
         if not post or impressions < 30 or ctr >= 0.02 or not (5 <= position <= 20):
             continue
-        items.append(
-            {
-                "post_id": int(post.get("id", 0)),
+        post_id = int(post.get("id", 0))
+        active = (active_experiments or {}).get(post_id)
+        state_consistent = bool(
+            active
+            and _rendered_title(post) == str(active.get("proposed_title", ""))
+        )
+        item = {
+                "post_id": post_id,
                 "title": _rendered_title(post),
                 "url": str(post.get("link", "")),
                 "top_query": top_queries.get(path, {}).get("query", ""),
@@ -972,17 +980,74 @@ def build_ctr_experiment_queue(
                 },
                 "change_contract": "title_or_meta_one_at_a_time",
                 "stop_rule": "14_days_or_1000_impressions",
-                "status": "REVIEW_REQUIRED",
+                "status": (
+                    "ACTIVE"
+                    if state_consistent
+                    else "STATE_MISMATCH"
+                    if active
+                    else "REVIEW_REQUIRED"
+                ),
             }
+        if active:
+            item["experiment"] = active
+        items.append(item)
+    items.sort(
+        key=lambda item: (
+            {"ACTIVE": 0, "STATE_MISMATCH": 1, "REVIEW_REQUIRED": 2}.get(
+                str(item.get("status")), 3
+            ),
+            -float(item["baseline"]["impressions"]),
         )
-    items.sort(key=lambda item: item["baseline"]["impressions"], reverse=True)
+    )
+    active_count = sum(item["status"] == "ACTIVE" for item in items)
+    review_count = sum(item["status"] == "REVIEW_REQUIRED" for item in items)
     return {
         "version": 1,
         "generated_at": now.isoformat(),
-        "status": "REVIEW_REQUIRED",
+        "status": "ACTIVE" if active_count and not review_count else "REVIEW_REQUIRED",
         "automatic_content_mutation": False,
+        "active_experiments": active_count,
+        "review_candidates": review_count,
         "items": items,
     }
+
+
+def read_active_title_experiments(
+    path: Path,
+    now: datetime,
+    *,
+    max_age: timedelta = TITLE_EXPERIMENT_MAX_AGE,
+) -> dict[int, dict[str, Any]]:
+    """Read recent applied title experiments from the append-only audit log."""
+    active: dict[int, dict[str, Any]] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return active
+    for line in lines:
+        try:
+            entry = json.loads(line)
+            if entry.get("action") != "title_experiment" or entry.get("status") != "applied":
+                continue
+            applied_at = datetime.fromisoformat(str(entry.get("applied_at", "")))
+            if applied_at.tzinfo is None:
+                continue
+            age = now.astimezone(timezone.utc) - applied_at.astimezone(timezone.utc)
+            if age < -timedelta(minutes=5) or age > max_age:
+                continue
+            post_id = int(entry.get("post_id", 0))
+            if post_id <= 0:
+                continue
+            active[post_id] = {
+                "applied_at": applied_at.isoformat(),
+                "previous_title": str(entry.get("previous_title", "")),
+                "proposed_title": str(entry.get("proposed_title", "")),
+                "baseline": entry.get("baseline", {}),
+                "stop_rule": str(entry.get("stop_rule", "14_days_or_1000_impressions")),
+            }
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+    return active
 
 
 def write_json_atomic(payload: dict[str, Any], path: Path) -> None:
@@ -1383,16 +1448,21 @@ def render(
     if current_ctr_items:
         current_title = current_ctr_items[0]
         current_baseline = current_title.get("baseline", {})
+        current_status = str(current_title.get("status", "REVIEW_REQUIRED"))
         lines.extend(
             [
-                "- current_title_experiment: `ELIGIBLE_REVIEW`",
+                f"- current_title_experiment: `{current_status}`",
                 f"- current_title_target: `{normalize_page_path(current_title.get('url', ''))}`",
                 f"- current_title_query: `{current_title.get('top_query') or 'N/A'}`",
                 "- current_title_metrics: "
                 f"`clicks={_number(current_baseline.get('clicks')):.0f}, "
                 f"impressions={_number(current_baseline.get('impressions')):.0f}, "
                 f"position={_number(current_baseline.get('position')):.1f}`",
-                "- proposed_single_change: `title_only; reviewer wording required`",
+                (
+                    "- proposed_single_change: `none; observe active title only`"
+                    if current_status == "ACTIVE"
+                    else "- proposed_single_change: `title_only; reviewer wording required`"
+                ),
                 f"- experiment_stop_rule: `{current_title.get('stop_rule', '14_days_or_1000_impressions')}`",
             ]
         )
@@ -1477,8 +1547,13 @@ def render(
         lines.append("- 검토 후보 없음")
 
     ctr_items = (ctr_experiment_queue or {}).get("items", [])
+    active_ctr_items = [item for item in ctr_items if item.get("status") == "ACTIVE"]
+    review_ctr_items = [
+        item for item in ctr_items if item.get("status") == "REVIEW_REQUIRED"
+    ]
     lines += ["", "### CTR 단일변수 실험 검토 큐", ""]
-    lines.append(f"- review_candidates: `{len(ctr_items)}`")
+    lines.append(f"- active_experiments: `{len(active_ctr_items)}`")
+    lines.append(f"- review_candidates: `{len(review_ctr_items)}`")
     lines.append("- automatic_content_mutation: `false`")
     for item in ctr_items[:10]:
         baseline = item.get("baseline", {})
@@ -1487,7 +1562,8 @@ def render(
             f"노출 `{_number(baseline.get('impressions')):.0f}`, "
             f"CTR `{_number(baseline.get('ctr')):.1%}`, "
             f"순위 `{_number(baseline.get('position')):.1f}`; "
-            f"query=`{item.get('top_query') or 'N/A'}`"
+            f"query=`{item.get('top_query') or 'N/A'}`; "
+            f"status=`{item.get('status', 'REVIEW_REQUIRED')}`"
         )
     if not ctr_items:
         lines.append("- 검토 후보 없음")
@@ -1596,6 +1672,7 @@ def main() -> int:
             page_rows,
             public_post_metadata or [],
             now,
+            read_active_title_experiments(SEARCH_REVIEW_AUDIT, now),
         )
         write_json_atomic(index_recovery_queue, INDEX_RECOVERY_QUEUE)
         write_json_atomic(ctr_experiment_queue, CTR_EXPERIMENT_QUEUE)

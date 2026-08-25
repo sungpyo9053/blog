@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ from scripts.run_analytics_optimizer import (
     measurement_warnings,
     mature_content_funnel,
     render,
+    read_active_title_experiments,
     select_index_checkpoint_urls,
     select_mature_recovery_urls,
     update_index_checkpoint_state,
@@ -650,6 +652,37 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertEqual(len(queue["items"]), 1)
         self.assertEqual(queue["items"][0]["top_query"], "핵심 검색어")
         self.assertEqual(queue["items"][0]["change_contract"], "title_or_meta_one_at_a_time")
+
+    def test_ctr_queue_marks_matching_recent_applied_title_active(self):
+        now = datetime(2026, 8, 26, 1, 0, tzinfo=timezone.utc)
+        queue = build_ctr_experiment_queue(
+            [{"keys": ["검색어", "https://huntlab.app/candidate/"], "impressions": 40}],
+            [{"page": "/candidate/", "clicks": 0, "impressions": 40, "ctr": 0, "position": 8}],
+            [{"id": 72, "link": "https://huntlab.app/candidate/", "title": {"rendered": "적용 제목"}, "status": "publish"}],
+            now,
+            {72: {"applied_at": now.isoformat(), "proposed_title": "적용 제목"}},
+        )
+
+        self.assertEqual(queue["items"][0]["status"], "ACTIVE")
+        self.assertEqual(queue["active_experiments"], 1)
+        self.assertEqual(queue["review_candidates"], 0)
+
+    def test_read_active_title_experiments_ignores_expired_and_malformed_rows(self):
+        now = datetime(2026, 8, 26, 1, 0, tzinfo=timezone.utc)
+        with TemporaryDirectory() as temporary:
+            audit = Path(temporary) / "audit.jsonl"
+            audit.write_text(
+                "not-json\n"
+                + json.dumps({"action": "title_experiment", "status": "applied", "post_id": 72, "applied_at": "2026-08-25T12:29:28+00:00", "proposed_title": "새 제목"})
+                + "\n"
+                + json.dumps({"action": "title_experiment", "status": "applied", "post_id": 90, "applied_at": "2026-08-07T05:01:29+00:00", "proposed_title": "오래된 제목"})
+                + "\n",
+                encoding="utf-8",
+            )
+
+            active = read_active_title_experiments(audit, now)
+
+        self.assertEqual(set(active), {72})
 
     def test_render_reports_read_to_internal_click_funnel_and_queues(self):
         body = render(
