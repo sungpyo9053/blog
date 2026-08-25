@@ -90,6 +90,31 @@ class CandidateEvaluatorTest(unittest.TestCase):
         self.assertEqual(low_result["effective_features"]["search_demand"], 0.0)
         self.assertGreater(high_result["effective_features"]["search_demand"], 0.0)
 
+    def test_search_demand_maps_structured_google_trends_traffic(self):
+        item = candidate("Google Trends 관측 수요")
+        item["whereispost_total_searches"] = 0
+        item["google_trends_approx_traffic"] = 200
+
+        result = CandidateEvaluator().evaluate(item)
+
+        self.assertEqual(result["evidence"]["search_demand"]["observed_value"], 200)
+        self.assertEqual(result["evidence"]["search_demand"]["strength"], "strong")
+        self.assertGreater(result["effective_features"]["search_demand"], 0.0)
+
+    def test_search_demand_recovers_legacy_approx_traffic_claim(self):
+        item = candidate("기존 Trends 문자열 수요")
+        item["whereispost_total_searches"] = 0
+        item["demand_signal_source"] = (
+            "Google Trends KR RSS checked_at=2026-08-23T16:10:17Z, "
+            "topic=수능원서접수, approx_traffic=200; Search Console 연결 없음"
+        )
+
+        result = CandidateEvaluator().evaluate(item)
+
+        self.assertEqual(result["evidence"]["search_demand"]["observed_value"], 200)
+        self.assertEqual(result["evidence"]["search_demand"]["strength"], "strong")
+        self.assertGreater(result["effective_features"]["search_demand"], 0.0)
+
     def test_candidate_id_ignores_title_and_tracking_query(self):
         first = make_candidate_id("https://example.com/release?utm_source=x", "event-1")
         second = make_candidate_id("https://example.com/release", "event-1")

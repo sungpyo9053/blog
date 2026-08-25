@@ -14,6 +14,10 @@ TopicReranker`의 Shadow 운영 및 production 승격 기준에 대한 운영 SS
 - 원점수가 있어도 근거가 없으면 `none × 0.0`으로 effective score를 0으로 만든다.
 - 검색 수요는 숫자로 저장된 관측값만 사용한다. Planner의 정성 검색 수요 점수는
   Shadow `search_demand` 계산에 사용하지 않는다.
+- 검색 수요 관측값은 `google_trends_approx_traffic`과
+  `whereispost_total_searches` 중 큰 값 하나를 사용하며 서로 다른 관측 기간의 값을
+  합산하지 않는다. 이전 산출물은 `demand_signal_source`의 정확한
+  `approx_traffic=<정수>` 표기를 호환 입력으로만 읽는다.
 - outcome은 ranking record를 수정하지 않고 `candidate_id → topic_id → post_id`에
   append-only observation으로 연결한다.
 

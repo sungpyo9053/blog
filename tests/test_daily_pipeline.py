@@ -366,12 +366,45 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            supplied = read_whereispost_observation(observation)
+            supplied = read_whereispost_observation(
+                observation,
+                now=datetime(2026, 8, 17, 0, 0, tzinfo=UTC),
+            )
             planner = planner_stage("주택청약", "run-observed", Path("/tmp/topics.md"), supplied)
 
             self.assertIn('"keyword": "주택청약"', planner.prompt)
             self.assertIn("수요 근거로만 사용", planner.prompt)
             self.assertIn("공식 원문 검증을 별도로 통과", planner.prompt)
+
+    def test_pipeline_rejects_stale_whereispost_cache_at_consumption_time(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            observation = Path(temporary) / "whereispost.json"
+            observation.write_text(
+                json.dumps(
+                    {
+                        "provider": "whereispost_keywordmaster",
+                        "checked_at": "2026-08-17T18:55:00+09:00",
+                        "rows": [
+                            {
+                                "keyword": "주택청약",
+                                "pc_searches": 10,
+                                "mobile_searches": 90,
+                                "total_searches": 100,
+                                "documents": 1000,
+                                "competition_ratio": 10.0,
+                                "related_keywords": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(PipelineError, "허용 범위\\(7일\\)"):
+                read_whereispost_observation(
+                    observation,
+                    now=datetime(2026, 8, 25, 19, 0, tzinfo=UTC),
+                )
 
     def test_cache_mode_forbids_live_whereispost_lookup(self):
         planner = planner_stage(
@@ -731,6 +764,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("Search Console 검색어", planner.prompt)
         self.assertIn("최대 1점만 가산", planner.prompt)
         self.assertIn("Whereispost 30일 평균은 장기 수요 참고값", planner.prompt)
+        self.assertIn("google_trends_approx_traffic", planner.prompt)
+        self.assertIn("일치 관측이 없으면 추정하지 말고 0", planner.prompt)
 
     def test_planner_uses_live_category_distribution_without_forcing_quota(self):
         planner = planner_stage(
@@ -835,6 +870,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "- whereispost_status: verified\n"
                     f"- whereispost_metrics: total={total_searches}; documents=1000\n"
                     f"- whereispost_total_searches: {total_searches}\n"
+                    "- google_trends_approx_traffic: 200\n"
                 )
             top10 = "\n".join(
                 f"{index}. 생활 검색 후보 {index}" for index in range(1, 11)
@@ -850,6 +886,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
 
             parsed = parse_topic_plan(path)
             self.assertEqual(parsed[0]["whereispost_total_searches"], 99)
+            self.assertEqual(parsed[0]["google_trends_approx_traffic"], 200)
 
     def test_planner_broadens_ml_beyond_isolation_forest(self):
         planner = planner_stage("", "run-ml-breadth", Path("/tmp/topics.md"))

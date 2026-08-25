@@ -31,6 +31,16 @@ RECOVERY_INSPECTION_QUOTA = 4
 INDEX_RECOVERY_QUEUE = REPORT_DIR / "index-recovery-queue.json"
 CTR_EXPERIMENT_QUEUE = REPORT_DIR / "ctr-experiment-queue.json"
 
+NOT_INDEXED_COVERAGE_MARKERS = (
+    "발견됨 - 현재 색인이 생성되지 않음",
+    "크롤링됨 - 현재 색인이 생성되지 않음",
+    "google에는 아직 알려지지 않은 url",
+    "url이 google에 등록되어 있지 않음",
+    "discovered - currently not indexed",
+    "crawled - currently not indexed",
+    "url is not on google",
+)
+
 
 def _credentials():
     from google.oauth2 import service_account
@@ -372,9 +382,7 @@ def aug7_review_decisions(
         }
 
     unindexed = [
-        item
-        for item in inspections
-        if item.get("status") == "COMPLETE" and item.get("verdict") != "PASS"
+        item for item in inspections if classify_index_inspection(item) == "not_indexed"
     ]
     discovery = (
         {
@@ -617,7 +625,7 @@ def collect_public_posts(base_url: str, *, timeout: float = 10.0) -> list[dict]:
             {
                 "per_page": 100,
                 "page": page,
-                "_fields": "id,date,link,slug,status,title,categories,tags",
+                "_fields": "id,date,link,slug,status,title,categories,tags,content",
             }
         )
         result = fetch(f"{endpoint}?{query}", timeout=timeout)
@@ -706,12 +714,11 @@ def hunt_news_performance_funnel(
         for item in (url_inspections or [])
         if item.get("status") == "COMPLETE"
     ]
-    indexed_count = sum(
-        item.get("verdict") == "PASS" for item in completed_inspections
-    )
-    not_indexed_count = sum(
-        item.get("verdict") == "FAIL" for item in completed_inspections
-    )
+    classifications = [
+        classify_index_inspection(item) for item in completed_inspections
+    ]
+    indexed_count = classifications.count("indexed")
+    not_indexed_count = classifications.count("not_indexed")
     inconclusive_count = (
         len(completed_inspections) - indexed_count - not_indexed_count
     )
@@ -782,6 +789,21 @@ def hunt_news_performance_funnel(
     }
 
 
+def classify_index_inspection(item: dict[str, Any]) -> str | None:
+    """Classify URL Inspection without treating every NEUTRAL result as unknown."""
+    if item.get("status") != "COMPLETE":
+        return None
+    verdict = str(item.get("verdict", "")).strip().upper()
+    if verdict == "PASS":
+        return "indexed"
+    coverage = str(item.get("coverage_state", "")).strip().casefold()
+    if verdict == "FAIL" or any(
+        marker in coverage for marker in NOT_INDEXED_COVERAGE_MARKERS
+    ):
+        return "not_indexed"
+    return "inconclusive"
+
+
 def _funnel_value(value: Any, *, percent: bool = False) -> str:
     if value is None:
         return "N/A"
@@ -795,6 +817,13 @@ def _rendered_title(post: dict[str, Any]) -> str:
     if isinstance(value, dict):
         value = value.get("rendered", "")
     return str(value).strip()
+
+
+def _rendered_content(post: dict[str, Any]) -> str:
+    value = post.get("content", "")
+    if isinstance(value, dict):
+        value = value.get("rendered", "")
+    return str(value)
 
 
 def build_index_recovery_queue(
@@ -811,10 +840,19 @@ def build_index_recovery_queue(
         for post in public_posts
         if post.get("status", "publish") == "publish"
     }
+    state_by_path = {
+        normalize_page_path(str(url)): record
+        for url, record in state.get("urls", {}).items()
+        if isinstance(record, dict)
+    }
     items: list[dict[str, Any]] = []
     for path in mature_paths:
         target = posts_by_path.get(path)
         if not target:
+            continue
+        record = state_by_path.get(normalize_page_path(str(target.get("link", ""))), {})
+        latest = record.get("latest", {})
+        if str(latest.get("verdict", "")).upper() == "PASS":
             continue
         target_categories = {int(value) for value in target.get("categories", [])}
         target_tags = {int(value) for value in target.get("tags", [])}
@@ -826,7 +864,12 @@ def build_index_recovery_queue(
                 int(value) for value in source.get("categories", [])
             }
             shared_tags = target_tags & {int(value) for value in source.get("tags", [])}
-            if not shared_categories and not shared_tags:
+            # A broad category such as IT is not enough evidence of contextual
+            # relevance. Require at least one shared editorial tag.
+            if not shared_tags:
+                continue
+            target_url = str(target.get("link", "")).strip()
+            if target_url and target_url in _rendered_content(source):
                 continue
             source_metrics = metrics.get(source_path, {})
             impressions = _number(source_metrics.get("impressions"))
@@ -849,8 +892,6 @@ def build_index_recovery_queue(
                 )
             )
         ranked_sources.sort(key=lambda item: item[0], reverse=True)
-        record = state.get("urls", {}).get(str(target.get("link", "")), {})
-        latest = record.get("latest", {})
         items.append(
             {
                 "target_post_id": int(target.get("id", 0)),
@@ -1246,7 +1287,7 @@ def render(
         if page_view_events and engaged_read_events is not None
         else None
     )
-    next_click_rate = (
+    clicks_per_engaged_read = (
         internal_click_events / engaged_read_events
         if engaged_read_events and internal_click_events is not None
         else None
@@ -1258,7 +1299,8 @@ def render(
             f"- yesterday_huntlab_engaged_read_events: `{_funnel_value(engaged_read_events)}`",
             f"- yesterday_huntlab_internal_click_events: `{_funnel_value(internal_click_events)}`",
             f"- yesterday_engaged_read_per_page_view: `{read_rate:.1%}`" if read_rate is not None else "- yesterday_engaged_read_per_page_view: `N/A`",
-            f"- yesterday_internal_click_per_engaged_read: `{next_click_rate:.1%}`" if next_click_rate is not None else "- yesterday_internal_click_per_engaged_read: `N/A`",
+            f"- yesterday_internal_clicks_per_engaged_read: `{clicks_per_engaged_read:.2f}`" if clicks_per_engaged_read is not None else "- yesterday_internal_clicks_per_engaged_read: `N/A`",
+            "- internal_clicks_per_engaged_read_semantics: `event count ratio, not conversion rate`",
             f"- yesterday_observed_hosts: `{', '.join(str(row.get('hostName', '')) for row in diagnostics.get('ga4_hosts', []) if row.get('hostName')) or 'N/A'}`",
         ]
     )
@@ -1303,7 +1345,7 @@ def render(
             lines.append(
                 f"- `{item['page']}`: 클릭 0, 노출 {item['impressions']:.0f}, "
                 f"평균 순위 {item['position']:.1f} — `disabled_review_required`; "
-                "8월 7일 재측정 전 자동 Refresh 금지"
+                "검토 승인 전 자동 Refresh 금지"
             )
     else:
         lines.append("- 초기 관찰 기준을 충족한 후보 없음")
@@ -1329,26 +1371,36 @@ def render(
         lines.append("- 관측 임계치를 충족한 후보 없음")
     inspections = url_inspections or []
     decisions = aug7_review_decisions(page_rows, inspections, now)
-    title_decision = decisions["title_experiment"]
     discovery_decision = decisions["index_discovery"]
+    current_ctr_items = (ctr_experiment_queue or {}).get("items", [])
     lines += [
         "",
-        "## 8월 7일 운영 결정",
+        "## 운영 결정",
         "",
+        "- decision_origin: `current_metrics_review_queue`",
         f"- review_date_ready: `{str(decisions['review_date_ready']).lower()}`",
-        f"- resident_title_experiment: `{title_decision['status']}`",
-        f"- resident_title_reason: `{title_decision['reason']}`",
     ]
-    if "impressions" in title_decision:
+    if current_ctr_items:
+        current_title = current_ctr_items[0]
+        current_baseline = current_title.get("baseline", {})
         lines.extend(
             [
-                "- resident_title_metrics: "
-                f"`clicks={title_decision['clicks']:.0f}, "
-                f"impressions={title_decision['impressions']:.0f}, "
-                f"position={title_decision['position']:.1f}`",
-                f"- proposed_single_change: `title_only` → "
-                f"`{title_decision['proposed_title']}`",
-                f"- experiment_stop_rule: `{title_decision['stop_rule']}`",
+                "- current_title_experiment: `ELIGIBLE_REVIEW`",
+                f"- current_title_target: `{normalize_page_path(current_title.get('url', ''))}`",
+                f"- current_title_query: `{current_title.get('top_query') or 'N/A'}`",
+                "- current_title_metrics: "
+                f"`clicks={_number(current_baseline.get('clicks')):.0f}, "
+                f"impressions={_number(current_baseline.get('impressions')):.0f}, "
+                f"position={_number(current_baseline.get('position')):.1f}`",
+                "- proposed_single_change: `title_only; reviewer wording required`",
+                f"- experiment_stop_rule: `{current_title.get('stop_rule', '14_days_or_1000_impressions')}`",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "- current_title_experiment: `HOLD`",
+                "- current_title_reason: `no_current_ctr_candidate`",
             ]
         )
     lines.extend(

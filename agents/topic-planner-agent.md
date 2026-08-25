@@ -166,6 +166,11 @@ Harness가 제공한 매시간 Google Trends 한국 RSS 캐시를 오늘 급상�
 `last_seen_at`과 관련 기사 목록을 관측값으로 기록하며 숫자를 절대 월간 검색량으로
 해석하지 않는다.
 
+모든 후보의 `google_trends_approx_traffic`에는 후보와 직접 일치하는 Trends 행의
+`approx_traffic`을 쉼표 없는 0 이상의 정수로 기록한다. 일치 관측이 없으면 값을
+추정하지 않고 `0`으로 기록한다. `demand_signal_source`에는 사용한 Trends 관측 시각과
+topic을 함께 남긴다.
+
 RSS 관련 기사와 급상승 표시는 후보 발견 근거일 뿐 사실 검증 자료가 아니다. TOP10에
 넣기 전에 핵심 사실을 정부·공공기관·법령·공시·당사자 원문 중 하나로 확인하거나,
 원문이 없는 사건은 서로 독립적인 신뢰 출처 두 개 이상으로 교차 확인한다. 출처가
@@ -346,6 +351,7 @@ IT의 직접 검증 후보는 프로젝트 내부, 격리된 임시 입력 또�
 - secondary_keywords: 관련 검색어1, 관련 검색어2
 - target_reader: 검색자의 상황과 해결 과제
 - demand_signal_source: Search Console, 실제 로그, 공식 Known Issues 등 확인한 발견 출처와 시각
+- google_trends_approx_traffic: 직접 일치하는 Google Trends 관측값, 없으면 0
 - observed_problem_phrase: 출처에서 실제 확인한 오류·문제 표현, 없으면 개념 의도
 - user_action: 독자가 글을 읽은 뒤 수행할 확인·해결·선택 행동
 - problem_origin: real_project, public_codebase, observed_search_question, controlled_lab, official_change 중 하나

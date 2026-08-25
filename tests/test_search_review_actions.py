@@ -10,8 +10,11 @@ from unittest.mock import patch
 import scripts.apply_search_review_actions as search_review_actions
 from scripts.apply_search_review_actions import (
     CASE_LINK_MARKER,
+    RELATED_LINK_MARKER,
+    add_related_article_links,
     add_reviewed_case_links,
     apply_title_experiment,
+    parse_ctr_queue_decision,
     parse_title_experiment,
 )
 
@@ -102,6 +105,41 @@ class SearchReviewActionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_title_experiment(report, date(2026, 8, 8))
 
+    def test_ctr_queue_decision_requires_current_review_candidate(self):
+        with TemporaryDirectory() as temporary:
+            queue = Path(temporary) / "queue.json"
+            queue.write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-08-25T01:00:00+09:00",
+                        "items": [
+                            {
+                                "post_id": 72,
+                                "status": "REVIEW_REQUIRED",
+                                "top_query": "석유 최고가격제 8차",
+                                "baseline": {
+                                    "clicks": 0,
+                                    "impressions": 176,
+                                    "position": 8.1,
+                                },
+                                "stop_rule": "14_days_or_1000_impressions",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            decision = parse_ctr_queue_decision(
+                queue,
+                post_id=72,
+                proposed_title="새 제목",
+                expected_date=date(2026, 8, 25),
+            )
+
+            self.assertEqual(decision["impressions"], 176)
+            self.assertEqual(decision["top_query"], "석유 최고가격제 8차")
+
     def test_reviewed_links_require_source_mention_and_are_idempotent(self):
         targets = [
             {
@@ -138,6 +176,23 @@ class SearchReviewActionTests(unittest.TestCase):
         }
         with self.assertRaises(ValueError):
             add_reviewed_case_links("<p>다른 글</p>", [target])
+
+    def test_related_article_link_is_added_to_existing_section_idempotently(self):
+        target = {
+            "id": 10,
+            "link": "https://huntlab.app/target/",
+            "title": {"rendered": "관련 대상"},
+        }
+        original = (
+            f"<p>{RELATED_LINK_MARKER}</p>\n"
+            '<section class="huntlab-related-articles"><h2>함께 읽으면 좋은 글</h2>'
+            "<ul><li>기존 링크</li></ul></section>"
+        )
+
+        updated = add_related_article_links(original, [target])
+
+        self.assertIn("https://huntlab.app/target/", updated)
+        self.assertEqual(add_related_article_links(updated, [target]), updated)
 
 
 if __name__ == "__main__":

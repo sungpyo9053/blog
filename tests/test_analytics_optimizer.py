@@ -12,6 +12,7 @@ from scripts.run_analytics_optimizer import (
     aug7_review_decisions,
     build_ctr_experiment_queue,
     build_index_recovery_queue,
+    classify_index_inspection,
     known_query_breakdown,
     hunt_news_performance_funnel,
     measurement_warnings,
@@ -66,6 +67,18 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertEqual(funnel["indexing"]["indexed"], 1)
         self.assertEqual(funnel["indexing"]["not_indexed"], 1)
         self.assertEqual(funnel["indexing"]["inconclusive"], 1)
+
+    def test_neutral_inspection_with_explicit_not_indexed_coverage_is_not_indexed(self):
+        inspection = {
+            "status": "COMPLETE",
+            "verdict": "NEUTRAL",
+            "coverage_state": "발견됨 - 현재 색인이 생성되지 않음",
+        }
+
+        self.assertEqual(classify_index_inspection(inspection), "not_indexed")
+        funnel = hunt_news_performance_funnel({}, [inspection])
+        self.assertEqual(funnel["indexing"]["not_indexed"], 1)
+        self.assertEqual(funnel["indexing"]["inconclusive"], 0)
 
     def test_performance_funnel_is_na_when_measurement_input_is_missing(self):
         funnel = hunt_news_performance_funnel({})
@@ -148,6 +161,26 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         )
         self.assertEqual(decision["title_experiment"]["status"], "SCHEDULED")
         self.assertEqual(decision["index_discovery"]["status"], "SCHEDULED")
+
+    def test_review_selects_neutral_result_with_explicit_not_indexed_coverage(self):
+        decision = aug7_review_decisions(
+            [],
+            [
+                {
+                    "url": "https://huntlab.app/not-indexed/",
+                    "status": "COMPLETE",
+                    "verdict": "NEUTRAL",
+                    "coverage_state": "Google에는 아직 알려지지 않은 URL입니다.",
+                }
+            ],
+            datetime(2026, 8, 25, 1, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(decision["index_discovery"]["status"], "ELIGIBLE_REVIEW")
+        self.assertEqual(
+            decision["index_discovery"]["target_url"],
+            "https://huntlab.app/not-indexed/",
+        )
 
     def test_analyze_returns_refresh_and_gap_candidates(self):
         rows = [
@@ -292,7 +325,8 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertIn("`/observed-post/`", body)
         self.assertIn("disabled_review_required", body)
         self.assertIn("자동 Refresh 금지", body)
-        self.assertIn("8월 7일 운영 결정", body)
+        self.assertIn("## 운영 결정", body)
+        self.assertIn("decision_origin: `current_metrics_review_queue`", body)
         self.assertIn("Naver·Whereispost Shadow Mode", body)
 
     def test_mature_content_funnel_excludes_fresh_posts(self):
@@ -484,6 +518,7 @@ class AnalyticsOptimizerTests(unittest.TestCase):
                 "date": "2026-08-02T02:00:00",
                 "categories": [3],
                 "tags": [7],
+                "content": {"rendered": "관련 설명"},
             },
             {
                 "id": 3,
@@ -507,6 +542,74 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         self.assertEqual(queue["status"], "REVIEW_REQUIRED")
         self.assertFalse(queue["automatic_content_mutation"])
         self.assertEqual(queue["items"][0]["recommended_sources"][0]["post_id"], 2)
+
+    def test_index_recovery_queue_rejects_category_only_and_existing_links(self):
+        now = datetime(2026, 8, 25, 1, 0, tzinfo=timezone.utc)
+        target = {
+            "id": 1,
+            "link": "https://huntlab.app/target/",
+            "title": {"rendered": "대상"},
+            "status": "publish",
+            "date": "2026-08-01T02:00:00",
+            "categories": [3],
+            "tags": [7],
+        }
+        category_only = {
+            "id": 2,
+            "link": "https://huntlab.app/category-only/",
+            "title": {"rendered": "카테고리만 같음"},
+            "status": "publish",
+            "categories": [3],
+            "tags": [8],
+            "content": {"rendered": "관련 링크 없음"},
+        }
+        already_linked = {
+            "id": 3,
+            "link": "https://huntlab.app/already-linked/",
+            "title": {"rendered": "이미 연결됨"},
+            "status": "publish",
+            "categories": [3],
+            "tags": [7],
+            "content": {"rendered": '<a href="https://huntlab.app/target/">대상</a>'},
+        }
+
+        queue = build_index_recovery_queue(
+            [target, category_only, already_linked],
+            ["/target/"],
+            [
+                {"page": "/category-only/", "clicks": 1, "impressions": 40},
+                {"page": "/already-linked/", "clicks": 1, "impressions": 40},
+            ],
+            {},
+            now,
+        )
+
+        self.assertEqual(queue["items"][0]["recommended_sources"], [])
+
+    def test_index_recovery_queue_matches_encoded_state_and_excludes_pass(self):
+        now = datetime(2026, 8, 25, 1, 0, tzinfo=timezone.utc)
+        post = {
+            "id": 1,
+            "link": "https://huntlab.app/한글-글/",
+            "title": {"rendered": "한글 글"},
+            "status": "publish",
+            "date": "2026-08-01T02:00:00",
+            "categories": [],
+            "tags": [],
+        }
+        state = {
+            "urls": {
+                "https://huntlab.app/%ED%95%9C%EA%B8%80-%EA%B8%80/": {
+                    "latest": {"verdict": "PASS"}
+                }
+            }
+        }
+
+        queue = build_index_recovery_queue(
+            [post], ["/한글-글/"], [], state, now
+        )
+
+        self.assertEqual(queue["items"], [])
 
     def test_ctr_queue_requires_enough_impressions_and_actionable_position(self):
         now = datetime(2026, 8, 20, 1, 0, tzinfo=timezone.utc)
@@ -567,7 +670,8 @@ class AnalyticsOptimizerTests(unittest.TestCase):
         )
 
         self.assertIn("yesterday_engaged_read_per_page_view: `25.0%`", body)
-        self.assertIn("yesterday_internal_click_per_engaged_read: `40.0%`", body)
+        self.assertIn("yesterday_internal_clicks_per_engaged_read: `0.40`", body)
+        self.assertIn("event count ratio, not conversion rate", body)
         self.assertIn("page_view=20, engaged_read=5, internal_click=2", body)
         self.assertIn("article_complete=0, share=0, return_visit=0", body)
         self.assertIn("GA4의 page_view→engaged_read 사이에는 전환율을 계산하지 않는다", body)

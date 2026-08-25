@@ -20,7 +20,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 CONTRACT_VERSION = "news-worthiness.v1"
-SCORER_VERSION = "deterministic.v1"
+SCORER_VERSION = "deterministic.v2"
 WEIGHTS_VERSION = "hunt-news.v1"
 SELECTION_MODE = "shadow"
 
@@ -69,6 +69,23 @@ def _parse_score_breakdown(value: str) -> dict[str, float]:
         if match:
             parsed[match.group(1).strip()] = _clamp_score(float(match.group(2)))
     return parsed
+
+
+def _parse_nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(str(value).replace(",", "").strip()))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _google_trends_approx_traffic(candidate: Mapping[str, Any]) -> int:
+    """Read the structured Trends value, with a bounded legacy-text fallback."""
+    explicit = _parse_nonnegative_int(candidate.get("google_trends_approx_traffic", 0))
+    if explicit > 0:
+        return explicit
+    claim = str(candidate.get("demand_signal_source", ""))
+    match = re.search(r"\bapprox_traffic\s*=\s*([0-9][0-9,]*)\b", claim, re.I)
+    return _parse_nonnegative_int(match.group(1)) if match else 0
 
 
 def _urls(value: str) -> list[str]:
@@ -156,11 +173,13 @@ class CandidateEvaluator:
         for legacy_label, feature in SCORE_LABELS.items():
             raw[feature] = breakdown.get(legacy_label, 0.0)
 
-        total_searches = candidate.get("whereispost_total_searches", 0)
-        try:
-            observed_searches = max(0, int(total_searches))
-        except (TypeError, ValueError):
-            observed_searches = 0
+        whereispost_searches = _parse_nonnegative_int(
+            candidate.get("whereispost_total_searches", 0)
+        )
+        google_trends_traffic = _google_trends_approx_traffic(candidate)
+        # These observations have different collection windows, so do not add
+        # them together. Use the stronger numeric signal without double-counting.
+        observed_searches = max(whereispost_searches, google_trends_traffic)
         # Search demand is derived only from an observed numeric value. The
         # logarithmic cap prevents a single large keyword from dominating.
         raw["search_demand"] = _clamp_score(math.log10(observed_searches + 1) * 2.5)
@@ -235,6 +254,8 @@ class CandidateEvaluator:
             "event_identifier": event_identifier,
             "effective_date": candidate.get("effective_date"),
             "observed_searches": observed_searches,
+            "whereispost_total_searches": whereispost_searches,
+            "google_trends_approx_traffic": google_trends_traffic,
         }
         return {
             "candidate_id": candidate_id,

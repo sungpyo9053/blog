@@ -20,6 +20,7 @@ from publisher.config import WordPressConfig
 from publisher.wordpress import WordPressClient
 
 CASE_LINK_MARKER = "<!-- huntlab-index-cases:v1 -->"
+RELATED_LINK_MARKER = "<!-- huntlab-related-links:v1 -->"
 
 
 def _plain_title(post: dict[str, Any]) -> str:
@@ -61,6 +62,37 @@ def parse_title_experiment(report: str, expected_date: date) -> dict[str, Any]:
         "impressions": float(metrics.group(2)),
         "position": float(metrics.group(3)),
         "stop_rule": stop_rule.group(1),
+    }
+
+
+def parse_ctr_queue_decision(
+    queue_path: Path,
+    *,
+    post_id: int,
+    proposed_title: str,
+    expected_date: date,
+) -> dict[str, Any]:
+    payload = json.loads(queue_path.read_text(encoding="utf-8"))
+    generated_at = datetime.fromisoformat(str(payload.get("generated_at", "")))
+    if generated_at.date() != expected_date:
+        raise ValueError("CTR experiment queue date does not match review date")
+    item = next(
+        (row for row in payload.get("items", []) if int(row.get("post_id", 0)) == post_id),
+        None,
+    )
+    if item is None or item.get("status") != "REVIEW_REQUIRED":
+        raise ValueError("post is not present in the current CTR review queue")
+    baseline = item.get("baseline", {})
+    title = proposed_title.strip()
+    if not title:
+        raise ValueError("reviewed proposed title is empty")
+    return {
+        "proposed_title": title,
+        "clicks": float(baseline.get("clicks", 0)),
+        "impressions": float(baseline.get("impressions", 0)),
+        "position": float(baseline.get("position", 0)),
+        "stop_rule": str(item.get("stop_rule", "14_days_or_1000_impressions")),
+        "top_query": str(item.get("top_query", "")),
     }
 
 
@@ -109,6 +141,34 @@ def add_reviewed_case_links(content: str, targets: list[dict[str, Any]]) -> str:
     return content.rstrip() + "\n\n" + section
 
 
+def add_related_article_links(content: str, targets: list[dict[str, Any]]) -> str:
+    missing = [target for target in targets if str(target.get("link", "")) not in content]
+    if not missing:
+        return content
+    items = "\n".join(
+        f'<li><a href="{html.escape(str(target["link"]), quote=True)}">'
+        f'{html.escape(_plain_title(target))}</a></li>'
+        for target in missing
+    )
+    section_match = re.search(
+        r'(?is)<section[^>]*class="[^"]*huntlab-related-articles[^"]*"[^>]*>.*?<ul[^>]*>',
+        content,
+    )
+    if section_match:
+        list_end = content.find("</ul>", section_match.end())
+        if list_end < 0:
+            raise ValueError("existing related-article section is malformed")
+        return content[:list_end] + items + "\n" + content[list_end:]
+    section = (
+        f"{RELATED_LINK_MARKER}\n"
+        '<section class="huntlab-related-articles" '
+        'aria-labelledby="huntlab-related-title">\n'
+        '<h2 id="huntlab-related-title">함께 읽으면 좋은 글</h2>\n'
+        f"<ul>\n{items}\n</ul>\n</section>\n"
+    )
+    return content.rstrip() + "\n\n" + section
+
+
 def _backup_path(kind: str, timestamp: datetime, *, resource: str) -> Path:
     directory = ROOT / "output" / "search-review-backups"
     directory.mkdir(parents=True, exist_ok=True)
@@ -137,8 +197,13 @@ def apply_internal_links(
         target.get("status") != "publish" for target in targets
     ):
         raise ValueError("source and reviewed targets must all be published")
+    source_tags = {int(value) for value in source.get("tags", [])}
+    for target in targets:
+        target_tags = {int(value) for value in target.get("tags", [])}
+        if not source_tags.intersection(target_tags):
+            raise ValueError("reviewed internal-link pair must share an editorial tag")
     original = _raw_content(source)
-    updated = add_reviewed_case_links(original, targets)
+    updated = add_related_article_links(original, targets)
     action = {
         "action": "internal_links",
         "source_id": source_id,
@@ -273,6 +338,12 @@ def main() -> int:
     parser.add_argument("--internal-link-target-id", type=int, action="append", default=[])
     parser.add_argument("--title-post-id", type=int)
     parser.add_argument("--expected-current-title")
+    parser.add_argument("--proposed-title")
+    parser.add_argument(
+        "--ctr-queue",
+        type=Path,
+        default=ROOT / "output" / "analytics" / "ctr-experiment-queue.json",
+    )
     parser.add_argument("--approved-by", default="")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
@@ -289,9 +360,18 @@ def main() -> int:
     generated = re.search(r"(?m)^- generated_at: `([^`]+)`$", report)
     if generated is None or datetime.fromisoformat(generated.group(1)).date() != args.review_date:
         raise SystemExit("analytics report date does not match review date")
-    decision = (
-        parse_title_experiment(report, args.review_date) if args.title_post_id else None
-    )
+    decision = None
+    if args.title_post_id:
+        decision = (
+            parse_ctr_queue_decision(
+                args.ctr_queue,
+                post_id=args.title_post_id,
+                proposed_title=args.proposed_title,
+                expected_date=args.review_date,
+            )
+            if args.proposed_title is not None
+            else parse_title_experiment(report, args.review_date)
+        )
     client = WordPressClient(WordPressConfig.from_environment(ROOT / ".env"))
     timestamp = datetime.now(UTC)
     results: list[dict[str, Any]] = []

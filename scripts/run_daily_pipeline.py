@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from publisher.frontmatter import FrontmatterError, load_document
-from scripts.manage_whereispost_cache import DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE
+from scripts.manage_whereispost_cache import (
+    DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE,
+    DEFAULT_MAX_AGE_DAYS as DEFAULT_WHEREISPOST_MAX_AGE_DAYS,
+)
 from scripts.news_worthiness import (
     build_shadow_diff,
     make_shadow_input_snapshot,
@@ -131,6 +134,15 @@ def parse_whereispost_total_searches(value: str, title: str) -> int:
     if not re.fullmatch(r"\d+", normalized):
         raise PipelineError(
             f"{title}: whereispost_total_searches는 0 이상의 정수여야 합니다."
+        )
+    return int(normalized)
+
+
+def parse_google_trends_approx_traffic(value: str, title: str) -> int:
+    normalized = value.replace(",", "").strip()
+    if not re.fullmatch(r"\d+", normalized):
+        raise PipelineError(
+            f"{title}: google_trends_approx_traffic은 0 이상의 정수여야 합니다."
         )
     return int(normalized)
 
@@ -503,6 +515,12 @@ def parse_topic_plan_document(path: Path) -> dict[str, Any]:
             "content_type": content_type,
             "tags": tags,
         }
+        if "google_trends_approx_traffic" in fields:
+            candidates[title]["google_trends_approx_traffic"] = (
+                parse_google_trends_approx_traffic(
+                    fields["google_trends_approx_traffic"], title
+                )
+            )
         if category in ACTIVE_EDITOR_CATEGORIES:
             candidates[title]["whereispost_total_searches"] = (
                 parse_whereispost_total_searches(
@@ -1569,13 +1587,30 @@ def validate_dry_run(
     return 0
 
 
-def read_whereispost_observation(path: Path | None) -> str:
+def read_whereispost_observation(
+    path: Path | None,
+    *,
+    now: datetime | None = None,
+    max_age_days: int = DEFAULT_WHEREISPOST_MAX_AGE_DAYS,
+) -> str:
     if path is None:
         return ""
     try:
         payload = load_whereispost_shadow(path)
     except SearchSignalError as exc:
         raise PipelineError(f"Whereispost 관측 파일이 올바르지 않습니다: {exc}") from exc
+    try:
+        checked_at = datetime.fromisoformat(str(payload["checked_at"]))
+    except (KeyError, ValueError) as exc:
+        raise PipelineError("Whereispost checked_at 형식이 올바르지 않습니다.") from exc
+    if checked_at.tzinfo is None:
+        raise PipelineError("Whereispost checked_at에 시간대가 없습니다.")
+    current = now or datetime.now(UTC)
+    age = current.astimezone(UTC) - checked_at.astimezone(UTC)
+    if age < -timedelta(minutes=5) or age > timedelta(days=max_age_days):
+        raise PipelineError(
+            f"Whereispost 관측 캐시가 허용 범위({max_age_days}일)를 벗어났습니다."
+        )
     rows = [row for row in payload.get("rows", []) if not row.get("consumed", False)]
     if not rows:
         raise PipelineError("Whereispost 관측 파일에 rows가 없습니다.")
@@ -1774,6 +1809,8 @@ def planner_stage(
             "Whereispost 30일 평균은 장기 수요 참고값으로만 사용하고 Google Trends 시의성이나 공식 근거를 "
             "뒤집는 필수 조건으로 사용하지 마세요. 각 TOP2의 demand_signal_source에는 사용한 Trends 관측 "
             "시각, Search Console 연결 여부, Whereispost 사용 여부를 구분해 기록하세요. "
+            "모든 후보의 google_trends_approx_traffic에는 후보와 직접 일치하는 Trends 행의 approx_traffic을 "
+            "쉼표 없는 0 이상의 정수로 기록하고, 일치 관측이 없으면 추정하지 말고 0으로 기록하세요. "
             "TOP2에는 demand_signal_source, observed_problem_phrase, user_action과 함께 "
             "problem_origin(real_project, public_codebase, observed_search_question, controlled_lab, official_change 중 하나), "
             "editorial_thesis(글 전체가 증명할 한 문장), chosen_focus, rejected_angle(넣지 않을 관점과 이유), "

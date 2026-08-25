@@ -50,6 +50,10 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
   표본이 없으면 `N/A`, 완료된 표본에서 색인 건수가 없으면 `0`으로 둔다. 표본
   수와 `indexed`·`not_indexed`·`inconclusive`를 함께 표시하며 전체 발행 글의
   색인율로 확대 해석하지 않는다.
+- URL Inspection의 `NEUTRAL`은 일괄 `inconclusive`로 처리하지 않는다. Coverage가
+  `발견됨 - 현재 색인이 생성되지 않음`, `크롤링됨 - 현재 색인이 생성되지 않음`,
+  `Google에는 아직 알려지지 않은 URL`처럼 미색인을 명시하면 `not_indexed`로
+  분류하고, Coverage로 상태를 확정할 수 없을 때만 `inconclusive`로 둔다.
 - 노출은 높고 CTR이 낮으면 제목·Meta Description 개선안을 제안한다.
 - 클릭은 있으나 참여가 낮으면 첫 화면·목차·내부 링크 개선안을 제안한다.
 - 검색 의도와 CTA가 어긋나면 CTA를 관련 글·공식 문서·무료 체험·문의 중 하나로 조정한다.
@@ -72,9 +76,13 @@ Publisher 정책을 대체하거나 자동 발행 권한을 부여하지 않는�
 - 기존 글로 해결되지 않는 Content Gap 후보
 - 신규 6개·성숙 회복 4개를 우선 배분한 URL Inspection 점검 결과
 - `index-recovery-queue.json`의 문맥상 관련 내부링크 출처 후보
+- URL 인코딩 표현이 달라도 동일 경로의 최신 Inspection 상태를 연결하고, 이미
+  `PASS`인 URL은 색인 회복 큐에서 제외한다.
 - `ctr-experiment-queue.json`의 제목 또는 Meta 단일변수 실험 후보
 - GA4 `page_view` → `huntlab_engaged_read` → `huntlab_article_complete`와
   `huntlab_internal_click`·`huntlab_article_share`·`huntlab_return_visit` 관측값
+- `internal_click / engaged_read`는 서로 다른 이벤트 횟수의 비율이므로 백분율
+  전환율이 아니라 `읽기 이벤트당 내부 클릭 이벤트 수`로 표시한다.
 - `hunt-news-performance-funnel.v1` 책임 단계와 `0`/`N/A` 의미
 - 계측 입력이 없으면 `N/A`, 계측됐으나 발생하지 않으면 `0`
 - 데이터 부족·API 실패·측정 누락
