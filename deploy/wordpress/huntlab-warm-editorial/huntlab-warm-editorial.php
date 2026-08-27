@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.3.1
+ * Version: 5.3.2
  * Author: Hunt News
  */
 
@@ -43,6 +43,61 @@ function hunt_news_register_briefing_type() {
 	}
 }
 add_action( 'init', 'hunt_news_register_briefing_type' );
+
+/**
+ * Build search metadata from the evidence-backed daily analysis while keeping
+ * the visible report title and date archive stable.
+ *
+ * @return array{title:string,description:string}
+ */
+function hunt_news_briefing_search_metadata() {
+	if ( ! is_singular( 'hunt_briefing' ) ) {
+		return array( 'title' => '', 'description' => '' );
+	}
+
+	$post_id  = get_queried_object_id();
+	$manifest = get_post_meta( $post_id, '_hunt_news_briefing_manifest', true );
+	$analysis = is_array( $manifest ) && isset( $manifest['analysis'] ) && is_array( $manifest['analysis'] ) ? $manifest['analysis'] : array();
+	$keywords = array();
+	foreach ( array_slice( (array) ( $analysis['keywords'] ?? array() ), 0, 3 ) as $keyword ) {
+		$name = sanitize_text_field( (string) ( $keyword['keyword'] ?? '' ) );
+		if ( '' !== $name && ! in_array( $name, $keywords, true ) ) {
+			$keywords[] = $name;
+		}
+	}
+
+	$date        = get_the_date( 'Y-m-d', $post_id );
+	$title       = $keywords ? implode( '·', $keywords ) . ' | ' . $date . ' 기술 브리핑 - Hunt News' : '';
+	$headline    = sanitize_text_field( (string) ( $analysis['headline'] ?? '' ) );
+	$summary     = sanitize_text_field( (string) ( $analysis['summary'] ?? '' ) );
+	$description = '';
+	if ( '' !== $headline ) {
+		$description = '오늘의 핵심은 ' . $headline . '입니다. ';
+	}
+	if ( '' !== $summary ) {
+		$description .= wp_html_excerpt( $summary, 85, '…' );
+	}
+	if ( '' !== $description ) {
+		$description = trim( $description ) . ' 근거와 개발자 행동을 정리했습니다.';
+	}
+
+	return array( 'title' => $title, 'description' => $description );
+}
+
+/** Use a keyword-rich title only in document/search metadata. */
+function hunt_news_briefing_search_title( $title ) {
+	$metadata = hunt_news_briefing_search_metadata();
+	return '' !== $metadata['title'] ? $metadata['title'] : $title;
+}
+add_filter( 'pre_get_document_title', 'hunt_news_briefing_search_title', 20 );
+add_filter( 'aioseo_title', 'hunt_news_briefing_search_title', 20 );
+
+/** Use the analysis summary as the briefing search snippet. */
+function hunt_news_briefing_search_description( $description ) {
+	$metadata = hunt_news_briefing_search_metadata();
+	return '' !== $metadata['description'] ? $metadata['description'] : $description;
+}
+add_filter( 'aioseo_description', 'hunt_news_briefing_search_description', 20 );
 
 /** Mark the report-first surfaces without affecting legacy article URLs. */
 function hunt_news_briefing_body_class( $classes ) {
