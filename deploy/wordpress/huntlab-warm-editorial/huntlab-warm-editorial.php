@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.4.4
+ * Version: 5.4.5
  * Author: Hunt News
  */
 
@@ -1143,10 +1143,19 @@ function hunt_news_home_sections() {
 				}
 			}
 		}
+		$briefing_feed_urls = array_fill_keys( array_filter( array_column( $must_read_items, 'url' ) ), true );
 		for ( $round = 0; $round < 10; $round++ ) {
 			foreach ( array_keys( $source_groups ) as $source_category ) {
 				if ( isset( $source_groups[ $source_category ][ $round ] ) ) {
-					$briefing_feed_items[] = $source_groups[ $source_category ][ $round ];
+					$feed_item = $source_groups[ $source_category ][ $round ];
+					$feed_url = (string) ( $feed_item['url'] ?? '' );
+					if ( $feed_url && isset( $briefing_feed_urls[ $feed_url ] ) ) {
+						continue;
+					}
+					$briefing_feed_items[] = $feed_item;
+					if ( $feed_url ) {
+						$briefing_feed_urls[ $feed_url ] = true;
+					}
 				}
 			}
 		}
@@ -1438,7 +1447,7 @@ function hunt_news_home_sections() {
 	document.addEventListener('DOMContentLoaded',function(){var board=document.getElementById('hunt-news-briefing-board');var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News Archive</p><h2>분야별 최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(board){parent.insertBefore(board,main);}if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}if(section){shell.insertAdjacentElement('afterend',section);}}if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
 	</script>
 	<script id="hunt-news-brief-view-controls">
-	document.addEventListener('DOMContentLoaded',function(){var viewButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-view]'));var mustReadCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="must-read"]'));var feedCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="feed"]'));var viewStatus=document.querySelector('[data-brief-view-status]');viewButtons.forEach(function(button){button.addEventListener('click',function(){var view=button.getAttribute('data-brief-view');var limit=view==='all'?feedCards.length:parseInt(view,10);viewButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});mustReadCards.forEach(function(card){card.hidden=view!=='must-read';});feedCards.forEach(function(card){card.hidden=view==='must-read'||parseInt(card.getAttribute('data-brief-card-index'),10)>=limit;});if(viewStatus){viewStatus.textContent=view==='must-read'?'AI가 근거와 영향도를 검토해 고른 5개입니다.':view==='all'?'오늘 수집한 기술 뉴스 전체입니다.':'오늘 수집한 기술 뉴스 중 최신 '+view+'개입니다.';}});});});
+	document.addEventListener('DOMContentLoaded',function(){var viewButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-view]'));var mustReadCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="must-read"]'));var feedCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="feed"]'));var viewStatus=document.querySelector('[data-brief-view-status]');viewButtons.forEach(function(button){button.addEventListener('click',function(){var view=button.getAttribute('data-brief-view');var extraLimit=view==='all'?feedCards.length:Math.max(0,parseInt(view,10)-mustReadCards.length);viewButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});mustReadCards.forEach(function(card){card.hidden=false;});feedCards.forEach(function(card){card.hidden=view==='must-read'||parseInt(card.getAttribute('data-brief-card-index'),10)>=extraLimit;});if(viewStatus){viewStatus.textContent=view==='must-read'?'AI가 근거와 영향도를 검토해 고른 5개입니다.':view==='all'?'필독 5개를 포함한 오늘의 기술 뉴스 전체입니다.':'필독 5개를 포함해 '+view+'개까지 펼쳤습니다.';}});});});
 	</script>
 	<script id="hunt-news-report-mode">
 	document.addEventListener('DOMContentLoaded',function(){var reportShell=document.querySelector('.hunt-news-report-shell');var board=document.getElementById('hunt-news-briefing-board');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');var archiveShell=main?main.closest('.hunt-news-content-shell'):null;if(reportShell&&board&&board.parentNode!==reportShell){reportShell.appendChild(board);}if(reportShell&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',reportShell);}else if(reportShell&&archiveShell&&archiveShell.parentNode){archiveShell.parentNode.insertBefore(reportShell,archiveShell);}if(document.body.classList.contains('hunt-news-briefing-mode')&&main){main.hidden=true;}var dateNav=document.getElementById('hunt-news-date-nav');var dateToggle=dateNav?dateNav.querySelector('.hunt-news-date-nav__toggle'):null;if(dateNav&&dateToggle){dateToggle.addEventListener('click',function(){var open=dateNav.classList.toggle('is-open');dateToggle.setAttribute('aria-expanded',open?'true':'false');});}});
