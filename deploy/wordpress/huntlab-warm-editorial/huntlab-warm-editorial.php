@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.4.0
+ * Version: 5.4.1
  * Author: Hunt News
  */
 
@@ -1143,6 +1143,33 @@ function hunt_news_home_sections() {
 			}
 		}
 	}
+	$briefing_evidence_urls = array();
+	foreach ( array( 'core_signals', 'matrix', 'timeline', 'insight_cards', 'themes', 'developer_insights', 'watchlist' ) as $analysis_section ) {
+		foreach ( (array) ( $analysis[ $analysis_section ] ?? array() ) as $analysis_row ) {
+			foreach ( (array) ( $analysis_row['evidence_urls'] ?? array() ) as $evidence_url ) {
+				if ( $evidence_url ) {
+					$briefing_evidence_urls[ (string) $evidence_url ] = true;
+				}
+			}
+		}
+	}
+	foreach ( (array) ( $analysis['must_read'] ?? array() ) as $analysis_row ) {
+		$evidence_url = (string) ( $analysis_row['source_url'] ?? '' );
+		if ( $evidence_url ) {
+			$briefing_evidence_urls[ $evidence_url ] = true;
+		}
+	}
+	if ( ! $briefing_evidence_urls ) {
+		foreach ( (array) ( $manifest['editorial_sources']['items'] ?? array() ) as $source_item ) {
+			$evidence_url = (string) ( $source_item['url'] ?? '' );
+			if ( $evidence_url ) {
+				$briefing_evidence_urls[ $evidence_url ] = true;
+			}
+		}
+	}
+	$briefing_core_count      = ! empty( $analysis['core_signals'] ) ? count( $analysis['core_signals'] ) : min( 3, count( $signal_posts ) );
+	$briefing_timeline_count  = ! empty( $analysis['timeline'] ) ? count( $analysis['timeline'] ) : count( $timeline );
+	$briefing_must_read_count = ! empty( $analysis['must_read'] ) ? count( $analysis['must_read'] ) : min( 5, count( $must_read_items ) );
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
 	<div class="hunt-news-report-shell">
@@ -1160,11 +1187,11 @@ function hunt_news_home_sections() {
 			</div>
 		</header>
 		<?php if ( $manifest ) : ?>
-		<section class="hunt-news-pipeline-status" aria-label="수집부터 발행까지의 실행 상태">
-			<div><span>수집</span><strong><?php echo esc_html( (string) absint( $manifest['collection']['observed_topic_count'] ?? 0 ) ); ?>개</strong><small><?php echo 'fresh' === ( $manifest['collection']['status'] ?? '' ) ? 'Google Trends 최신 캐시' : ( 'stale' === ( $manifest['collection']['status'] ?? '' ) ? 'Google Trends 캐시 지연' : '수집 캐시 미연결' ); ?></small></div>
-			<div><span>선정</span><strong><?php echo esc_html( (string) absint( $manifest['selection']['candidate_count'] ?? 0 ) ); ?> → 2</strong><small>Legacy 실제 발행 후보</small></div>
-			<div><span>검증</span><strong><?php echo esc_html( (string) count( (array) ( $manifest['published'] ?? array() ) ) ); ?>건</strong><small>Reviewer·Publisher 통과</small></div>
-			<div><span>Shadow</span><strong><?php echo esc_html( (string) absint( $manifest['selection']['overlap_count'] ?? 0 ) ); ?>/2</strong><small>비발행 병렬 비교</small></div>
+		<section id="hunt-news-reader-summary" class="hunt-news-reader-summary" aria-label="오늘 브리핑 구성">
+			<div><span>핵심 변화</span><strong><?php echo esc_html( (string) $briefing_core_count ); ?>개</strong><small>오늘 먼저 볼 변화</small></div>
+			<div><span>연결된 근거</span><strong><?php echo esc_html( (string) count( $briefing_evidence_urls ) ); ?>개</strong><small>분석에 연결된 원문</small></div>
+			<div><span>행동 시점</span><strong><?php echo esc_html( (string) $briefing_timeline_count ); ?>개</strong><small>오늘·이번 주·이번 달·올해 말</small></div>
+			<div><span>분야별 필독</span><strong><?php echo esc_html( (string) $briefing_must_read_count ); ?>개</strong><small>카테고리별 한 건</small></div>
 		</section>
 		<?php endif; ?>
 
