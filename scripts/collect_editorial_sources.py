@@ -23,10 +23,40 @@ DEFAULT_CACHE = PROJECT_ROOT / "output/search-signals/editorial-sources.json"
 PROVIDER = "hunt_news_editorial_sources"
 CONTRACT_VERSION = "editorial-source-cache.v1"
 USER_AGENT = "HuntNews-SourceCollector/1.0 (+https://huntlab.app/)"
+RELEVANCE_PROFILES = {
+    "ai_ml": (
+        "ai", "artificial intelligence", "machine learning", "llm",
+        "language model", "language models", "agent", "agents", "chatgpt",
+        "openai", "anthropic",
+        "gemini", "claude", "mistral", "nvidia", "gpu", "hugging face",
+        "laion", "neural", "transformer", "diffusion", "inference",
+        "generative", "deep learning", "benchmark", "dataset", "datasets",
+        "robot", "robots", "computer vision", "deepmind",
+        "xai", "mcp",
+    ),
+}
 
 
 class EditorialSourceError(RuntimeError):
     pass
+
+
+def matches_source_relevance(title: str, source: dict[str, Any]) -> bool:
+    """Fail closed for broad feeds that opt into an item-level topic profile."""
+    profile = str(source.get("relevance_profile", "")).strip()
+    if not profile:
+        return True
+    terms = RELEVANCE_PROFILES.get(profile)
+    if not terms:
+        raise EditorialSourceError(
+            f"{source.get('name', 'source')}: unknown relevance profile {profile}"
+        )
+    normalized = re.sub(r"\s+", " ", title.casefold()).strip()
+    for term in terms:
+        escaped = re.escape(term.casefold()).replace(r"\ ", r"\s+")
+        if re.search(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", normalized):
+            return True
+    return False
 
 
 def canonical_hash(value: Any) -> str:
@@ -55,7 +85,7 @@ def _published(value: str, fallback: datetime) -> str:
     return parsed.astimezone(UTC).isoformat()
 
 
-def parse_feed(data: bytes, source: dict[str, str], *, collected_at: datetime, limit: int = 20) -> list[dict[str, Any]]:
+def parse_feed(data: bytes, source: dict[str, Any], *, collected_at: datetime, limit: int = 20) -> list[dict[str, Any]]:
     try:
         root = ET.fromstring(data)
     except ET.ParseError as exc:
@@ -71,7 +101,7 @@ def parse_feed(data: bytes, source: dict[str, str], *, collected_at: datetime, l
         atom_link = entry.find("{http://www.w3.org/2005/Atom}link")
         if not link and atom_link is not None:
             link = (atom_link.attrib.get("href") or "").strip()
-        if not title or not link or link in seen:
+        if not title or not link or link in seen or not matches_source_relevance(title, source):
             continue
         seen.add(link)
         published = (
@@ -91,7 +121,7 @@ def parse_feed(data: bytes, source: dict[str, str], *, collected_at: datetime, l
     return rows
 
 
-def fetch_source(source: dict[str, str], *, collected_at: datetime, timeout: float, limit: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def fetch_source(source: dict[str, Any], *, collected_at: datetime, timeout: float, limit: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     request = urllib.request.Request(source["feed_url"], headers={"User-Agent": USER_AGENT, "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -139,10 +169,23 @@ def collect(config_path: Path, cache_path: Path, *, now: datetime | None = None,
     statuses = [result[0] for result in results]
     successful_names = {row["name"] for row in statuses if row["status"] == "SUCCESS"}
     failed_names = {row["name"] for row in statuses if row["status"] == "ERROR"}
-    rows = [row for _, items in results for row in items]
+    source_by_name = {str(source.get("name", "")): source for source in sources}
+    rows = [
+        row
+        for _, items in results
+        for row in items
+        if matches_source_relevance(
+            str(row.get("title", "")),
+            source_by_name.get(str(row.get("source", "")), {}),
+        )
+    ]
     fallback_rows = [
         row for row in _previous_rows(cache_path)
         if row.get("source") in failed_names and row.get("source") not in successful_names
+        and matches_source_relevance(
+            str(row.get("title", "")),
+            source_by_name.get(str(row.get("source", "")), {}),
+        )
     ]
     if fallback_rows:
         rows.extend(fallback_rows)

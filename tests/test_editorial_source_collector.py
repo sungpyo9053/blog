@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.collect_editorial_sources import collect, parse_feed
+from scripts.collect_editorial_sources import collect, matches_source_relevance, parse_feed
 from scripts.search_signal_providers import load_editorial_source_cache
 
 
@@ -24,6 +24,56 @@ class EditorialSourceCollectorTests(unittest.TestCase):
         self.assertEqual(rss[0]["title"], "AI agent release")
         self.assertEqual(atom[0]["url"], "https://example.com/b")
         self.assertEqual(atom[0]["category"], "AI/ML 핵심")
+
+    def test_broad_ai_feed_excludes_unrelated_item_before_categorizing(self):
+        source = {
+            "category": "AI/ML 핵심",
+            "name": "Hacker News",
+            "relevance_profile": "ai_ml",
+        }
+        feed = b'''<?xml version="1.0"?><rss><channel>
+        <item><title>Kusama Yayoi Dies at 97</title><link>https://example.com/culture</link></item>
+        <item><title>OpenAI launches a new agent model</title><link>https://example.com/ai</link></item>
+        </channel></rss>'''
+        rows = parse_feed(feed, source, collected_at=self.now)
+        self.assertEqual([row["url"] for row in rows], ["https://example.com/ai"])
+        self.assertFalse(matches_source_relevance("Kusama Yayoi Dies at 97", source))
+
+    def test_failed_broad_source_does_not_restore_irrelevant_cached_row(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = root / "sources.json"
+            cache = root / "cache.json"
+            sources = [
+                {"category": "AI/ML 핵심", "name": "Good", "feed_url": "https://good.test/feed"},
+                {
+                    "category": "AI/ML 핵심", "name": "Broad",
+                    "feed_url": "https://broad.test/feed", "relevance_profile": "ai_ml",
+                },
+            ]
+            config.write_text(json.dumps({"sources": sources}), encoding="utf-8")
+            cache.write_text(json.dumps({
+                "provider": "hunt_news_editorial_sources",
+                "contract_version": "editorial-source-cache.v1",
+                "rows": [{
+                    "category": "AI/ML 핵심", "source": "Broad",
+                    "title": "Kusama Yayoi Dies at 97", "url": "https://example.com/culture",
+                    "published_at": self.now.isoformat(), "collected_at": self.now.isoformat(),
+                }],
+            }), encoding="utf-8")
+
+            def fake_fetch(source, **kwargs):
+                if source["name"] == "Broad":
+                    return ({"category": source["category"], "name": "Broad", "status": "ERROR", "reason": "timeout"}, [])
+                return (
+                    {"category": source["category"], "name": "Good", "status": "SUCCESS", "item_count": 1},
+                    parse_feed(RSS, source, collected_at=self.now),
+                )
+
+            with patch("scripts.collect_editorial_sources.fetch_source", side_effect=fake_fetch):
+                payload = collect(config, cache, now=self.now)
+            self.assertNotIn("https://example.com/culture", {row["url"] for row in payload["rows"]})
+            self.assertEqual(payload["fallback_source_count"], 0)
 
     def test_source_failure_is_isolated_and_cache_is_deterministic(self):
         with tempfile.TemporaryDirectory() as temporary:
