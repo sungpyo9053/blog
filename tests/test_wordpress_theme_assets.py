@@ -172,6 +172,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertNotIn("Legacy 실제 발행 후보", php)
         self.assertNotIn("Reviewer·Publisher 통과", php)
         self.assertNotIn("비발행 병렬 비교", php)
+        self.assertNotIn("수집 <?php echo esc_html", php)
+        self.assertIn("핵심 변화 · 근거 원문 · 행동 가이드", php)
         self.assertIn("grid-template-columns: 14px minmax(0, 0.82fr) minmax(0, 1.18fr)", css)
         self.assertIn(".hunt-news-signal-card > div", css)
         self.assertIn("overflow-wrap: anywhere", css)

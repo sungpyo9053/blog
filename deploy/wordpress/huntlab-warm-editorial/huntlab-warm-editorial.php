@@ -621,7 +621,7 @@ function huntlab_warm_editorial_home_intro() {
 				<div class="huntlab-home-intro__status" aria-label="브리핑 상태">
 					<span><?php echo esc_html( is_singular( 'hunt_briefing' ) ? get_the_date( 'Y.m.d', get_queried_object_id() ) : wp_date( 'Y.m.d' ) ); ?></span>
 					<span>매일 한 장의 기술 보고서</span>
-					<?php if ( $brief_manifest ) : ?><span>수집 <?php echo esc_html( (string) absint( $brief_manifest['collection']['observed_topic_count'] ?? 0 ) ); ?>개 · 후보 <?php echo esc_html( (string) absint( $brief_manifest['selection']['candidate_count'] ?? 0 ) ); ?>개</span><?php endif; ?>
+					<?php if ( $brief_manifest ) : ?><span>핵심 변화 · 근거 원문 · 행동 가이드</span><?php endif; ?>
 					<a href="#hunt-news-briefing-board">오늘 브리핑 보기 <b aria-hidden="true">↓</b></a>
 				</div>
 			<?php endif; ?>
