@@ -914,7 +914,14 @@ function hunt_news_home_sections() {
 				$source_groups[ $source_category ][] = $source_item;
 			}
 		}
-		$must_read_items = array_slice( (array) ( $manifest['editorial_sources']['items'] ?? array() ), 0, 10 );
+		$must_read_categories = array( 'AI/ML 핵심', '개발 트렌드', 'AI 공식 블로그', '국내 IT', '국내 시사' );
+		for ( $round = 0; $round < 2; $round++ ) {
+			foreach ( $must_read_categories as $must_read_category ) {
+				if ( isset( $source_groups[ $must_read_category ][ $round ] ) ) {
+					$must_read_items[] = $source_groups[ $must_read_category ][ $round ];
+				}
+			}
+		}
 	}
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
