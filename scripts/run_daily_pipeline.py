@@ -1903,27 +1903,43 @@ def run_daily_briefing_analysis(
 ) -> Path | None:
     """Generate one optional analysis artifact without controlling publication."""
     analysis_path = run_directory / "daily-briefing-analysis.json"
+    source_snapshot_path = run_directory / "editorial-sources-snapshot.json"
     try:
-        source_cache = load_editorial_source_cache(DEFAULT_EDITORIAL_SOURCE_CACHE)
+        if not source_snapshot_path.is_file():
+            source_payload = json.loads(DEFAULT_EDITORIAL_SOURCE_CACHE.read_text(encoding="utf-8"))
+            atomic_write_manifest(source_snapshot_path, source_payload)
+        source_cache = load_editorial_source_cache(source_snapshot_path)
         source_hash = str(source_cache.get("source_snapshot_hash", ""))
         if not source_cache.get("rows") or not source_hash:
             raise DailyBriefingError("editorial source cache unavailable")
-        if not analysis_path.is_file():
+        if analysis_path.is_file():
+            try:
+                payload = load_daily_briefing(
+                    analysis_path,
+                    source_snapshot_hash=source_hash,
+                )
+            except DailyBriefingError:
+                invalid_path = analysis_path.with_suffix(".invalid.json")
+                analysis_path.replace(invalid_path)
+                payload = {}
+        else:
+            payload = {}
+        if not payload:
             run_stage(
                 codex,
                 daily_briefing_stage(
                     run_id,
                     topics_path,
                     analysis_path,
-                    DEFAULT_EDITORIAL_SOURCE_CACHE,
+                    source_snapshot_path,
                 ),
                 logger,
                 timeout_seconds=timeout_seconds,
             )
-        payload = load_daily_briefing(
-            analysis_path,
-            source_snapshot_hash=source_hash,
-        )
+            payload = load_daily_briefing(
+                analysis_path,
+                source_snapshot_hash=source_hash,
+            )
         logger.info(
             "daily_briefing event=ready failed=false run_id=%s signals=%d must_read=%d artifact=%s",
             run_id,
@@ -2306,12 +2322,15 @@ def write_and_sync_briefing_manifest(
 ) -> Path:
     """Persist the end-to-end observer artifact and sync it without blocking posts."""
     destination = run_directory / "briefing-manifest.json"
+    editorial_source_path = run_directory / "editorial-sources-snapshot.json"
+    if not editorial_source_path.is_file():
+        editorial_source_path = DEFAULT_EDITORIAL_SOURCE_CACHE
     payload = build_briefing_manifest(
         run_id=run_id,
         plan_document=plan_document,
         publications=collect_run_publications(run_directory),
         trends_cache_path=DEFAULT_GOOGLE_TRENDS_CACHE,
-        editorial_source_cache_path=DEFAULT_EDITORIAL_SOURCE_CACHE,
+        editorial_source_cache_path=editorial_source_path,
         shadow_path=run_directory / "news-worthiness-shadow.json",
         fallback_path=run_directory / "publication-fallback.json",
         daily_briefing_path=run_directory / "daily-briefing-analysis.json",

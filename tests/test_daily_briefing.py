@@ -1,8 +1,11 @@
 import json
+import logging
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import scripts.run_daily_pipeline as pipeline
 from scripts.daily_briefing import DailyBriefingError, load_daily_briefing
 
 
@@ -54,6 +57,47 @@ def analysis_payload(source_hash: str = "a" * 64):
 
 
 class DailyBriefingTests(unittest.TestCase):
+    def test_pipeline_freezes_source_snapshot_before_agent_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = root / "run"
+            run.mkdir()
+            topics = run / "topics.md"
+            topics.write_text("# fixture", encoding="utf-8")
+            cache = root / "editorial.json"
+            cache.write_text(
+                json.dumps(
+                    {
+                        "provider": "hunt_news_editorial_sources",
+                        "contract_version": "editorial-source-cache.v1",
+                        "checked_at": "2026-08-27T12:00:00+00:00",
+                        "source_snapshot_hash": "a" * 64,
+                        "rows": [{"category": "AI/ML 핵심", "source": "source", "title": "title", "url": "https://example.com/item", "published_at": "2026-08-27T12:00:00+00:00"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            def fake_run_stage(*args, **kwargs):
+                (run / "daily-briefing-analysis.json").write_text(
+                    json.dumps(analysis_payload(), ensure_ascii=False), encoding="utf-8"
+                )
+
+            with mock.patch.object(pipeline, "DEFAULT_EDITORIAL_SOURCE_CACHE", cache), mock.patch.object(pipeline, "run_stage", side_effect=fake_run_stage):
+                result = pipeline.run_daily_briefing_analysis(
+                    "codex",
+                    run_id="20260827T170000Z-1234567890",
+                    run_directory=run,
+                    topics_path=topics,
+                    logger=logging.getLogger("snapshot-test"),
+                    timeout_seconds=10,
+                )
+
+            self.assertEqual(result, run / "daily-briefing-analysis.json")
+            frozen = json.loads((run / "editorial-sources-snapshot.json").read_text())
+            self.assertEqual(frozen["source_snapshot_hash"], "a" * 64)
+
     def test_validates_complete_evidence_backed_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "daily-briefing-analysis.json"

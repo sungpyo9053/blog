@@ -90,6 +90,9 @@ Planner 후보를 읽고 `daily-briefing-analysis.json`을 생성합니다. 이 
 함께 저장합니다. 분석 실패·형식 오류·snapshot 불일치는 경고만 남기며 기존 TOP2
 Writer·Reviewer·Publisher를 막지 않습니다. 검증된 분석만 날짜별 WordPress 브리핑에
 포함되고, 원문 수집 카드는 보고서 맨 아래 참고자료로 렌더링됩니다.
+분석 시작 시 `editorial-sources-snapshot.json`을 run 디렉터리에 원자적으로 고정하므로,
+실행 중 매시간 수집기가 최신 cache를 갱신해도 분석과 WordPress manifest의 hash는
+같은 입력을 가리킵니다.
 
 Planner는 Velog 공개 트렌딩과 기술 태그에서 반복되는 기술·언어·시스템
 아키텍처 관심사를 한국 개발자 수요의 보조 신호로 참고합니다. 제목이나 구성을
