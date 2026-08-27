@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.5.2
+ * Version: 5.5.3
  * Author: Hunt News
  */
 
@@ -1459,7 +1459,7 @@ function hunt_news_home_sections() {
 					<?php endforeach; ?>
 				<?php endif; ?>
 				<?php foreach ( $briefing_feed_items as $index => $item ) : ?>
-					<article class="hunt-news-brief-card" data-brief-card-kind="feed" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>" hidden>
+					<article class="hunt-news-brief-card hunt-news-brief-card--feed" data-brief-card-kind="feed" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>" hidden>
 						<div><span><?php echo esc_html( (string) ( $item['source'] ?? $item['category'] ?? '기술 뉴스' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
 						<h4><a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></a></h4>
 						<?php $feed_translated_title = (string) ( $source_title_translations[ (string) ( $item['url'] ?? '' ) ] ?? '' ); if ( $feed_translated_title && $feed_translated_title !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( $feed_translated_title ); ?></p><?php endif; ?>

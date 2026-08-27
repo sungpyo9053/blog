@@ -56,7 +56,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.5.2", php)
+        self.assertIn("Version: 5.5.3", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -170,6 +170,9 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn('data-brief-view="10"', php)
         self.assertIn('data-brief-view="all"', php)
         self.assertIn('data-brief-card-index=', php)
+        self.assertIn("hunt-news-brief-card--feed", php)
+        self.assertIn(".hunt-news-brief-card--feed", css)
+        self.assertIn("background: linear-gradient(150deg, #f8fafc 0%, #edf3f8 100%)", css)
         self.assertIn("card.hidden=", php)
         self.assertIn("$briefing_feed_items", php)
         self.assertIn("parseInt(view,10)-mustReadCards.length", php)
@@ -205,7 +208,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.5.2", php)
+        self.assertIn("Version: 5.5.3", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
