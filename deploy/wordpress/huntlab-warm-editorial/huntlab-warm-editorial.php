@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.5.3
+ * Version: 5.6.0
  * Author: Hunt News
  */
 
@@ -84,8 +84,23 @@ function hunt_news_briefing_search_metadata() {
 	return array( 'title' => $title, 'description' => $description );
 }
 
+/** Keep the homepage search promise aligned with the briefing-first product. */
+function hunt_news_home_search_metadata() {
+	if ( ! ( is_home() || is_front_page() ) ) {
+		return array( 'title' => '', 'description' => '' );
+	}
+	return array(
+		'title'       => 'AI·개발 기술 브리핑 | 오늘의 핵심 변화와 원문 - Hunt News',
+		'description' => '매일 오전 2시 AI·개발 기술 변화의 핵심 신호, 개발자 영향, 지금 할 일과 확인할 공식 원문을 한 장의 날짜별 브리핑으로 정리합니다.',
+	);
+}
+
 /** Use a keyword-rich title only in document/search metadata. */
 function hunt_news_briefing_search_title( $title ) {
+	$home_metadata = hunt_news_home_search_metadata();
+	if ( '' !== $home_metadata['title'] ) {
+		return $home_metadata['title'];
+	}
 	$metadata = hunt_news_briefing_search_metadata();
 	return '' !== $metadata['title'] ? $metadata['title'] : $title;
 }
@@ -94,6 +109,10 @@ add_filter( 'aioseo_title', 'hunt_news_briefing_search_title', 20 );
 
 /** Use the analysis summary as the briefing search snippet. */
 function hunt_news_briefing_search_description( $description ) {
+	$home_metadata = hunt_news_home_search_metadata();
+	if ( '' !== $home_metadata['description'] ) {
+		return $home_metadata['description'];
+	}
 	$metadata = hunt_news_briefing_search_metadata();
 	return '' !== $metadata['description'] ? $metadata['description'] : $description;
 }
@@ -1320,22 +1339,30 @@ function hunt_news_home_sections() {
 		</div>
 
 		<?php if ( 'available' === ( $analysis['retrospective']['status'] ?? '' ) ) :
-			$retrospective_labels = array( 'confirmed' => '유지', 'changed' => '변경', 'unresolved' => '확인 중' ); ?>
+			$retrospective_counts = array( 'confirmed' => 0, 'changed' => 0, 'unresolved' => 0 );
+			$retrospective_change = '';
+			foreach ( (array) $analysis['retrospective']['items'] as $review ) {
+				$verdict = (string) ( $review['verdict'] ?? 'unresolved' );
+				if ( isset( $retrospective_counts[ $verdict ] ) ) {
+					$retrospective_counts[ $verdict ]++;
+				}
+				if ( '' === $retrospective_change && 'changed' === $verdict ) {
+					$retrospective_change = (string) ( $review['current_status'] ?? '' );
+				}
+			}
+			$previous_briefing_date = wp_date( 'Y-m-d', strtotime( (string) $analysis['retrospective']['previous_generated_at'] ) );
+			$previous_briefing_url  = home_url( '/briefing/' . $previous_briefing_date . '/' ); ?>
 		<section class="hunt-news-retrospective" aria-labelledby="hunt-news-retrospective-title">
 			<header class="hunt-news-panel-heading">
 				<div><span aria-hidden="true">↺</span><h3 id="hunt-news-retrospective-title">어제의 판단 복기</h3></div>
-				<p><?php echo esc_html( wp_date( 'Y.m.d', strtotime( (string) $analysis['retrospective']['previous_generated_at'] ) ) ); ?> 핵심 신호를 오늘 근거로 재검증</p>
+				<p><?php echo esc_html( $previous_briefing_date ); ?> 판단의 변경 여부만 요약합니다</p>
 			</header>
-			<div class="hunt-news-retrospective__grid">
-				<?php foreach ( $analysis['retrospective']['items'] as $review ) : ?>
-				<article class="hunt-news-retrospective__item hunt-news-retrospective__item--<?php echo esc_attr( (string) $review['verdict'] ); ?>">
-					<div><span><?php echo esc_html( $retrospective_labels[ $review['verdict'] ] ?? '확인 중' ); ?></span><small>전일 신호 <?php echo esc_html( (string) $review['previous_signal_index'] ); ?></small></div>
-					<h4><?php echo esc_html( (string) $review['previous_label'] ); ?></h4>
-					<p class="hunt-news-retrospective__previous"><b>어제</b> <?php echo esc_html( (string) $review['previous_detail'] ); ?></p>
-					<p><b>오늘</b> <?php echo esc_html( (string) $review['current_status'] ); ?></p>
-					<a href="<?php echo esc_url( (string) ( $review['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $review['action'] ); ?> <b aria-hidden="true">→</b></a>
-				</article>
-				<?php endforeach; ?>
+			<div class="hunt-news-retrospective__summary">
+				<div><strong><?php echo esc_html( (string) $retrospective_counts['confirmed'] ); ?></strong><span>유지</span></div>
+				<div><strong><?php echo esc_html( (string) $retrospective_counts['changed'] ); ?></strong><span>변경</span></div>
+				<div><strong><?php echo esc_html( (string) $retrospective_counts['unresolved'] ); ?></strong><span>확인 중</span></div>
+				<p><?php echo esc_html( $retrospective_change ? wp_html_excerpt( $retrospective_change, 150, '…' ) : '공식 근거가 달라진 판단은 없습니다. 기존 행동 기준을 유지합니다.' ); ?></p>
+				<a href="<?php echo esc_url( $previous_briefing_url ); ?>">전날 브리핑과 비교 <b aria-hidden="true">→</b></a>
 			</div>
 		</section>
 		<?php endif; ?>
@@ -1349,7 +1376,7 @@ function hunt_news_home_sections() {
 				<?php if ( ! empty( $analysis['timeline'] ) ) :
 					$horizon_labels = array( 'today' => '오늘', 'week' => '이번 주', 'month' => '이번 달', 'year' => '올해 말' ); ?>
 					<?php foreach ( $analysis['timeline'] as $row ) : ?>
-					<li><span class="hunt-news-action-timeline__marker" aria-hidden="true"></span><strong><?php echo esc_html( $horizon_labels[ $row['horizon'] ] ?? $row['horizon'] ); ?></strong><small><?php echo esc_html( (string) $row['reason'] ); ?></small><a href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $row['action'] ); ?></a></li>
+					<li><span class="hunt-news-action-timeline__marker" aria-hidden="true"></span><strong><?php echo esc_html( $horizon_labels[ $row['horizon'] ] ?? $row['horizon'] ); ?></strong><small><?php echo esc_html( (string) $row['reason'] ); ?></small><span class="hunt-news-action-timeline__action"><?php echo esc_html( (string) $row['action'] ); ?></span></li>
 					<?php endforeach; ?>
 				<?php else : ?>
 				<?php foreach ( $timeline as $index => $row ) : ?>
@@ -1357,43 +1384,24 @@ function hunt_news_home_sections() {
 						<span class="hunt-news-action-timeline__marker" aria-hidden="true"></span>
 						<strong><?php echo esc_html( $row['label'] ); ?></strong>
 						<small><?php echo esc_html( $row['description'] ); ?></small>
-						<a href="<?php echo esc_url( get_permalink( $row['post'] ) ); ?>"><?php echo esc_html( wp_html_excerpt( get_the_title( $row['post'] ), 46, '…' ) ); ?></a>
+						<span class="hunt-news-action-timeline__action"><?php echo esc_html( wp_html_excerpt( get_the_title( $row['post'] ), 46, '…' ) ); ?></span>
 					</li>
 				<?php endforeach; ?>
 				<?php endif; ?>
 			</ol>
 		</section>
 
-		<section class="hunt-news-impact-matrix" aria-labelledby="hunt-news-impact-title">
-			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">⌁</span><h3 id="hunt-news-impact-title">기술 영향력 매트릭스</h3></div><p>버블을 눌러 관련 뉴스를 확인하세요</p></header>
-			<div class="hunt-news-impact-matrix__plot">
-				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--focus">지금 집중</span>
-				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--future">미래 준비</span>
-				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--apply">즉시 적용</span>
-				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--watch">모니터링</span>
-				<?php if ( ! empty( $analysis['matrix'] ) ) : ?>
-					<?php foreach ( $analysis['matrix'] as $index => $row ) : ?>
-					<a class="hunt-news-impact-bubble hunt-news-impact-bubble--<?php echo esc_attr( (string) ( $index + 1 ) ); ?>" href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer" style="--bubble-size:82px" title="<?php echo esc_attr( (string) $row['meaning'] . ' — ' . (string) $row['action'] ); ?>"><?php echo esc_html( wp_html_excerpt( (string) $row['label'], 12, '…' ) ); ?></a>
-					<?php endforeach; ?>
-				<?php else : ?>
-					<?php foreach ( array_slice( $keywords, 0, 6 ) as $index => $keyword ) : ?>
-						<a class="hunt-news-impact-bubble hunt-news-impact-bubble--<?php echo esc_attr( (string) ( $index + 1 ) ); ?>" href="<?php echo esc_url( $keyword['url'] ); ?>" style="--bubble-size:<?php echo esc_attr( (string) max( 54, min( 92, 48 + (int) $keyword['percent'] / 2 ) ) ); ?>px"><?php echo esc_html( wp_html_excerpt( $keyword['name'], 12, '…' ) ); ?></a>
-					<?php endforeach; ?>
-				<?php endif; ?>
-			</div>
-		</section>
-
 		<?php $lead = $brief_posts[0]; ?>
 		<section class="hunt-news-focus" aria-labelledby="hunt-news-focus-title">
 			<div class="hunt-news-focus__heading">
-				<p>오늘의 핵심</p>
+				<p>Hunt News 한 줄 판단</p>
 				<h3 id="hunt-news-focus-title"><?php echo esc_html( $analysis ? (string) $analysis['headline'] : get_the_title( $lead ) ); ?></h3>
 				<?php if ( $analysis ) : ?><span><?php echo esc_html( (string) $analysis['summary'] ); ?></span><?php else : ?><a href="<?php echo esc_url( get_permalink( $lead ) ); ?>">전체 내용 읽기 <b aria-hidden="true">→</b></a><?php endif; ?>
 			</div>
 			<div class="hunt-news-focus__points">
 				<?php if ( ! empty( $analysis['insight_cards'] ) ) : ?>
 					<?php foreach ( $analysis['insight_cards'] as $point ) : ?>
-					<article><span>분석</span><strong><?php echo esc_html( (string) $point['title'] ); ?></strong><p><?php echo esc_html( (string) $point['analysis'] ); ?></p><a href="<?php echo esc_url( (string) ( $point['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $point['action'] ); ?></a></article>
+					<article><span>판단 근거</span><strong><?php echo esc_html( (string) $point['title'] ); ?></strong><p><?php echo esc_html( (string) $point['analysis'] ); ?></p><b class="hunt-news-focus__action"><?php echo esc_html( (string) $point['action'] ); ?></b></article>
 					<?php endforeach; ?>
 				<?php else : ?>
 				<?php foreach ( $signal_posts as $index => $post ) :
@@ -1404,23 +1412,12 @@ function hunt_news_home_sections() {
 					<article>
 						<span><?php echo esc_html( $category['name'] ); ?></span>
 						<strong><?php echo esc_html( wp_html_excerpt( get_the_title( $post ), 44, '…' ) ); ?></strong>
-						<a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( wp_html_excerpt( $action, 44, '…' ) ); ?></a>
+						<b class="hunt-news-focus__action"><?php echo esc_html( wp_html_excerpt( $action, 44, '…' ) ); ?></b>
 					</article>
 				<?php endforeach; ?>
 				<?php endif; ?>
 			</div>
 		</section>
-
-		<?php if ( $analysis ) : ?>
-		<section class="hunt-news-synthesis" aria-labelledby="hunt-news-synthesis-title">
-			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">◈</span><h3 id="hunt-news-synthesis-title">오늘의 종합 분석</h3></div><p>기사 중복을 합치고 영향과 행동으로 정리했습니다</p></header>
-			<div class="hunt-news-synthesis__grid">
-				<section><h4>오늘의 핵심 테마</h4><?php foreach ( (array) $analysis['themes'] as $row ) : ?><article><h5><?php echo esc_html( (string) $row['title'] ); ?></h5><p><?php echo esc_html( (string) $row['analysis'] ); ?></p><a href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $row['action'] ); ?> →</a></article><?php endforeach; ?></section>
-				<section><h4>개발자 인사이트</h4><?php foreach ( (array) $analysis['developer_insights'] as $row ) : ?><article><h5><?php echo esc_html( (string) $row['title'] ); ?></h5><p><?php echo esc_html( (string) $row['analysis'] ); ?></p><a href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $row['action'] ); ?> →</a></article><?php endforeach; ?></section>
-				<section class="hunt-news-synthesis__watch"><h4>이번 주 주시할 것</h4><?php foreach ( (array) $analysis['watchlist'] as $row ) : ?><article><h5><?php echo esc_html( (string) $row['title'] ); ?></h5><p><?php echo esc_html( (string) $row['reason'] ); ?></p><strong>확인 신호: <?php echo esc_html( (string) $row['trigger'] ); ?></strong></article><?php endforeach; ?></section>
-			</div>
-		</section>
-		<?php endif; ?>
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
@@ -1439,7 +1436,7 @@ function hunt_news_home_sections() {
 						<article class="hunt-news-brief-card hunt-news-brief-card--source" data-brief-card-kind="must-read">
 							<b class="hunt-news-brief-card__rank">#<?php echo esc_html( (string) ( $index + 1 ) ); ?></b>
 							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
-							<h4><a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></a></h4>
+							<h4><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></h4>
 							<?php if ( ! empty( $item['korean_title'] ) && (string) $item['korean_title'] !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( (string) $item['korean_title'] ); ?></p><?php endif; ?>
 							<p><?php echo esc_html( ! empty( $item['why_it_matters'] ) ? (string) $item['why_it_matters'] : ( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 공식 원문과 독립 출처를 확인하세요.' ) ); ?></p>
 							<?php if ( ! empty( $item['action'] ) ) : ?><strong class="hunt-news-brief-card__decision">→ <?php echo esc_html( (string) $item['action'] ); ?></strong><?php endif; ?>
@@ -1461,7 +1458,7 @@ function hunt_news_home_sections() {
 				<?php foreach ( $briefing_feed_items as $index => $item ) : ?>
 					<article class="hunt-news-brief-card hunt-news-brief-card--feed" data-brief-card-kind="feed" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>" hidden>
 						<div><span><?php echo esc_html( (string) ( $item['source'] ?? $item['category'] ?? '기술 뉴스' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
-						<h4><a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></a></h4>
+						<h4><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></h4>
 						<?php $feed_translated_title = (string) ( $source_title_translations[ (string) ( $item['url'] ?? '' ) ] ?? '' ); if ( $feed_translated_title && $feed_translated_title !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( $feed_translated_title ); ?></p><?php endif; ?>
 						<p><?php echo esc_html( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 원문에서 핵심 사실과 적용 조건을 확인하세요.' ); ?></p>
 						<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">원문 확인 <b aria-hidden="true">→</b></a>
@@ -1522,7 +1519,7 @@ function hunt_news_home_sections() {
 	document.addEventListener('DOMContentLoaded',function(){var board=document.getElementById('hunt-news-briefing-board');var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News Archive</p><h2>분야별 최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(board){parent.insertBefore(board,main);}if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}if(section){shell.insertAdjacentElement('afterend',section);}}if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
 	</script>
 	<script id="hunt-news-brief-view-controls">
-	document.addEventListener('DOMContentLoaded',function(){var viewButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-view]'));var mustReadCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="must-read"]'));var feedCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="feed"]'));var viewStatus=document.querySelector('[data-brief-view-status]');viewButtons.forEach(function(button){button.addEventListener('click',function(){var view=button.getAttribute('data-brief-view');var extraLimit=view==='all'?feedCards.length:Math.max(0,parseInt(view,10)-mustReadCards.length);viewButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});mustReadCards.forEach(function(card){card.hidden=false;});feedCards.forEach(function(card){card.hidden=view==='must-read'||parseInt(card.getAttribute('data-brief-card-index'),10)>=extraLimit;});if(viewStatus){viewStatus.textContent=view==='must-read'?'AI가 근거와 영향도를 검토해 고른 5개입니다.':view==='all'?'필독 5개를 포함한 오늘의 기술 뉴스 전체입니다.':'필독 5개를 포함해 '+view+'개까지 펼쳤습니다.';}});});});
+	document.addEventListener('DOMContentLoaded',function(){var viewButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-view]'));var mustReadCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="must-read"]'));var feedCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="feed"]'));var viewStatus=document.querySelector('[data-brief-view-status]');viewButtons.forEach(function(button){button.addEventListener('click',function(){var view=button.getAttribute('data-brief-view');var extraLimit=view==='all'?feedCards.length:Math.max(0,parseInt(view,10)-mustReadCards.length);viewButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});mustReadCards.forEach(function(card){card.hidden=false;});feedCards.forEach(function(card){card.hidden=view==='must-read'||parseInt(card.getAttribute('data-brief-card-index'),10)>=extraLimit;});if(viewStatus){viewStatus.textContent=view==='must-read'?'AI가 근거와 영향도를 검토해 고른 5개입니다.':view==='all'?'필독 5개를 포함한 오늘의 기술 뉴스 전체입니다.':'필독 5개를 포함해 '+view+'개까지 펼쳤습니다.';}var track=window.gtag||window.__gtagTracker;if(typeof track==='function'){track('event','huntlab_briefing_filter',{briefing_view:view,visible_card_count:mustReadCards.length+(view==='all'?feedCards.length:extraLimit),transport_type:'beacon'});}});});});
 	</script>
 	<script id="hunt-news-report-mode">
 	document.addEventListener('DOMContentLoaded',function(){var reportShell=document.querySelector('.hunt-news-report-shell');var board=document.getElementById('hunt-news-briefing-board');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');var archiveShell=main?main.closest('.hunt-news-content-shell'):null;if(reportShell&&board&&board.parentNode!==reportShell){reportShell.appendChild(board);}if(reportShell&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',reportShell);}else if(reportShell&&archiveShell&&archiveShell.parentNode){archiveShell.parentNode.insertBefore(reportShell,archiveShell);}if(document.body.classList.contains('hunt-news-briefing-mode')&&main){main.hidden=true;}var dateNav=document.getElementById('hunt-news-date-nav');var dateToggle=dateNav?dateNav.querySelector('.hunt-news-date-nav__toggle'):null;if(dateNav&&dateToggle){dateToggle.addEventListener('click',function(){var open=dateNav.classList.toggle('is-open');dateToggle.setAttribute('aria-expanded',open?'true':'false');});}});
@@ -1613,14 +1610,19 @@ function huntlab_warm_editorial_engaged_read_signal() {
 				}
 				return;
 			}
-			var link=event.target.closest('main a[href],.huntlab-related-articles a[href],.entry-related a[href]');
+			var link=event.target.closest('main a[href],.huntlab-related-articles a[href],.entry-related a[href],.hunt-news-briefing-board a[href],.hunt-news-date-nav a[href]');
 			if(!link){return;}
 			var destination;
 			try{destination=new URL(link.href,window.location.href);}catch(error){return;}
-			if(destination.origin!==window.location.origin||destination.pathname===window.location.pathname){return;}
+			if(destination.origin!==window.location.origin){
+				var briefingArea=link.closest('.hunt-news-must-read')?'must_read':link.closest('.hunt-news-source-board')?'source_board':link.closest('.hunt-news-signal-panel')?'core_signal':'briefing';
+				send('huntlab_briefing_source_click',{source_host:destination.hostname,link_area:briefingArea,transport_type:'beacon'});
+				return;
+			}
+			if(destination.pathname===window.location.pathname){return;}
 			send('huntlab_internal_click',{
 				link_path:destination.pathname,
-				link_area:link.closest('.huntlab-related-articles,.entry-related')?'related':'content',
+				link_area:link.closest('.hunt-news-date-nav')?'briefing_archive':link.closest('.huntlab-related-articles,.entry-related')?'related':'content',
 				transport_type:'beacon'
 			});
 		});

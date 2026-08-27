@@ -1902,6 +1902,11 @@ def daily_briefing_stage(
             "액션 타임라인·종합 인사이트·필독 5를 생성하세요. "
             + retrospective_prompt
             + " "
+            "headline은 사건 나열이 아니라 오늘 채택할 것, 보류할 것 또는 먼저 막을 위험을 "
+            "분명히 말하는 편집 판단 한 문장으로 작성하세요. summary는 그 판단의 이유와 우선순위를 "
+            "한 문단으로만 설명하세요. core_signals, insight_cards, themes, developer_insights에서 같은 "
+            "사실·결론·행동 문장을 되풀이하지 말고 각 항목이 서로 다른 질문에 답하게 하세요. "
+            "같은 원문을 여러 항목의 대표 근거로 재사용해야 한다면 새 판단이 추가되는 경우로 제한하세요. "
             f"결과 JSON은 {str(analysis_path)!r}에만 저장하세요. "
             "원문 기사 나열을 보고서 본문으로 대체하지 말고 각 판단에 근거 URL과 구체적인 "
             "행동을 연결하세요. WordPress와 다른 외부 시스템은 변경하지 마세요."

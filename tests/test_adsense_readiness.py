@@ -29,7 +29,7 @@ class AdSenseReadinessTests(unittest.TestCase):
         self.assertIn("30초 활용 흐름", ABOUT_HTML)
         self.assertIn("페이지 구성", ABOUT_HTML)
         self.assertIn("신호와 키워드 읽는 법", ABOUT_HTML)
-        self.assertIn("기술 영향력과 행동 타임라인", ABOUT_HTML)
+        self.assertIn("한 줄 판단과 행동 타임라인", ABOUT_HTML)
         self.assertIn("필독·5개·10개·전체의 차이", ABOUT_HTML)
         self.assertIn("지난 브리핑 찾기", ABOUT_HTML)
         self.assertIn("자주 묻는 질문", ABOUT_HTML)
