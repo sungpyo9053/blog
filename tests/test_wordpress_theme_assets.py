@@ -193,6 +193,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("hunt-news-brief-card__rank", php)
         self.assertIn("$must_read_categories", php)
         self.assertIn("'AI/ML 핵심', '개발 트렌드', 'AI 공식 블로그', '국내 IT', '국내 시사'", php)
+        self.assertIn("count( $must_read_items ) < 10", php)
+        self.assertIn("$selected_urls", php)
         self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr))", css)
         self.assertIn(".hunt-news-brief-card--source h4 a", css)
         self.assertIn(".hunt-news-source-board { order: 6; }", css)

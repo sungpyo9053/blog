@@ -922,6 +922,22 @@ function hunt_news_home_sections() {
 				}
 			}
 		}
+		if ( count( $must_read_items ) < 10 ) {
+			$selected_urls = array_fill_keys( array_filter( array_column( $must_read_items, 'url' ) ), true );
+			foreach ( (array) ( $manifest['editorial_sources']['items'] ?? array() ) as $source_item ) {
+				$source_url = (string) ( $source_item['url'] ?? '' );
+				if ( $source_url && isset( $selected_urls[ $source_url ] ) ) {
+					continue;
+				}
+				$must_read_items[] = $source_item;
+				if ( $source_url ) {
+					$selected_urls[ $source_url ] = true;
+				}
+				if ( count( $must_read_items ) >= 10 ) {
+					break;
+				}
+			}
+		}
 	}
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
