@@ -47,8 +47,10 @@ from scripts.news_worthiness import (
     write_shadow_diff,
 )
 from scripts.search_signal_providers import (
+    DEFAULT_EDITORIAL_SOURCE_CACHE,
     DEFAULT_GOOGLE_TRENDS_CACHE,
     SearchSignalError,
+    load_editorial_source_cache,
     load_google_trends_cache,
     load_whereispost_shadow,
 )
@@ -62,24 +64,21 @@ LOG_DIR = PROJECT_ROOT / "logs"
 LOCK_FILE = LOG_DIR / "daily-pipeline.lock"
 TOP2_PATTERN = re.compile(r"(?m)^\s*[12]\.\s+(.+?)\s*$")
 ACTIVE_EDITOR_CATEGORIES = {
-    "생활",
-    "경제",
-    "부동산",
-    "사회",
-    "정치",
-    "문화·엔터",
-    "IT",
+    "AI/ML 핵심",
+    "개발 트렌드",
+    "AI 공식 블로그",
+    "국내 IT",
+    "국내 시사",
 }
 ACTIVE_CATEGORY_SLUGS = {
-    "life": "생활",
-    "economy": "경제",
-    "real-estate": "부동산",
-    "society": "사회",
-    "politics": "정치",
-    "culture-entertainment": "문화·엔터",
-    "it": "IT",
+    "ai-ml-core": "AI/ML 핵심",
+    "development-trends": "개발 트렌드",
+    "ai-official-blogs": "AI 공식 블로그",
+    "korea-it": "국내 IT",
+    "korea-current-affairs": "국내 시사",
 }
 LEGACY_EDITOR_CATEGORIES = {
+    "생활", "경제", "부동산", "사회", "정치", "문화·엔터", "IT",
     "Tech",
     "AI",
     "Economy",
@@ -102,6 +101,11 @@ CONTENT_TYPE_GUIDES = {
     "life_impact_explainer": PROJECT_ROOT / "guides/content-types/life-impact-explainer.md",
 }
 LEGACY_CONTENT_TYPE_BY_CATEGORY = {
+    "AI/ML 핵심": "concept_architecture",
+    "개발 트렌드": "tutorial_troubleshooting",
+    "AI 공식 블로그": "concept_architecture",
+    "국내 IT": "current_affairs_policy",
+    "국내 시사": "current_affairs_policy",
     "Tech": "tutorial_troubleshooting",
     "AI": "ai_ml_experiment",
     "ML Algorithms": "ai_ml_experiment",
@@ -467,17 +471,6 @@ def parse_topic_plan_document(path: Path) -> dict[str, Any]:
         ]
         if content_type not in CONTENT_TYPE_GUIDES:
             raise PipelineError(f"{title}: 허용되지 않은 content_type: {content_type}")
-        if category in ACTIVE_EDITOR_CATEGORIES:
-            demand_fields = {
-                "whereispost_status",
-                "whereispost_metrics",
-                "whereispost_total_searches",
-            }
-            missing_demand = sorted(demand_fields - fields.keys())
-            if missing_demand:
-                raise PipelineError(
-                    f"{title}: Whereispost 필드 누락: {', '.join(missing_demand)}"
-                )
         if content_type == "life_impact_explainer":
             impact_fields = {
                 "affected_reader",
@@ -528,7 +521,7 @@ def parse_topic_plan_document(path: Path) -> dict[str, Any]:
                     fields["google_trends_approx_traffic"], title
                 )
             )
-        if category in ACTIVE_EDITOR_CATEGORIES:
+        if "whereispost_total_searches" in fields:
             candidates[title]["whereispost_total_searches"] = (
                 parse_whereispost_total_searches(
                     fields["whereispost_total_searches"], title
@@ -1422,6 +1415,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--use-editorial-source-cache",
+        action="store_true",
+        help="매시간 수집한 기술 뉴스 소스 캐시를 후보 발견과 출처 교차 확인에 사용",
+    )
+    parser.add_argument(
         "--use-whereispost-cache",
         action="store_true",
         help=(
@@ -1475,7 +1473,7 @@ def dry_run_topics() -> str:
     candidates: list[str] = []
     number = 0
     for category in sorted(ACTIVE_EDITOR_CATEGORIES):
-        for index in range(1, 6):
+        for index in range(1, 8):
             number += 1
             title = f"{category} Dry Run 후보 {index}"
             candidates.append(
@@ -1674,6 +1672,32 @@ def read_google_trends_observation(path: Path | None) -> str:
     )
 
 
+def read_editorial_source_observation(path: Path | None) -> str:
+    try:
+        payload = load_editorial_source_cache(path)
+    except SearchSignalError as exc:
+        raise PipelineError(f"기술 뉴스 소스 캐시가 올바르지 않습니다: {exc}") from exc
+    try:
+        checked_at = datetime.fromisoformat(str(payload["checked_at"]))
+    except (KeyError, ValueError) as exc:
+        raise PipelineError("기술 뉴스 소스 checked_at 형식이 올바르지 않습니다.") from exc
+    if checked_at.tzinfo is None:
+        raise PipelineError("기술 뉴스 소스 checked_at에 시간대가 없습니다.")
+    age = datetime.now(UTC) - checked_at.astimezone(UTC)
+    if age < -timedelta(minutes=5) or age > timedelta(hours=6):
+        raise PipelineError("기술 뉴스 소스 캐시가 6시간보다 오래되었습니다.")
+    rows = sorted(payload.get("rows", []), key=lambda row: str(row.get("published_at", "")), reverse=True)[:120]
+    if not rows:
+        raise PipelineError("기술 뉴스 소스 캐시에 rows가 없습니다.")
+    return json.dumps({
+        "provider": payload["provider"],
+        "contract_version": payload["contract_version"],
+        "source_snapshot_hash": payload["source_snapshot_hash"],
+        "checked_at": payload["checked_at"],
+        "rows": rows,
+    }, ensure_ascii=False, sort_keys=True)
+
+
 def read_public_category_distribution(base_url: str, *, timeout: float = 10.0) -> str:
     """Read active public category counts for a bounded portfolio-balance signal."""
     endpoint = urllib.parse.urljoin(
@@ -1715,6 +1739,8 @@ def planner_stage(
     whereispost_cache_mode: bool = False,
     google_trends_observation: str = "",
     google_trends_cache_mode: bool = False,
+    editorial_source_observation: str = "",
+    editorial_source_cache_mode: bool = False,
     category_distribution: str = "",
 ) -> Stage:
     return Stage(
@@ -1730,6 +1756,18 @@ def planner_stage(
                 "category=System Architecture, content_type=system_design_case를 사용하세요. "
                 if keywords.strip()
                 else ""
+            )
+            + (
+                "Harness가 매시간 수집한 기술 뉴스 소스 캐시를 제공합니다: "
+                f"{editorial_source_observation}. 이 목록에서 후보를 발견하고 동일 사건의 독립 출처를 "
+                "찾으세요. 활성 카테고리는 AI/ML 핵심, 개발 트렌드, AI 공식 블로그, 국내 IT, 국내 시사 "
+                "다섯 개뿐입니다. 국내 시사는 AI·개발·클라우드·반도체·플랫폼·기술 정책과 직접 연결되는 "
+                "기사만 후보로 사용하세요. RSS 제목은 발견 근거일 뿐이므로 공식 발표나 원문을 다시 확인하세요. "
+                if editorial_source_observation
+                else (
+                    "기술 뉴스 소스 캐시가 없으면 출처를 추정하지 말고 Google Trends와 공식 원문으로 계속하세요. "
+                    if editorial_source_cache_mode else ""
+                )
             )
             + (
                 "이 실행의 주력 시의성 신호는 매시간 누적한 Google Trends 한국 RSS 캐시입니다: "
@@ -1765,45 +1803,26 @@ def planner_stage(
                 if whereispost_cache_mode
                 else ""
             )
-            + "Hunt News는 복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명하는 사이트입니다. "
+            + "Hunt News는 매일 AI와 개발 기술 변화를 골라 개발자가 지금 이해하고 적용할 행동까지 정리하는 기술 뉴스 브리핑입니다. "
             + (
                 "Harness가 현재 공개 카테고리 분포를 읽기 전용으로 제공합니다: "
                 f"{category_distribution}. 이 값은 후보 품질을 대체하는 할당량이 아니라 카테고리 균형 "
                 "점수의 관측 근거입니다. 한 카테고리가 전체의 60%를 넘으면 그 카테고리에는 균형 가산점을 "
-                "주지 말고, 공식 근거·검색 수요·생활 영향·비중복 조건을 모두 통과한 저대표 카테고리 후보에만 "
+                "주지 말고, 공식 근거·검색 수요·실무 영향·비중복 조건을 모두 통과한 저대표 카테고리 후보에만 "
                 "카테고리 균형 점수를 우대하세요. 약한 후보를 비율 때문에 TOP2에 넣지는 마세요. "
                 if category_distribution
                 else "공개 카테고리 분포를 읽지 못하면 비율을 추정하지 말고 기존 글의 최근 편중만 정성적으로 평가하세요. "
             )
-            + "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 생활, 경제, 부동산, 사회, 정치, "
-            "문화·엔터, IT를 활성 카테고리로 사용하세요. 생활 영향 후보는 "
-            "content_type=life_impact_explainer를 사용하고, IT의 설치·실험·시스템 설계 글만 "
-            "검색 의도에 맞는 기존 기술 content_type을 사용하세요. "
+            + "기존 WordPress 게시글과 Draft, output의 기존 글을 확인한 뒤 AI/ML 핵심, 개발 트렌드, "
+            "AI 공식 블로그, 국내 IT, 국내 시사만 활성 카테고리로 사용하세요. 신규 후보는 검색 의도에 따라 "
+            "tutorial_troubleshooting, concept_architecture, ai_ml_experiment, build_log_operations, "
+            "current_affairs_policy 중 가장 적합한 content_type을 사용하세요. "
             "후보는 발표명이나 보도자료 제목이 아니라 독자가 검색하는 질문에서 시작해야 합니다. "
-            "무엇이 바뀌었는지, 언제부터인지, 누가 대상인지, 내 돈·시간·일·권리·소비·선택이 "
-            "얼마나 달라지는지, 지금 무엇을 확인할지를 한 제목과 research_focus로 연결하세요. "
-            "예: '9차 석유 최고가격 발표'가 아니라 '9차 석유 최고가격 얼마? 내일부터 주유소 "
-            "가격은 어떻게 달라지나', '건강보험료 개편안 발표'가 아니라 '건강보험료 개편되면 "
-            "월급 400만원 직장인은 얼마나 더 내나', '기준금리 동결'이 아니라 '기준금리 동결되면 "
-            "내 주담대 금리는 언제 내려가나'처럼 구체화합니다. 숫자와 시점은 공식 산식과 원문으로 "
-            "검증할 수 있을 때만 사용하세요. "
-            "Harness가 제공한 Whereispost 수요 캐시에 동일한 primary_keyword가 있으면 PC·모바일·총 검색량, 문서 수, "
-            "경쟁 비율을 whereispost_metrics에 기록하고 총 검색량은 쉼표 없는 정수 "
-            "whereispost_total_searches로도 기록하세요. 동일 키워드가 없으면 값을 추정하지 말고 "
-            "whereispost_status=unavailable, whereispost_total_searches=0으로 기록하세요. 캐시 부재나 100회 미만은 "
-            "감점 요소이지만 TOP2의 절대 탈락 조건은 아닙니다. "
-            "Whereispost는 수요 선별 신호일 뿐 정책·가격·날짜의 사실 근거가 아니며, 핵심 사실은 정부, "
-            "공공기관, 중앙은행, 법령, 공시 또는 당사자 원문으로 다시 확인하세요. "
-            "생활 영향 후보에는 affected_reader, life_impact, effective_date, reader_action, "
-            "whereispost_status, whereispost_metrics, whereispost_total_searches를 반드시 기록하세요. "
-            "정치 글은 진영 논평보다 법·정책·"
-            "예산·권리의 생활 영향을 다루세요. 폐지·신설·개편처럼 찬반이 갈리면 현행 제도와 실제 변경안, "
-            "현재 절차, 찬성 측의 주장·근거·전제, 반대 측의 주장·근거·전제, 확인된 사실과 아직 예측인 "
-            "부분을 나누고 안전·권리·세금·행정 절차의 변화를 설명하세요. 근거 없는 주장을 분량을 맞추려고 "
-            "확인된 사실과 같은 무게로 다루지 마세요. 문화·엔터 글은 사생활·루머보다 요금·계약·플랫폼·관람·소비 "
-            "변화를 다루세요. 부동산 글은 전월세·청약·대출 규제·세금·정비사업의 계약·현금흐름·거주 영향을 "
-            "공식 원문으로 설명하고 집값 단정이나 매수·매도 추천은 하지 마세요. 기존 기술 글과 연결되는 IT 후보도 기술 자체보다 일반 사용자의 경험과 "
-            "선택 변화가 명확할 때 우대하세요. 기존 글과 검색 의도가 겹치면 신규 증산보다 Refresh를 "
+            "무엇이 바뀌었는지, 어떤 개발자·팀에 영향이 있는지, 지금 적용할지 관찰할지와 확인할 원문을 "
+            "한 제목과 research_focus로 연결하세요. 제품 발표명을 그대로 옮기지 말고 호환성, 비용, 보안, "
+            "성능, 운영 방식 중 실제 의사결정이 달라지는 지점을 드러내세요. 숫자와 시점은 공식 원문이나 "
+            "재현 가능한 관측으로 확인할 수 있을 때만 사용하세요. 국내 시사는 기술 정책과 산업 운영에 직접 "
+            "연결된 경우에만 다루며 사실, 당사자 주장, 전망을 구분하세요. 기존 글과 검색 의도가 겹치면 신규 증산보다 Refresh를 "
             "우선하세요. Build Log는 실제 작업 기록·운영 변경·실패 로그가 있을 때만 사용하며 오늘 실행을 "
             "위해 새로 만든 테스트나 Search Console 관측만으로 선정할 수 없습니다. "
             "IT의 ML 후보는 Isolation Forest 한 알고리즘에 편중하지 말고 분류·회귀·군집화·차원 축소·추천·"
@@ -1817,9 +1836,8 @@ def planner_stage(
             "신호 없음으로 계속 진행하세요. "
             "검색 수요 점수는 Google Trends의 최근성·급상승 강도를 우선 반영하고, Analytics 리포트의 "
             "실제 Search Console 검색어와 같은 검색 의도 또는 인접 주제로 연결되면 최대 1점만 가산하세요. "
-            "Whereispost 30일 평균은 장기 수요 참고값으로만 사용하고 Google Trends 시의성이나 공식 근거를 "
-            "뒤집는 필수 조건으로 사용하지 마세요. 각 TOP2의 demand_signal_source에는 사용한 Trends 관측 "
-            "시각, Search Console 연결 여부, Whereispost 사용 여부를 구분해 기록하세요. "
+            "각 TOP2의 demand_signal_source에는 사용한 기술 뉴스 소스 snapshot, Trends 관측 시각과 Search "
+            "Console 연결 여부를 구분해 기록하세요. "
             "모든 후보의 google_trends_approx_traffic에는 후보와 직접 일치하는 Trends 행의 approx_traffic을 "
             "쉼표 없는 0 이상의 정수로 기록하고, 일치 관측이 없으면 추정하지 말고 0으로 기록하세요. "
             "TOP2에는 demand_signal_source, observed_problem_phrase, user_action과 함께 "
@@ -1838,7 +1856,7 @@ def planner_stage(
             "TOP2 자리를 미리 배정하지 마세요. 적합한 후보가 없으면 할당량을 채우기 위해 억지로 만들지 "
             "말고 전체 후보 중 품질이 가장 높은 주제를 선택하세요. "
             "성공 글의 제목이나 본문 구성을 복제하지 말고 검색 의도와 문제 유형만 후속 후보 근거로 사용하세요. "
-            "TOP2는 카테고리 할당량으로 채우지 말고 캐시 수요 신호를 참고하되 생활 영향의 구체성, 공식 원문, "
+            "TOP2는 카테고리 할당량으로 채우지 말고 캐시 수요 신호를 참고하되 실무 영향의 구체성, 공식 원문, "
             "비중복 검색 의도와 설명 가능성이 가장 강한 후보를 고르세요. 근거가 부족하면 두 편을 "
             "억지로 채우지 말고 Planner를 실패시키세요. "
             "후보마다 기존 공개 글과 검색 의도가 겹치는지 검사하고 "
@@ -2222,6 +2240,7 @@ def write_and_sync_briefing_manifest(
         plan_document=plan_document,
         publications=collect_run_publications(run_directory),
         trends_cache_path=DEFAULT_GOOGLE_TRENDS_CACHE,
+        editorial_source_cache_path=DEFAULT_EDITORIAL_SOURCE_CACHE,
         shadow_path=run_directory / "news-worthiness-shadow.json",
         fallback_path=run_directory / "publication-fallback.json",
     )
@@ -2320,6 +2339,12 @@ def main() -> int:
                         "google_trends_cache status=UNAVAILABLE continuing=true reason=%s",
                         exc,
                     )
+            editorial_source_observation = ""
+            if args.use_editorial_source_cache:
+                try:
+                    editorial_source_observation = read_editorial_source_observation(DEFAULT_EDITORIAL_SOURCE_CACHE)
+                except PipelineError as exc:
+                    logger.warning("editorial_source_cache status=UNAVAILABLE continuing=true reason=%s", exc)
             planner = planner_stage(
                 args.keywords,
                 run_id,
@@ -2328,6 +2353,8 @@ def main() -> int:
                 whereispost_cache_mode=args.use_whereispost_cache,
                 google_trends_observation=google_trends_observation,
                 google_trends_cache_mode=args.use_google_trends_cache,
+                editorial_source_observation=editorial_source_observation,
+                editorial_source_cache_mode=args.use_editorial_source_cache,
                 category_distribution=read_public_category_distribution(
                     os.environ.get("PUBLIC_SITE_URL", "https://huntlab.app/")
                 ),

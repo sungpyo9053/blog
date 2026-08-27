@@ -21,12 +21,12 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("huntlab-warm-editorial-late-overrides", php)
         self.assertIn("add_action( 'wp_head'", php)
         self.assertIn("huntlab_warm_editorial_home_intro", php)
-        self.assertIn("복잡한 변화가", php)
+        self.assertIn("AI와 개발 기술 변화", php)
         self.assertIn("Hunt Brief · 매일 02:00 KST", php)
         self.assertIn("오늘 바뀐 것", php)
-        self.assertIn("뉴스를 읽고도 남는 세 가지", php)
-        self.assertIn("'label'       => '경제'", php)
-        self.assertIn("'label'       => '사회'", php)
+        self.assertIn("기술 뉴스를 읽고 남는 세 가지", php)
+        self.assertIn("'label' => 'AI/ML 핵심'", php)
+        self.assertIn("'label' => '국내 시사'", php)
         self.assertIn("Hunt News 콘텐츠 원칙", php)
         self.assertIn("hunt_news_translate_archive_labels", php)
         self.assertIn("hunt_news_remove_legacy_category_hero", php)
@@ -54,7 +54,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 4.0.0", php)
+        self.assertIn("Version: 5.0.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -83,7 +83,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("repeat(2, minmax(0, 1fr))", css)
         self.assertIn("grid-template-columns: 112px minmax(0, 1fr)", css)
         self.assertIn("hunt-news-home-notices", php)
-        self.assertIn("공식 원문과 실제 적용 단계를 나눠 설명합니다", php)
+        self.assertIn("공식 원문, 독립 보도와 직접 검증을 구분합니다", php)
         self.assertIn("body:is(.home, .category) #main.site-main", css)
         self.assertIn("is_home() || is_front_page() || is_category()", php)
         self.assertIn("body:is(.home, .category) .content-wrap.kadence-posts-list", css)
@@ -152,9 +152,12 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("핵심 신호", php)
         self.assertIn("오늘의 키워드", php)
         self.assertIn("확인 타임라인", php)
-        self.assertIn("편집 기준 필독", php)
-        self.assertNotIn("AI 선정 필독", php)
-        self.assertIn('data-brief-limit="2"', php)
+        self.assertIn("AI 선정 오늘의 필독 5", php)
+        self.assertIn("기술 영향력 매트릭스", php)
+        self.assertIn("오늘 수집한 기술 뉴스", php)
+        self.assertIn("날짜 아카이브", php)
+        self.assertIn("hunt_briefing", php)
+        self.assertIn('data-brief-limit="5"', php)
         self.assertIn("aria-pressed", php)
         self.assertIn("card.hidden=", php)
         self.assertIn("--hunt-brief-navy", css)
@@ -231,17 +234,15 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
     def test_category_tabs_include_hunt_news_sections(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
         for slug in (
-            "life",
-            "economy",
-            "real-estate",
-            "society",
-            "politics",
-            "culture-entertainment",
-            "it",
+            "ai-ml-core",
+            "development-trends",
+            "ai-official-blogs",
+            "korea-it",
+            "korea-current-affairs",
         ):
             self.assertIn(slug, php)
         self.assertNotIn("0 === (int) $category->count", php)
-        self.assertIn("Version: 2.2.0", php)
+        self.assertIn("Version: 3.0.0", php)
         self.assertIn("hunt_news_redirect_legacy_categories", php)
         self.assertIn("wp_safe_redirect( $target, 301 )", php)
         self.assertIn("position:sticky;top:0;overflow-x:auto", php)

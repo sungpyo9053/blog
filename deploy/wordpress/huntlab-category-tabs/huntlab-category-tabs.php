@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Category Tabs
  * Description: Adds fast category navigation for Hunt News readers.
- * Version: 2.2.0
+ * Version: 3.0.0
  * Author: Hunt News
  */
 
@@ -72,13 +72,11 @@ function huntlab_category_tabs_items() {
 	);
 
 	$categories = array(
-		'life'                  => '생활',
-		'economy'               => '경제',
-		'real-estate'           => '부동산',
-		'society'               => '사회',
-		'politics'              => '정치',
-		'culture-entertainment' => '문화·엔터',
-		'it'                    => 'IT',
+		'ai-ml-core'            => 'AI/ML 핵심',
+		'development-trends'    => '개발 트렌드',
+		'ai-official-blogs'     => 'AI 공식 블로그',
+		'korea-it'              => '국내 IT',
+		'korea-current-affairs' => '국내 시사',
 	);
 
 	foreach ( $categories as $slug => $label ) {

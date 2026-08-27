@@ -744,11 +744,17 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("공식 1차 자료", planner.prompt)
         self.assertIn("Velog 신호 없음으로 계속 진행", planner.prompt)
 
-    def test_planner_uses_whereispost_as_optional_demand_signal(self):
-        planner = planner_stage("", "run-whereispost-all", Path("/tmp/topics.md"))
-        self.assertIn("Harness가 제공한 Whereispost 수요 캐시", planner.prompt)
-        self.assertIn("절대 탈락 조건은 아닙니다", planner.prompt)
-        self.assertIn("whereispost_total_searches", planner.prompt)
+    def test_planner_uses_editorial_sources_as_primary_discovery_input(self):
+        observation = '{"checked_at":"2026-08-27T01:20:00+00:00","rows":[]}'
+        planner = planner_stage(
+            "", "run-editorial-sources", Path("/tmp/topics.md"),
+            editorial_source_observation=observation,
+            editorial_source_cache_mode=True,
+        )
+        self.assertIn("매시간 수집한 기술 뉴스 소스 캐시", planner.prompt)
+        self.assertIn("AI/ML 핵심, 개발 트렌드, AI 공식 블로그", planner.prompt)
+        self.assertIn("RSS 제목은 발견 근거일 뿐", planner.prompt)
+        self.assertNotIn("Whereispost", planner.prompt)
 
     def test_planner_uses_google_trends_as_primary_freshness_signal(self):
         observation = '{"checked_at":"2026-08-19T01:10:00+00:00","rows":[]}'
@@ -763,7 +769,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("공식 원문 하나 또는 서로 독립적인 신뢰 출처 두 개 이상", planner.prompt)
         self.assertIn("Search Console 검색어", planner.prompt)
         self.assertIn("최대 1점만 가산", planner.prompt)
-        self.assertIn("Whereispost 30일 평균은 장기 수요 참고값", planner.prompt)
+        self.assertIn("기술 뉴스 소스 snapshot", planner.prompt)
         self.assertIn("google_trends_approx_traffic", planner.prompt)
         self.assertIn("일치 관측이 없으면 추정하지 말고 0", planner.prompt)
 
@@ -784,8 +790,8 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         response = MagicMock()
         response.read.return_value = json.dumps(
             [
-                {"slug": "it", "count": 70},
-                {"slug": "life", "count": 6},
+                {"slug": "ai-ml-core", "count": 70},
+                {"slug": "development-trends", "count": 6},
                 {"slug": "legacy", "count": 99},
             ]
         ).encode("utf-8")
@@ -794,7 +800,9 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         payload = json.loads(read_public_category_distribution("https://huntlab.app/"))
 
         self.assertEqual(payload["total"], 76)
-        self.assertEqual(payload["counts"], {"IT": 70, "생활": 6})
+        self.assertEqual(
+            payload["counts"], {"AI/ML 핵심": 70, "개발 트렌드": 6}
+        )
 
     def test_google_trends_cache_must_be_recent(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -838,14 +846,14 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             path = Path(temporary) / "topics.md"
             candidates = []
             for index in range(1, 36):
-                title = f"생활 검색 후보 {index}"
+                title = f"AI 검색 후보 {index}"
                 total_searches = 99 if index == 1 else 100
                 candidates.append(
                     f"## {index}. {title}\n\n"
                     f"- title: {title}\n"
-                    "- category: 생활\n"
-                    "- content_type: life_impact_explainer\n"
-                    "- tags: 생활, 검색, 확인\n"
+                    "- category: AI/ML 핵심\n"
+                    "- content_type: concept_architecture\n"
+                    "- tags: AI, 검색, 확인\n"
                     "- score: 80/90\n"
                     "- score_breakdown: 검색 수요와 생활 영향 검증\n"
                     "- reason: 독자의 실제 선택을 돕는다\n"
@@ -856,10 +864,10 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "- recommended_images: 확인 절차\n"
                     "- duplicate_check: 중복 없음\n"
                     "- internal_link_candidates: 없음\n"
-                    "- topic_cluster: 생활 확인\n"
+                    "- topic_cluster: AI 기술 확인\n"
                     "- pillar_candidate: 없음\n"
                     "- problem_origin: observed_search_question\n"
-                    "- editorial_thesis: 생활 영향을 확인한다\n"
+                    "- editorial_thesis: 기술 영향을 확인한다\n"
                     "- chosen_focus: 독자 행동\n"
                     "- rejected_angle: 일반론 제외\n"
                     "- structure_mode: eligibility_check\n"
@@ -873,14 +881,14 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                     "- google_trends_approx_traffic: 200\n"
                 )
             top10 = "\n".join(
-                f"{index}. 생활 검색 후보 {index}" for index in range(1, 11)
+                f"{index}. AI 검색 후보 {index}" for index in range(1, 11)
             )
             path.write_text(
                 "# Topic Candidates\n\n"
                 + "\n".join(candidates)
                 + "\n## TOP10\n\n"
                 + top10
-                + "\n\n## TOP2\n\n1. 생활 검색 후보 1\n2. 생활 검색 후보 2\n",
+                + "\n\n## TOP2\n\n1. AI 검색 후보 1\n2. AI 검색 후보 2\n",
                 encoding="utf-8",
             )
 
@@ -944,7 +952,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
 
     def test_planner_uses_demand_and_evidence_without_forced_tracks(self):
         planner = planner_stage("", "run-track-split", Path("/tmp/topics.md"))
-        self.assertIn("Whereispost 수요", planner.prompt)
+        self.assertIn("Google Trends", planner.prompt)
         self.assertIn("공식 원문", planner.prompt)
         self.assertIn("카테고리 할당량으로 채우지 말고", planner.prompt)
         self.assertNotIn("selection_track=public_signal", planner.prompt)

@@ -11,15 +11,14 @@ from .frontmatter import MarkdownDocument
 from .models import ValidationIssue, ValidationReport
 
 ACTIVE_EDITOR_CATEGORIES = {
-    "생활",
-    "경제",
-    "부동산",
-    "사회",
-    "정치",
-    "문화·엔터",
-    "IT",
+    "AI/ML 핵심",
+    "개발 트렌드",
+    "AI 공식 블로그",
+    "국내 IT",
+    "국내 시사",
 }
 LEGACY_EDITOR_CATEGORIES = {
+    "생활", "경제", "부동산", "사회", "정치", "문화·엔터", "IT",
     "Tech",
     "AI",
     "Economy",

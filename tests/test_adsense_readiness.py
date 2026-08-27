@@ -25,7 +25,8 @@ class AdSenseReadinessTests(unittest.TestCase):
     def test_about_describes_actual_signal_boundaries(self):
         self.assertIn("Google Trends 한국 RSS", ABOUT_HTML)
         self.assertIn("Search Console", ABOUT_HTML)
-        self.assertIn("과거 캐시만 장기 수요 참고값", ABOUT_HTML)
+        self.assertIn("기술 뉴스 RSS·Atom", ABOUT_HTML)
+        self.assertIn("사실 근거로 사용하지 않고", ABOUT_HTML)
         self.assertIn("Shadow Mode", ABOUT_HTML)
         self.assertIn("발행 주제를 바꾸지 않습니다", ABOUT_HTML)
 

@@ -47,7 +47,14 @@ SCORE_LABELS = {
     "기술적 깊이": "explainability",
     "독창성": "shareability",
 }
-HIGH_RISK_CATEGORIES = {"정치", "Politics", "경제", "Economy", "부동산"}
+HIGH_RISK_CATEGORIES = {
+    "국내 시사",
+    "정치",
+    "Politics",
+    "경제",
+    "Economy",
+    "부동산",
+}
 
 
 def _canonical_json(value: Any) -> str:

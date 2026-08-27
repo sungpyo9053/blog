@@ -142,7 +142,13 @@ class PublisherTests(unittest.TestCase):
             )
 
     def test_validation_accepts_every_active_hunt_news_category(self):
-        for category in ("생활", "경제", "부동산", "사회", "정치", "문화·엔터", "IT"):
+        for category in (
+            "AI/ML 핵심",
+            "개발 트렌드",
+            "AI 공식 블로그",
+            "국내 IT",
+            "국내 시사",
+        ):
             with self.subTest(category=category), tempfile.TemporaryDirectory() as tmp:
                 markdown = VALID_MARKDOWN.replace("category: Tech", f"category: {category}")
                 document = load_document(self._write_document(Path(tmp), markdown))

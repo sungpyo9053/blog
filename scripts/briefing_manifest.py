@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 
 CONTRACT_VERSION = "briefing-manifest.v1"
 MAX_PUBLIC_TOPICS = 7
+MAX_PUBLIC_SOURCE_ITEMS = 60
 
 
 def _canonical_json(value: Any) -> str:
@@ -148,12 +149,41 @@ def _collection_health(collection: Mapping[str, Any], generated: datetime) -> di
     }
 
 
+def _editorial_source_summary(cache_path: Path | None) -> dict[str, Any]:
+    payload = load_json(cache_path) if cache_path else {}
+    rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
+    safe_rows: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        url = str(row.get("url", "")).strip()
+        title = str(row.get("title", "")).strip()
+        if not url.startswith("https://") or not title or url in seen:
+            continue
+        seen.add(url)
+        safe_rows.append({
+            "category": str(row.get("category", ""))[:40],
+            "source": str(row.get("source", ""))[:80],
+            "title": title[:300], "url": url,
+            "published_at": str(row.get("published_at", ""))[:40],
+        })
+        if len(safe_rows) >= MAX_PUBLIC_SOURCE_ITEMS:
+            break
+    return {
+        "provider": str(payload.get("provider", "hunt_news_editorial_sources")),
+        "checked_at": str(payload.get("checked_at", "")),
+        "successful_source_count": _nonnegative_int(payload.get("successful_source_count")),
+        "source_count": _nonnegative_int(payload.get("source_count")),
+        "items": safe_rows,
+    }
+
+
 def build_briefing_manifest(
     *,
     run_id: str,
     plan_document: Mapping[str, Any],
     publications: Sequence[Mapping[str, Any]],
     trends_cache_path: Path,
+    editorial_source_cache_path: Path | None = None,
     shadow_path: Path,
     fallback_path: Path,
     generated_at: datetime | None = None,
@@ -170,6 +200,7 @@ def build_briefing_manifest(
     fallback = load_json(fallback_path)
     collection = _collection_summary(trends_cache_path)
     collection.update(_collection_health(collection, generated))
+    editorial_sources = _editorial_source_summary(editorial_source_cache_path)
 
     legacy_order = {title: index for index, title in enumerate(legacy_top2)}
     ordered_publications = sorted(
@@ -247,6 +278,7 @@ def build_briefing_manifest(
         "complete": len(public_posts) == 2,
         "source_snapshot_hash": _sha256(source_contract),
         "collection": collection,
+        "editorial_sources": editorial_sources,
         "selection": selection,
         "published": public_posts,
     }

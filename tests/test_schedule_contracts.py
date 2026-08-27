@@ -24,21 +24,18 @@ class ScheduleContractTests(unittest.TestCase):
         self.assertIn("OnCalendar=*-*-* 17:00:00 Asia/Seoul", timer)
         self.assertIn("Persistent=false", timer)
 
-    def test_whereispost_collector_runs_every_two_hours_at_minute_30(self):
-        timer = (ROOT / "deploy/huntlab-whereispost-collector.timer").read_text(
+    def test_editorial_source_collector_runs_hourly_and_daily_pipeline_consumes_it(self):
+        timer = (ROOT / "deploy/huntlab-editorial-source-collector.timer").read_text(
             encoding="utf-8"
         )
-        self.assertIn(
-            "OnCalendar=*-*-* 00,02,04,06,08,10,12,14,16,18,20,22:30:00 Asia/Seoul",
-            timer,
-        )
+        self.assertIn("OnCalendar=*-*-* *:20:00 Asia/Seoul", timer)
         self.assertIn("Persistent=false", timer)
 
         service = (ROOT / "deploy/huntlab-daily-pipeline.service").read_text(
             encoding="utf-8"
         )
-        self.assertIn("--use-whereispost-cache", service)
-        self.assertNotIn("--require-whereispost-cache", service)
+        self.assertIn("--use-editorial-source-cache", service)
+        self.assertNotIn("--use-whereispost-cache", service)
 
     def test_google_trends_collector_runs_hourly_and_daily_pipeline_consumes_it(self):
         timer = (ROOT / "deploy/huntlab-google-trends-collector.timer").read_text(

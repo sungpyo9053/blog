@@ -15,13 +15,11 @@ class SEOAgentContractTests(unittest.TestCase):
     def test_topic_planner_has_editor_and_search_contract(self):
         text = read("agents/topic-planner-agent.md")
         for category in (
-            "생활",
-            "경제",
-            "부동산",
-            "사회",
-            "정치",
-            "문화·엔터",
-            "IT",
+            "AI/ML 핵심",
+            "개발 트렌드",
+            "AI 공식 블로그",
+            "국내 IT",
+            "국내 시사",
         ):
             self.assertIn(category, text)
         self.assertIn("전체 최소 35개", text)
@@ -33,11 +31,9 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("demand_signal_source", text)
         self.assertIn("observed_problem_phrase", text)
         self.assertIn("user_action", text)
-        self.assertIn("Whereispost", text)
-        self.assertIn("PC·모바일·총 검색량", text)
-        self.assertIn("문서 수", text)
-        self.assertIn("경쟁 비율", text)
-        self.assertIn("생활 영향", text)
+        self.assertIn("source_snapshot_hash", text)
+        self.assertIn("RSS·Atom", text)
+        self.assertIn("실무 영향", text)
         self.assertIn("공식 원문", text)
         self.assertIn("TOP2로 선정해 실제", text)
         for field in (
@@ -84,9 +80,9 @@ class SEOAgentContractTests(unittest.TestCase):
         reviewer = read("agents/reviewer.md")
         for field in (
             "Hunt News WordPress 설명형 콘텐츠 문체 가이드",
-            "복잡한 변화가",
-            "돈·시간·일·권리·소비·선택",
-            "그래서 내 생활에 무엇이 달라지는가",
+            "AI/ML 핵심",
+            "코드·운영·비용·보안·선택",
+            "그래서 우리 코드와 운영 판단에 무엇이 달라지는가",
             "검증 범위와 판단",
             "AI가 쓴 티를 줄이는 규칙",
             "한눈에 보기는 선택 사항",
@@ -315,12 +311,12 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
             self.assertIn(term, writer)
             self.assertIn(term, reviewer)
 
-    def test_topic_planner_prioritizes_life_impact_without_category_quota(self):
+    def test_topic_planner_prioritizes_technical_impact_without_category_quota(self):
         text = read("agents/topic-planner-agent.md")
-        self.assertIn("생활, 경제, 부동산, 사회, 정치, 문화·엔터", text)
+        self.assertIn("AI/ML 핵심, 개발 트렌드, AI 공식 블로그", text)
         self.assertIn("카테고리별 의무 할당을 두지 않는다", text)
-        self.assertIn("Whereispost 수요", text)
-        self.assertIn("공식\n원문", text)
+        self.assertIn("기술 뉴스 source snapshot", text)
+        self.assertIn("공식 원문", text)
         self.assertNotIn("TOP2의\n최대 한 자리", text)
 
 

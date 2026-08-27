@@ -11,6 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_GOOGLE_TRENDS_CACHE = (
     PROJECT_ROOT / "output/search-signals/google-trends-kr.json"
 )
+DEFAULT_EDITORIAL_SOURCE_CACHE = (
+    PROJECT_ROOT / "output/search-signals/editorial-sources.json"
+)
 
 
 class SearchSignalError(ValueError):
@@ -136,6 +139,34 @@ def load_google_trends_cache(path: Path | None) -> dict[str, Any]:
                 raise SearchSignalError(
                     f"Google Trends row {index} observation_count is invalid"
                 )
+    return {**payload, "status": "AVAILABLE", "rows": rows}
+
+
+def load_editorial_source_cache(path: Path | None) -> dict[str, Any]:
+    """Load the bounded multi-source technology-news cache."""
+    if path is None or not path.is_file():
+        return {
+            "provider": "hunt_news_editorial_sources",
+            "status": "N/A",
+            "reason": "hourly_cache_unavailable",
+            "rows": [],
+        }
+    payload = _load_json(path)
+    if payload.get("provider") != "hunt_news_editorial_sources":
+        raise SearchSignalError("editorial source provider mismatch")
+    if payload.get("contract_version") != "editorial-source-cache.v1":
+        raise SearchSignalError("editorial source contract version mismatch")
+    if len(str(payload.get("source_snapshot_hash", ""))) != 64:
+        raise SearchSignalError("editorial source snapshot hash is required")
+    if not str(payload.get("checked_at", "")).strip():
+        raise SearchSignalError("editorial source checked_at is required")
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        raise SearchSignalError("editorial source rows must be a list")
+    required = {"category", "source", "title", "url", "published_at"}
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict) or not required.issubset(row):
+            raise SearchSignalError(f"editorial source row {index} is incomplete")
     return {**payload, "status": "AVAILABLE", "rows": rows}
 
 

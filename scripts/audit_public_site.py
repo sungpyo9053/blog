@@ -35,13 +35,11 @@ EVIDENCE_TERMS = (
     "한계",
 )
 ACTIVE_CATEGORY_SLUGS = {
-    "life",
-    "economy",
-    "real-estate",
-    "society",
-    "politics",
-    "culture-entertainment",
-    "it",
+    "ai-ml-core",
+    "development-trends",
+    "ai-official-blogs",
+    "korea-it",
+    "korea-current-affairs",
 }
 
 

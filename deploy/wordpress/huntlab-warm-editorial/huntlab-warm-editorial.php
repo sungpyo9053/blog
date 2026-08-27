@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 4.0.0
+ * Version: 5.0.0
  * Author: Hunt News
  */
 
@@ -24,6 +24,25 @@ function huntlab_warm_editorial_enqueue_styles() {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'huntlab_warm_editorial_enqueue_styles', 100 );
+
+/** Register one public briefing archive entry per completed 02:00 run. */
+function hunt_news_register_briefing_type() {
+	register_post_type(
+		'hunt_briefing',
+		array(
+			'labels' => array( 'name' => '날짜별 브리핑', 'singular_name' => '날짜별 브리핑' ),
+			'public' => true, 'show_in_rest' => true, 'has_archive' => 'briefing',
+			'rewrite' => array( 'slug' => 'briefing', 'with_front' => false ),
+			'supports' => array( 'title', 'editor', 'excerpt' ),
+			'menu_icon' => 'dashicons-calendar-alt',
+		)
+	);
+	if ( 'v1' !== get_option( 'hunt_news_briefing_rewrite_version' ) ) {
+		flush_rewrite_rules( false );
+		update_option( 'hunt_news_briefing_rewrite_version', 'v1', false );
+	}
+}
+add_action( 'init', 'hunt_news_register_briefing_type' );
 
 /**
  * The Hunt News category hero owns the archive H1, so suppress Kadence's
@@ -176,6 +195,12 @@ function hunt_news_briefing_timeline( $posts ) {
  * @return array<string,mixed>
  */
 function hunt_news_latest_briefing_manifest() {
+	if ( is_singular( 'hunt_briefing' ) ) {
+		$historical = get_post_meta( get_queried_object_id(), '_hunt_news_briefing_manifest', true );
+		if ( is_array( $historical ) && 'briefing-manifest.v1' === ( $historical['contract_version'] ?? '' ) && ! empty( $historical['complete'] ) ) {
+			return $historical;
+		}
+	}
 	$manifest = get_option( 'hunt_news_briefing_manifest', array() );
 	if ( ! is_array( $manifest ) || 'briefing-manifest.v1' !== ( $manifest['contract_version'] ?? '' ) || empty( $manifest['complete'] ) ) {
 		return array();
@@ -216,6 +241,24 @@ function hunt_news_manifest_signal_posts( $recent_posts, $manifest ) {
 		}
 	}
 	return array_slice( $ordered, 0, 3 );
+}
+
+/**
+ * Resolve the independent articles that belong to a stored daily briefing.
+ * Historical briefing pages must never silently show today's recent posts.
+ *
+ * @param array<string,mixed> $manifest Stored manifest.
+ * @return array<int,WP_Post>
+ */
+function hunt_news_manifest_posts( $manifest ) {
+	$posts = array();
+	foreach ( (array) ( $manifest['published'] ?? array() ) as $item ) {
+		$post = get_post( absint( $item['post_id'] ?? 0 ) );
+		if ( $post && 'post' === $post->post_type && 'publish' === $post->post_status ) {
+			$posts[] = $post;
+		}
+	}
+	return $posts;
 }
 
 /** @return array<int,array<string,mixed>> */
@@ -262,6 +305,36 @@ function hunt_news_manifest_keywords( $manifest ) {
  */
 function huntlab_warm_editorial_category_intros() {
 	return array(
+		'ai-ml-core'          => array(
+			'label' => 'AI/ML 핵심', 'title' => '모델 이름보다,<br>검증과 실제 영향을.',
+			'description' => '에이전트, 모델, 평가와 AI 인프라 변화를 공식 원문과 독립 보도로 확인합니다.',
+			'promises' => array( '공식 원문', '평가', '실무 영향' ), 'image' => 'ai.webp',
+			'alt' => 'AI 모델과 평가 지표, 인프라가 연결된 기술 뉴스 미니어처',
+		),
+		'development-trends'  => array(
+			'label' => '개발 트렌드', 'title' => '화제보다,<br>개발 흐름의 변화를.',
+			'description' => '오픈소스, 클라우드, 데이터와 보안 변경이 개발·운영에 미치는 영향을 정리합니다.',
+			'promises' => array( '릴리스', '마이그레이션', '운영 판단' ), 'image' => 'tech.webp',
+			'alt' => '코드와 클라우드 서비스, 데이터 흐름이 연결된 개발 트렌드 미니어처',
+		),
+		'ai-official-blogs'   => array(
+			'label' => 'AI 공식 블로그', 'title' => '발표보다,<br>근거와 한계를.',
+			'description' => '공식 연구·제품 발표를 독립 출처와 함께 읽고 홍보와 검증된 사실을 구분합니다.',
+			'promises' => array( '공식 발표', '독립 확인', '한계' ), 'image' => 'ml-algorithms.webp',
+			'alt' => '공식 발표 문서와 독립 검증 카드가 나란히 놓인 AI 블로그 미니어처',
+		),
+		'korea-it'            => array(
+			'label' => '국내 IT', 'title' => '보도자료보다,<br>국내 기술 산업의 변화.',
+			'description' => '국내 기업, 플랫폼, 반도체와 클라우드 소식을 공시와 공식 자료로 확인합니다.',
+			'promises' => array( '기업 공시', '기술 변화', '산업 영향' ), 'image' => 'system-architecture.webp',
+			'alt' => '국내 기업과 반도체, 클라우드 인프라가 연결된 국내 IT 미니어처',
+		),
+		'korea-current-affairs' => array(
+			'label' => '국내 시사', 'title' => '정쟁보다,<br>기술 정책과 산업 영향을.',
+			'description' => 'AI·플랫폼·반도체 정책과 규제가 개발자, 기업과 일자리에 만드는 변화를 설명합니다.',
+			'promises' => array( '정책 원문', '산업 영향', '확인할 것' ), 'image' => 'society.webp',
+			'alt' => '정책 문서와 기술 산업, 개발 현장이 이어지는 국내 시사 미니어처',
+		),
 		'life'                => array(
 			'label'       => '생활',
 			'title'       => '발표보다,<br>내 일상의 변화를.',
@@ -382,7 +455,7 @@ function huntlab_warm_editorial_category_intros() {
  * without changing the active theme or article pages.
  */
 function huntlab_warm_editorial_home_intro() {
-	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() ) ) {
+	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_singular( 'hunt_briefing' ) ) ) {
 		return;
 	}
 
@@ -402,12 +475,15 @@ function huntlab_warm_editorial_home_intro() {
 		$brief_posts = hunt_news_briefing_posts( 12 );
 	}
 	$brief_manifest = $is_category ? array() : hunt_news_latest_briefing_manifest();
+	if ( is_singular( 'hunt_briefing' ) && $brief_manifest ) {
+		$brief_posts = hunt_news_manifest_posts( $brief_manifest );
+	}
 	?>
 	<section id="huntlab-home-intro" class="huntlab-home-intro<?php echo $is_category ? ' huntlab-home-intro--category' : ''; ?>" aria-labelledby="huntlab-home-intro-title">
 		<div class="huntlab-home-intro__copy">
 			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt Brief · 매일 02:00 KST'; ?></p>
 			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '오늘 바뀐 것,<br>30초 안에 파악하세요.'; ?></h1>
-			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '뉴스를 나열하지 않습니다. 생활에 닿는 변화와 확인할 조건, 지금 할 일을 한 화면에 정리합니다.'; ?></p>
+			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '기술 뉴스를 나열하지 않습니다. 개발자에게 미치는 영향과 확인할 원문, 지금 할 일을 한 화면에 정리합니다.'; ?></p>
 			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'Hunt News 콘텐츠 원칙' ); ?>">
 				<?php foreach ( $is_category ? $intro['promises'] : array( '핵심 신호', '영향과 조건', '지금 할 일' ) as $promise ) : ?>
 					<li><?php echo esc_html( $promise ); ?></li>
@@ -662,6 +738,20 @@ function hunt_news_store_briefing_manifest( $request ) {
 			);
 		}
 	}
+	$source_items = array();
+	foreach ( array_slice( (array) ( $payload['editorial_sources']['items'] ?? array() ), 0, 60 ) as $item ) {
+		$url = esc_url_raw( (string) ( $item['url'] ?? '' ) );
+		if ( '' === $url || 0 !== strpos( $url, 'https://' ) ) {
+			continue;
+		}
+		$source_items[] = array(
+			'category' => sanitize_text_field( (string) ( $item['category'] ?? '' ) ),
+			'source' => sanitize_text_field( (string) ( $item['source'] ?? '' ) ),
+			'title' => sanitize_text_field( (string) ( $item['title'] ?? '' ) ),
+			'url' => $url,
+			'published_at' => sanitize_text_field( (string) ( $item['published_at'] ?? '' ) ),
+		);
+	}
 	$safe = array(
 		'contract_version'    => 'briefing-manifest.v1',
 		'generated_at'        => sanitize_text_field( (string) ( $payload['generated_at'] ?? '' ) ),
@@ -677,6 +767,13 @@ function hunt_news_store_briefing_manifest( $request ) {
 			'observed_topic_count' => absint( $payload['collection']['observed_topic_count'] ?? 0 ),
 			'top_topics'           => $top_topics,
 		),
+		'editorial_sources'   => array(
+			'provider' => sanitize_key( (string) ( $payload['editorial_sources']['provider'] ?? '' ) ),
+			'checked_at' => sanitize_text_field( (string) ( $payload['editorial_sources']['checked_at'] ?? '' ) ),
+			'successful_source_count' => absint( $payload['editorial_sources']['successful_source_count'] ?? 0 ),
+			'source_count' => absint( $payload['editorial_sources']['source_count'] ?? 0 ),
+			'items' => $source_items,
+		),
 		'selection'           => array(
 			'candidate_count' => absint( $payload['selection']['candidate_count'] ?? 0 ),
 			'legacy_top2'     => array_slice( array_map( 'sanitize_text_field', (array) ( $payload['selection']['legacy_top2'] ?? array() ) ), 0, 2 ),
@@ -689,45 +786,73 @@ function hunt_news_store_briefing_manifest( $request ) {
 		'stored_at'           => current_time( 'mysql', true ),
 	);
 	update_option( 'hunt_news_briefing_manifest', $safe, false );
-	return rest_ensure_response( array( 'stored' => true, 'run_id' => $run_id, 'post_ids' => wp_list_pluck( $safe_posts, 'post_id' ) ) );
+	$briefing_date = wp_date( 'Y-m-d', strtotime( $safe['generated_at'] ) );
+	$existing = get_posts( array( 'post_type' => 'hunt_briefing', 'post_status' => 'any', 'name' => $briefing_date, 'posts_per_page' => 1, 'fields' => 'ids' ) );
+	$links = '';
+	foreach ( $safe_posts as $safe_post ) {
+		$links .= '<li><a href="' . esc_url( $safe_post['url'] ) . '">' . esc_html( $safe_post['title'] ) . '</a></li>';
+	}
+	$briefing_post = array(
+		'ID' => $existing ? absint( $existing[0] ) : 0,
+		'post_type' => 'hunt_briefing', 'post_status' => 'publish', 'post_name' => $briefing_date,
+		'post_title' => 'Hunt Brief ' . $briefing_date,
+		'post_excerpt' => 'AI·개발 기술 뉴스 수집, 필독 5와 오늘의 TOP2를 한 화면에 정리한 날짜별 브리핑입니다.',
+		'post_content' => '<p>이 날짜의 AI·개발 기술 뉴스 브리핑입니다. 전체 대시보드에서 수집 기사와 판단 근거를 확인하고 아래 TOP2 원문을 읽을 수 있습니다.</p><ul>' . $links . '</ul>',
+	);
+	$briefing_id = wp_insert_post( wp_slash( $briefing_post ), true );
+	if ( ! is_wp_error( $briefing_id ) ) {
+		update_post_meta( $briefing_id, '_hunt_news_briefing_manifest', $safe );
+	}
+	return rest_ensure_response( array( 'stored' => true, 'run_id' => $run_id, 'briefing_id' => is_wp_error( $briefing_id ) ? 0 : $briefing_id, 'briefing_url' => is_wp_error( $briefing_id ) ? '' : get_permalink( $briefing_id ), 'post_ids' => wp_list_pluck( $safe_posts, 'post_id' ) ) );
 }
 
 /**
  * Explain the editorial promise and offer category-first discovery on home.
  */
 function hunt_news_home_sections() {
-	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() ) ) {
+	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_singular( 'hunt_briefing' ) ) ) {
 		return;
 	}
 
 	$is_category = is_category();
 
 	$categories = array(
-		'life'                  => array( '생활', '교통·주거·건강·교육·소비' ),
-		'economy'               => array( '경제', '금리·물가·세금·보험료' ),
-		'real-estate'           => array( '부동산', '전월세·청약·대출·세금' ),
-		'society'               => array( '사회', '노동·복지·안전·제도' ),
-		'politics'              => array( '정치', '법안·정책·찬반 쟁점' ),
-		'culture-entertainment' => array( '문화·엔터', '콘텐츠·공연·플랫폼·계약' ),
-		'it'                    => array( 'IT', 'AI·앱·플랫폼·작동 원리' ),
+		'ai-ml-core'            => array( 'AI/ML 핵심', '모델·에이전트·평가·AI 인프라' ),
+		'development-trends'    => array( '개발 트렌드', '오픈소스·클라우드·데이터·보안' ),
+		'ai-official-blogs'     => array( 'AI 공식 블로그', '공식 발표·연구·릴리스 노트' ),
+		'korea-it'              => array( '국내 IT', '기업·플랫폼·반도체·클라우드' ),
+		'korea-current-affairs' => array( '국내 시사', '기술 정책·산업·일자리 영향' ),
 	);
 	$brief_posts  = $is_category ? array() : hunt_news_briefing_posts( 12 );
 	$manifest     = $is_category ? array() : hunt_news_latest_briefing_manifest();
+	if ( is_singular( 'hunt_briefing' ) && $manifest ) {
+		$brief_posts = hunt_news_manifest_posts( $manifest );
+	}
 	$manifest_map = $is_category ? array() : hunt_news_manifest_publications_by_post( $manifest );
 	$signal_posts = $is_category ? array() : hunt_news_manifest_signal_posts( $brief_posts, $manifest );
 	$keywords     = $is_category ? array() : ( $manifest ? hunt_news_manifest_keywords( $manifest ) : hunt_news_briefing_keywords( $brief_posts, 7 ) );
 	$timeline     = $is_category ? array() : hunt_news_briefing_timeline( $brief_posts );
+	$source_groups = array();
+	if ( ! $is_category && $manifest ) {
+		foreach ( (array) ( $manifest['editorial_sources']['items'] ?? array() ) as $source_item ) {
+			$source_category = (string) ( $source_item['category'] ?? '' );
+			if ( in_array( $source_category, array( 'AI/ML 핵심', '개발 트렌드', 'AI 공식 블로그', '국내 IT', '국내 시사' ), true ) ) {
+				$source_groups[ $source_category ][] = $source_item;
+			}
+		}
+	}
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
 	<section id="hunt-news-briefing-board" class="hunt-news-briefing-board" aria-labelledby="hunt-news-briefing-title">
 		<header class="hunt-news-briefing-board__toolbar">
 			<div>
-				<p>오늘의 헌팅 대시보드</p>
-				<h2 id="hunt-news-briefing-title">생활에 닿는 변화부터 봅니다</h2>
+				<p>오늘의 AI·개발 뉴스 대시보드</p>
+				<h2 id="hunt-news-briefing-title">개발자가 지금 알아야 할 변화</h2>
 			</div>
 			<div class="hunt-news-briefing-board__date" aria-label="브리핑 기준">
 				<strong><?php echo esc_html( wp_date( 'Y-m-d' ) ); ?></strong>
-				<span>최신 공개 글 기준</span>
+				<span>02시 브리핑 기준</span>
+				<a href="<?php echo esc_url( get_post_type_archive_link( 'hunt_briefing' ) ); ?>">날짜 아카이브</a>
 			</div>
 		</header>
 		<?php if ( $manifest ) : ?>
@@ -798,6 +923,19 @@ function hunt_news_home_sections() {
 			</ol>
 		</section>
 
+		<section class="hunt-news-impact-matrix" aria-labelledby="hunt-news-impact-title">
+			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">⌁</span><h3 id="hunt-news-impact-title">기술 영향력 매트릭스</h3></div><p>버블을 눌러 관련 뉴스를 확인하세요</p></header>
+			<div class="hunt-news-impact-matrix__plot">
+				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--focus">지금 집중</span>
+				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--future">미래 준비</span>
+				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--apply">즉시 적용</span>
+				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--watch">모니터링</span>
+				<?php foreach ( array_slice( $keywords, 0, 6 ) as $index => $keyword ) : ?>
+					<a class="hunt-news-impact-bubble hunt-news-impact-bubble--<?php echo esc_attr( (string) ( $index + 1 ) ); ?>" href="<?php echo esc_url( $keyword['url'] ); ?>" style="--bubble-size:<?php echo esc_attr( (string) max( 54, min( 92, 48 + (int) $keyword['percent'] / 2 ) ) ); ?>px"><?php echo esc_html( wp_html_excerpt( $keyword['name'], 12, '…' ) ); ?></a>
+				<?php endforeach; ?>
+			</div>
+		</section>
+
 		<?php $lead = $brief_posts[0]; ?>
 		<section class="hunt-news-focus" aria-labelledby="hunt-news-focus-title">
 			<div class="hunt-news-focus__heading">
@@ -822,10 +960,11 @@ function hunt_news_home_sections() {
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
-				<div><p>편집 기준 필독</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 뉴스</h3></div>
+				<div><p>AI 선정 오늘의 필독 5</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
 				<div class="hunt-news-must-read__modes" role="group" aria-label="표시할 필독 기사 수">
-					<button type="button" data-brief-limit="2" aria-pressed="true">필독 2</button>
+					<button type="button" data-brief-limit="5" aria-pressed="true">필독</button>
 					<button type="button" data-brief-limit="5" aria-pressed="false">5개</button>
+					<button type="button" data-brief-limit="10" aria-pressed="false">10개</button>
 					<button type="button" data-brief-limit="all" aria-pressed="false">전체</button>
 				</div>
 			</header>
@@ -833,7 +972,7 @@ function hunt_news_home_sections() {
 				<?php foreach ( array_slice( $brief_posts, 0, 10 ) as $index => $post ) :
 					$category = hunt_news_briefing_category( $post );
 					?>
-					<article class="hunt-news-brief-card" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>"<?php echo $index >= 2 ? ' hidden' : ''; ?>>
+					<article class="hunt-news-brief-card" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>"<?php echo $index >= 5 ? ' hidden' : ''; ?>>
 						<div><span><?php echo esc_html( $category['name'] ); ?></span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $post ) ); ?>"><?php echo esc_html( get_the_date( 'm.d H:i', $post ) ); ?></time></div>
 						<h4><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h4>
 						<p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p>
@@ -842,20 +981,36 @@ function hunt_news_home_sections() {
 				<?php endforeach; ?>
 			</div>
 		</section>
+
+		<?php if ( $source_groups ) : ?>
+		<section class="hunt-news-source-board" aria-labelledby="hunt-news-source-title">
+			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">▤</span><h3 id="hunt-news-source-title">오늘 수집한 기술 뉴스</h3></div><p>제목은 발견용이며 핵심 사실은 원문에서 확인합니다</p></header>
+			<div class="hunt-news-source-board__grid">
+				<?php foreach ( array_keys( $source_groups ) as $source_category ) : ?>
+				<section class="hunt-news-source-column">
+					<h4><?php echo esc_html( $source_category ); ?></h4>
+					<?php foreach ( array_slice( $source_groups[ $source_category ], 0, 10 ) as $source_item ) : ?>
+					<article><div><span><?php echo esc_html( $source_item['source'] ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( $source_item['published_at'] ) ) ); ?></time></div><h5><a href="<?php echo esc_url( $source_item['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $source_item['title'] ); ?></a></h5></article>
+					<?php endforeach; ?>
+				</section>
+				<?php endforeach; ?>
+			</div>
+		</section>
+		<?php endif; ?>
 	</section>
 	<?php endif; ?>
 	<aside id="hunt-news-home-notices" class="hunt-news-home-notices" aria-label="Hunt News 이용 안내">
-		<a class="hunt-news-home-notices__primary" href="<?php echo esc_url( home_url( '/about/' ) ); ?>"><strong>읽는 기준</strong><span>대상·금액·시점·내가 할 일부터 빠르게 확인하세요</span><b aria-hidden="true">→</b></a>
-		<a class="hunt-news-home-notices__secondary" href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>"><span>공식 원문과 실제 적용 단계를 나눠 설명합니다</span><b aria-hidden="true">→</b></a>
+		<a class="hunt-news-home-notices__primary" href="<?php echo esc_url( home_url( '/about/' ) ); ?>"><strong>읽는 기준</strong><span>버전·호환성·비용·보안과 지금 할 일부터 확인하세요</span><b aria-hidden="true">→</b></a>
+		<a class="hunt-news-home-notices__secondary" href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>"><span>공식 원문, 독립 보도와 직접 검증을 구분합니다</span><b aria-hidden="true">→</b></a>
 	</aside>
 	<?php hunt_news_render_popular_news(); ?>
 	<?php if ( ! $is_category ) : ?>
 	<section id="hunt-news-reading-guide" class="hunt-news-reading-guide" aria-labelledby="hunt-news-reading-guide-title">
-		<h2 id="hunt-news-reading-guide-title">뉴스를 읽고도 남는 세 가지</h2>
+		<h2 id="hunt-news-reading-guide-title">기술 뉴스를 읽고 남는 세 가지</h2>
 		<div class="hunt-news-reading-guide__steps">
 			<article><span>1</span><h3>무엇이 바뀌었나</h3><p>발표 제목이 아니라 실제 변경점과 현재 단계를 확인합니다.</p></article>
-			<article><span>2</span><h3>나에게 무엇이 달라지나</h3><p>대상, 금액, 시점과 예외를 내 생활 조건에 맞춰 설명합니다.</p></article>
-			<article><span>3</span><h3>지금 무엇을 하면 되나</h3><p>확인할 문서, 신청·선택 시점과 아직 기다려야 할 부분을 나눕니다.</p></article>
+			<article><span>2</span><h3>개발에 무엇이 달라지나</h3><p>아키텍처, 비용, 보안과 운영 조건이 어떻게 바뀌는지 설명합니다.</p></article>
+			<article><span>3</span><h3>지금 무엇을 적용하나</h3><p>오늘, 이번 주, 이번 달과 올해 말의 행동을 나눕니다.</p></article>
 		</div>
 		<h2 class="hunt-news-reading-guide__categories-title">분야별로 보기</h2>
 		<nav class="hunt-news-category-grid" aria-label="Hunt News 분야별 글">
@@ -1039,7 +1194,7 @@ function hunt_news_editorial_organization_schema( $graphs ) {
 		'@id'         => $organization_id,
 		'name'        => 'Hunt News 편집팀',
 		'url'         => home_url( '/' ),
-		'description' => '복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명합니다.',
+		'description' => '매일 AI와 개발 기술 변화를 골라 개발자가 지금 이해하고 적용할 행동까지 정리합니다.',
 		'sameAs'      => array( 'https://github.com/sungpyo9053/blog' ),
 		'logo'        => array(
 			'@type' => 'ImageObject',

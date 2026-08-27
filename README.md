@@ -1,7 +1,7 @@
 # Hunt News Content Pipeline
 
-복잡한 변화가 내 생활에 어떤 영향을 주는지 쉽게 설명하는 `Hunt News`의
-검색 주제 기획부터 리서치, 글쓰기, 이미지 제작, 검수, WordPress 발행과
+매일 AI와 개발 기술 변화를 골라 개발자가 지금 이해하고 적용할 행동까지 정리하는
+`Hunt News`의 뉴스 수집부터 리서치, 글쓰기, 이미지 제작, 검수, WordPress 발행과
 발행 후 Search Console·GA4 분석까지 수행하는 콘텐츠 운영 시스템입니다.
 
 공개 사이트는 [huntlab.app](https://huntlab.app/)을 유지하며 기존 URL, 글,
@@ -9,15 +9,16 @@
 
 ## Hunt Brief 홈
 
-홈 화면은 매일 발행된 글을 빠르게 판단할 수 있는 브리핑 대시보드로 구성합니다.
-최근 공개 글에서 핵심 신호 3개, 실제 태그·카테고리 기반 키워드, 발행 시점별
-확인 타임라인, 편집 기준 필독 목록을 만들고 기존 분야별 아카이브로 이어집니다.
-현재 공개 데이터만 사용하며 Scorer가 Production으로 승격되기 전에는
-`AI 선정`이나 임의 점수처럼 검증할 수 없는 표시는 사용하지 않습니다.
+홈 화면은 날짜별 기술 뉴스 브리핑과 독립 기사 아카이브를 함께 제공합니다. 매일
+브리핑에는 수집 소스별 카드, 핵심 신호, 관측 키워드, 기술 영향력 매트릭스, 확인
+타임라인과 필독 목록을 묶고, TOP2는 각각 독립 URL의 검색용 심층 기사로 유지합니다.
+`/briefing/` 아카이브에서 날짜별 브리핑을 다시 열 수 있으며 기존 글·URL·미디어는
+삭제하거나 재분류하지 않습니다.
 
 정규 Daily Pipeline은 글 두 건의 Publisher 감사 로그를 확인한 뒤
-`briefing-manifest.json`을 원자적으로 생성합니다. 이 파일은 Google Trends 수집
-상태, 전체 후보 수, Legacy·Shadow 비교와 실제 공개 Post ID를 연결합니다.
+`briefing-manifest.json`을 원자적으로 생성합니다. 이 파일은 Google Trends와 24개
+기술 뉴스 소스의 수집 상태, 전체 후보 수, Legacy·Shadow 비교와 실제 공개 Post ID를
+연결합니다.
 완료된 두 건만 인증된 WordPress REST 경로로 최신 홈 브리핑에 동기화하며,
 동기화 실패는 경고로 격리되어 이미 성공한 02시 발행을 실패로 바꾸지 않습니다.
 
@@ -57,8 +58,10 @@ Shadow TOP2는 보충 후보로 사용하지 않으며 기존 Shadow artifact도
 
 ### Topic Planner 선정 원칙
 
-`생활`, `경제`, `부동산`, `사회`, `정치`, `문화·엔터`, `IT`를 활성 편집 범위로
-사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다.
+`AI/ML 핵심`, `개발 트렌드`, `AI 공식 블로그`, `국내 IT`, `국내 시사`를 활성 편집
+범위로 사용하지만 카테고리별 후보 수나 TOP2 할당량을 강제하지 않습니다. 기존
+생활·경제·부동산·사회·정치·문화·엔터·IT 카테고리는 기존 URL 보존용 레거시
+아카이브로만 유지합니다.
 TOP2는 검색 수요, 공식 출처, HuntLab 적합성, 독창성과 실제 해결 가치를
 기준으로 선정합니다. Harness는 실행 직전 공개 WordPress 카테고리 분포도 읽어
 한 카테고리가 전체의 60%를 넘으면 그 카테고리의 균형 가산점을 제거합니다.
@@ -73,11 +76,12 @@ Google Trends 한국 RSS 수집기는 매시간 급상승 검색어, 대략적�
 `discovery_score`로 계산하고 canonical `source_snapshot_hash`를 남깁니다. 이 점수는
 후보 발견 순서만 정하며 기사 중요도나 사실 신뢰도 판단을 대체하지 않습니다.
 
-Whereispost 수집기는 2시간마다 소량의 키워드를 정상 브라우저
-화면으로 조회해 PC·모바일 검색량, 총 검색량, 문서 수와 경쟁 비율을 캐시에 누적합니다.
-광고 잠금이나 인증 실패가 발생하면 우회하지 않고 마지막 정상 캐시를 보존합니다.
-Planner는 이 캐시를 장기 수요 참고값으로만 사용하며 캐시가 없거나 100회 미만이어도
-공식 원문, 시의성, 생활 영향과 비중복 검색 의도가 충분하면 TOP2로 선정할 수 있습니다.
+기술 뉴스 수집기는 매시간 Hacker News, MIT Tech Review, The Verge AI, GitHub Blog,
+Google AI Blog, 국내 IT·시사 매체 등 등록된 RSS·Atom을 병렬 수집합니다. 개별 소스
+실패는 격리하고 72시간 정상 캐시를 보존하며 canonical snapshot hash를 남깁니다.
+Whereispost는 자동 실행과 02시 선정 경로에서 제외합니다. 검색 수요는 Google Trends와
+Search Console 관측만 사용하고, 수집 카드 자체는 사실 근거가 아니므로 TOP2 전에 공식
+원문 하나와 독립 보도 하나 또는 독립 출처 두 개 이상으로 확인합니다.
 
 Planner는 Velog 공개 트렌딩과 기술 태그에서 반복되는 기술·언어·시스템
 아키텍처 관심사를 한국 개발자 수요의 보조 신호로 참고합니다. 제목이나 구성을
@@ -132,11 +136,11 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 다음 systemd unit을 사용합니다.
 
 - `deploy/huntlab-daily-pipeline.service`
-- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Trends·Search Console·Whereispost 캐시 참고
+- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Trends·기술 뉴스 소스·Search Console 캐시 참고
 - `deploy/huntlab-google-trends-collector.service`
 - `deploy/huntlab-google-trends-collector.timer`: 매시간 10분, 한국 급상승 RSS 누적
-- `deploy/huntlab-whereispost-collector.service`
-- `deploy/huntlab-whereispost-collector.timer`: 00:30부터 2시간 간격, 회당 3개 누적 수집
+- `deploy/huntlab-editorial-source-collector.service`
+- `deploy/huntlab-editorial-source-collector.timer`: 매시간 20분, 기술 뉴스 RSS·Atom 누적
 - `deploy/huntlab-daily-retry.service`
 - `deploy/huntlab-daily-retry.timer`: 매일 17:00 KST 실패 점검
 - `deploy/huntlab-analytics-optimizer.service`
