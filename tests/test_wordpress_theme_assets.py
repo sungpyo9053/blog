@@ -54,7 +54,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.1.0", php)
+        self.assertIn("Version: 5.2.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -152,8 +152,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("핵심 신호", php)
         self.assertIn("오늘의 키워드", php)
         self.assertIn("확인 타임라인", php)
-        self.assertIn("오늘 보고서의 근거와 상세 해설", php)
-        self.assertIn("브리핑 핵심 항목", php)
+        self.assertIn("AI 선정 오늘의 필독 5", php)
+        self.assertIn("지금 놓치면 아쉬운 기술 뉴스", php)
         self.assertIn("기술 영향력 매트릭스", php)
         self.assertIn("오늘 수집한 기술 뉴스", php)
         self.assertIn("날짜 아카이브", php)
@@ -174,7 +174,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.1.0", php)
+        self.assertIn("Version: 5.2.0", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -189,6 +189,10 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("position: sticky", css)
         self.assertIn(".hunt-news-date-nav.is-open", css)
         self.assertIn("aria-expanded", php)
+        self.assertIn("hunt-news-brief-card--source", php)
+        self.assertIn("hunt-news-brief-card__rank", php)
+        self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr))", css)
+        self.assertIn(".hunt-news-source-board { order: 6; }", css)
 
     def test_real_read_signal_requires_visible_time_and_scroll_depth(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")

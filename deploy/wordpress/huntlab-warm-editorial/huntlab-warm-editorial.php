@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.1.0
+ * Version: 5.2.0
  * Author: Hunt News
  */
 
@@ -906,6 +906,7 @@ function hunt_news_home_sections() {
 	$keywords     = $is_category ? array() : ( $manifest ? hunt_news_manifest_keywords( $manifest ) : hunt_news_briefing_keywords( $brief_posts, 7 ) );
 	$timeline     = $is_category ? array() : hunt_news_briefing_timeline( $brief_posts );
 	$source_groups = array();
+	$must_read_items = array();
 	if ( ! $is_category && $manifest ) {
 		foreach ( (array) ( $manifest['editorial_sources']['items'] ?? array() ) as $source_item ) {
 			$source_category = (string) ( $source_item['category'] ?? '' );
@@ -913,6 +914,7 @@ function hunt_news_home_sections() {
 				$source_groups[ $source_category ][] = $source_item;
 			}
 		}
+		$must_read_items = array_slice( (array) ( $manifest['editorial_sources']['items'] ?? array() ), 0, 10 );
 	}
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
@@ -1035,7 +1037,7 @@ function hunt_news_home_sections() {
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
-				<div><p>오늘 보고서의 근거와 상세 해설</p><h3 id="hunt-news-must-read-title">브리핑 핵심 항목</h3></div>
+				<div><p>AI 선정 오늘의 필독 5</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
 				<div class="hunt-news-must-read__modes" role="group" aria-label="표시할 필독 기사 수">
 					<button type="button" data-brief-limit="5" aria-pressed="true">필독</button>
 					<button type="button" data-brief-limit="5" aria-pressed="false">5개</button>
@@ -1044,16 +1046,28 @@ function hunt_news_home_sections() {
 				</div>
 			</header>
 			<div class="hunt-news-must-read__grid">
-				<?php foreach ( array_slice( $brief_posts, 0, 10 ) as $index => $post ) :
-					$category = hunt_news_briefing_category( $post );
-					?>
-					<article class="hunt-news-brief-card" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>"<?php echo $index >= 5 ? ' hidden' : ''; ?>>
-						<div><span><?php echo esc_html( $category['name'] ); ?></span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $post ) ); ?>"><?php echo esc_html( get_the_date( 'm.d H:i', $post ) ); ?></time></div>
-						<h4><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h4>
-						<p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p>
-						<a href="<?php echo esc_url( get_permalink( $post ) ); ?>">브리핑 읽기 <b aria-hidden="true">→</b></a>
-					</article>
-				<?php endforeach; ?>
+				<?php if ( $must_read_items ) : ?>
+					<?php foreach ( $must_read_items as $index => $item ) : ?>
+						<article class="hunt-news-brief-card hunt-news-brief-card--source" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>"<?php echo $index >= 5 ? ' hidden' : ''; ?>>
+							<b class="hunt-news-brief-card__rank">#<?php echo esc_html( (string) ( $index + 1 ) ); ?></b>
+							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
+							<h4><a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></a></h4>
+							<p><?php echo esc_html( (string) ( $item['category'] ?? '기술 뉴스' ) ); ?> · 공식 원문과 독립 출처를 확인하세요.</p>
+							<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">원문 확인 <b aria-hidden="true">→</b></a>
+						</article>
+					<?php endforeach; ?>
+				<?php else : ?>
+					<?php foreach ( array_slice( $brief_posts, 0, 10 ) as $index => $post ) :
+						$category = hunt_news_briefing_category( $post );
+						?>
+						<article class="hunt-news-brief-card" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>"<?php echo $index >= 5 ? ' hidden' : ''; ?>>
+							<div><span><?php echo esc_html( $category['name'] ); ?></span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $post ) ); ?>"><?php echo esc_html( get_the_date( 'm.d H:i', $post ) ); ?></time></div>
+							<h4><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h4>
+							<p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p>
+							<a href="<?php echo esc_url( get_permalink( $post ) ); ?>">브리핑 읽기 <b aria-hidden="true">→</b></a>
+						</article>
+					<?php endforeach; ?>
+				<?php endif; ?>
 			</div>
 		</section>
 
