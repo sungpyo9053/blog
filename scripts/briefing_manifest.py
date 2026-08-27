@@ -22,6 +22,13 @@ from urllib.parse import urlsplit
 CONTRACT_VERSION = "briefing-manifest.v1"
 MAX_PUBLIC_TOPICS = 7
 MAX_PUBLIC_SOURCE_ITEMS = 60
+EDITORIAL_CATEGORY_ORDER = (
+    "AI/ML 핵심",
+    "개발 트렌드",
+    "AI 공식 블로그",
+    "국내 IT",
+    "국내 시사",
+)
 
 
 def _canonical_json(value: Any) -> str:
@@ -152,7 +159,10 @@ def _collection_health(collection: Mapping[str, Any], generated: datetime) -> di
 def _editorial_source_summary(cache_path: Path | None) -> dict[str, Any]:
     payload = load_json(cache_path) if cache_path else {}
     rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
-    safe_rows: list[dict[str, str]] = []
+    category_rows: dict[str, list[dict[str, str]]] = {
+        category: [] for category in EDITORIAL_CATEGORY_ORDER
+    }
+    other_rows: list[dict[str, str]] = []
     seen: set[str] = set()
     for row in rows:
         url = str(row.get("url", "")).strip()
@@ -160,14 +170,32 @@ def _editorial_source_summary(cache_path: Path | None) -> dict[str, Any]:
         if not url.startswith("https://") or not title or url in seen:
             continue
         seen.add(url)
-        safe_rows.append({
+        safe_row = {
             "category": str(row.get("category", ""))[:40],
             "source": str(row.get("source", ""))[:80],
             "title": title[:300], "url": url,
             "published_at": str(row.get("published_at", ""))[:40],
-        })
-        if len(safe_rows) >= MAX_PUBLIC_SOURCE_ITEMS:
+        }
+        if safe_row["category"] in category_rows:
+            category_rows[safe_row["category"]].append(safe_row)
+        else:
+            other_rows.append(safe_row)
+    safe_rows: list[dict[str, str]] = []
+    round_index = 0
+    while len(safe_rows) < MAX_PUBLIC_SOURCE_ITEMS:
+        added = False
+        for category in EDITORIAL_CATEGORY_ORDER:
+            bucket = category_rows[category]
+            if round_index < len(bucket):
+                safe_rows.append(bucket[round_index])
+                added = True
+                if len(safe_rows) >= MAX_PUBLIC_SOURCE_ITEMS:
+                    break
+        if not added:
             break
+        round_index += 1
+    if len(safe_rows) < MAX_PUBLIC_SOURCE_ITEMS:
+        safe_rows.extend(other_rows[: MAX_PUBLIC_SOURCE_ITEMS - len(safe_rows)])
     return {
         "provider": str(payload.get("provider", "hunt_news_editorial_sources")),
         "checked_at": str(payload.get("checked_at", "")),

@@ -10,6 +10,7 @@ from publisher.config import ConfigurationError
 from publisher.config import WordPressConfig
 from publisher.wordpress import WordPressClient
 from scripts.briefing_manifest import (
+    _editorial_source_summary,
     atomic_write_manifest,
     build_briefing_manifest,
     collect_run_publications,
@@ -38,6 +39,52 @@ def candidate(title: str, category: str) -> dict[str, object]:
 
 
 class BriefingManifestTests(unittest.TestCase):
+    def test_editorial_source_summary_balances_all_reference_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp) / "editorial.json"
+            categories = [
+                "AI/ML 핵심",
+                "개발 트렌드",
+                "AI 공식 블로그",
+                "국내 IT",
+                "국내 시사",
+            ]
+            rows = []
+            for category_index, category in enumerate(reversed(categories)):
+                for item_index in range(20):
+                    rows.append(
+                        {
+                            "category": category,
+                            "source": f"source-{category_index}",
+                            "title": f"{category}-{item_index}",
+                            "url": f"https://example.com/{category_index}/{item_index}",
+                            "published_at": "2026-08-27T12:00:00+00:00",
+                        }
+                    )
+            cache.write_text(
+                json.dumps(
+                    {
+                        "provider": "hunt_news_editorial_sources",
+                        "checked_at": "2026-08-27T12:00:00+00:00",
+                        "successful_source_count": 5,
+                        "source_count": 5,
+                        "rows": rows,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            summary = _editorial_source_summary(cache)
+
+            self.assertEqual(len(summary["items"]), 60)
+            self.assertEqual(
+                [item["category"] for item in summary["items"][:5]], categories
+            )
+            self.assertEqual(
+                {item["category"] for item in summary["items"]}, set(categories)
+            )
+
     def test_wordpress_client_uses_authenticated_custom_manifest_route(self):
         response = mock.MagicMock()
         response.status = 200
