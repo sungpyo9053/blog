@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.3.2
+ * Version: 5.3.3
  * Author: Hunt News
  */
 
@@ -72,7 +72,7 @@ function hunt_news_briefing_search_metadata() {
 	$summary     = sanitize_text_field( (string) ( $analysis['summary'] ?? '' ) );
 	$description = '';
 	if ( '' !== $headline ) {
-		$description = '오늘의 핵심은 ' . $headline . '입니다. ';
+		$description = '오늘의 핵심: ' . rtrim( $headline, ".。!? " ) . '. ';
 	}
 	if ( '' !== $summary ) {
 		$description .= wp_html_excerpt( $summary, 85, '…' );
