@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Category Tabs
  * Description: Adds fast briefing navigation for Hunt News readers.
- * Version: 3.1.1
+ * Version: 3.1.2
  * Author: Hunt News
  */
 
@@ -35,7 +35,7 @@ function huntlab_category_tabs_items() {
 	$weekly_category = get_category_by_slug( 'weekly-tech-review' );
 	$weekly_url = $weekly_category ? get_category_link( $weekly_category->term_id ) : home_url( '/category/weekly-tech-review/' );
 
-	return array(
+	$items = array(
 		array(
 			'label' => '오늘 브리핑',
 			'url'   => $today_url,
@@ -48,19 +48,22 @@ function huntlab_category_tabs_items() {
 			'slug'  => 'archive',
 			'meta'  => '날짜별',
 		),
-		array(
+	);
+	if ( $weekly_category && 0 < (int) $weekly_category->count ) {
+		$items[] = array(
 			'label' => '주간 회고',
 			'url'   => $weekly_url,
 			'slug'  => 'weekly',
 			'meta'  => '매주',
-		),
-		array(
-			'label' => '원문 모아보기',
-			'url'   => $source_url,
-			'slug'  => 'sources',
-			'meta'  => '수집원',
-		),
+		);
+	}
+	$items[] = array(
+		'label' => '원문 모아보기',
+		'url'   => $source_url,
+		'slug'  => 'sources',
+		'meta'  => '수집원',
 	);
+	return $items;
 }
 
 /**

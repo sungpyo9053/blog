@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.5.1
+ * Version: 5.5.2
  * Author: Hunt News
  */
 
@@ -1113,6 +1113,10 @@ function hunt_news_home_sections() {
 		'korea-current-affairs' => array( '국내 시사', '기술 정책·산업·일자리 영향' ),
 		'weekly-tech-review'    => array( '주간 기술 회고', '이번 주의 변화·영향·다음 주 확인 신호' ),
 	);
+	$weekly_category = get_category_by_slug( 'weekly-tech-review' );
+	if ( ! $weekly_category || 1 > (int) $weekly_category->count ) {
+		unset( $categories['weekly-tech-review'] );
+	}
 	$brief_posts  = $is_category ? array() : hunt_news_briefing_posts( 12 );
 	$manifest     = $is_category ? array() : hunt_news_latest_briefing_manifest();
 	if ( is_singular( 'hunt_briefing' ) && $manifest ) {

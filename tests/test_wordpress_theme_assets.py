@@ -56,7 +56,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.5.1", php)
+        self.assertIn("Version: 5.5.2", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -205,7 +205,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.5.1", php)
+        self.assertIn("Version: 5.5.2", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -309,12 +309,14 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
 
     def test_category_tabs_include_briefing_navigation(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
-        self.assertIn("Version: 3.1.1", php)
+        self.assertIn("Version: 3.1.2", php)
         self.assertIn("오늘 브리핑", php)
         self.assertIn("날짜 아카이브", php)
         self.assertIn("주간 회고", php)
         self.assertIn("weekly-tech-review", php)
         self.assertIn("is_category( 'weekly-tech-review' )", php)
+        self.assertIn("0 < (int) $weekly_category->count", php)
+        self.assertIn("unset( $categories['weekly-tech-review'] )", (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8"))
         self.assertIn("원문 모아보기", php)
         self.assertIn("get_post_type_archive_link( 'hunt_briefing' )", php)
         self.assertIn("#hunt-news-source-title", php)
