@@ -197,6 +197,10 @@ Frontmatter는 Markdown 문서 상단의 구조화된 게시 메타데이터다.
 - 정확히 일치하는 Category가 없으면 Validation 실패로 처리하고 WordPress 게시물을 생성하지 않는다.
 - 존재하지 않는 카테고리를 기본 카테고리로 조용히 대체하지 않는다.
 - `Uncategorized`를 자동 또는 대체 Category로 연결하는 것을 금지한다.
+- `주간 기술 회고`(`weekly-tech-review`)는 사람이 WordPress에 미리 생성한 별도
+  카테고리다. 주간 회고 파이프라인만 이 카테고리를 사용하며 일일 TOP2에는 할당하지 않는다.
+- 주간 회고는 월요일부터 일요일까지 유효한 일일 브리핑 분석 5개 이상과 고유 근거 URL
+  5개 이상을 고정한 입력 스냅샷, Reviewer 승인 해시를 모두 갖춰야 Publish할 수 있다.
 
 # 태그 규칙
 

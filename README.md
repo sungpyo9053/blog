@@ -3,6 +3,8 @@
 매일 AI와 개발 기술 변화를 수집·검증해 한 장의 날짜별 기술 보고서로 발행하는
 `Hunt News` 운영 시스템입니다. 개별 글 생산보다 매일 02시에 공개되는 브리핑과
 날짜 아카이브를 핵심 제품으로 두며, 상세 글은 보고서의 근거·확장 읽기 역할을 합니다.
+매주 일요일에는 그 주의 일일 브리핑을 다시 합성한 `주간 기술 회고` 한 건을 별도
+카테고리에 발행해 반복된 변화와 다음 주 확인 신호를 남깁니다.
 
 공개 사이트는 [huntlab.app](https://huntlab.app/)을 유지하며 기존 URL, 글,
 미디어와 검색 색인을 보존합니다.
@@ -33,6 +35,7 @@
 - `guides/`: 문체, Google SEO, 이미지, 발행, 분석·수익화 정책
 - `publisher/`: WordPress REST API 검증·업로드·발행 모듈
 - `scripts/run_daily_pipeline.py`: TOP2 실행 Harness
+- `scripts/run_weekly_review.py`: 일일 브리핑 5개 이상을 근거로 만드는 주간 회고 Harness
 - `scripts/update_adsense_readiness.py`: 개인정보·소개·문의 페이지를 백업 후 갱신하는 plan/apply 도구
 - `scripts/audit_content_repetition.py`: 공통 UI 제목을 제외하고 도입·H2 흐름·결론의 실질 중복을 점검
 - `tests/`: 단계 간 계약과 Publisher 회귀 테스트
@@ -132,6 +135,19 @@ WordPress 태그는 게시물당 재사용 가능한 3~4개만 허용합니다. 
 ./.venv/bin/python scripts/run_daily_pipeline.py --dry-run
 ```
 
+## 주간 기술 회고
+
+주간 회고는 월요일부터 일요일까지의 검증된 `daily-briefing-analysis.json`을 날짜별로
+하나씩 고정합니다. 최소 5일과 고유 근거 URL 5개를 충족할 때만 계획을 만들며,
+기사 나열 대신 `반복된 변화 → 달라진 개발자 판단 → 다음 주 확인 신호`를 한 글로
+합성합니다. 기존 Writer·Reviewer·Publisher 계약을 재사용하고 `주간 기술 회고`
+(`weekly-tech-review`) 카테고리에만 발행합니다. 이 카테고리는 WordPress에 미리
+생성되어 있어야 하며 Harness가 자동 생성하지 않습니다.
+
+```bash
+./.venv/bin/python scripts/run_weekly_review.py --dry-run --week-end 2026-08-30
+```
+
 ## 실패 실행 재개
 
 완료된 단계는 재사용하고 TOP2 중 실패한 순위만 재개할 수 있습니다.
@@ -153,6 +169,7 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 
 - `deploy/huntlab-daily-pipeline.service`
 - `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Trends·기술 뉴스 소스·Search Console 캐시 참고
+- `deploy/huntlab-weekly-review.timer`: 매주 일요일 20:30 KST, 주간 기술 회고 한 건
 - `deploy/huntlab-google-trends-collector.service`
 - `deploy/huntlab-google-trends-collector.timer`: 매시간 10분, 한국 급상승 RSS 누적
 - `deploy/huntlab-editorial-source-collector.service`

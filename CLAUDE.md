@@ -35,6 +35,12 @@
 8. Reviewer 승인 후 `agents/publisher-agent.md`에 따라 WordPress 발행 위임 → 일일 자동 파이프라인은 Publish
 9. 보고서와 상세글 2개의 완전한 매니페스트를 WordPress에 동기화하고 저장 확인
 
+매주 일요일 20:30 KST에는 해당 주의 유효한 일일 브리핑 분석이 5개 이상일 때만
+`Weekly Review Planner Agent`가 반복된 변화, 달라진 판단, 다음 주 확인 신호를 하나의
+계획으로 합친다. 이후 Research → Writer → Image Maker → Assembler → Reviewer →
+Publisher 계약을 그대로 재사용해 `주간 기술 회고` 카테고리에 독립 글 한 건을 발행한다.
+이 경로의 실패는 다음 날 02시 일일 파이프라인을 변경하거나 보충 발행하지 않는다.
+
 일일 보고서 생성, 근거 검증, 매니페스트 완전성 또는 WordPress 저장 확인이 실패하면
 해당 실행은 성공으로 기록하지 않는다.
 
@@ -97,7 +103,7 @@ Topic Planner Agent는 생활, 경제, 부동산, 사회, 정치, 문화·엔터
 Whereispost 수요 신호, 공식 원문, 생활 영향과 기존 글 중복을 확인하고 후보 생성 →
 평가 → TOP10 → TOP2 → `topics.md` 순서로 결정한다.
 
-일일 자동 파이프라인의 Publisher는 `publish.md`에 전달된 Editor의 `category`와 `tags`를 WordPress에 반영하고 실제 Publish를 수행한다. 카테고리는 이름으로 조회하며 없으면 생성하고, Uncategorized로 대체하지 않는다. Publish는 `guides/publisher-guide.md`가 정의한 조건과 Reviewer 승인 해시 검증을 모두 만족하는 경우에만 수행한다.
+일일·주간 자동 파이프라인의 Publisher는 `publish.md`에 전달된 Editor의 `category`와 `tags`를 WordPress에 반영하고 실제 Publish를 수행한다. 카테고리는 이름으로 조회하며 없으면 실패하고, 자동 생성하거나 Uncategorized로 대체하지 않는다. Publish는 `guides/publisher-guide.md`가 정의한 조건과 Reviewer 승인 해시 검증을 모두 만족하는 경우에만 수행한다.
 
 # Source of Truth
 

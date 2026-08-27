@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.5.0
+ * Version: 5.5.1
  * Author: Hunt News
  */
 
@@ -462,6 +462,14 @@ function huntlab_warm_editorial_category_intros() {
 			'description' => 'AI·플랫폼·반도체 정책과 규제가 개발자, 기업과 일자리에 만드는 변화를 설명합니다.',
 			'promises' => array( '정책 원문', '산업 영향', '확인할 것' ), 'image' => 'society.webp',
 			'alt' => '정책 문서와 기술 산업, 개발 현장이 이어지는 국내 시사 미니어처',
+		),
+		'weekly-tech-review'    => array(
+			'label'       => '주간 기술 회고',
+			'title'       => '기사 목록보다,<br>한 주의 방향과 다음 판단을.',
+			'description' => '일일 브리핑에서 반복된 변화와 실제로 달라진 판단을 묶어 다음 주 확인할 신호를 정리합니다.',
+			'promises'    => array( '반복된 변화', '개발자 영향', '다음 주 신호' ),
+			'image'       => 'system-architecture.webp',
+			'alt'         => '일주일의 기술 변화와 다음 주 확인 신호를 연결한 주간 기술 회고 미니어처',
 		),
 		'life'                => array(
 			'label'       => '생활',
@@ -1103,6 +1111,7 @@ function hunt_news_home_sections() {
 		'ai-official-blogs'     => array( 'AI 공식 블로그', '공식 발표·연구·릴리스 노트' ),
 		'korea-it'              => array( '국내 IT', '기업·플랫폼·반도체·클라우드' ),
 		'korea-current-affairs' => array( '국내 시사', '기술 정책·산업·일자리 영향' ),
+		'weekly-tech-review'    => array( '주간 기술 회고', '이번 주의 변화·영향·다음 주 확인 신호' ),
 	);
 	$brief_posts  = $is_category ? array() : hunt_news_briefing_posts( 12 );
 	$manifest     = $is_category ? array() : hunt_news_latest_briefing_manifest();
