@@ -120,7 +120,13 @@ class DailyBriefingTests(unittest.TestCase):
                     json.dumps(analysis_payload(), ensure_ascii=False), encoding="utf-8"
                 )
 
-            with mock.patch.object(pipeline, "DEFAULT_EDITORIAL_SOURCE_CACHE", cache), mock.patch.object(pipeline, "run_stage", side_effect=fake_run_stage):
+            with mock.patch.object(
+                pipeline, "DEFAULT_EDITORIAL_SOURCE_CACHE", cache
+            ), mock.patch.object(
+                pipeline, "RUNS_DIR", root / "isolated-runs"
+            ), mock.patch.object(
+                pipeline, "run_stage", side_effect=fake_run_stage
+            ):
                 result = pipeline.run_daily_briefing_analysis(
                     "codex",
                     run_id="20260827T170000Z-1234567890",
@@ -173,6 +179,8 @@ class DailyBriefingTests(unittest.TestCase):
 
             with mock.patch.object(
                 pipeline, "DEFAULT_EDITORIAL_SOURCE_CACHE", cache
+            ), mock.patch.object(
+                pipeline, "RUNS_DIR", root / "isolated-runs"
             ), mock.patch.object(
                 pipeline, "run_stage", side_effect=fake_run_stage
             ), self.assertRaises(pipeline.PipelineError):
