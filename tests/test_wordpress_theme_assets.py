@@ -54,7 +54,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.3.0", php)
+        self.assertIn("Version: 5.3.1", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -164,6 +164,10 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("--hunt-brief-navy", css)
         self.assertIn(".hunt-news-briefing-overview", css)
         self.assertIn(".hunt-news-pipeline-status", css)
+        self.assertIn("grid-template-columns: 14px minmax(0, 0.82fr) minmax(0, 1.18fr)", css)
+        self.assertIn(".hunt-news-signal-card > div", css)
+        self.assertIn("overflow-wrap: anywhere", css)
+        self.assertIn("white-space: normal", css)
         self.assertIn(".hunt-news-action-timeline", css)
         self.assertIn(".hunt-news-focus", css)
         self.assertIn(".hunt-news-must-read__modes", css)
@@ -174,7 +178,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.3.0", php)
+        self.assertIn("Version: 5.3.1", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
