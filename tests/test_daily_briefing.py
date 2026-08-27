@@ -17,6 +17,12 @@ def analysis_payload(source_hash: str = "a" * 64):
         "source_snapshot_hash": source_hash,
         "headline": "오늘의 기술 변화는 권한과 운영 비용으로 모인다",
         "summary": "여러 기사를 중복 제거해 개발자의 결정으로 번역했다.",
+        "retrospective": {
+            "status": "baseline",
+            "previous_generated_at": "",
+            "previous_snapshot_hash": "",
+            "items": [],
+        },
         "core_signals": [
             {"metric": str(index), "label": f"신호 {index}", "detail": "변화 설명", "action": "설정을 확인한다", "tone": tone, "evidence_urls": evidence}
             for index, tone in enumerate(("green", "amber", "red"), 1)
@@ -60,6 +66,33 @@ def analysis_payload(source_hash: str = "a" * 64):
 
 
 class DailyBriefingTests(unittest.TestCase):
+    def test_freezes_latest_valid_prior_briefing_for_retrospective(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            prior = runs / "20260826T170000Z-1111111111"
+            current = runs / "20260827T170000Z-2222222222"
+            prior.mkdir(parents=True)
+            current.mkdir(parents=True)
+            (prior / "daily-briefing-analysis.json").write_text(
+                json.dumps(analysis_payload(), ensure_ascii=False), encoding="utf-8"
+            )
+
+            with mock.patch.object(pipeline, "RUNS_DIR", runs):
+                path, snapshot_hash, labels = pipeline.freeze_previous_daily_briefing(
+                    run_id=current.name,
+                    run_directory=current,
+                )
+
+            self.assertEqual(path, current / "previous-daily-briefing.json")
+            self.assertEqual(len(snapshot_hash), 64)
+            self.assertEqual(labels, ["신호 1", "신호 2", "신호 3"])
+            snapshot = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                snapshot["contract_version"],
+                "daily-briefing-retrospective-input.v1",
+            )
+            self.assertEqual(snapshot["previous_run_id"], prior.name)
+
     def test_pipeline_freezes_source_snapshot_before_agent_execution(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -101,6 +134,57 @@ class DailyBriefingTests(unittest.TestCase):
             frozen = json.loads((run / "editorial-sources-snapshot.json").read_text())
             self.assertEqual(frozen["source_snapshot_hash"], "a" * 64)
 
+    def test_pipeline_fails_closed_when_required_analysis_is_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = root / "run"
+            run.mkdir()
+            topics = run / "topics.md"
+            topics.write_text("# fixture", encoding="utf-8")
+            cache = root / "editorial.json"
+            cache.write_text(
+                json.dumps(
+                    {
+                        "provider": "hunt_news_editorial_sources",
+                        "contract_version": "editorial-source-cache.v1",
+                        "checked_at": "2026-08-27T12:00:00+00:00",
+                        "source_snapshot_hash": "a" * 64,
+                        "rows": [
+                            {
+                                "category": "AI/ML 핵심",
+                                "source": "source",
+                                "title": "title",
+                                "url": "https://example.com/item",
+                                "published_at": "2026-08-27T12:00:00+00:00",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            def fake_run_stage(*args, **kwargs):
+                invalid = analysis_payload()
+                invalid["core_signals"][0]["evidence_urls"] = []
+                (run / "daily-briefing-analysis.json").write_text(
+                    json.dumps(invalid, ensure_ascii=False), encoding="utf-8"
+                )
+
+            with mock.patch.object(
+                pipeline, "DEFAULT_EDITORIAL_SOURCE_CACHE", cache
+            ), mock.patch.object(
+                pipeline, "run_stage", side_effect=fake_run_stage
+            ), self.assertRaises(pipeline.PipelineError):
+                pipeline.run_daily_briefing_analysis(
+                    "codex",
+                    run_id="20260827T170000Z-1234567890",
+                    run_directory=run,
+                    topics_path=topics,
+                    logger=logging.getLogger("invalid-briefing-test"),
+                    timeout_seconds=10,
+                )
+
     def test_validates_complete_evidence_backed_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "daily-briefing-analysis.json"
@@ -140,6 +224,73 @@ class DailyBriefingTests(unittest.TestCase):
             path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             with self.assertRaises(DailyBriefingError):
                 load_daily_briefing(path, source_snapshot_hash="a" * 64)
+
+    def test_rejects_retrospective_snapshot_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            payload["retrospective"] = {
+                "status": "available",
+                "previous_generated_at": "2026-08-26T13:00:00+09:00",
+                "previous_snapshot_hash": "b" * 64,
+                "items": [
+                    {
+                        "previous_signal_index": index,
+                        "previous_label": f"신호 {index}",
+                        "previous_detail": "전일 판단",
+                        "verdict": "confirmed",
+                        "current_status": "오늘 근거로 유지됨",
+                        "action": "변경 여부를 계속 확인한다",
+                        "evidence_urls": ["https://example.com/current"],
+                    }
+                    for index in range(1, 4)
+                ],
+            }
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaises(DailyBriefingError):
+                load_daily_briefing(
+                    path,
+                    previous_snapshot_hash="c" * 64,
+                    previous_signal_labels=["신호 1", "신호 2", "신호 3"],
+                    retrospective_required=True,
+                )
+
+    def test_accepts_evidence_backed_three_signal_retrospective(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            payload["retrospective"] = {
+                "status": "available",
+                "previous_generated_at": "2026-08-26T13:00:00+09:00",
+                "previous_snapshot_hash": "b" * 64,
+                "items": [
+                    {
+                        "previous_signal_index": index,
+                        "previous_label": f"신호 {index}",
+                        "previous_detail": "전일 판단",
+                        "verdict": verdict,
+                        "current_status": "오늘 근거로 다시 확인한 상태",
+                        "action": "공식 변경 여부를 계속 확인한다",
+                        "evidence_urls": [f"https://example.com/current/{index}"],
+                    }
+                    for index, verdict in enumerate(
+                        ("confirmed", "changed", "unresolved"), start=1
+                    )
+                ],
+            }
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            safe = load_daily_briefing(
+                path,
+                previous_snapshot_hash="b" * 64,
+                previous_signal_labels=["신호 1", "신호 2", "신호 3"],
+                retrospective_required=True,
+            )
+
+            self.assertEqual(
+                [item["verdict"] for item in safe["retrospective"]["items"]],
+                ["confirmed", "changed", "unresolved"],
+            )
 
 
 if __name__ == "__main__":

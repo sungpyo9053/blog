@@ -2,9 +2,10 @@
 
 ## 목적
 
-복잡한 변화가 독자의 생활에 어떤 영향을 주는지 쉽게 설명하는 글을 리서치,
-글쓰기, 이미지 제작, 최종 조립 순서로 만든다. 완성된 글은 Reviewer 승인 이후
-Publisher Agent가 WordPress 발행 정책에 따라 처리한다.
+복잡한 변화를 근거 기반 일일 보고서로 합성하고, 검색 질문에 답하는 상세글 2개를
+리서치, 글쓰기, 이미지 제작, 최종 조립 순서로 만든다. 일일 보고서 분석이 유효해야
+상세글 발행을 시작하며, 완성된 글은 Reviewer 승인 이후 Publisher Agent가 WordPress
+발행 정책에 따라 처리한다.
 
 ## 폴더 구조
 
@@ -25,12 +26,17 @@ Publisher Agent가 WordPress 발행 정책에 따라 처리한다.
 ## 주제 처리 순서
 
 1. `agents/topic-planner-agent.md`의 편집장(Editor)에 따라 10개 카테고리 후보 생성 → 평가 → TOP10 → TOP2 → `output/topics.md`
-2. `agents/researcher.md`에 따라 TOP2만 리서치 위임 → `output/[주제]/research.md`
-3. `agents/writer.md`에 따라 글쓰기 위임 → `output/[주제]/draft.md`
-4. `agents/image-maker.md`에 따라 이미지 제작 위임 → 이미지 생성 및 `draft.md` 마커 치환
-5. `agents/assembler.md`에 따라 최종 조립 위임 → `output/[주제]/final.md`, `final.html`
-6. Reviewer Agent에 최종 콘텐츠 검토 위임 → 승인 또는 수정 요청
-7. Reviewer 승인 후 `agents/publisher-agent.md`에 따라 WordPress 발행 위임 → 일일 자동 파이프라인은 Publish
+2. 전체 수집 자료, TOP2와 전일 보고서 스냅샷을 `agents/daily-briefing-agent.md`에 전달 → 전일 핵심 신호 3개 재검증을 포함한 필수 일일 보고서 분석 생성
+3. `agents/researcher.md`에 따라 TOP2만 리서치 위임 → `output/[주제]/research.md`
+4. `agents/writer.md`에 따라 글쓰기 위임 → `output/[주제]/draft.md`
+5. `agents/image-maker.md`에 따라 이미지 제작 위임 → 이미지 생성 및 `draft.md` 마커 치환
+6. `agents/assembler.md`에 따라 최종 조립 위임 → `output/[주제]/final.md`, `final.html`
+7. Reviewer Agent에 최종 콘텐츠 검토 위임 → 승인 또는 수정 요청
+8. Reviewer 승인 후 `agents/publisher-agent.md`에 따라 WordPress 발행 위임 → 일일 자동 파이프라인은 Publish
+9. 보고서와 상세글 2개의 완전한 매니페스트를 WordPress에 동기화하고 저장 확인
+
+일일 보고서 생성, 근거 검증, 매니페스트 완전성 또는 WordPress 저장 확인이 실패하면
+해당 실행은 성공으로 기록하지 않는다.
 
 Research Agent는 사용자가 별도 주제를 명시하지 않은 일일 자동 파이프라인에서 Topic Planner가 `output/topics.md`에 선정한 TOP2만 입력으로 사용한다. 각 TOP2의 `category`, `tags`, `reason`, `research_focus`를 그대로 전달받아 조사 범위와 출처 우선순위에 반영한다.
 

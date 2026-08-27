@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.4.5
+ * Version: 5.5.0
  * Author: Hunt News
  */
 
@@ -808,8 +808,7 @@ function hunt_news_register_popular_read_route() {
 add_action( 'rest_api_init', 'hunt_news_register_popular_read_route' );
 
 /**
- * Sanitize the optional evidence-backed daily analysis without making it a
- * publication dependency.
+ * Sanitize the required evidence-backed daily analysis.
  *
  * @param mixed $payload Untrusted analysis payload.
  * @return array
@@ -834,10 +833,48 @@ function hunt_news_sanitize_daily_analysis( $payload ) {
 		'source_snapshot_hash' => sanitize_text_field( (string) ( $payload['source_snapshot_hash'] ?? '' ) ),
 		'headline' => sanitize_text_field( (string) ( $payload['headline'] ?? '' ) ),
 		'summary' => sanitize_textarea_field( (string) ( $payload['summary'] ?? '' ) ),
+		'retrospective' => array( 'status' => 'baseline', 'previous_generated_at' => '', 'previous_snapshot_hash' => '', 'items' => array() ),
 		'core_signals' => array(), 'keywords' => array(), 'matrix' => array(), 'timeline' => array(),
 		'insight_cards' => array(), 'themes' => array(), 'developer_insights' => array(),
 		'watchlist' => array(), 'source_title_translations' => array(), 'must_read' => array(),
 	);
+	$retrospective = (array) ( $payload['retrospective'] ?? array() );
+	if ( 'available' === ( $retrospective['status'] ?? '' ) ) {
+		$previous_hash = sanitize_text_field( (string) ( $retrospective['previous_snapshot_hash'] ?? '' ) );
+		$previous_time = sanitize_text_field( (string) ( $retrospective['previous_generated_at'] ?? '' ) );
+		$seen_indexes  = array();
+		$review_items  = array();
+		foreach ( array_slice( (array) ( $retrospective['items'] ?? array() ), 0, 3 ) as $row ) {
+			$signal_index = absint( $row['previous_signal_index'] ?? 0 );
+			$verdict      = sanitize_key( (string) ( $row['verdict'] ?? '' ) );
+			$evidence     = $safe_urls( $row['evidence_urls'] ?? array() );
+			if ( ! in_array( $signal_index, array( 1, 2, 3 ), true ) || isset( $seen_indexes[ $signal_index ] ) || ! in_array( $verdict, array( 'confirmed', 'changed', 'unresolved' ), true ) || empty( $evidence ) ) {
+				return array();
+			}
+			$seen_indexes[ $signal_index ] = true;
+			$review_items[] = array(
+				'previous_signal_index' => $signal_index,
+				'previous_label' => sanitize_text_field( (string) ( $row['previous_label'] ?? '' ) ),
+				'previous_detail' => sanitize_textarea_field( (string) ( $row['previous_detail'] ?? '' ) ),
+				'verdict' => $verdict,
+				'current_status' => sanitize_textarea_field( (string) ( $row['current_status'] ?? '' ) ),
+				'action' => sanitize_textarea_field( (string) ( $row['action'] ?? '' ) ),
+				'evidence_urls' => $evidence,
+			);
+		}
+		if ( 3 !== count( $review_items ) || ! preg_match( '/^[a-f0-9]{64}$/', $previous_hash ) || '' === $previous_time ) {
+			return array();
+		}
+		usort( $review_items, static function ( $left, $right ) { return $left['previous_signal_index'] <=> $right['previous_signal_index']; } );
+		$safe['retrospective'] = array(
+			'status' => 'available',
+			'previous_generated_at' => $previous_time,
+			'previous_snapshot_hash' => $previous_hash,
+			'items' => $review_items,
+		);
+	} elseif ( 'baseline' !== ( $retrospective['status'] ?? 'baseline' ) ) {
+		return array();
+	}
 	foreach ( array_slice( (array) ( $payload['core_signals'] ?? array() ), 0, 3 ) as $row ) {
 		$safe['core_signals'][] = array(
 			'metric' => sanitize_text_field( (string) ( $row['metric'] ?? '' ) ),
@@ -991,6 +1028,10 @@ function hunt_news_store_briefing_manifest( $request ) {
 			'published_at' => sanitize_text_field( (string) ( $item['published_at'] ?? '' ) ),
 		);
 	}
+	$safe_analysis = hunt_news_sanitize_daily_analysis( $payload['analysis'] ?? array() );
+	if ( empty( $safe_analysis ) ) {
+		return new WP_Error( 'invalid_briefing_analysis', '검증된 일일 보고서 분석이 필요합니다.', array( 'status' => 400 ) );
+	}
 	$safe = array(
 		'contract_version'    => 'briefing-manifest.v1',
 		'generated_at'        => sanitize_text_field( (string) ( $payload['generated_at'] ?? '' ) ),
@@ -1013,7 +1054,7 @@ function hunt_news_store_briefing_manifest( $request ) {
 			'source_count' => absint( $payload['editorial_sources']['source_count'] ?? 0 ),
 			'items' => $source_items,
 		),
-		'analysis'            => hunt_news_sanitize_daily_analysis( $payload['analysis'] ?? array() ),
+		'analysis'            => $safe_analysis,
 		'selection'           => array(
 			'candidate_count' => absint( $payload['selection']['candidate_count'] ?? 0 ),
 			'legacy_top2'     => array_slice( array_map( 'sanitize_text_field', (array) ( $payload['selection']['legacy_top2'] ?? array() ) ), 0, 2 ),
@@ -1264,6 +1305,27 @@ function hunt_news_home_sections() {
 				</ol>
 			</aside>
 		</div>
+
+		<?php if ( 'available' === ( $analysis['retrospective']['status'] ?? '' ) ) :
+			$retrospective_labels = array( 'confirmed' => '유지', 'changed' => '변경', 'unresolved' => '확인 중' ); ?>
+		<section class="hunt-news-retrospective" aria-labelledby="hunt-news-retrospective-title">
+			<header class="hunt-news-panel-heading">
+				<div><span aria-hidden="true">↺</span><h3 id="hunt-news-retrospective-title">어제의 판단 복기</h3></div>
+				<p><?php echo esc_html( wp_date( 'Y.m.d', strtotime( (string) $analysis['retrospective']['previous_generated_at'] ) ) ); ?> 핵심 신호를 오늘 근거로 재검증</p>
+			</header>
+			<div class="hunt-news-retrospective__grid">
+				<?php foreach ( $analysis['retrospective']['items'] as $review ) : ?>
+				<article class="hunt-news-retrospective__item hunt-news-retrospective__item--<?php echo esc_attr( (string) $review['verdict'] ); ?>">
+					<div><span><?php echo esc_html( $retrospective_labels[ $review['verdict'] ] ?? '확인 중' ); ?></span><small>전일 신호 <?php echo esc_html( (string) $review['previous_signal_index'] ); ?></small></div>
+					<h4><?php echo esc_html( (string) $review['previous_label'] ); ?></h4>
+					<p class="hunt-news-retrospective__previous"><b>어제</b> <?php echo esc_html( (string) $review['previous_detail'] ); ?></p>
+					<p><b>오늘</b> <?php echo esc_html( (string) $review['current_status'] ); ?></p>
+					<a href="<?php echo esc_url( (string) ( $review['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $review['action'] ); ?> <b aria-hidden="true">→</b></a>
+				</article>
+				<?php endforeach; ?>
+			</div>
+		</section>
+		<?php endif; ?>
 
 		<section class="hunt-news-action-timeline" aria-labelledby="hunt-news-timeline-title">
 			<header class="hunt-news-panel-heading">

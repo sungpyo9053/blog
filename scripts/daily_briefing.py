@@ -14,6 +14,8 @@ TONES = {"green", "amber", "red", "violet"}
 DIRECTIONS = {"up", "down", "stable"}
 QUADRANTS = {"focus", "future", "apply", "watch"}
 HORIZONS = {"today", "week", "month", "year"}
+RETROSPECTIVE_STATUSES = {"baseline", "available"}
+RETROSPECTIVE_VERDICTS = {"confirmed", "changed", "unresolved"}
 
 
 class DailyBriefingError(RuntimeError):
@@ -46,7 +48,14 @@ def _rows(payload: dict[str, Any], field: str, expected: int | tuple[int, int]) 
     return rows
 
 
-def validate_daily_briefing(payload: Any, *, source_snapshot_hash: str = "") -> dict[str, Any]:
+def validate_daily_briefing(
+    payload: Any,
+    *,
+    source_snapshot_hash: str = "",
+    previous_snapshot_hash: str = "",
+    previous_signal_labels: list[str] | None = None,
+    retrospective_required: bool = False,
+) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
         raise DailyBriefingError("invalid daily briefing contract")
     artifact_hash = _text(payload.get("source_snapshot_hash"), "source_snapshot_hash", limit=128)
@@ -59,6 +68,79 @@ def validate_daily_briefing(payload: Any, *, source_snapshot_hash: str = "") -> 
         "headline": _text(payload.get("headline"), "headline", limit=180),
         "summary": _text(payload.get("summary"), "summary", limit=700),
     }
+
+    retrospective_present = "retrospective" in payload
+    retrospective = payload.get("retrospective")
+    if retrospective is None and not retrospective_required:
+        retrospective = {"status": "baseline", "items": []}
+    if retrospective_required and not retrospective_present:
+        raise DailyBriefingError("retrospective is required")
+    if not isinstance(retrospective, dict):
+        raise DailyBriefingError("retrospective must be an object")
+    retrospective_status = str(retrospective.get("status") or "").strip()
+    if retrospective_status not in RETROSPECTIVE_STATUSES:
+        raise DailyBriefingError("invalid retrospective status")
+    retrospective_rows = retrospective.get("items", [])
+    if not isinstance(retrospective_rows, list) or not all(
+        isinstance(row, dict) for row in retrospective_rows
+    ):
+        raise DailyBriefingError("retrospective.items must be an object list")
+    if retrospective_status == "baseline":
+        if previous_snapshot_hash or retrospective_rows:
+            raise DailyBriefingError("baseline retrospective cannot replace a previous report")
+        safe["retrospective"] = {
+            "status": "baseline",
+            "previous_generated_at": "",
+            "previous_snapshot_hash": "",
+            "items": [],
+        }
+    else:
+        artifact_previous_hash = _text(
+            retrospective.get("previous_snapshot_hash"),
+            "retrospective.previous_snapshot_hash",
+            limit=128,
+        )
+        if len(artifact_previous_hash) != 64:
+            raise DailyBriefingError("invalid previous briefing snapshot hash")
+        if previous_snapshot_hash and artifact_previous_hash != previous_snapshot_hash:
+            raise DailyBriefingError("previous briefing snapshot hash mismatch")
+        if len(retrospective_rows) != 3:
+            raise DailyBriefingError("available retrospective requires three rows")
+        safe_rows = []
+        used_indexes: set[int] = set()
+        for row in retrospective_rows:
+            try:
+                signal_index = int(row.get("previous_signal_index", 0))
+            except (TypeError, ValueError) as exc:
+                raise DailyBriefingError("previous signal index must be an integer") from exc
+            if signal_index not in {1, 2, 3} or signal_index in used_indexes:
+                raise DailyBriefingError("retrospective requires unique signal indexes 1..3")
+            used_indexes.add(signal_index)
+            previous_label = _text(row.get("previous_label"), "previous_label", limit=100)
+            if previous_signal_labels and previous_label != previous_signal_labels[signal_index - 1]:
+                raise DailyBriefingError("retrospective previous signal label mismatch")
+            verdict = _text(row.get("verdict"), "verdict", limit=20)
+            if verdict not in RETROSPECTIVE_VERDICTS:
+                raise DailyBriefingError("invalid retrospective verdict")
+            safe_rows.append({
+                "previous_signal_index": signal_index,
+                "previous_label": previous_label,
+                "previous_detail": _text(row.get("previous_detail"), "previous_detail", limit=320),
+                "verdict": verdict,
+                "current_status": _text(row.get("current_status"), "current_status", limit=420),
+                "action": _text(row.get("action"), "action", limit=240),
+                "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
+            })
+        safe["retrospective"] = {
+            "status": "available",
+            "previous_generated_at": _text(
+                retrospective.get("previous_generated_at"),
+                "retrospective.previous_generated_at",
+                limit=40,
+            ),
+            "previous_snapshot_hash": artifact_previous_hash,
+            "items": sorted(safe_rows, key=lambda row: row["previous_signal_index"]),
+        }
 
     safe["core_signals"] = []
     for index, row in enumerate(_rows(payload, "core_signals", 3)):
@@ -178,11 +260,24 @@ def validate_daily_briefing(payload: Any, *, source_snapshot_hash: str = "") -> 
     return safe
 
 
-def load_daily_briefing(path: Path, *, source_snapshot_hash: str = "") -> dict[str, Any]:
+def load_daily_briefing(
+    path: Path,
+    *,
+    source_snapshot_hash: str = "",
+    previous_snapshot_hash: str = "",
+    previous_signal_labels: list[str] | None = None,
+    retrospective_required: bool = False,
+) -> dict[str, Any]:
     if not path.is_file():
         raise DailyBriefingError(f"daily briefing artifact missing: {path}")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise DailyBriefingError("daily briefing artifact is not valid JSON") from exc
-    return validate_daily_briefing(payload, source_snapshot_hash=source_snapshot_hash)
+    return validate_daily_briefing(
+        payload,
+        source_snapshot_hash=source_snapshot_hash,
+        previous_snapshot_hash=previous_snapshot_hash,
+        previous_signal_labels=previous_signal_labels,
+        retrospective_required=retrospective_required,
+    )

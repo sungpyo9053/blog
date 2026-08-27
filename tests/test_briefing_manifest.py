@@ -15,7 +15,7 @@ from scripts.briefing_manifest import (
     build_briefing_manifest,
     collect_run_publications,
 )
-from scripts.run_daily_pipeline import write_and_sync_briefing_manifest
+from scripts.run_daily_pipeline import PipelineError, write_and_sync_briefing_manifest
 
 
 RUN_ID = "20260827T170000Z-1234567890"
@@ -178,7 +178,15 @@ class BriefingManifestTests(unittest.TestCase):
                 generated_at=datetime(2026, 8, 27, 17, 30, tzinfo=UTC),
             )
 
-            self.assertTrue(payload["complete"])
+            self.assertFalse(payload["complete"])
+            self.assertEqual(
+                payload["completion"],
+                {
+                    "analysis_complete": False,
+                    "publications_complete": True,
+                    "published_count": 2,
+                },
+            )
             self.assertEqual(payload["collection"]["observed_topic_count"], 2)
             self.assertEqual(payload["collection"]["status"], "fresh")
             self.assertEqual(payload["collection"]["age_minutes"], 80)
@@ -231,7 +239,7 @@ class BriefingManifestTests(unittest.TestCase):
             self.assertEqual(rows[0]["post_id"], 11)
             self.assertEqual(rows[0]["topic_id"], "topic-a")
 
-    def test_wordpress_manifest_sync_failure_never_fails_publication_run(self):
+    def test_wordpress_manifest_sync_failure_fails_required_report_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp)
             plans = [candidate("주제 A", "생활"), candidate("주제 B", "경제")]
@@ -264,18 +272,85 @@ class BriefingManifestTests(unittest.TestCase):
                     encoding="utf-8",
                 )
             logger = logging.getLogger("briefing-manifest-test")
+            complete_payload = {
+                "complete": True,
+                "completion": {
+                    "analysis_complete": True,
+                    "publications_complete": True,
+                    "published_count": 2,
+                },
+                "published": [{"post_id": 1}, {"post_id": 2}],
+            }
             with mock.patch(
+                "scripts.run_daily_pipeline.build_briefing_manifest",
+                return_value=complete_payload,
+            ), mock.patch(
                 "scripts.run_daily_pipeline.WordPressConfig.from_environment",
                 side_effect=ConfigurationError("missing credentials"),
-            ):
-                artifact = write_and_sync_briefing_manifest(
+            ), self.assertRaises(PipelineError):
+                write_and_sync_briefing_manifest(
                     run_id=RUN_ID,
                     run_directory=run,
                     plan_document={"candidates": plans, "top2": plans},
                     logger=logger,
                 )
+            artifact = run / "briefing-manifest.json"
             self.assertTrue(artifact.is_file())
             self.assertTrue(json.loads(artifact.read_text())["complete"])
+
+    def test_incomplete_manifest_never_reaches_wordpress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            payload = {
+                "complete": False,
+                "completion": {
+                    "analysis_complete": False,
+                    "publications_complete": True,
+                    "published_count": 2,
+                },
+                "published": [{"post_id": 1}, {"post_id": 2}],
+            }
+            with mock.patch(
+                "scripts.run_daily_pipeline.build_briefing_manifest",
+                return_value=payload,
+            ), mock.patch(
+                "scripts.run_daily_pipeline.WordPressClient.sync_briefing_manifest"
+            ) as sync, self.assertRaises(PipelineError):
+                write_and_sync_briefing_manifest(
+                    run_id=RUN_ID,
+                    run_directory=run,
+                    plan_document={},
+                    logger=logging.getLogger("briefing-incomplete-test"),
+                )
+            sync.assert_not_called()
+
+    def test_wordpress_must_confirm_manifest_storage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            payload = {
+                "complete": True,
+                "completion": {
+                    "analysis_complete": True,
+                    "publications_complete": True,
+                    "published_count": 2,
+                },
+                "published": [{"post_id": 1}, {"post_id": 2}],
+            }
+            with mock.patch(
+                "scripts.run_daily_pipeline.build_briefing_manifest",
+                return_value=payload,
+            ), mock.patch(
+                "scripts.run_daily_pipeline.WordPressConfig.from_environment"
+            ), mock.patch(
+                "scripts.run_daily_pipeline.WordPressClient.sync_briefing_manifest",
+                return_value={"stored": False},
+            ), self.assertRaises(PipelineError):
+                write_and_sync_briefing_manifest(
+                    run_id=RUN_ID,
+                    run_directory=run,
+                    plan_document={},
+                    logger=logging.getLogger("briefing-storage-test"),
+                )
 
 
 if __name__ == "__main__":

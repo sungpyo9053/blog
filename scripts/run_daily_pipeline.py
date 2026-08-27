@@ -1876,7 +1876,22 @@ def daily_briefing_stage(
     topics_path: Path,
     analysis_path: Path,
     editorial_source_path: Path,
+    previous_briefing_path: Path | None = None,
+    previous_snapshot_hash: str = "",
 ) -> Stage:
+    if previous_briefing_path:
+        retrospective_prompt = (
+            f" 이전 보고서 스냅샷 {str(previous_briefing_path)!r}의 core_signals 3개를 "
+            "현재 수집 자료와 필요한 공식 원문으로 각각 재검증하세요. retrospective.status는 "
+            "available, previous_generated_at은 스냅샷 값, previous_snapshot_hash는 "
+            f"{previous_snapshot_hash!r}로 기록하고 items는 이전 순서 1..3을 유지하세요. "
+            "판정은 confirmed, changed, unresolved 중 하나이며 새 evidence URL 없이 확정하지 마세요."
+        )
+    else:
+        retrospective_prompt = (
+            " 비교할 이전 보고서가 없으므로 retrospective.status는 baseline, "
+            "previous_generated_at과 previous_snapshot_hash는 빈 문자열, items는 빈 배열로 기록하세요."
+        )
     return Stage(
         "Daily Briefing Analyst",
         PROJECT_ROOT / "agents/daily-briefing-agent.md",
@@ -1885,11 +1900,65 @@ def daily_briefing_stage(
             f"기술 뉴스 cache {str(editorial_source_path)!r}와 Planner 후보 {str(topics_path)!r}를 "
             "읽고 중복 사건을 합친 뒤, 가이드의 핵심 신호·키워드 방향·영향 매트릭스·"
             "액션 타임라인·종합 인사이트·필독 5를 생성하세요. "
+            + retrospective_prompt
+            + " "
             f"결과 JSON은 {str(analysis_path)!r}에만 저장하세요. "
             "원문 기사 나열을 보고서 본문으로 대체하지 말고 각 판단에 근거 URL과 구체적인 "
             "행동을 연결하세요. WordPress와 다른 외부 시스템은 변경하지 마세요."
         ),
     )
+
+
+def freeze_previous_daily_briefing(
+    *, run_id: str, run_directory: Path
+) -> tuple[Path | None, str, list[str]]:
+    """Freeze the latest valid prior analysis as the retrospective input."""
+    try:
+        current_report_date = (
+            datetime.strptime(run_id[:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+            + timedelta(hours=9)
+        ).date()
+    except ValueError:
+        return None, "", []
+    previous_report_date = current_report_date - timedelta(days=1)
+
+    def is_previous_report(path: Path) -> bool:
+        try:
+            candidate_date = (
+                datetime.strptime(path.parent.name[:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+                + timedelta(hours=9)
+            ).date()
+        except ValueError:
+            return False
+        return candidate_date == previous_report_date
+
+    candidates = sorted(
+        (
+            path
+            for path in RUNS_DIR.glob("*/daily-briefing-analysis.json")
+            if path.parent != run_directory and is_previous_report(path)
+        ),
+        key=lambda path: path.parent.name,
+        reverse=True,
+    )
+    for candidate_path in candidates:
+        try:
+            previous = load_daily_briefing(candidate_path)
+        except DailyBriefingError:
+            continue
+        snapshot = {
+            "contract_version": "daily-briefing-retrospective-input.v1",
+            "previous_run_id": candidate_path.parent.name,
+            "generated_at": previous["generated_at"],
+            "headline": previous["headline"],
+            "core_signals": previous["core_signals"],
+        }
+        destination = run_directory / "previous-daily-briefing.json"
+        atomic_write_manifest(destination, snapshot)
+        snapshot_hash = hashlib.sha256(destination.read_bytes()).hexdigest()
+        labels = [str(row["label"]) for row in snapshot["core_signals"]]
+        return destination, snapshot_hash, labels
+    return None, "", []
 
 
 def run_daily_briefing_analysis(
@@ -1900,11 +1969,15 @@ def run_daily_briefing_analysis(
     topics_path: Path,
     logger: logging.Logger,
     timeout_seconds: int,
-) -> Path | None:
-    """Generate one optional analysis artifact without controlling publication."""
+) -> Path:
+    """Generate the required daily briefing analysis before publication."""
     analysis_path = run_directory / "daily-briefing-analysis.json"
     source_snapshot_path = run_directory / "editorial-sources-snapshot.json"
     try:
+        previous_path, previous_hash, previous_labels = freeze_previous_daily_briefing(
+            run_id=run_id,
+            run_directory=run_directory,
+        )
         if not source_snapshot_path.is_file():
             source_payload = json.loads(DEFAULT_EDITORIAL_SOURCE_CACHE.read_text(encoding="utf-8"))
             atomic_write_manifest(source_snapshot_path, source_payload)
@@ -1917,6 +1990,9 @@ def run_daily_briefing_analysis(
                 payload = load_daily_briefing(
                     analysis_path,
                     source_snapshot_hash=source_hash,
+                    previous_snapshot_hash=previous_hash,
+                    previous_signal_labels=previous_labels or None,
+                    retrospective_required=True,
                 )
             except DailyBriefingError:
                 invalid_path = analysis_path.with_suffix(".invalid.json")
@@ -1932,6 +2008,8 @@ def run_daily_briefing_analysis(
                     topics_path,
                     analysis_path,
                     source_snapshot_path,
+                    previous_path,
+                    previous_hash,
                 ),
                 logger,
                 timeout_seconds=timeout_seconds,
@@ -1939,22 +2017,29 @@ def run_daily_briefing_analysis(
             payload = load_daily_briefing(
                 analysis_path,
                 source_snapshot_hash=source_hash,
+                previous_snapshot_hash=previous_hash,
+                previous_signal_labels=previous_labels or None,
+                retrospective_required=True,
             )
         logger.info(
-            "daily_briefing event=ready failed=false run_id=%s signals=%d must_read=%d artifact=%s",
+            "daily_briefing event=ready failed=false run_id=%s signals=%d must_read=%d "
+            "retrospective=%s artifact=%s",
             run_id,
             len(payload["core_signals"]),
             len(payload["must_read"]),
+            payload["retrospective"]["status"],
             analysis_path,
         )
         return analysis_path
     except (DailyBriefingError, PipelineError, SearchSignalError, OSError, ValueError) as exc:
-        logger.warning(
-            "daily_briefing event=failed continuing=true run_id=%s reason_type=%s",
+        logger.error(
+            "daily_briefing event=failed failed=true continuing=false run_id=%s reason_type=%s",
             run_id,
             type(exc).__name__,
         )
-        return None
+        raise PipelineError(
+            f"필수 일일 보고서 생성에 실패했습니다: {type(exc).__name__}"
+        ) from exc
 
 
 def planner_retry_stage(stage: Stage, topics_path: Path) -> Stage:
@@ -2320,7 +2405,7 @@ def write_and_sync_briefing_manifest(
     plan_document: dict[str, Any],
     logger: logging.Logger,
 ) -> Path:
-    """Persist the end-to-end observer artifact and sync it without blocking posts."""
+    """Persist and synchronise the required end-to-end briefing manifest."""
     destination = run_directory / "briefing-manifest.json"
     editorial_source_path = run_directory / "editorial-sources-snapshot.json"
     if not editorial_source_path.is_file():
@@ -2344,24 +2429,38 @@ def write_and_sync_briefing_manifest(
         destination,
     )
     if not payload["complete"]:
-        logger.warning(
-            "briefing_manifest event=sync_skipped continuing=true reason=incomplete_run"
+        completion = payload.get("completion", {})
+        logger.error(
+            "briefing_manifest event=incomplete failed=true continuing=false "
+            "analysis_complete=%s publications_complete=%s",
+            bool(completion.get("analysis_complete")),
+            bool(completion.get("publications_complete")),
         )
-        return destination
+        raise PipelineError("필수 브리핑 매니페스트가 완전하지 않습니다")
     try:
         config = WordPressConfig.from_environment(PROJECT_ROOT / ".env")
         response = WordPressClient(config).sync_briefing_manifest(payload)
+        stored = isinstance(response, dict) and response.get("stored") is True
         logger.info(
             "briefing_manifest event=synced failed=false run_id=%s stored=%s",
             run_id,
-            bool(response.get("stored")) if isinstance(response, dict) else False,
+            stored,
         )
+        if not stored:
+            raise WordPressError(
+                "briefing_manifest_storage",
+                "WordPress did not confirm briefing manifest storage",
+            )
     except (ConfigurationError, WordPressError, OSError, ValueError) as exc:
-        logger.warning(
-            "briefing_manifest event=sync_failed continuing=true run_id=%s reason_type=%s",
+        logger.error(
+            "briefing_manifest event=sync_failed failed=true continuing=false "
+            "run_id=%s reason_type=%s",
             run_id,
             type(exc).__name__,
         )
+        raise PipelineError(
+            f"필수 브리핑 매니페스트 동기화에 실패했습니다: {type(exc).__name__}"
+        ) from exc
     return destination
 
 

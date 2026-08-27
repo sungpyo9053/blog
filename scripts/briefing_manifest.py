@@ -312,11 +312,18 @@ def build_briefing_manifest(
         "collection_checked_at": collection["checked_at"],
         "shadow_source_snapshot_hash": shadow.get("source_snapshot_hash", ""),
     }
+    analysis_complete = bool(analysis)
+    publications_complete = len(public_posts) == 2
     return {
         "contract_version": CONTRACT_VERSION,
         "generated_at": generated.isoformat(),
         "run_id": run_id,
-        "complete": len(public_posts) == 2,
+        "complete": analysis_complete and publications_complete,
+        "completion": {
+            "analysis_complete": analysis_complete,
+            "publications_complete": publications_complete,
+            "published_count": len(public_posts),
+        },
         "source_snapshot_hash": _sha256(source_contract),
         "collection": collection,
         "editorial_sources": editorial_sources,

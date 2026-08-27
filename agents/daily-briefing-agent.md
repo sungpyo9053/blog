@@ -29,8 +29,17 @@ tools:
 지정된 `daily-briefing-analysis.json` 하나만 생성한다. 설명용 Markdown이나 다른 파일을
 쓰지 않는다. JSON은 다음 필드를 정확히 포함한다.
 
+이 산출물은 일일 발행의 필수 게이트다. 파일 누락, 스키마 위반, 근거 누락 또는
+`source_snapshot_hash` 불일치가 있으면 Publisher 단계로 진행하지 않는다.
+
 - `contract_version`: `daily-briefing-analysis.v1`
 - `generated_at`, `source_snapshot_hash`, `headline`, `summary`
+- `retrospective`: 전일 보고서가 없으면 `status: baseline`, 빈
+  `previous_generated_at`, `previous_snapshot_hash`, `items`. 전일 스냅샷이 있으면
+  `status: available`, 스냅샷의 생성 시각과 전달받은 SHA-256을 그대로 기록하고
+  `items`는 이전 `core_signals` 순서대로 정확히 3개를 작성한다.
+- `retrospective.items`: `previous_signal_index` 1~3, 원문 그대로의 `previous_label`,
+  `previous_detail`, `verdict`, `current_status`, `action`, `evidence_urls`
 - `core_signals`: 정확히 3개. `metric`, `label`, `detail`, `action`, `tone`, `evidence_urls`
 - `keywords`: 정확히 7개. `keyword`, 0~10 정수 `score`, `direction`, `basis`
 - `matrix`: 정확히 4개. `quadrant`, `label`, `meaning`, `action`, `evidence_urls`
@@ -53,11 +62,16 @@ tools:
 - quadrant: `focus`, `future`, `apply`, `watch`를 각각 한 번
 - horizon: `today`, `week`, `month`, `year`를 각각 한 번
 - category: `AI/ML 핵심`, `개발 트렌드`, `AI 공식 블로그`, `국내 IT`, `국내 시사`
+- retrospective verdict: `confirmed`, `changed`, `unresolved`
 
 `metric`은 근거로 확인된 수치가 있을 때만 수치를 사용한다. 그렇지 않으면 `보안`,
 `호환성`, `비용`, `운영`처럼 짧은 신호어를 사용한다. 키워드 score는 실제 검색량이
 아니라 오늘 브리핑 안에서의 상대적 중요도다. direction은 캐시의 반복·시각 관측이나
 공식 변화가 없으면 `stable`로 둔다.
+
+전일 판단을 단순 재서술하지 않는다. 오늘 수집 자료나 새 공식 원문으로 상태를 다시
+확인하고, 변화가 확인되지 않거나 근거가 부족하면 `unresolved`로 둔다. 검색 노출,
+체류시간, 클릭률처럼 아직 입력으로 제공되지 않은 성과를 추정하지 않는다.
 
 필독 5의 `why_it_matters`는 제목을 바꿔 말하지 말고 실제 영향과 선택을 설명한다.
 `action`은 독자가 오늘 확인할 문서·설정·조건을 구체적으로 적는다.
