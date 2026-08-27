@@ -39,8 +39,12 @@ tools:
 - `themes`: 3~4개. `title`, `analysis`, `action`, `evidence_urls`
 - `developer_insights`: 3~4개. `title`, `analysis`, `action`, `evidence_urls`
 - `watchlist`: 2~3개. `title`, `reason`, `trigger`, `evidence_urls`
-- `must_read`: 정확히 5개. 활성 카테고리별 하나씩 `title`, `category`, `source`,
-  `source_url`, `why_it_matters`, `action`
+- `source_title_translations`: 입력 cache에서 활성 카테고리별 앞 10개 안에 드는
+  영어 제목마다 `source_url`, `korean_title`. 원문 제목의 제품명·버전·수치는
+  보존하고 자연스러운 한국어 보조 제목으로 번역한다. 이미 한국어인 제목은 제외한다.
+- `must_read`: 정확히 5개. 활성 카테고리별 하나씩 원문 그대로의 `title`, 영어
+  제목일 때의 `korean_title`, `category`, `source`, `source_url`,
+  `why_it_matters`, `action`
 
 허용 값:
 
@@ -57,3 +61,5 @@ tools:
 
 필독 5의 `why_it_matters`는 제목을 바꿔 말하지 말고 실제 영향과 선택을 설명한다.
 `action`은 독자가 오늘 확인할 문서·설정·조건을 구체적으로 적는다.
+번역 제목은 원문을 대체하지 않는다. 고유명사·모델명·버전·수치를 바꾸거나 새로운
+사실을 덧붙이지 말고, UI에서 원문 아래에 붙는 한국어 보조 제목으로만 작성한다.

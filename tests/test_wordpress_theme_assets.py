@@ -54,7 +54,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.3.4", php)
+        self.assertIn("Version: 5.4.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -179,7 +179,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.3.4", php)
+        self.assertIn("Version: 5.4.0", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -209,6 +209,9 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("hunt_news_sanitize_daily_analysis", php)
         self.assertIn("오늘의 종합 분석", php)
         self.assertIn("why_it_matters", php)
+        self.assertIn("source_title_translations", php)
+        self.assertIn("hunt-news-source-card__translated", php)
+        self.assertIn(".hunt-news-source-card__translated", css)
         self.assertIn(".hunt-news-synthesis", css)
         self.assertIn(".hunt-news-source-board { order: 8; }", css)
         self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr))", css)

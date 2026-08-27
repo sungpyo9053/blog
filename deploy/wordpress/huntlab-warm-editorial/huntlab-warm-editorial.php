@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.3.4
+ * Version: 5.4.0
  * Author: Hunt News
  */
 
@@ -836,7 +836,7 @@ function hunt_news_sanitize_daily_analysis( $payload ) {
 		'summary' => sanitize_textarea_field( (string) ( $payload['summary'] ?? '' ) ),
 		'core_signals' => array(), 'keywords' => array(), 'matrix' => array(), 'timeline' => array(),
 		'insight_cards' => array(), 'themes' => array(), 'developer_insights' => array(),
-		'watchlist' => array(), 'must_read' => array(),
+		'watchlist' => array(), 'source_title_translations' => array(), 'must_read' => array(),
 	);
 	foreach ( array_slice( (array) ( $payload['core_signals'] ?? array() ), 0, 3 ) as $row ) {
 		$safe['core_signals'][] = array(
@@ -891,11 +891,20 @@ function hunt_news_sanitize_daily_analysis( $payload ) {
 			'evidence_urls' => $safe_urls( $row['evidence_urls'] ?? array() ),
 		);
 	}
+	$translated_urls = array();
+	foreach ( array_slice( (array) ( $payload['source_title_translations'] ?? array() ), 0, 60 ) as $row ) {
+		$source_url   = esc_url_raw( (string) ( $row['source_url'] ?? '' ) );
+		$korean_title = sanitize_text_field( (string) ( $row['korean_title'] ?? '' ) );
+		if ( 0 !== strpos( $source_url, 'https://' ) || '' === $korean_title || isset( $translated_urls[ $source_url ] ) ) { continue; }
+		$translated_urls[ $source_url ] = true;
+		$safe['source_title_translations'][] = array( 'source_url' => $source_url, 'korean_title' => $korean_title );
+	}
 	foreach ( array_slice( (array) ( $payload['must_read'] ?? array() ), 0, 5 ) as $row ) {
 		$source_url = esc_url_raw( (string) ( $row['source_url'] ?? '' ) );
 		if ( 0 !== strpos( $source_url, 'https://' ) ) { continue; }
 		$safe['must_read'][] = array(
 			'title' => sanitize_text_field( (string) ( $row['title'] ?? '' ) ),
+			'korean_title' => sanitize_text_field( (string) ( $row['korean_title'] ?? '' ) ),
 			'category' => sanitize_text_field( (string) ( $row['category'] ?? '' ) ),
 			'source' => sanitize_text_field( (string) ( $row['source'] ?? '' ) ),
 			'source_url' => $source_url,
@@ -1080,6 +1089,13 @@ function hunt_news_home_sections() {
 	}
 	$source_groups = array();
 	$must_read_items = array();
+	$source_title_translations = array();
+	foreach ( (array) ( $analysis['source_title_translations'] ?? array() ) as $translation ) {
+		$translation_url = (string) ( $translation['source_url'] ?? '' );
+		if ( $translation_url ) {
+			$source_title_translations[ $translation_url ] = (string) ( $translation['korean_title'] ?? '' );
+		}
+	}
 	if ( ! $is_category && $manifest ) {
 		foreach ( (array) ( $manifest['editorial_sources']['items'] ?? array() ) as $source_item ) {
 			$source_category = (string) ( $source_item['category'] ?? '' );
@@ -1093,6 +1109,7 @@ function hunt_news_home_sections() {
 					'category' => (string) ( $item['category'] ?? '' ),
 					'source' => (string) ( $item['source'] ?? '' ),
 					'title' => (string) ( $item['title'] ?? '' ),
+					'korean_title' => (string) ( $item['korean_title'] ?? ( $source_title_translations[ (string) ( $item['source_url'] ?? '' ) ] ?? '' ) ),
 					'url' => (string) ( $item['source_url'] ?? '' ),
 					'published_at' => (string) ( $analysis['generated_at'] ?? '' ),
 					'why_it_matters' => (string) ( $item['why_it_matters'] ?? '' ),
@@ -1303,6 +1320,7 @@ function hunt_news_home_sections() {
 							<b class="hunt-news-brief-card__rank">#<?php echo esc_html( (string) ( $index + 1 ) ); ?></b>
 							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
 							<h4><a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></a></h4>
+							<?php if ( ! empty( $item['korean_title'] ) && (string) $item['korean_title'] !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( (string) $item['korean_title'] ); ?></p><?php endif; ?>
 							<p><?php echo esc_html( ! empty( $item['why_it_matters'] ) ? (string) $item['why_it_matters'] : ( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 공식 원문과 독립 출처를 확인하세요.' ) ); ?></p>
 							<?php if ( ! empty( $item['action'] ) ) : ?><strong class="hunt-news-brief-card__decision">→ <?php echo esc_html( (string) $item['action'] ); ?></strong><?php endif; ?>
 							<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">근거 원문 <b aria-hidden="true">→</b></a>
@@ -1331,7 +1349,7 @@ function hunt_news_home_sections() {
 				<section class="hunt-news-source-column">
 					<h4><?php echo esc_html( $source_category ); ?></h4>
 					<?php foreach ( array_slice( $source_groups[ $source_category ], 0, 10 ) as $source_item ) : ?>
-					<article><div><span><?php echo esc_html( $source_item['source'] ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( $source_item['published_at'] ) ) ); ?></time></div><h5><a href="<?php echo esc_url( $source_item['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $source_item['title'] ); ?></a></h5></article>
+					<article><div><span><?php echo esc_html( $source_item['source'] ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( $source_item['published_at'] ) ) ); ?></time></div><h5><a href="<?php echo esc_url( $source_item['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $source_item['title'] ); ?></a></h5><?php $translated_title = (string) ( $source_title_translations[ (string) $source_item['url'] ] ?? '' ); if ( $translated_title && $translated_title !== (string) $source_item['title'] ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( $translated_title ); ?></p><?php endif; ?></article>
 					<?php endforeach; ?>
 				</section>
 				<?php endforeach; ?>

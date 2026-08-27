@@ -49,8 +49,11 @@ def analysis_payload(source_hash: str = "a" * 64):
             {"title": f"주시 {index}", "reason": "후속 발표 대기", "trigger": "공식 릴리스", "evidence_urls": evidence}
             for index in range(2)
         ],
+        "source_title_translations": [
+            {"source_url": "https://example.com/english", "korean_title": "에이전트 평가를 운영 게이트로 전환"}
+        ],
         "must_read": [
-            {"title": category, "category": category, "source": "공식 원문", "source_url": f"https://example.com/{index}", "why_it_matters": "선택이 달라진다", "action": "원문 조건을 확인한다"}
+            {"title": category, "korean_title": "", "category": category, "source": "공식 원문", "source_url": f"https://example.com/{index}", "why_it_matters": "선택이 달라진다", "action": "원문 조건을 확인한다"}
             for index, category in enumerate(("AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"))
         ],
     }
@@ -108,7 +111,17 @@ class DailyBriefingTests(unittest.TestCase):
 
             self.assertEqual(len(safe["core_signals"]), 3)
             self.assertEqual(len(safe["must_read"]), 5)
+            self.assertEqual(safe["source_title_translations"][0]["korean_title"], "에이전트 평가를 운영 게이트로 전환")
             self.assertEqual({row["category"] for row in safe["must_read"]}, {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"})
+
+    def test_rejects_non_korean_source_title_translation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            payload["source_title_translations"][0]["korean_title"] = "English only"
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaises(DailyBriefingError):
+                load_daily_briefing(path, source_snapshot_hash="a" * 64)
 
     def test_rejects_snapshot_drift_and_missing_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -89,7 +89,8 @@ Planner 후보를 읽고 `daily-briefing-analysis.json`을 생성합니다. 이 
 올해 말 행동, 종합 테마, 개발자 인사이트, 주시 항목과 카테고리별 필독 5를 근거 URL과
 함께 저장합니다. 분석 실패·형식 오류·snapshot 불일치는 경고만 남기며 기존 TOP2
 Writer·Reviewer·Publisher를 막지 않습니다. 검증된 분석만 날짜별 WordPress 브리핑에
-포함되고, 원문 수집 카드는 보고서 맨 아래 참고자료로 렌더링됩니다.
+포함되고, 원문 수집 카드는 보고서 맨 아래 참고자료로 렌더링됩니다. 영어 원문 제목은
+그대로 보존하고, 분석기가 만든 한국어 보조 제목을 아래에 함께 표시합니다.
 분석 시작 시 `editorial-sources-snapshot.json`을 run 디렉터리에 원자적으로 고정하므로,
 실행 중 매시간 수집기가 최신 cache를 갱신해도 분석과 WordPress manifest의 hash는
 같은 입력을 가리킵니다.

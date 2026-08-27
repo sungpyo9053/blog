@@ -138,6 +138,24 @@ def validate_daily_briefing(payload: Any, *, source_snapshot_hash: str = "") -> 
             "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
         })
 
+    translations = payload.get("source_title_translations", [])
+    if not isinstance(translations, list) or not all(isinstance(row, dict) for row in translations):
+        raise DailyBriefingError("source_title_translations must be an object list")
+    safe["source_title_translations"] = []
+    translated_urls: set[str] = set()
+    for row in translations[:60]:
+        source_url = _text(row.get("source_url"), "source_url", limit=500)
+        korean_title = _text(row.get("korean_title"), "korean_title", limit=220)
+        if not source_url.startswith("https://") or source_url in translated_urls:
+            raise DailyBriefingError("source title translations require unique https URLs")
+        if not any("가" <= char <= "힣" for char in korean_title):
+            raise DailyBriefingError("korean_title must contain Korean text")
+        translated_urls.add(source_url)
+        safe["source_title_translations"].append({
+            "source_url": source_url,
+            "korean_title": korean_title,
+        })
+
     safe["must_read"] = []
     categories: set[str] = set()
     for row in _rows(payload, "must_read", 5):
@@ -150,6 +168,7 @@ def validate_daily_briefing(payload: Any, *, source_snapshot_hash: str = "") -> 
             raise DailyBriefingError("must_read source_url must use https")
         safe["must_read"].append({
             "title": _text(row.get("title"), "title", limit=220),
+            "korean_title": str(row.get("korean_title") or "").strip()[:220],
             "category": category,
             "source": _text(row.get("source"), "source", limit=80),
             "source_url": source_url,
