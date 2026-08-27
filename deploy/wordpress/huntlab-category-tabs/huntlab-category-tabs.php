@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Hunt News Category Tabs
- * Description: Adds fast category navigation for Hunt News readers.
- * Version: 3.0.0
+ * Description: Adds fast briefing navigation for Hunt News readers.
+ * Version: 3.1.0
  * Author: Hunt News
  */
 
@@ -11,95 +11,48 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Return category slugs that received a published post during the last 3 days.
+ * Return the visible Hunt News briefing navigation items.
  *
- * @return array<string, bool>
- */
-function huntlab_category_tabs_recent_slugs() {
-	static $recent_slugs = null;
-
-	if ( null !== $recent_slugs ) {
-		return $recent_slugs;
-	}
-
-	$recent_slugs = array();
-	$cutoff       = gmdate( 'Y-m-d H:i:s', current_time( 'timestamp', true ) - ( 3 * DAY_IN_SECONDS ) );
-	$post_ids     = get_posts(
-		array(
-			'post_type'           => 'post',
-			'post_status'         => 'publish',
-			'posts_per_page'      => 20,
-			'fields'              => 'ids',
-			'orderby'             => 'date',
-			'order'               => 'DESC',
-			'ignore_sticky_posts' => true,
-			'no_found_rows'       => true,
-			'date_query'          => array(
-				array(
-					'column'    => 'post_date_gmt',
-					'after'     => $cutoff,
-					'inclusive' => true,
-				),
-			),
-		)
-	);
-
-	foreach ( $post_ids as $post_id ) {
-		foreach ( get_the_category( $post_id ) as $category ) {
-			$recent_slugs[ (string) $category->slug ] = true;
-		}
-	}
-
-	return $recent_slugs;
-}
-
-/**
- * Return the visible Hunt News category navigation items.
- *
- * @return array<int, array{label:string,url:string,slug:string}>
+ * @return array<int, array{label:string,url:string,slug:string,meta:string}>
  */
 function huntlab_category_tabs_items() {
-	$post_counts  = wp_count_posts( 'post' );
-	$recent_slugs = huntlab_category_tabs_recent_slugs();
-	$items = array(
+	$latest_briefings = get_posts(
 		array(
-			'label' => '전체',
-			'url'   => home_url( '/' ),
-			'slug'  => 'all',
-			'count' => isset( $post_counts->publish ) ? (int) $post_counts->publish : 0,
-			'is_new' => false,
+			'post_type'      => 'hunt_briefing',
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+			'no_found_rows'  => true,
+		)
+	);
+	$today_url = $latest_briefings ? get_permalink( $latest_briefings[0] ) : home_url( '/#hunt-news-briefing-board' );
+	$archive_url = get_post_type_archive_link( 'hunt_briefing' );
+	if ( ! $archive_url ) {
+		$archive_url = home_url( '/briefing/' );
+	}
+	$source_url = $latest_briefings ? trailingslashit( get_permalink( $latest_briefings[0] ) ) . '#hunt-news-source-title' : home_url( '/#hunt-news-source-title' );
+
+	return array(
+		array(
+			'label' => '오늘 브리핑',
+			'url'   => $today_url,
+			'slug'  => 'today',
+			'meta'  => '최신',
+		),
+		array(
+			'label' => '날짜 아카이브',
+			'url'   => $archive_url,
+			'slug'  => 'archive',
+			'meta'  => '날짜별',
+		),
+		array(
+			'label' => '원문 모아보기',
+			'url'   => $source_url,
+			'slug'  => 'sources',
+			'meta'  => '수집원',
 		),
 	);
-
-	$categories = array(
-		'ai-ml-core'            => 'AI/ML 핵심',
-		'development-trends'    => '개발 트렌드',
-		'ai-official-blogs'     => 'AI 공식 블로그',
-		'korea-it'              => '국내 IT',
-		'korea-current-affairs' => '국내 시사',
-	);
-
-	foreach ( $categories as $slug => $label ) {
-		$category = get_category_by_slug( $slug );
-		if ( ! $category ) {
-			continue;
-		}
-
-		$category_url = get_category_link( $category->term_id );
-		if ( is_wp_error( $category_url ) ) {
-			continue;
-		}
-
-		$items[] = array(
-			'label' => $label,
-			'url'   => $category_url,
-			'slug'  => $slug,
-			'count' => (int) $category->count,
-			'is_new' => isset( $recent_slugs[ $slug ] ),
-		);
-	}
-
-	return $items;
 }
 
 /**
@@ -108,19 +61,11 @@ function huntlab_category_tabs_items() {
  * @return string
  */
 function huntlab_category_tabs_active_slug() {
-	if ( is_category() ) {
-		$category = get_queried_object();
-		return isset( $category->slug ) ? (string) $category->slug : '';
+	if ( is_post_type_archive( 'hunt_briefing' ) ) {
+		return 'archive';
 	}
 
-	if ( is_single() ) {
-		$post_categories = get_the_category();
-		if ( $post_categories ) {
-			return (string) $post_categories[0]->slug;
-		}
-	}
-
-	return ( is_home() || is_front_page() ) ? 'all' : '';
+	return ( is_home() || is_front_page() || is_singular( 'hunt_briefing' ) ) ? 'today' : '';
 }
 
 /**
@@ -133,25 +78,18 @@ function huntlab_render_category_tabs() {
 
 	$active_slug = huntlab_category_tabs_active_slug();
 	?>
-	<nav id="huntlab-category-tabs" class="huntlab-category-tabs" aria-label="글 카테고리">
+	<nav id="huntlab-category-tabs" class="huntlab-category-tabs" aria-label="Hunt News 브리핑 탐색">
 		<?php foreach ( huntlab_category_tabs_items() as $item ) :
-			$aria_label = sprintf(
-				'%1$s, 글 %2$d개%3$s',
-				$item['label'],
-				$item['count'],
-				$item['is_new'] ? ', 최근 3일 내 새 글 있음' : ''
-			);
+			$aria_label = $item['label'] . ', ' . $item['meta'];
 			?>
 			<a class="huntlab-category-tabs__link<?php echo $active_slug === $item['slug'] ? ' is-active' : ''; ?>"
 				href="<?php echo esc_url( $item['url'] ); ?>"
+				data-hunt-news-nav="<?php echo esc_attr( $item['slug'] ); ?>"
 				aria-label="<?php echo esc_attr( $aria_label ); ?>"
 				<?php echo $active_slug === $item['slug'] ? 'aria-current="page"' : ''; ?>>
 				<span class="huntlab-category-tabs__label"><?php echo esc_html( $item['label'] ); ?></span>
 				<span class="huntlab-category-tabs__meta" aria-hidden="true">
-					<span class="huntlab-category-tabs__count">(<?php echo esc_html( (string) $item['count'] ); ?>)</span>
-					<?php if ( $item['is_new'] ) : ?>
-						<span class="huntlab-category-tabs__new" title="최근 3일 내 새 글">N</span>
-					<?php endif; ?>
+					<span class="huntlab-category-tabs__count"><?php echo esc_html( $item['meta'] ); ?></span>
 				</span>
 			</a>
 		<?php endforeach; ?>
@@ -177,7 +115,7 @@ add_action( 'wp_head', 'huntlab_category_tabs_styles', 30 );
 function huntlab_category_tabs_script() {
 	?>
 	<script id="huntlab-category-tabs-js">
-	document.addEventListener('DOMContentLoaded',function(){var nav=document.getElementById('huntlab-category-tabs');var intro=document.getElementById('huntlab-home-intro');var header=document.querySelector('#masthead,.site-header');if(nav&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',nav);}else if(nav&&header&&header.parentNode){header.insertAdjacentElement('afterend',nav);}});
+	document.addEventListener('DOMContentLoaded',function(){var nav=document.getElementById('huntlab-category-tabs');var intro=document.getElementById('huntlab-home-intro');var header=document.querySelector('#masthead,.site-header');if(nav&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',nav);}else if(nav&&header&&header.parentNode){header.insertAdjacentElement('afterend',nav);}if(!nav){return;}var links=Array.prototype.slice.call(nav.querySelectorAll('[data-hunt-news-nav]'));var sync=function(){if(window.location.hash==='#hunt-news-source-title'){links.forEach(function(link){var active=link.getAttribute('data-hunt-news-nav')==='sources';link.classList.toggle('is-active',active);if(active){link.setAttribute('aria-current','location');}else{link.removeAttribute('aria-current');}});}};sync();window.addEventListener('hashchange',sync);});
 	</script>
 	<?php
 }

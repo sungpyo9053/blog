@@ -298,18 +298,16 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn('viewBox="0 0 96 96"', svg_text)
         self.assertIn("Hunt News의 강아지 로고", svg_text)
 
-    def test_category_tabs_include_hunt_news_sections(self):
+    def test_category_tabs_include_briefing_navigation(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
-        for slug in (
-            "ai-ml-core",
-            "development-trends",
-            "ai-official-blogs",
-            "korea-it",
-            "korea-current-affairs",
-        ):
-            self.assertIn(slug, php)
-        self.assertNotIn("0 === (int) $category->count", php)
-        self.assertIn("Version: 3.0.0", php)
+        self.assertIn("Version: 3.1.0", php)
+        self.assertIn("오늘 브리핑", php)
+        self.assertIn("날짜 아카이브", php)
+        self.assertIn("원문 모아보기", php)
+        self.assertIn("get_post_type_archive_link( 'hunt_briefing' )", php)
+        self.assertIn("#hunt-news-source-title", php)
+        self.assertIn('data-hunt-news-nav=', php)
+        self.assertIn('aria-label="Hunt News 브리핑 탐색"', php)
         self.assertIn("hunt_news_redirect_legacy_categories", php)
         self.assertIn("wp_safe_redirect( $target, 301 )", php)
         self.assertIn("position:sticky;top:0;overflow-x:auto", php)
@@ -318,15 +316,13 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("margin-left:calc(50% - 50vw)", php)
         self.assertIn("min-height:44px", php)
 
-    def test_category_tabs_show_counts_and_recent_badges(self):
+    def test_category_tabs_remove_empty_category_counts(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
-        self.assertIn("function huntlab_category_tabs_recent_slugs()", php)
-        self.assertIn("3 * DAY_IN_SECONDS", php)
-        self.assertIn("wp_count_posts( 'post' )", php)
-        self.assertIn("'count' => (int) $category->count", php)
-        self.assertIn("huntlab-category-tabs__count", php)
-        self.assertIn("huntlab-category-tabs__new", php)
-        self.assertIn("최근 3일 내 새 글 있음", php)
+        self.assertNotIn("function huntlab_category_tabs_recent_slugs()", php)
+        self.assertNotIn("wp_count_posts( 'post' )", php)
+        self.assertNotIn("'count' => (int) $category->count", php)
+        self.assertNotIn("최근 3일 내 새 글 있음", php)
+        self.assertIn("window.location.hash==='#hunt-news-source-title'", php)
 
 
 if __name__ == "__main__":
