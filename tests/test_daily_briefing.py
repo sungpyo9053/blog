@@ -1,0 +1,89 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from scripts.daily_briefing import DailyBriefingError, load_daily_briefing
+
+
+def analysis_payload(source_hash: str = "a" * 64):
+    evidence = ["https://example.com/evidence"]
+    return {
+        "contract_version": "daily-briefing-analysis.v1",
+        "generated_at": "2026-08-27T13:00:00+09:00",
+        "source_snapshot_hash": source_hash,
+        "headline": "오늘의 기술 변화는 권한과 운영 비용으로 모인다",
+        "summary": "여러 기사를 중복 제거해 개발자의 결정으로 번역했다.",
+        "core_signals": [
+            {"metric": str(index), "label": f"신호 {index}", "detail": "변화 설명", "action": "설정을 확인한다", "tone": tone, "evidence_urls": evidence}
+            for index, tone in enumerate(("green", "amber", "red"), 1)
+        ],
+        "keywords": [
+            {"keyword": f"키워드 {index}", "score": 10 - index, "direction": "stable", "basis": "공식 변화와 반복 관측"}
+            for index in range(7)
+        ],
+        "matrix": [
+            {"quadrant": quadrant, "label": quadrant, "meaning": "영향 설명", "action": "확인 행동", "evidence_urls": evidence}
+            for quadrant in ("focus", "future", "apply", "watch")
+        ],
+        "timeline": [
+            {"horizon": horizon, "action": "실행 항목", "reason": "실행 이유", "evidence_urls": evidence}
+            for horizon in ("today", "week", "month", "year")
+        ],
+        "insight_cards": [
+            {"title": f"인사이트 {index}", "analysis": "종합 분석", "action": "결정 확인", "evidence_urls": evidence}
+            for index in range(3)
+        ],
+        "themes": [
+            {"title": f"테마 {index}", "analysis": "기사 묶음 분석", "action": "문서를 확인", "evidence_urls": evidence}
+            for index in range(3)
+        ],
+        "developer_insights": [
+            {"title": f"개발자 {index}", "analysis": "운영 영향", "action": "환경 점검", "evidence_urls": evidence}
+            for index in range(3)
+        ],
+        "watchlist": [
+            {"title": f"주시 {index}", "reason": "후속 발표 대기", "trigger": "공식 릴리스", "evidence_urls": evidence}
+            for index in range(2)
+        ],
+        "must_read": [
+            {"title": category, "category": category, "source": "공식 원문", "source_url": f"https://example.com/{index}", "why_it_matters": "선택이 달라진다", "action": "원문 조건을 확인한다"}
+            for index, category in enumerate(("AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"))
+        ],
+    }
+
+
+class DailyBriefingTests(unittest.TestCase):
+    def test_validates_complete_evidence_backed_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            safe = load_daily_briefing(path, source_snapshot_hash="a" * 64)
+
+            self.assertEqual(len(safe["core_signals"]), 3)
+            self.assertEqual(len(safe["must_read"]), 5)
+            self.assertEqual({row["category"] for row in safe["must_read"]}, {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"})
+
+    def test_rejects_snapshot_drift_and_missing_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            payload["core_signals"][0]["evidence_urls"] = []
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaises(DailyBriefingError):
+                load_daily_briefing(path, source_snapshot_hash="b" * 64)
+
+    def test_rejects_duplicate_must_read_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            payload["must_read"][4]["category"] = "AI/ML 핵심"
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaises(DailyBriefingError):
+                load_daily_briefing(path, source_snapshot_hash="a" * 64)
+
+
+if __name__ == "__main__":
+    unittest.main()

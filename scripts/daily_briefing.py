@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Validate the evidence-backed daily briefing analysis artifact."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+
+CONTRACT_VERSION = "daily-briefing-analysis.v1"
+CATEGORIES = {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"}
+TONES = {"green", "amber", "red", "violet"}
+DIRECTIONS = {"up", "down", "stable"}
+QUADRANTS = {"focus", "future", "apply", "watch"}
+HORIZONS = {"today", "week", "month", "year"}
+
+
+class DailyBriefingError(RuntimeError):
+    """The analyst artifact is absent or violates its public contract."""
+
+
+def _text(value: Any, field: str, *, limit: int = 500) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise DailyBriefingError(f"{field} is required")
+    return text[:limit]
+
+
+def _urls(value: Any, field: str, *, minimum: int = 1) -> list[str]:
+    if not isinstance(value, list):
+        raise DailyBriefingError(f"{field} must be a list")
+    urls = list(dict.fromkeys(str(item).strip() for item in value if str(item).startswith("https://")))[:4]
+    if len(urls) < minimum:
+        raise DailyBriefingError(f"{field} requires {minimum} evidence URL(s)")
+    return urls
+
+
+def _rows(payload: dict[str, Any], field: str, expected: int | tuple[int, int]) -> list[dict[str, Any]]:
+    rows = payload.get(field)
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise DailyBriefingError(f"{field} must be an object list")
+    low, high = (expected, expected) if isinstance(expected, int) else expected
+    if not low <= len(rows) <= high:
+        raise DailyBriefingError(f"{field} requires {low}..{high} rows")
+    return rows
+
+
+def validate_daily_briefing(payload: Any, *, source_snapshot_hash: str = "") -> dict[str, Any]:
+    if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
+        raise DailyBriefingError("invalid daily briefing contract")
+    artifact_hash = _text(payload.get("source_snapshot_hash"), "source_snapshot_hash", limit=128)
+    if source_snapshot_hash and artifact_hash != source_snapshot_hash:
+        raise DailyBriefingError("source snapshot hash mismatch")
+    safe: dict[str, Any] = {
+        "contract_version": CONTRACT_VERSION,
+        "generated_at": _text(payload.get("generated_at"), "generated_at", limit=40),
+        "source_snapshot_hash": artifact_hash,
+        "headline": _text(payload.get("headline"), "headline", limit=180),
+        "summary": _text(payload.get("summary"), "summary", limit=700),
+    }
+
+    safe["core_signals"] = []
+    for index, row in enumerate(_rows(payload, "core_signals", 3)):
+        tone = _text(row.get("tone"), f"core_signals[{index}].tone", limit=20)
+        if tone not in TONES:
+            raise DailyBriefingError("invalid signal tone")
+        safe["core_signals"].append({
+            "metric": _text(row.get("metric"), "metric", limit=40),
+            "label": _text(row.get("label"), "label", limit=100),
+            "detail": _text(row.get("detail"), "detail", limit=320),
+            "action": _text(row.get("action"), "action", limit=240),
+            "tone": tone,
+            "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
+        })
+
+    safe["keywords"] = []
+    for row in _rows(payload, "keywords", 7):
+        direction = _text(row.get("direction"), "direction", limit=12)
+        if direction not in DIRECTIONS:
+            raise DailyBriefingError("invalid keyword direction")
+        try:
+            score = max(0, min(10, int(row.get("score", 0))))
+        except (TypeError, ValueError) as exc:
+            raise DailyBriefingError("keyword score must be an integer") from exc
+        safe["keywords"].append({
+            "keyword": _text(row.get("keyword"), "keyword", limit=60),
+            "score": score,
+            "direction": direction,
+            "basis": _text(row.get("basis"), "basis", limit=220),
+        })
+
+    safe["matrix"] = []
+    quadrants: set[str] = set()
+    for row in _rows(payload, "matrix", 4):
+        quadrant = _text(row.get("quadrant"), "quadrant", limit=12)
+        if quadrant not in QUADRANTS or quadrant in quadrants:
+            raise DailyBriefingError("matrix requires four unique quadrants")
+        quadrants.add(quadrant)
+        safe["matrix"].append({
+            "quadrant": quadrant,
+            "label": _text(row.get("label"), "label", limit=90),
+            "meaning": _text(row.get("meaning"), "meaning", limit=260),
+            "action": _text(row.get("action"), "action", limit=220),
+            "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
+        })
+
+    safe["timeline"] = []
+    horizons: set[str] = set()
+    for row in _rows(payload, "timeline", 4):
+        horizon = _text(row.get("horizon"), "horizon", limit=12)
+        if horizon not in HORIZONS or horizon in horizons:
+            raise DailyBriefingError("timeline requires four unique horizons")
+        horizons.add(horizon)
+        safe["timeline"].append({
+            "horizon": horizon,
+            "action": _text(row.get("action"), "action", limit=240),
+            "reason": _text(row.get("reason"), "reason", limit=260),
+            "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
+        })
+
+    for field, expected in (("insight_cards", 3), ("themes", (3, 4)), ("developer_insights", (3, 4))):
+        safe[field] = []
+        for row in _rows(payload, field, expected):
+            safe[field].append({
+                "title": _text(row.get("title"), "title", limit=140),
+                "analysis": _text(row.get("analysis"), "analysis", limit=700),
+                "action": _text(row.get("action"), "action", limit=260),
+                "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
+            })
+
+    safe["watchlist"] = []
+    for row in _rows(payload, "watchlist", (2, 3)):
+        safe["watchlist"].append({
+            "title": _text(row.get("title"), "title", limit=140),
+            "reason": _text(row.get("reason"), "reason", limit=500),
+            "trigger": _text(row.get("trigger"), "trigger", limit=240),
+            "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
+        })
+
+    safe["must_read"] = []
+    categories: set[str] = set()
+    for row in _rows(payload, "must_read", 5):
+        category = _text(row.get("category"), "category", limit=40)
+        if category not in CATEGORIES or category in categories:
+            raise DailyBriefingError("must_read requires one item per active category")
+        categories.add(category)
+        source_url = _text(row.get("source_url"), "source_url", limit=500)
+        if not source_url.startswith("https://"):
+            raise DailyBriefingError("must_read source_url must use https")
+        safe["must_read"].append({
+            "title": _text(row.get("title"), "title", limit=220),
+            "category": category,
+            "source": _text(row.get("source"), "source", limit=80),
+            "source_url": source_url,
+            "why_it_matters": _text(row.get("why_it_matters"), "why_it_matters", limit=420),
+            "action": _text(row.get("action"), "action", limit=260),
+        })
+    return safe
+
+
+def load_daily_briefing(path: Path, *, source_snapshot_hash: str = "") -> dict[str, Any]:
+    if not path.is_file():
+        raise DailyBriefingError(f"daily briefing artifact missing: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DailyBriefingError("daily briefing artifact is not valid JSON") from exc
+    return validate_daily_briefing(payload, source_snapshot_hash=source_snapshot_hash)

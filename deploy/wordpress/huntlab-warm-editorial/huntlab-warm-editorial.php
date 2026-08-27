@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.2.0
+ * Version: 5.3.0
  * Author: Hunt News
  */
 
@@ -753,6 +753,108 @@ function hunt_news_register_popular_read_route() {
 add_action( 'rest_api_init', 'hunt_news_register_popular_read_route' );
 
 /**
+ * Sanitize the optional evidence-backed daily analysis without making it a
+ * publication dependency.
+ *
+ * @param mixed $payload Untrusted analysis payload.
+ * @return array
+ */
+function hunt_news_sanitize_daily_analysis( $payload ) {
+	if ( ! is_array( $payload ) || 'daily-briefing-analysis.v1' !== ( $payload['contract_version'] ?? '' ) ) {
+		return array();
+	}
+	$safe_urls = static function ( $urls ) {
+		$result = array();
+		foreach ( array_slice( (array) $urls, 0, 4 ) as $url ) {
+			$url = esc_url_raw( (string) $url );
+			if ( 0 === strpos( $url, 'https://' ) ) {
+				$result[] = $url;
+			}
+		}
+		return array_values( array_unique( $result ) );
+	};
+	$safe = array(
+		'contract_version' => 'daily-briefing-analysis.v1',
+		'generated_at' => sanitize_text_field( (string) ( $payload['generated_at'] ?? '' ) ),
+		'source_snapshot_hash' => sanitize_text_field( (string) ( $payload['source_snapshot_hash'] ?? '' ) ),
+		'headline' => sanitize_text_field( (string) ( $payload['headline'] ?? '' ) ),
+		'summary' => sanitize_textarea_field( (string) ( $payload['summary'] ?? '' ) ),
+		'core_signals' => array(), 'keywords' => array(), 'matrix' => array(), 'timeline' => array(),
+		'insight_cards' => array(), 'themes' => array(), 'developer_insights' => array(),
+		'watchlist' => array(), 'must_read' => array(),
+	);
+	foreach ( array_slice( (array) ( $payload['core_signals'] ?? array() ), 0, 3 ) as $row ) {
+		$safe['core_signals'][] = array(
+			'metric' => sanitize_text_field( (string) ( $row['metric'] ?? '' ) ),
+			'label' => sanitize_text_field( (string) ( $row['label'] ?? '' ) ),
+			'detail' => sanitize_textarea_field( (string) ( $row['detail'] ?? '' ) ),
+			'action' => sanitize_textarea_field( (string) ( $row['action'] ?? '' ) ),
+			'tone' => in_array( ( $row['tone'] ?? '' ), array( 'green', 'amber', 'red', 'violet' ), true ) ? $row['tone'] : 'amber',
+			'evidence_urls' => $safe_urls( $row['evidence_urls'] ?? array() ),
+		);
+	}
+	foreach ( array_slice( (array) ( $payload['keywords'] ?? array() ), 0, 7 ) as $row ) {
+		$safe['keywords'][] = array(
+			'keyword' => sanitize_text_field( (string) ( $row['keyword'] ?? '' ) ),
+			'score' => min( 10, absint( $row['score'] ?? 0 ) ),
+			'direction' => in_array( ( $row['direction'] ?? '' ), array( 'up', 'down', 'stable' ), true ) ? $row['direction'] : 'stable',
+			'basis' => sanitize_textarea_field( (string) ( $row['basis'] ?? '' ) ),
+		);
+	}
+	foreach ( array_slice( (array) ( $payload['matrix'] ?? array() ), 0, 4 ) as $row ) {
+		$safe['matrix'][] = array(
+			'quadrant' => in_array( ( $row['quadrant'] ?? '' ), array( 'focus', 'future', 'apply', 'watch' ), true ) ? $row['quadrant'] : 'watch',
+			'label' => sanitize_text_field( (string) ( $row['label'] ?? '' ) ),
+			'meaning' => sanitize_textarea_field( (string) ( $row['meaning'] ?? '' ) ),
+			'action' => sanitize_textarea_field( (string) ( $row['action'] ?? '' ) ),
+			'evidence_urls' => $safe_urls( $row['evidence_urls'] ?? array() ),
+		);
+	}
+	foreach ( array_slice( (array) ( $payload['timeline'] ?? array() ), 0, 4 ) as $row ) {
+		$safe['timeline'][] = array(
+			'horizon' => in_array( ( $row['horizon'] ?? '' ), array( 'today', 'week', 'month', 'year' ), true ) ? $row['horizon'] : 'today',
+			'action' => sanitize_textarea_field( (string) ( $row['action'] ?? '' ) ),
+			'reason' => sanitize_textarea_field( (string) ( $row['reason'] ?? '' ) ),
+			'evidence_urls' => $safe_urls( $row['evidence_urls'] ?? array() ),
+		);
+	}
+	foreach ( array( 'insight_cards' => 3, 'themes' => 4, 'developer_insights' => 4 ) as $field => $limit ) {
+		foreach ( array_slice( (array) ( $payload[ $field ] ?? array() ), 0, $limit ) as $row ) {
+			$safe[ $field ][] = array(
+				'title' => sanitize_text_field( (string) ( $row['title'] ?? '' ) ),
+				'analysis' => sanitize_textarea_field( (string) ( $row['analysis'] ?? '' ) ),
+				'action' => sanitize_textarea_field( (string) ( $row['action'] ?? '' ) ),
+				'evidence_urls' => $safe_urls( $row['evidence_urls'] ?? array() ),
+			);
+		}
+	}
+	foreach ( array_slice( (array) ( $payload['watchlist'] ?? array() ), 0, 3 ) as $row ) {
+		$safe['watchlist'][] = array(
+			'title' => sanitize_text_field( (string) ( $row['title'] ?? '' ) ),
+			'reason' => sanitize_textarea_field( (string) ( $row['reason'] ?? '' ) ),
+			'trigger' => sanitize_textarea_field( (string) ( $row['trigger'] ?? '' ) ),
+			'evidence_urls' => $safe_urls( $row['evidence_urls'] ?? array() ),
+		);
+	}
+	foreach ( array_slice( (array) ( $payload['must_read'] ?? array() ), 0, 5 ) as $row ) {
+		$source_url = esc_url_raw( (string) ( $row['source_url'] ?? '' ) );
+		if ( 0 !== strpos( $source_url, 'https://' ) ) { continue; }
+		$safe['must_read'][] = array(
+			'title' => sanitize_text_field( (string) ( $row['title'] ?? '' ) ),
+			'category' => sanitize_text_field( (string) ( $row['category'] ?? '' ) ),
+			'source' => sanitize_text_field( (string) ( $row['source'] ?? '' ) ),
+			'source_url' => $source_url,
+			'why_it_matters' => sanitize_textarea_field( (string) ( $row['why_it_matters'] ?? '' ) ),
+			'action' => sanitize_textarea_field( (string) ( $row['action'] ?? '' ) ),
+		);
+	}
+	if ( 3 !== count( $safe['core_signals'] ) || 7 !== count( $safe['keywords'] ) || 4 !== count( $safe['matrix'] ) || 4 !== count( $safe['timeline'] ) || 5 !== count( $safe['must_read'] ) ) {
+		return array();
+	}
+	return $safe;
+}
+
+/**
  * Validate and store a bounded public-safe run manifest from the publisher.
  * Publication already succeeded before this optional observer write occurs.
  *
@@ -847,6 +949,7 @@ function hunt_news_store_briefing_manifest( $request ) {
 			'source_count' => absint( $payload['editorial_sources']['source_count'] ?? 0 ),
 			'items' => $source_items,
 		),
+		'analysis'            => hunt_news_sanitize_daily_analysis( $payload['analysis'] ?? array() ),
 		'selection'           => array(
 			'candidate_count' => absint( $payload['selection']['candidate_count'] ?? 0 ),
 			'legacy_top2'     => array_slice( array_map( 'sanitize_text_field', (array) ( $payload['selection']['legacy_top2'] ?? array() ) ), 0, 2 ),
@@ -905,6 +1008,21 @@ function hunt_news_home_sections() {
 	$signal_posts = $is_category ? array() : hunt_news_manifest_signal_posts( $brief_posts, $manifest );
 	$keywords     = $is_category ? array() : ( $manifest ? hunt_news_manifest_keywords( $manifest ) : hunt_news_briefing_keywords( $brief_posts, 7 ) );
 	$timeline     = $is_category ? array() : hunt_news_briefing_timeline( $brief_posts );
+	$analysis     = ( ! $is_category && ! empty( $manifest['analysis'] ) && is_array( $manifest['analysis'] ) ) ? $manifest['analysis'] : array();
+	if ( ! empty( $analysis['keywords'] ) ) {
+		$keywords = array();
+		foreach ( $analysis['keywords'] as $keyword ) {
+			$direction = (string) ( $keyword['direction'] ?? 'stable' );
+			$keywords[] = array(
+				'name' => (string) ( $keyword['keyword'] ?? '' ),
+				'label' => (string) absint( $keyword['score'] ?? 0 ) . '/10 ' . ( 'up' === $direction ? '↑' : ( 'down' === $direction ? '↓' : '→' ) ),
+				'count' => absint( $keyword['score'] ?? 0 ),
+				'percent' => min( 100, absint( $keyword['score'] ?? 0 ) * 10 ),
+				'url' => '#hunt-news-source-title',
+				'basis' => (string) ( $keyword['basis'] ?? '' ),
+			);
+		}
+	}
 	$source_groups = array();
 	$must_read_items = array();
 	if ( ! $is_category && $manifest ) {
@@ -914,15 +1032,29 @@ function hunt_news_home_sections() {
 				$source_groups[ $source_category ][] = $source_item;
 			}
 		}
-		$must_read_categories = array( 'AI/ML 핵심', '개발 트렌드', 'AI 공식 블로그', '국내 IT', '국내 시사' );
-		for ( $round = 0; $round < 2; $round++ ) {
-			foreach ( $must_read_categories as $must_read_category ) {
-				if ( isset( $source_groups[ $must_read_category ][ $round ] ) ) {
-					$must_read_items[] = $source_groups[ $must_read_category ][ $round ];
+		if ( ! empty( $analysis['must_read'] ) ) {
+			foreach ( $analysis['must_read'] as $item ) {
+				$must_read_items[] = array(
+					'category' => (string) ( $item['category'] ?? '' ),
+					'source' => (string) ( $item['source'] ?? '' ),
+					'title' => (string) ( $item['title'] ?? '' ),
+					'url' => (string) ( $item['source_url'] ?? '' ),
+					'published_at' => (string) ( $analysis['generated_at'] ?? '' ),
+					'why_it_matters' => (string) ( $item['why_it_matters'] ?? '' ),
+					'action' => (string) ( $item['action'] ?? '' ),
+				);
+			}
+		} else {
+			$must_read_categories = array( 'AI/ML 핵심', '개발 트렌드', 'AI 공식 블로그', '국내 IT', '국내 시사' );
+			for ( $round = 0; $round < 2; $round++ ) {
+				foreach ( $must_read_categories as $must_read_category ) {
+					if ( isset( $source_groups[ $must_read_category ][ $round ] ) ) {
+						$must_read_items[] = $source_groups[ $must_read_category ][ $round ];
+					}
 				}
 			}
 		}
-		if ( count( $must_read_items ) < 10 ) {
+		if ( empty( $analysis['must_read'] ) && count( $must_read_items ) < 10 ) {
 			$selected_urls = array_fill_keys( array_filter( array_column( $must_read_items, 'url' ) ), true );
 			foreach ( (array) ( $manifest['editorial_sources']['items'] ?? array() ) as $source_item ) {
 				$source_url = (string) ( $source_item['url'] ?? '' );
@@ -968,9 +1100,19 @@ function hunt_news_home_sections() {
 			<section class="hunt-news-signal-panel" aria-labelledby="hunt-news-signal-title">
 				<header class="hunt-news-panel-heading">
 					<div><span aria-hidden="true">●</span><h3 id="hunt-news-signal-title">핵심 신호</h3></div>
-					<p>최근 공개 글 중 먼저 읽을 변화 3개</p>
+					<p><?php echo $analysis ? '전체 수집원을 종합한 변화와 행동 3개' : '최근 공개 글 중 먼저 읽을 변화 3개'; ?></p>
 				</header>
 				<div class="hunt-news-signal-list">
+					<?php if ( ! empty( $analysis['core_signals'] ) ) : ?>
+						<?php foreach ( $analysis['core_signals'] as $signal ) :
+							$evidence_url = (string) ( $signal['evidence_urls'][0] ?? '' ); ?>
+						<article class="hunt-news-signal-card hunt-news-signal-card--<?php echo esc_attr( (string) $signal['tone'] ); ?>">
+							<div class="hunt-news-signal-card__dot" aria-hidden="true"></div>
+							<div><p><?php echo esc_html( (string) $signal['metric'] ); ?></p><h4><?php echo esc_html( (string) $signal['label'] ); ?></h4><span><?php echo esc_html( (string) $signal['detail'] ); ?></span></div>
+							<a class="hunt-news-signal-card__action" href="<?php echo esc_url( $evidence_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $signal['action'] ); ?> <b aria-hidden="true">→</b></a>
+						</article>
+						<?php endforeach; ?>
+					<?php else : ?>
 					<?php foreach ( $signal_posts as $index => $post ) :
 						$category = hunt_news_briefing_category( $post );
 						$tones    = array( 'green', 'amber', 'violet' );
@@ -987,6 +1129,7 @@ function hunt_news_home_sections() {
 							<a class="hunt-news-signal-card__action" href="<?php echo esc_url( get_permalink( $post ) ); ?>">핵심 확인 <b aria-hidden="true">→</b></a>
 						</article>
 					<?php endforeach; ?>
+					<?php endif; ?>
 				</div>
 			</section>
 
@@ -1012,6 +1155,12 @@ function hunt_news_home_sections() {
 				<p>발행 시점에 따라 다시 볼 뉴스를 나눴습니다</p>
 			</header>
 			<ol>
+				<?php if ( ! empty( $analysis['timeline'] ) ) :
+					$horizon_labels = array( 'today' => '오늘', 'week' => '이번 주', 'month' => '이번 달', 'year' => '올해 말' ); ?>
+					<?php foreach ( $analysis['timeline'] as $row ) : ?>
+					<li><span class="hunt-news-action-timeline__marker" aria-hidden="true"></span><strong><?php echo esc_html( $horizon_labels[ $row['horizon'] ] ?? $row['horizon'] ); ?></strong><small><?php echo esc_html( (string) $row['reason'] ); ?></small><a href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $row['action'] ); ?></a></li>
+					<?php endforeach; ?>
+				<?php else : ?>
 				<?php foreach ( $timeline as $index => $row ) : ?>
 					<li>
 						<span class="hunt-news-action-timeline__marker" aria-hidden="true"></span>
@@ -1020,6 +1169,7 @@ function hunt_news_home_sections() {
 						<a href="<?php echo esc_url( get_permalink( $row['post'] ) ); ?>"><?php echo esc_html( wp_html_excerpt( get_the_title( $row['post'] ), 46, '…' ) ); ?></a>
 					</li>
 				<?php endforeach; ?>
+				<?php endif; ?>
 			</ol>
 		</section>
 
@@ -1030,9 +1180,15 @@ function hunt_news_home_sections() {
 				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--future">미래 준비</span>
 				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--apply">즉시 적용</span>
 				<span class="hunt-news-impact-matrix__axis hunt-news-impact-matrix__axis--watch">모니터링</span>
-				<?php foreach ( array_slice( $keywords, 0, 6 ) as $index => $keyword ) : ?>
-					<a class="hunt-news-impact-bubble hunt-news-impact-bubble--<?php echo esc_attr( (string) ( $index + 1 ) ); ?>" href="<?php echo esc_url( $keyword['url'] ); ?>" style="--bubble-size:<?php echo esc_attr( (string) max( 54, min( 92, 48 + (int) $keyword['percent'] / 2 ) ) ); ?>px"><?php echo esc_html( wp_html_excerpt( $keyword['name'], 12, '…' ) ); ?></a>
-				<?php endforeach; ?>
+				<?php if ( ! empty( $analysis['matrix'] ) ) : ?>
+					<?php foreach ( $analysis['matrix'] as $index => $row ) : ?>
+					<a class="hunt-news-impact-bubble hunt-news-impact-bubble--<?php echo esc_attr( (string) ( $index + 1 ) ); ?>" href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer" style="--bubble-size:82px" title="<?php echo esc_attr( (string) $row['meaning'] . ' — ' . (string) $row['action'] ); ?>"><?php echo esc_html( wp_html_excerpt( (string) $row['label'], 12, '…' ) ); ?></a>
+					<?php endforeach; ?>
+				<?php else : ?>
+					<?php foreach ( array_slice( $keywords, 0, 6 ) as $index => $keyword ) : ?>
+						<a class="hunt-news-impact-bubble hunt-news-impact-bubble--<?php echo esc_attr( (string) ( $index + 1 ) ); ?>" href="<?php echo esc_url( $keyword['url'] ); ?>" style="--bubble-size:<?php echo esc_attr( (string) max( 54, min( 92, 48 + (int) $keyword['percent'] / 2 ) ) ); ?>px"><?php echo esc_html( wp_html_excerpt( $keyword['name'], 12, '…' ) ); ?></a>
+					<?php endforeach; ?>
+				<?php endif; ?>
 			</div>
 		</section>
 
@@ -1040,10 +1196,15 @@ function hunt_news_home_sections() {
 		<section class="hunt-news-focus" aria-labelledby="hunt-news-focus-title">
 			<div class="hunt-news-focus__heading">
 				<p>오늘의 핵심</p>
-				<h3 id="hunt-news-focus-title"><?php echo esc_html( get_the_title( $lead ) ); ?></h3>
-				<a href="<?php echo esc_url( get_permalink( $lead ) ); ?>">전체 내용 읽기 <b aria-hidden="true">→</b></a>
+				<h3 id="hunt-news-focus-title"><?php echo esc_html( $analysis ? (string) $analysis['headline'] : get_the_title( $lead ) ); ?></h3>
+				<?php if ( $analysis ) : ?><span><?php echo esc_html( (string) $analysis['summary'] ); ?></span><?php else : ?><a href="<?php echo esc_url( get_permalink( $lead ) ); ?>">전체 내용 읽기 <b aria-hidden="true">→</b></a><?php endif; ?>
 			</div>
 			<div class="hunt-news-focus__points">
+				<?php if ( ! empty( $analysis['insight_cards'] ) ) : ?>
+					<?php foreach ( $analysis['insight_cards'] as $point ) : ?>
+					<article><span>분석</span><strong><?php echo esc_html( (string) $point['title'] ); ?></strong><p><?php echo esc_html( (string) $point['analysis'] ); ?></p><a href="<?php echo esc_url( (string) ( $point['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $point['action'] ); ?></a></article>
+					<?php endforeach; ?>
+				<?php else : ?>
 				<?php foreach ( $signal_posts as $index => $post ) :
 					$category = hunt_news_briefing_category( $post );
 					$observed = $manifest_map[ $post->ID ] ?? array();
@@ -1055,8 +1216,20 @@ function hunt_news_home_sections() {
 						<a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( wp_html_excerpt( $action, 44, '…' ) ); ?></a>
 					</article>
 				<?php endforeach; ?>
+				<?php endif; ?>
 			</div>
 		</section>
+
+		<?php if ( $analysis ) : ?>
+		<section class="hunt-news-synthesis" aria-labelledby="hunt-news-synthesis-title">
+			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">◈</span><h3 id="hunt-news-synthesis-title">오늘의 종합 분석</h3></div><p>기사 중복을 합치고 영향과 행동으로 정리했습니다</p></header>
+			<div class="hunt-news-synthesis__grid">
+				<section><h4>오늘의 핵심 테마</h4><?php foreach ( (array) $analysis['themes'] as $row ) : ?><article><h5><?php echo esc_html( (string) $row['title'] ); ?></h5><p><?php echo esc_html( (string) $row['analysis'] ); ?></p><a href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $row['action'] ); ?> →</a></article><?php endforeach; ?></section>
+				<section><h4>개발자 인사이트</h4><?php foreach ( (array) $analysis['developer_insights'] as $row ) : ?><article><h5><?php echo esc_html( (string) $row['title'] ); ?></h5><p><?php echo esc_html( (string) $row['analysis'] ); ?></p><a href="<?php echo esc_url( (string) ( $row['evidence_urls'][0] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) $row['action'] ); ?> →</a></article><?php endforeach; ?></section>
+				<section class="hunt-news-synthesis__watch"><h4>이번 주 주시할 것</h4><?php foreach ( (array) $analysis['watchlist'] as $row ) : ?><article><h5><?php echo esc_html( (string) $row['title'] ); ?></h5><p><?php echo esc_html( (string) $row['reason'] ); ?></p><strong>확인 신호: <?php echo esc_html( (string) $row['trigger'] ); ?></strong></article><?php endforeach; ?></section>
+			</div>
+		</section>
+		<?php endif; ?>
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
@@ -1075,8 +1248,9 @@ function hunt_news_home_sections() {
 							<b class="hunt-news-brief-card__rank">#<?php echo esc_html( (string) ( $index + 1 ) ); ?></b>
 							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
 							<h4><a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></a></h4>
-							<p><?php echo esc_html( (string) ( $item['category'] ?? '기술 뉴스' ) ); ?> · 공식 원문과 독립 출처를 확인하세요.</p>
-							<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">원문 확인 <b aria-hidden="true">→</b></a>
+							<p><?php echo esc_html( ! empty( $item['why_it_matters'] ) ? (string) $item['why_it_matters'] : ( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 공식 원문과 독립 출처를 확인하세요.' ) ); ?></p>
+							<?php if ( ! empty( $item['action'] ) ) : ?><strong class="hunt-news-brief-card__decision">→ <?php echo esc_html( (string) $item['action'] ); ?></strong><?php endif; ?>
+							<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">근거 원문 <b aria-hidden="true">→</b></a>
 						</article>
 					<?php endforeach; ?>
 				<?php else : ?>

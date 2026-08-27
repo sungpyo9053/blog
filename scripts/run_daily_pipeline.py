@@ -37,6 +37,7 @@ from scripts.briefing_manifest import (
     build_briefing_manifest,
     collect_run_publications,
 )
+from scripts.daily_briefing import DailyBriefingError, load_daily_briefing
 from scripts.manage_whereispost_cache import (
     DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE,
     DEFAULT_MAX_AGE_DAYS as DEFAULT_WHEREISPOST_MAX_AGE_DAYS,
@@ -1870,6 +1871,76 @@ def planner_stage(
     )
 
 
+def daily_briefing_stage(
+    run_id: str,
+    topics_path: Path,
+    analysis_path: Path,
+    editorial_source_path: Path,
+) -> Stage:
+    return Stage(
+        "Daily Briefing Analyst",
+        PROJECT_ROOT / "agents/daily-briefing-agent.md",
+        (
+            f"현재 run_id는 {run_id!r}입니다. "
+            f"기술 뉴스 cache {str(editorial_source_path)!r}와 Planner 후보 {str(topics_path)!r}를 "
+            "읽고 중복 사건을 합친 뒤, 가이드의 핵심 신호·키워드 방향·영향 매트릭스·"
+            "액션 타임라인·종합 인사이트·필독 5를 생성하세요. "
+            f"결과 JSON은 {str(analysis_path)!r}에만 저장하세요. "
+            "원문 기사 나열을 보고서 본문으로 대체하지 말고 각 판단에 근거 URL과 구체적인 "
+            "행동을 연결하세요. WordPress와 다른 외부 시스템은 변경하지 마세요."
+        ),
+    )
+
+
+def run_daily_briefing_analysis(
+    codex: str,
+    *,
+    run_id: str,
+    run_directory: Path,
+    topics_path: Path,
+    logger: logging.Logger,
+    timeout_seconds: int,
+) -> Path | None:
+    """Generate one optional analysis artifact without controlling publication."""
+    analysis_path = run_directory / "daily-briefing-analysis.json"
+    try:
+        source_cache = load_editorial_source_cache(DEFAULT_EDITORIAL_SOURCE_CACHE)
+        source_hash = str(source_cache.get("source_snapshot_hash", ""))
+        if not source_cache.get("rows") or not source_hash:
+            raise DailyBriefingError("editorial source cache unavailable")
+        if not analysis_path.is_file():
+            run_stage(
+                codex,
+                daily_briefing_stage(
+                    run_id,
+                    topics_path,
+                    analysis_path,
+                    DEFAULT_EDITORIAL_SOURCE_CACHE,
+                ),
+                logger,
+                timeout_seconds=timeout_seconds,
+            )
+        payload = load_daily_briefing(
+            analysis_path,
+            source_snapshot_hash=source_hash,
+        )
+        logger.info(
+            "daily_briefing event=ready failed=false run_id=%s signals=%d must_read=%d artifact=%s",
+            run_id,
+            len(payload["core_signals"]),
+            len(payload["must_read"]),
+            analysis_path,
+        )
+        return analysis_path
+    except (DailyBriefingError, PipelineError, SearchSignalError, OSError, ValueError) as exc:
+        logger.warning(
+            "daily_briefing event=failed continuing=true run_id=%s reason_type=%s",
+            run_id,
+            type(exc).__name__,
+        )
+        return None
+
+
 def planner_retry_stage(stage: Stage, topics_path: Path) -> Stage:
     """Retry a Planner that returned without its required topics artifact."""
     return Stage(
@@ -2243,6 +2314,7 @@ def write_and_sync_briefing_manifest(
         editorial_source_cache_path=DEFAULT_EDITORIAL_SOURCE_CACHE,
         shadow_path=run_directory / "news-worthiness-shadow.json",
         fallback_path=run_directory / "publication-fallback.json",
+        daily_briefing_path=run_directory / "daily-briefing-analysis.json",
     )
     atomic_write_manifest(destination, payload)
     logger.info(
@@ -2383,6 +2455,14 @@ def main() -> int:
                 )
         plan_document = parse_topic_plan_document(topics_path)
         plans = plan_document["top2"]
+        run_daily_briefing_analysis(
+            codex,
+            run_id=run_id,
+            run_directory=run_directory,
+            topics_path=topics_path,
+            logger=logger,
+            timeout_seconds=args.timeout,
+        )
         # Shadow ranking is observability-only. Failure cannot replace, reorder,
         # or block the legacy TOP2 and therefore cannot affect 02:00 publishing.
         run_news_worthiness_shadow(run_directory, plan_document, logger)

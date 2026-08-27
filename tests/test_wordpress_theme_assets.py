@@ -54,7 +54,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.2.0", php)
+        self.assertIn("Version: 5.3.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -174,7 +174,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.2.0", php)
+        self.assertIn("Version: 5.3.0", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -195,9 +195,14 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("'AI/ML 핵심', '개발 트렌드', 'AI 공식 블로그', '국내 IT', '국내 시사'", php)
         self.assertIn("count( $must_read_items ) < 10", php)
         self.assertIn("$selected_urls", php)
+        self.assertIn("daily-briefing-analysis.v1", php)
+        self.assertIn("hunt_news_sanitize_daily_analysis", php)
+        self.assertIn("오늘의 종합 분석", php)
+        self.assertIn("why_it_matters", php)
+        self.assertIn(".hunt-news-synthesis", css)
+        self.assertIn(".hunt-news-source-board { order: 8; }", css)
         self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr))", css)
         self.assertIn(".hunt-news-brief-card--source h4 a", css)
-        self.assertIn(".hunt-news-source-board { order: 6; }", css)
 
     def test_real_read_signal_requires_visible_time_and_scroll_depth(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")

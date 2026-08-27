@@ -83,6 +83,14 @@ Whereispost는 자동 실행과 02시 선정 경로에서 제외합니다. 검�
 Search Console 관측만 사용하고, 수집 카드 자체는 사실 근거가 아니므로 TOP2 전에 공식
 원문 하나와 독립 보도 하나 또는 독립 출처 두 개 이상으로 확인합니다.
 
+02시 Planner가 후보를 확정하면 `Daily Briefing Analyst`가 같은 기술 뉴스 snapshot과
+Planner 후보를 읽고 `daily-briefing-analysis.json`을 생성합니다. 이 산출물은 기사
+목록이 아니라 핵심 신호 3개, 키워드 방향 7개, 영향 매트릭스, 오늘·이번 주·이번 달·
+올해 말 행동, 종합 테마, 개발자 인사이트, 주시 항목과 카테고리별 필독 5를 근거 URL과
+함께 저장합니다. 분석 실패·형식 오류·snapshot 불일치는 경고만 남기며 기존 TOP2
+Writer·Reviewer·Publisher를 막지 않습니다. 검증된 분석만 날짜별 WordPress 브리핑에
+포함되고, 원문 수집 카드는 보고서 맨 아래 참고자료로 렌더링됩니다.
+
 Planner는 Velog 공개 트렌딩과 기술 태그에서 반복되는 기술·언어·시스템
 아키텍처 관심사를 한국 개발자 수요의 보조 신호로 참고합니다. 제목이나 구성을
 복제하지 않으며 Search Console, 검색 의도, 공식 1차 자료와 HuntLab에서 직접

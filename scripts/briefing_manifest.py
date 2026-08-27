@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlsplit
 
+from scripts.daily_briefing import DailyBriefingError, load_daily_briefing
+
 
 CONTRACT_VERSION = "briefing-manifest.v1"
 MAX_PUBLIC_TOPICS = 7
@@ -199,6 +201,7 @@ def _editorial_source_summary(cache_path: Path | None) -> dict[str, Any]:
     return {
         "provider": str(payload.get("provider", "hunt_news_editorial_sources")),
         "checked_at": str(payload.get("checked_at", "")),
+        "source_snapshot_hash": str(payload.get("source_snapshot_hash", "")),
         "successful_source_count": _nonnegative_int(payload.get("successful_source_count")),
         "source_count": _nonnegative_int(payload.get("source_count")),
         "items": safe_rows,
@@ -214,6 +217,7 @@ def build_briefing_manifest(
     editorial_source_cache_path: Path | None = None,
     shadow_path: Path,
     fallback_path: Path,
+    daily_briefing_path: Path | None = None,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     generated = (generated_at or datetime.now(UTC)).astimezone(UTC)
@@ -229,6 +233,15 @@ def build_briefing_manifest(
     collection = _collection_summary(trends_cache_path)
     collection.update(_collection_health(collection, generated))
     editorial_sources = _editorial_source_summary(editorial_source_cache_path)
+    analysis: dict[str, Any] = {}
+    if daily_briefing_path:
+        try:
+            analysis = load_daily_briefing(
+                daily_briefing_path,
+                source_snapshot_hash=editorial_sources.get("source_snapshot_hash", ""),
+            )
+        except DailyBriefingError:
+            analysis = {}
 
     legacy_order = {title: index for index, title in enumerate(legacy_top2)}
     ordered_publications = sorted(
@@ -307,6 +320,7 @@ def build_briefing_manifest(
         "source_snapshot_hash": _sha256(source_contract),
         "collection": collection,
         "editorial_sources": editorial_sources,
+        "analysis": analysis,
         "selection": selection,
         "published": public_posts,
     }
