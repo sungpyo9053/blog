@@ -54,7 +54,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.0.0", php)
+        self.assertIn("Version: 5.1.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -152,7 +152,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("핵심 신호", php)
         self.assertIn("오늘의 키워드", php)
         self.assertIn("확인 타임라인", php)
-        self.assertIn("AI 선정 오늘의 필독 5", php)
+        self.assertIn("오늘 보고서의 근거와 상세 해설", php)
+        self.assertIn("브리핑 핵심 항목", php)
         self.assertIn("기술 영향력 매트릭스", php)
         self.assertIn("오늘 수집한 기술 뉴스", php)
         self.assertIn("날짜 아카이브", php)
@@ -168,6 +169,26 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn(".hunt-news-must-read__modes", css)
         self.assertIn(".hunt-news-brief-card[hidden]", css)
         self.assertIn("@media (max-width: 767px)", css)
+
+    def test_daily_briefing_is_primary_and_has_month_date_navigation(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
+        css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
+
+        self.assertIn("Version: 5.1.0", php)
+        self.assertIn("function hunt_news_briefing_archive_months", php)
+        self.assertIn("function hunt_news_render_briefing_navigation", php)
+        self.assertIn("class=\"hunt-news-report-shell\"", php)
+        self.assertIn("id=\"hunt-news-date-nav\"", php)
+        self.assertIn("Hunt News [", php)
+        self.assertIn("Hunt News <?php echo esc_html( get_the_date( 'Y-m-d', $post ) ); ?>", php)
+        self.assertIn("is_post_type_archive( 'hunt_briefing' )", php)
+        self.assertIn("'post_title' => 'Hunt News ' . $briefing_date", php)
+        self.assertIn("매일 한 장의 기술 보고서", php)
+        self.assertIn("body.hunt-news-briefing-mode #main.site-main", css)
+        self.assertIn("grid-template-columns: 238px minmax(0, 1fr)", css)
+        self.assertIn("position: sticky", css)
+        self.assertIn(".hunt-news-date-nav.is-open", css)
+        self.assertIn("aria-expanded", php)
 
     def test_real_read_signal_requires_visible_time_and_scroll_depth(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")

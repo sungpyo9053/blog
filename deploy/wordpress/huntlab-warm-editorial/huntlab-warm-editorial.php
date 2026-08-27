@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.0.0
+ * Version: 5.1.0
  * Author: Hunt News
  */
 
@@ -30,7 +30,7 @@ function hunt_news_register_briefing_type() {
 	register_post_type(
 		'hunt_briefing',
 		array(
-			'labels' => array( 'name' => '날짜별 브리핑', 'singular_name' => '날짜별 브리핑' ),
+			'labels' => array( 'name' => '매일 브리핑', 'singular_name' => '매일 브리핑' ),
 			'public' => true, 'show_in_rest' => true, 'has_archive' => 'briefing',
 			'rewrite' => array( 'slug' => 'briefing', 'with_front' => false ),
 			'supports' => array( 'title', 'editor', 'excerpt' ),
@@ -43,6 +43,79 @@ function hunt_news_register_briefing_type() {
 	}
 }
 add_action( 'init', 'hunt_news_register_briefing_type' );
+
+/** Mark the report-first surfaces without affecting legacy article URLs. */
+function hunt_news_briefing_body_class( $classes ) {
+	if ( is_home() || is_front_page() || is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) {
+		$classes[] = 'hunt-news-briefing-mode';
+	}
+	return $classes;
+}
+add_filter( 'body_class', 'hunt_news_briefing_body_class' );
+
+/**
+ * Return all public daily reports grouped by local calendar month.
+ *
+ * @return array<string, array<int, WP_Post>>
+ */
+function hunt_news_briefing_archive_months() {
+	$months = array();
+	$posts  = get_posts(
+		array(
+			'post_type'              => 'hunt_briefing',
+			'post_status'            => 'publish',
+			'posts_per_page'         => 400,
+			'orderby'                => 'date',
+			'order'                  => 'DESC',
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+		)
+	);
+	foreach ( $posts as $post ) {
+		$key = get_the_date( 'Y.m', $post );
+		$months[ $key ][] = $post;
+	}
+	return $months;
+}
+
+/** Render the primary month/date navigation for daily reports. */
+function hunt_news_render_briefing_navigation() {
+	$months   = hunt_news_briefing_archive_months();
+	$current  = is_singular( 'hunt_briefing' ) ? get_queried_object_id() : 0;
+	$first_id = 0;
+	foreach ( $months as $posts ) {
+		if ( $posts ) {
+			$first_id = $posts[0]->ID;
+			break;
+		}
+	}
+	$active_id = $current ? $current : $first_id;
+	?>
+	<aside id="hunt-news-date-nav" class="hunt-news-date-nav" aria-label="날짜별 Hunt News 브리핑">
+		<div class="hunt-news-date-nav__heading">
+			<div><span>HUNT ARCHIVE</span><strong>매일 브리핑</strong></div>
+			<button type="button" class="hunt-news-date-nav__toggle" aria-expanded="false" aria-controls="hunt-news-date-months">날짜 선택</button>
+		</div>
+		<div id="hunt-news-date-months" class="hunt-news-date-nav__months">
+			<?php if ( ! $months ) : ?>
+				<p class="hunt-news-date-nav__empty">첫 브리핑이 발행되면 날짜가 여기에 쌓입니다.</p>
+			<?php endif; ?>
+			<?php foreach ( $months as $month => $posts ) :
+				$contains_active = in_array( $active_id, wp_list_pluck( $posts, 'ID' ), true );
+				?>
+				<details<?php echo $contains_active ? ' open' : ''; ?>>
+					<summary>Hunt News [<?php echo esc_html( $month ); ?>]</summary>
+					<ul>
+						<?php foreach ( $posts as $post ) : ?>
+							<li><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"<?php echo $post->ID === $active_id ? ' aria-current="page"' : ''; ?>>Hunt News <?php echo esc_html( get_the_date( 'Y-m-d', $post ) ); ?></a></li>
+						<?php endforeach; ?>
+					</ul>
+				</details>
+			<?php endforeach; ?>
+		</div>
+	</aside>
+	<?php
+}
 
 /**
  * The Hunt News category hero owns the archive H1, so suppress Kadence's
@@ -455,7 +528,7 @@ function huntlab_warm_editorial_category_intros() {
  * without changing the active theme or article pages.
  */
 function huntlab_warm_editorial_home_intro() {
-	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_singular( 'hunt_briefing' ) ) ) {
+	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) ) {
 		return;
 	}
 
@@ -491,8 +564,8 @@ function huntlab_warm_editorial_home_intro() {
 			</ul>
 			<?php if ( ! $is_category ) : ?>
 				<div class="huntlab-home-intro__status" aria-label="브리핑 상태">
-					<span><?php echo esc_html( wp_date( 'Y.m.d' ) ); ?></span>
-					<span>최근 공개 글 <?php echo esc_html( (string) count( $brief_posts ) ); ?>개 반영</span>
+					<span><?php echo esc_html( is_singular( 'hunt_briefing' ) ? get_the_date( 'Y.m.d', get_queried_object_id() ) : wp_date( 'Y.m.d' ) ); ?></span>
+					<span>매일 한 장의 기술 보고서</span>
 					<?php if ( $brief_manifest ) : ?><span>수집 <?php echo esc_html( (string) absint( $brief_manifest['collection']['observed_topic_count'] ?? 0 ) ); ?>개 · 후보 <?php echo esc_html( (string) absint( $brief_manifest['selection']['candidate_count'] ?? 0 ) ); ?>개</span><?php endif; ?>
 					<a href="#hunt-news-briefing-board">오늘 브리핑 보기 <b aria-hidden="true">↓</b></a>
 				</div>
@@ -795,9 +868,9 @@ function hunt_news_store_briefing_manifest( $request ) {
 	$briefing_post = array(
 		'ID' => $existing ? absint( $existing[0] ) : 0,
 		'post_type' => 'hunt_briefing', 'post_status' => 'publish', 'post_name' => $briefing_date,
-		'post_title' => 'Hunt Brief ' . $briefing_date,
-		'post_excerpt' => 'AI·개발 기술 뉴스 수집, 필독 5와 오늘의 TOP2를 한 화면에 정리한 날짜별 브리핑입니다.',
-		'post_content' => '<p>이 날짜의 AI·개발 기술 뉴스 브리핑입니다. 전체 대시보드에서 수집 기사와 판단 근거를 확인하고 아래 TOP2 원문을 읽을 수 있습니다.</p><ul>' . $links . '</ul>',
+		'post_title' => 'Hunt News ' . $briefing_date,
+		'post_excerpt' => 'AI·개발 기술 변화와 근거, 영향, 지금 할 일을 한 장에 정리한 일일 보고서입니다.',
+		'post_content' => '<p>이 날짜의 Hunt News 기술 보고서입니다. 수집 신호, 선정 근거, 영향과 실행 항목을 한 화면에서 확인할 수 있습니다.</p><ul>' . $links . '</ul>',
 	);
 	$briefing_id = wp_insert_post( wp_slash( $briefing_post ), true );
 	if ( ! is_wp_error( $briefing_id ) ) {
@@ -810,7 +883,7 @@ function hunt_news_store_briefing_manifest( $request ) {
  * Explain the editorial promise and offer category-first discovery on home.
  */
 function hunt_news_home_sections() {
-	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_singular( 'hunt_briefing' ) ) ) {
+	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) ) {
 		return;
 	}
 
@@ -843,15 +916,17 @@ function hunt_news_home_sections() {
 	}
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
+	<div class="hunt-news-report-shell">
+		<?php hunt_news_render_briefing_navigation(); ?>
 	<section id="hunt-news-briefing-board" class="hunt-news-briefing-board" aria-labelledby="hunt-news-briefing-title">
 		<header class="hunt-news-briefing-board__toolbar">
 			<div>
-				<p>오늘의 AI·개발 뉴스 대시보드</p>
-				<h2 id="hunt-news-briefing-title">개발자가 지금 알아야 할 변화</h2>
+				<p>매일 발행하는 AI·개발 기술 보고서</p>
+				<h2 id="hunt-news-briefing-title">Hunt News <?php echo esc_html( is_singular( 'hunt_briefing' ) ? get_the_date( 'Y-m-d', get_queried_object_id() ) : wp_date( 'Y-m-d' ) ); ?></h2>
 			</div>
 			<div class="hunt-news-briefing-board__date" aria-label="브리핑 기준">
-				<strong><?php echo esc_html( wp_date( 'Y-m-d' ) ); ?></strong>
-				<span>02시 브리핑 기준</span>
+				<strong>DAILY REPORT</strong>
+				<span>매일 02시 발행</span>
 				<a href="<?php echo esc_url( get_post_type_archive_link( 'hunt_briefing' ) ); ?>">날짜 아카이브</a>
 			</div>
 		</header>
@@ -960,7 +1035,7 @@ function hunt_news_home_sections() {
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
-				<div><p>AI 선정 오늘의 필독 5</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
+				<div><p>오늘 보고서의 근거와 상세 해설</p><h3 id="hunt-news-must-read-title">브리핑 핵심 항목</h3></div>
 				<div class="hunt-news-must-read__modes" role="group" aria-label="표시할 필독 기사 수">
 					<button type="button" data-brief-limit="5" aria-pressed="true">필독</button>
 					<button type="button" data-brief-limit="5" aria-pressed="false">5개</button>
@@ -998,12 +1073,13 @@ function hunt_news_home_sections() {
 		</section>
 		<?php endif; ?>
 	</section>
+	</div>
 	<?php endif; ?>
 	<aside id="hunt-news-home-notices" class="hunt-news-home-notices" aria-label="Hunt News 이용 안내">
 		<a class="hunt-news-home-notices__primary" href="<?php echo esc_url( home_url( '/about/' ) ); ?>"><strong>읽는 기준</strong><span>버전·호환성·비용·보안과 지금 할 일부터 확인하세요</span><b aria-hidden="true">→</b></a>
 		<a class="hunt-news-home-notices__secondary" href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>"><span>공식 원문, 독립 보도와 직접 검증을 구분합니다</span><b aria-hidden="true">→</b></a>
 	</aside>
-	<?php hunt_news_render_popular_news(); ?>
+	<?php if ( $is_category ) { hunt_news_render_popular_news(); } ?>
 	<?php if ( ! $is_category ) : ?>
 	<section id="hunt-news-reading-guide" class="hunt-news-reading-guide" aria-labelledby="hunt-news-reading-guide-title">
 		<h2 id="hunt-news-reading-guide-title">기술 뉴스를 읽고 남는 세 가지</h2>
@@ -1031,6 +1107,9 @@ function hunt_news_home_sections() {
 	<?php endif; ?>
 	<script id="hunt-news-home-sections-position">
 	document.addEventListener('DOMContentLoaded',function(){var board=document.getElementById('hunt-news-briefing-board');var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News Archive</p><h2>분야별 최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(board){parent.insertBefore(board,main);}if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}if(section){shell.insertAdjacentElement('afterend',section);}}var limitButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-limit]'));var briefCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-index]'));limitButtons.forEach(function(button){button.addEventListener('click',function(){var value=button.getAttribute('data-brief-limit');var limit=value==='all'?briefCards.length:parseInt(value,10);limitButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});briefCards.forEach(function(card){card.hidden=parseInt(card.getAttribute('data-brief-card-index'),10)>=limit;});});});if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
+	</script>
+	<script id="hunt-news-report-mode">
+	document.addEventListener('DOMContentLoaded',function(){var reportShell=document.querySelector('.hunt-news-report-shell');var board=document.getElementById('hunt-news-briefing-board');var main=document.querySelector('#main,main.site-main');if(reportShell&&board&&board.parentNode!==reportShell){reportShell.appendChild(board);}if(document.body.classList.contains('hunt-news-briefing-mode')&&main){main.hidden=true;}var dateNav=document.getElementById('hunt-news-date-nav');var dateToggle=dateNav?dateNav.querySelector('.hunt-news-date-nav__toggle'):null;if(dateNav&&dateToggle){dateToggle.addEventListener('click',function(){var open=dateNav.classList.toggle('is-open');dateToggle.setAttribute('aria-expanded',open?'true':'false');});}});
 	</script>
 	<?php
 }
