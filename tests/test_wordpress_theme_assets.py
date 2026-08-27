@@ -54,7 +54,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.3.3", php)
+        self.assertIn("Version: 5.3.4", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -170,6 +170,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("white-space: normal", css)
         self.assertIn(".hunt-news-action-timeline", css)
         self.assertIn(".hunt-news-focus", css)
+        self.assertIn(".hunt-news-focus__heading h3 {\n\tcolor: #fff;", css)
         self.assertIn(".hunt-news-must-read__modes", css)
         self.assertIn(".hunt-news-brief-card[hidden]", css)
         self.assertIn("@media (max-width: 767px)", css)
@@ -178,7 +179,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.3.3", php)
+        self.assertIn("Version: 5.3.4", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
