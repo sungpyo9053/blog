@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.4.1
+ * Version: 5.4.2
  * Author: Hunt News
  */
 
@@ -610,8 +610,8 @@ function huntlab_warm_editorial_home_intro() {
 	<section id="huntlab-home-intro" class="huntlab-home-intro<?php echo $is_category ? ' huntlab-home-intro--category' : ''; ?>" aria-labelledby="huntlab-home-intro-title">
 		<div class="huntlab-home-intro__copy">
 			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt Brief · 매일 02:00 KST'; ?></p>
-			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '오늘 바뀐 것,<br>30초 안에 파악하세요.'; ?></h1>
-			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '기술 뉴스를 나열하지 않습니다. 개발자에게 미치는 영향과 확인할 원문, 지금 할 일을 한 화면에 정리합니다.'; ?></p>
+			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '오늘의 기술 변화,<br>한눈에 파악하세요.'; ?></h1>
+			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : 'AI·개발 뉴스를 단순히 나열하지 않습니다. 중요한 변화가 개발 업무에 미치는 영향, 확인할 원문, 지금 해야 할 일을 한 장의 브리핑으로 정리합니다.'; ?></p>
 			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'Hunt News 콘텐츠 원칙' ); ?>">
 				<?php foreach ( $is_category ? $intro['promises'] : array( '핵심 신호', '영향과 조건', '지금 할 일' ) as $promise ) : ?>
 					<li><?php echo esc_html( $promise ); ?></li>

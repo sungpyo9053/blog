@@ -23,7 +23,9 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("huntlab_warm_editorial_home_intro", php)
         self.assertIn("AI와 개발 기술 변화", php)
         self.assertIn("Hunt Brief · 매일 02:00 KST", php)
-        self.assertIn("오늘 바뀐 것", php)
+        self.assertIn("오늘의 기술 변화", php)
+        self.assertIn("한눈에 파악하세요", php)
+        self.assertNotIn("30초 안에 파악하세요", php)
         self.assertIn("기술 뉴스를 읽고 남는 세 가지", php)
         self.assertIn("'label' => 'AI/ML 핵심'", php)
         self.assertIn("'label' => '국내 시사'", php)
@@ -54,7 +56,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.4.1", php)
+        self.assertIn("Version: 5.4.2", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -189,7 +191,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.4.1", php)
+        self.assertIn("Version: 5.4.2", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
