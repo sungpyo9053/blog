@@ -56,8 +56,13 @@ class WordPressClient:
         content_type: str = "application/json",
         extra_headers: dict[str, str] | None = None,
         expected: tuple[int, ...] = (200,),
+        namespace: str = "wp/v2",
     ) -> Any:
-        api_root = self.config.api_root
+        api_root = (
+            self.config.api_root
+            if namespace == "wp/v2"
+            else f"{self.config.base_url}/?rest_route=/{namespace.strip('/')}"
+        )
         clean_path = path.lstrip("/")
         if "?rest_route=" in api_root:
             endpoint, separator, query = clean_path.partition("?")
@@ -129,6 +134,16 @@ class WordPressClient:
                 ) from exc
 
         raise AssertionError("request retry loop exhausted unexpectedly")
+
+    def sync_briefing_manifest(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Store the latest public-safe run manifest in the Hunt News plugin."""
+        return self.request(
+            "POST",
+            "briefing-run",
+            payload=payload,
+            expected=(200,),
+            namespace="hunt-news/v1",
+        )
 
     def find_posts(self, *, title: str | None = None, slug: str | None = None) -> list[dict[str, Any]]:
         query: dict[str, str] = {"context": "edit", "per_page": "100"}

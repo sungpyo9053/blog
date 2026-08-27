@@ -30,6 +30,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from publisher.frontmatter import FrontmatterError, load_document
+from publisher.config import ConfigurationError, WordPressConfig
+from publisher.wordpress import WordPressClient, WordPressError
+from scripts.briefing_manifest import (
+    atomic_write_manifest,
+    build_briefing_manifest,
+    collect_run_publications,
+)
 from scripts.manage_whereispost_cache import (
     DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE,
     DEFAULT_MAX_AGE_DAYS as DEFAULT_WHEREISPOST_MAX_AGE_DAYS,
@@ -1647,13 +1654,17 @@ def read_google_trends_observation(path: Path | None) -> str:
     recent_rows = sorted(
         rows,
         key=lambda row: (
-            str(row.get("last_seen_at", "")), int(row.get("approx_traffic", 0))
+            float(row.get("discovery_score", 0.0)),
+            str(row.get("last_seen_at", "")),
+            int(row.get("approx_traffic", 0)),
         ),
         reverse=True,
     )[:60]
     return json.dumps(
         {
             "provider": payload["provider"],
+            "contract_version": payload.get("contract_version", "legacy"),
+            "source_snapshot_hash": payload.get("source_snapshot_hash", ""),
             "geo": payload["geo"],
             "checked_at": payload["checked_at"],
             "rows": recent_rows,
@@ -2197,6 +2208,53 @@ def run_topics_with_quality_fallback(
     return results
 
 
+def write_and_sync_briefing_manifest(
+    *,
+    run_id: str,
+    run_directory: Path,
+    plan_document: dict[str, Any],
+    logger: logging.Logger,
+) -> Path:
+    """Persist the end-to-end observer artifact and sync it without blocking posts."""
+    destination = run_directory / "briefing-manifest.json"
+    payload = build_briefing_manifest(
+        run_id=run_id,
+        plan_document=plan_document,
+        publications=collect_run_publications(run_directory),
+        trends_cache_path=DEFAULT_GOOGLE_TRENDS_CACHE,
+        shadow_path=run_directory / "news-worthiness-shadow.json",
+        fallback_path=run_directory / "publication-fallback.json",
+    )
+    atomic_write_manifest(destination, payload)
+    logger.info(
+        "briefing_manifest event=written run_id=%s complete=%s published=%d artifact=%s",
+        run_id,
+        payload["complete"],
+        len(payload["published"]),
+        destination,
+    )
+    if not payload["complete"]:
+        logger.warning(
+            "briefing_manifest event=sync_skipped continuing=true reason=incomplete_run"
+        )
+        return destination
+    try:
+        config = WordPressConfig.from_environment(PROJECT_ROOT / ".env")
+        response = WordPressClient(config).sync_briefing_manifest(payload)
+        logger.info(
+            "briefing_manifest event=synced failed=false run_id=%s stored=%s",
+            run_id,
+            bool(response.get("stored")) if isinstance(response, dict) else False,
+        )
+    except (ConfigurationError, WordPressError, OSError, ValueError) as exc:
+        logger.warning(
+            "briefing_manifest event=sync_failed continuing=true run_id=%s reason_type=%s",
+            run_id,
+            type(exc).__name__,
+        )
+    return destination
+
+
 def main() -> int:
     args = build_parser().parse_args()
     logger = configure_logger(date.today())
@@ -2347,6 +2405,12 @@ def main() -> int:
                 resume=bool(args.resume_run_id),
                 workers=args.topic_workers,
             )
+        write_and_sync_briefing_manifest(
+            run_id=run_id,
+            run_directory=run_directory,
+            plan_document=plan_document,
+            logger=logger,
+        )
         logger.info(
             "pipeline event=end failed=false run_id=%s topics=%r posts=%r "
             "duration_seconds=%.3f",

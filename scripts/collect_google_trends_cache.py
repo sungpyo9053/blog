@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import re
 import tempfile
@@ -22,6 +24,7 @@ DEFAULT_FEED_URL = "https://trends.google.com/trending/rss?geo=KR"
 PROVIDER = "google_trends_kr_rss"
 HT_NAMESPACE = "https://trends.google.com/trending/rss"
 USER_AGENT = "HuntNews-TrendCollector/1.0 (+https://huntlab.app/)"
+CONTRACT_VERSION = "google-trends-cache.v2"
 
 
 class TrendsCollectorError(RuntimeError):
@@ -30,6 +33,47 @@ class TrendsCollectorError(RuntimeError):
 
 def normalize_topic(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+def canonical_hash(value: Any) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def discovery_score(row: dict[str, Any], *, collected_at: datetime) -> float:
+    """Rank observed demand without model inference or editorial judgment."""
+    try:
+        last_seen = datetime.fromisoformat(str(row.get("last_seen_at", ""))).astimezone(UTC)
+    except ValueError:
+        last_seen = collected_at.astimezone(UTC) - timedelta(hours=48)
+    age_hours = max(0.0, (collected_at.astimezone(UTC) - last_seen).total_seconds() / 3600)
+    traffic = max(0, int(row.get("approx_traffic", 0)))
+    observations = max(1, int(row.get("observation_count", 1)))
+    sources = max(0, int(row.get("news_source_count", 0)))
+    traffic_component = min(10.0, math.log10(max(1, traffic)) * 2.0)
+    freshness_component = max(0.0, 10.0 - (age_hours / 4.8))
+    recurrence_component = min(10.0, observations * 1.5)
+    diversity_component = min(10.0, sources * 2.0)
+    return round(
+        traffic_component * 0.45
+        + freshness_component * 0.25
+        + recurrence_component * 0.15
+        + diversity_component * 0.15,
+        4,
+    )
+
+
+def enrich_row(row: dict[str, Any], *, collected_at: datetime) -> dict[str, Any]:
+    enriched = dict(row)
+    enriched["observation_count"] = max(1, int(enriched.get("observation_count", 1)))
+    enriched["peak_traffic"] = max(
+        int(enriched.get("peak_traffic", 0)), int(enriched.get("approx_traffic", 0))
+    )
+    enriched["traffic_delta"] = int(enriched.get("traffic_delta", 0))
+    enriched["discovery_score"] = discovery_score(enriched, collected_at=collected_at)
+    return enriched
 
 
 def parse_approx_traffic(value: str) -> int:
@@ -79,7 +123,7 @@ def parse_feed(xml_bytes: bytes, *, collected_at: datetime) -> list[dict[str, An
             news_items.append({"title": title, "url": url, "source": source})
 
         rows.append(
-            {
+            enrich_row({
                 "topic": topic,
                 "normalized_topic": key,
                 "approx_traffic": parse_approx_traffic(traffic_text),
@@ -91,7 +135,10 @@ def parse_feed(xml_bytes: bytes, *, collected_at: datetime) -> list[dict[str, An
                 "news_source_count": len(
                     {entry["source"].casefold() for entry in news_items if entry["source"]}
                 ),
-            }
+                "observation_count": 1,
+                "peak_traffic": parse_approx_traffic(traffic_text),
+                "traffic_delta": 0,
+            }, collected_at=collected_at)
         )
     if not rows:
         raise TrendsCollectorError("Google Trends RSS contained no usable topics")
@@ -127,7 +174,9 @@ def merge_rows(
         except ValueError:
             continue
         if key and last_seen.astimezone(UTC) >= cutoff:
-            merged[key] = {**row, "normalized_topic": key}
+            merged[key] = enrich_row(
+                {**row, "normalized_topic": key}, collected_at=collected_at
+            )
 
     for row in fresh:
         key = row["normalized_topic"]
@@ -144,13 +193,22 @@ def merge_rows(
                     if previous_traffic > fresh_traffic
                     else row["traffic_label"]
                 ),
+                "observation_count": max(1, int(previous.get("observation_count", 1))) + 1,
+                "peak_traffic": max(
+                    previous_traffic,
+                    int(previous.get("peak_traffic", 0)),
+                    fresh_traffic,
+                ),
+                "traffic_delta": fresh_traffic - previous_traffic,
             }
-        merged[key] = row
+        merged[key] = enrich_row(row, collected_at=collected_at)
 
     return sorted(
         merged.values(),
         key=lambda row: (
-            str(row.get("last_seen_at", "")), int(row.get("approx_traffic", 0))
+            float(row.get("discovery_score", 0.0)),
+            str(row.get("last_seen_at", "")),
+            int(row.get("approx_traffic", 0)),
         ),
         reverse=True,
     )[:max_rows]
@@ -202,15 +260,18 @@ def main() -> int:
             retention_hours=args.retention_hours,
             max_rows=args.max_rows,
         )
+        payload = {
+            "contract_version": CONTRACT_VERSION,
+            "provider": PROVIDER,
+            "geo": "KR",
+            "checked_at": collected_at.isoformat(),
+            "retention_hours": args.retention_hours,
+            "rows": rows,
+        }
+        payload["source_snapshot_hash"] = canonical_hash(rows)
         atomic_write(
             args.cache,
-            {
-                "provider": PROVIDER,
-                "geo": "KR",
-                "checked_at": collected_at.isoformat(),
-                "retention_hours": args.retention_hours,
-                "rows": rows,
-            },
+            payload,
         )
     except TrendsCollectorError as exc:
         print(f"google_trends_collector status=ERROR cache_preserved=true reason={exc}")

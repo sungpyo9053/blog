@@ -99,6 +99,11 @@ def load_google_trends_cache(path: Path | None) -> dict[str, Any]:
     payload = _load_json(path)
     if payload.get("provider") != "google_trends_kr_rss":
         raise SearchSignalError("Google Trends provider mismatch")
+    contract_version = payload.get("contract_version")
+    if contract_version not in {None, "google-trends-cache.v2"}:
+        raise SearchSignalError("Google Trends contract version mismatch")
+    if contract_version and len(str(payload.get("source_snapshot_hash", ""))) != 64:
+        raise SearchSignalError("Google Trends source snapshot hash is required")
     if payload.get("geo") != "KR" or not str(payload.get("checked_at", "")).strip():
         raise SearchSignalError("Google Trends geo and checked_at are required")
     rows = payload.get("rows")
@@ -122,6 +127,15 @@ def load_google_trends_cache(path: Path | None) -> dict[str, Any]:
             raise SearchSignalError(f"Google Trends row {index} traffic is invalid")
         if not isinstance(row["news_items"], list):
             raise SearchSignalError(f"Google Trends row {index} news_items is invalid")
+        if contract_version:
+            if not isinstance(row.get("discovery_score"), (int, float)):
+                raise SearchSignalError(
+                    f"Google Trends row {index} discovery_score is invalid"
+                )
+            if not isinstance(row.get("observation_count"), int) or row["observation_count"] < 1:
+                raise SearchSignalError(
+                    f"Google Trends row {index} observation_count is invalid"
+                )
     return {**payload, "status": "AVAILABLE", "rows": rows}
 
 

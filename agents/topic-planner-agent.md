@@ -163,8 +163,11 @@ HuntLab의 실제 프로젝트와 운영 경험을 적극 활용한다. ReviewDr
 
 Harness가 제공한 매시간 Google Trends 한국 RSS 캐시를 오늘 급상승 후보를 발견하는
 주력 신호로 사용한다. `topic`, `approx_traffic`, `published_at`, `first_seen_at`,
-`last_seen_at`과 관련 기사 목록을 관측값으로 기록하며 숫자를 절대 월간 검색량으로
-해석하지 않는다.
+`last_seen_at`, `observation_count`, `news_source_count`, `discovery_score`와 관련 기사
+목록을 관측값으로 기록하며 숫자를 절대 월간 검색량으로 해석하지 않는다.
+`discovery_score`는 검색량·신선도·반복 관측·출처 다양성을 Python이 합산한 발견
+우선순위일 뿐 기사 중요도나 사실 신뢰도 점수가 아니다. 높은 점수만으로 TOP2에
+올리지 말고 아래의 공식 원문 계약을 별도로 통과시킨다.
 
 모든 후보의 `google_trends_approx_traffic`에는 후보와 직접 일치하는 Trends 행의
 `approx_traffic`을 쉼표 없는 0 이상의 정수로 기록한다. 일치 관측이 없으면 값을

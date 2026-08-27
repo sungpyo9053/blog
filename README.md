@@ -7,6 +7,20 @@
 공개 사이트는 [huntlab.app](https://huntlab.app/)을 유지하며 기존 URL, 글,
 미디어와 검색 색인을 보존합니다.
 
+## Hunt Brief 홈
+
+홈 화면은 매일 발행된 글을 빠르게 판단할 수 있는 브리핑 대시보드로 구성합니다.
+최근 공개 글에서 핵심 신호 3개, 실제 태그·카테고리 기반 키워드, 발행 시점별
+확인 타임라인, 편집 기준 필독 목록을 만들고 기존 분야별 아카이브로 이어집니다.
+현재 공개 데이터만 사용하며 Scorer가 Production으로 승격되기 전에는
+`AI 선정`이나 임의 점수처럼 검증할 수 없는 표시는 사용하지 않습니다.
+
+정규 Daily Pipeline은 글 두 건의 Publisher 감사 로그를 확인한 뒤
+`briefing-manifest.json`을 원자적으로 생성합니다. 이 파일은 Google Trends 수집
+상태, 전체 후보 수, Legacy·Shadow 비교와 실제 공개 Post ID를 연결합니다.
+완료된 두 건만 인증된 WordPress REST 경로로 최신 홈 브리핑에 동기화하며,
+동기화 실패는 경고로 격리되어 이미 성공한 02시 발행을 실패로 바꾸지 않습니다.
+
 ## 구성
 
 - `agents/`: Planner, Researcher, Writer, Image Maker, Assembler, Reviewer,
@@ -55,6 +69,9 @@ Google Trends 한국 RSS 수집기는 매시간 급상승 검색어, 대략적�
 시의성 신호로 사용하지만 관련 기사 자체를 사실 근거로 간주하지 않으며, 공식 원문
 하나 또는 독립 출처 두 개 이상을 다시 확인합니다. 같은 검색 의도가 Search Console의
 실제 HuntLab 검색어와 연결되면 적합성 가산점을 최대 1점만 적용합니다.
+캐시 V2는 검색량·신선도·반복 관측·관련 기사 출처 다양성을 결정론적
+`discovery_score`로 계산하고 canonical `source_snapshot_hash`를 남깁니다. 이 점수는
+후보 발견 순서만 정하며 기사 중요도나 사실 신뢰도 판단을 대체하지 않습니다.
 
 Whereispost 수집기는 2시간마다 소량의 키워드를 정상 브라우저
 화면으로 조회해 PC·모바일 검색량, 총 검색량, 문서 수와 경쟁 비율을 캐시에 누적합니다.

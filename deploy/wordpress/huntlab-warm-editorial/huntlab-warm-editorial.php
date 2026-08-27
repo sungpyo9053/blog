@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 3.1.0
+ * Version: 4.0.0
  * Author: Hunt News
  */
 
@@ -35,6 +35,225 @@ function hunt_news_remove_legacy_category_hero() {
 	}
 }
 add_action( 'wp', 'hunt_news_remove_legacy_category_hero', 20 );
+
+/**
+ * Return a stable, public-only snapshot for the home briefing board.
+ *
+ * @param int $limit Maximum number of posts.
+ * @return array<int, WP_Post>
+ */
+function hunt_news_briefing_posts( $limit = 12 ) {
+	return get_posts(
+		array(
+			'post_type'              => 'post',
+			'post_status'            => 'publish',
+			'posts_per_page'         => max( 1, min( 24, absint( $limit ) ) ),
+			'orderby'                => 'date',
+			'order'                  => 'DESC',
+			'ignore_sticky_posts'    => true,
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+		)
+	);
+}
+
+/**
+ * Keep home-card summaries short and based only on the published article.
+ *
+ * @param WP_Post $post Post object.
+ * @return string
+ */
+function hunt_news_briefing_summary( $post ) {
+	$summary = has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_strip_all_tags( $post->post_content );
+	return wp_html_excerpt( trim( wp_strip_all_tags( $summary ) ), 116, '…' );
+}
+
+/**
+ * Resolve one visible primary category without inventing a new taxonomy.
+ *
+ * @param WP_Post $post Post object.
+ * @return array{name:string,url:string,slug:string}
+ */
+function hunt_news_briefing_category( $post ) {
+	$categories = get_the_category( $post->ID );
+	if ( ! $categories ) {
+		return array( 'name' => '브리핑', 'url' => home_url( '/' ), 'slug' => 'briefing' );
+	}
+	$category = $categories[0];
+	$url      = get_category_link( $category->term_id );
+	return array(
+		'name' => $category->name,
+		'url'  => is_wp_error( $url ) ? home_url( '/' ) : $url,
+		'slug' => $category->slug,
+	);
+}
+
+/**
+ * Count observed taxonomy terms in the same post snapshot.
+ *
+ * @param array<int, WP_Post> $posts Posts used by the board.
+ * @param int                 $limit Maximum keyword rows.
+ * @return array<int, array{name:string,count:int,percent:int,url:string}>
+ */
+function hunt_news_briefing_keywords( $posts, $limit = 7 ) {
+	$terms = array();
+	foreach ( $posts as $post ) {
+		$post_terms = get_the_tags( $post->ID );
+		if ( ! $post_terms ) {
+			$post_terms = get_the_category( $post->ID );
+		}
+		foreach ( array_slice( $post_terms, 0, 4 ) as $term ) {
+			$key = sanitize_title( $term->name );
+			if ( ! isset( $terms[ $key ] ) ) {
+				$url = get_term_link( $term );
+				$terms[ $key ] = array(
+					'name'  => $term->name,
+					'count' => 0,
+					'url'   => is_wp_error( $url ) ? home_url( '/' ) : $url,
+				);
+			}
+			$terms[ $key ]['count']++;
+		}
+	}
+	usort(
+		$terms,
+		function ( $left, $right ) {
+			if ( $left['count'] === $right['count'] ) {
+				return strcmp( $left['name'], $right['name'] );
+			}
+			return $right['count'] <=> $left['count'];
+		}
+	);
+	$terms = array_slice( $terms, 0, max( 1, absint( $limit ) ) );
+	$max   = $terms ? max( array_column( $terms, 'count' ) ) : 1;
+	foreach ( $terms as &$term ) {
+		$term['percent'] = max( 24, (int) round( ( $term['count'] / $max ) * 100 ) );
+	}
+	unset( $term );
+	return $terms;
+}
+
+/**
+ * Select an honest time-based reading path from the recent post snapshot.
+ *
+ * @param array<int, WP_Post> $posts Recent posts.
+ * @return array<int, array{label:string,description:string,post:WP_Post}>
+ */
+function hunt_news_briefing_timeline( $posts ) {
+	$now     = current_time( 'timestamp' );
+	$buckets = array(
+		'today' => array( 'label' => '오늘', 'description' => '지금 먼저 확인할 변화', 'min' => 0, 'max' => DAY_IN_SECONDS ),
+		'week'  => array( 'label' => '이번 주', 'description' => '일정과 조건을 다시 볼 것', 'min' => DAY_IN_SECONDS, 'max' => 7 * DAY_IN_SECONDS ),
+		'month' => array( 'label' => '이번 달', 'description' => '신청·계약 전에 점검할 것', 'min' => 7 * DAY_IN_SECONDS, 'max' => 31 * DAY_IN_SECONDS ),
+		'watch' => array( 'label' => '계속 보기', 'description' => '후속 발표를 추적할 것', 'min' => 31 * DAY_IN_SECONDS, 'max' => PHP_INT_MAX ),
+	);
+	$used = array();
+	$rows = array();
+	foreach ( $buckets as $bucket ) {
+		$selected = null;
+		foreach ( $posts as $post ) {
+			if ( isset( $used[ $post->ID ] ) ) {
+				continue;
+			}
+			$age = max( 0, $now - get_post_time( 'U', false, $post ) );
+			if ( $age >= $bucket['min'] && $age < $bucket['max'] ) {
+				$selected = $post;
+				break;
+			}
+		}
+		if ( $selected ) {
+			$used[ $selected->ID ] = true;
+			$rows[] = array( 'label' => $bucket['label'], 'description' => $bucket['description'], 'post' => $selected );
+		}
+	}
+	return $rows;
+}
+
+/**
+ * Return only a complete, recent pipeline manifest. Stale state never masquerades
+ * as today's collection result and the homepage falls back to public posts.
+ *
+ * @return array<string,mixed>
+ */
+function hunt_news_latest_briefing_manifest() {
+	$manifest = get_option( 'hunt_news_briefing_manifest', array() );
+	if ( ! is_array( $manifest ) || 'briefing-manifest.v1' !== ( $manifest['contract_version'] ?? '' ) || empty( $manifest['complete'] ) ) {
+		return array();
+	}
+	$generated = strtotime( (string) ( $manifest['generated_at'] ?? '' ) );
+	$now       = current_time( 'timestamp', true );
+	if ( ! $generated || $generated > $now + HOUR_IN_SECONDS || $generated < $now - ( 3 * DAY_IN_SECONDS ) ) {
+		return array();
+	}
+	$published = isset( $manifest['published'] ) && is_array( $manifest['published'] ) ? $manifest['published'] : array();
+	return 2 === count( $published ) ? $manifest : array();
+}
+
+/**
+ * Prefer the two verified publications from the latest manifest, then fill the
+ * third briefing slot with the next public post.
+ *
+ * @param array<int,WP_Post> $recent_posts Recent public posts.
+ * @param array<string,mixed> $manifest Latest manifest.
+ * @return array<int,WP_Post>
+ */
+function hunt_news_manifest_signal_posts( $recent_posts, $manifest ) {
+	$ordered = array();
+	$used    = array();
+	foreach ( (array) ( $manifest['published'] ?? array() ) as $item ) {
+		$post = get_post( absint( $item['post_id'] ?? 0 ) );
+		if ( $post && 'post' === $post->post_type && 'publish' === $post->post_status ) {
+			$ordered[]        = $post;
+			$used[ $post->ID ] = true;
+		}
+	}
+	foreach ( $recent_posts as $post ) {
+		if ( count( $ordered ) >= 3 ) {
+			break;
+		}
+		if ( ! isset( $used[ $post->ID ] ) ) {
+			$ordered[] = $post;
+		}
+	}
+	return array_slice( $ordered, 0, 3 );
+}
+
+/** @return array<int,array<string,mixed>> */
+function hunt_news_manifest_publications_by_post( $manifest ) {
+	$items = array();
+	foreach ( (array) ( $manifest['published'] ?? array() ) as $item ) {
+		$post_id = absint( $item['post_id'] ?? 0 );
+		if ( $post_id ) {
+			$items[ $post_id ] = $item;
+		}
+	}
+	return $items;
+}
+
+/** @return array<int,array{name:string,url:string,count:int,percent:int,label:string}> */
+function hunt_news_manifest_keywords( $manifest ) {
+	$topics = (array) ( $manifest['collection']['top_topics'] ?? array() );
+	$max    = 1;
+	foreach ( $topics as $topic ) {
+		$max = max( $max, absint( $topic['approx_traffic'] ?? 0 ) );
+	}
+	$keywords = array();
+	foreach ( array_slice( $topics, 0, 7 ) as $topic ) {
+		$name    = sanitize_text_field( (string) ( $topic['topic'] ?? '' ) );
+		$traffic = absint( $topic['approx_traffic'] ?? 0 );
+		if ( '' === $name ) {
+			continue;
+		}
+		$keywords[] = array(
+			'name'    => $name,
+			'url'     => add_query_arg( 's', $name, home_url( '/' ) ),
+			'count'   => $traffic,
+			'percent' => max( 24, (int) round( ( $traffic / $max ) * 100 ) ),
+			'label'   => $traffic ? number_format_i18n( $traffic ) . '+' : '관측',
+		);
+	}
+	return $keywords;
+}
 
 /**
  * Return category-specific editorial context for the archive hero.
@@ -169,6 +388,7 @@ function huntlab_warm_editorial_home_intro() {
 
 	$is_category = is_category();
 	$intro       = null;
+	$brief_posts = array();
 
 	if ( $is_category ) {
 		$category = get_queried_object();
@@ -178,26 +398,33 @@ function huntlab_warm_editorial_home_intro() {
 		if ( ! $intro ) {
 			return;
 		}
+	} else {
+		$brief_posts = hunt_news_briefing_posts( 12 );
 	}
+	$brief_manifest = $is_category ? array() : hunt_news_latest_briefing_manifest();
 	?>
 	<section id="huntlab-home-intro" class="huntlab-home-intro<?php echo $is_category ? ' huntlab-home-intro--category' : ''; ?>" aria-labelledby="huntlab-home-intro-title">
 		<div class="huntlab-home-intro__copy">
-			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt News · 생활 변화 설명서'; ?></p>
-			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '복잡한 변화가,<br>내 생활에 닿는 순간.'; ?></h1>
-			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '정책, 경제, 부동산, 사회, 정치, 문화·엔터와 IT의 변화를 어려운 말 대신 실제 대상·금액·시점·내가 할 일로 설명합니다.'; ?></p>
+			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt Brief · 매일 02:00 KST'; ?></p>
+			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '오늘 바뀐 것,<br>30초 안에 파악하세요.'; ?></h1>
+			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '뉴스를 나열하지 않습니다. 생활에 닿는 변화와 확인할 조건, 지금 할 일을 한 화면에 정리합니다.'; ?></p>
 			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'Hunt News 콘텐츠 원칙' ); ?>">
-				<?php foreach ( $is_category ? $intro['promises'] : array( '얼마나 달라지나', '언제부터 적용되나', '나는 무엇을 하나' ) as $promise ) : ?>
+				<?php foreach ( $is_category ? $intro['promises'] : array( '핵심 신호', '영향과 조건', '지금 할 일' ) as $promise ) : ?>
 					<li><?php echo esc_html( $promise ); ?></li>
 				<?php endforeach; ?>
 			</ul>
+			<?php if ( ! $is_category ) : ?>
+				<div class="huntlab-home-intro__status" aria-label="브리핑 상태">
+					<span><?php echo esc_html( wp_date( 'Y.m.d' ) ); ?></span>
+					<span>최근 공개 글 <?php echo esc_html( (string) count( $brief_posts ) ); ?>개 반영</span>
+					<?php if ( $brief_manifest ) : ?><span>수집 <?php echo esc_html( (string) absint( $brief_manifest['collection']['observed_topic_count'] ?? 0 ) ); ?>개 · 후보 <?php echo esc_html( (string) absint( $brief_manifest['selection']['candidate_count'] ?? 0 ) ); ?>개</span><?php endif; ?>
+					<a href="#hunt-news-briefing-board">오늘 브리핑 보기 <b aria-hidden="true">↓</b></a>
+				</div>
+			<?php endif; ?>
 		</div>
 		<?php if ( $is_category ) : ?>
 			<figure class="huntlab-home-intro__visual">
 				<img src="<?php echo esc_url( plugins_url( 'assets/categories/' . $intro['image'], __FILE__ ) ); ?>" width="1000" height="563" alt="<?php echo esc_attr( $intro['alt'] ); ?>" loading="eager" decoding="async" fetchpriority="high">
-			</figure>
-		<?php else : ?>
-			<figure class="huntlab-home-intro__visual huntlab-home-intro__visual--home">
-				<img src="<?php echo esc_url( plugins_url( 'assets/hunt-news-life-impact-hero.webp', __FILE__ ) ); ?>" width="1600" height="900" alt="정책과 경제 변화가 휴대전화, 달력, 지갑, 교통과 주유 같은 일상으로 이어지는 미니어처" loading="eager" decoding="async" fetchpriority="high">
 			</figure>
 		<?php endif; ?>
 	</section>
@@ -362,8 +589,108 @@ function hunt_news_register_popular_read_route() {
 			'args'                => array( 'post_id' => array( 'required' => true, 'type' => 'integer' ) ),
 		)
 	);
+	register_rest_route(
+		'hunt-news/v1',
+		'/briefing-run',
+		array(
+			'methods'             => 'POST',
+			'callback'            => 'hunt_news_store_briefing_manifest',
+			'permission_callback' => function () {
+				return current_user_can( 'edit_posts' );
+			},
+		)
+	);
 }
 add_action( 'rest_api_init', 'hunt_news_register_popular_read_route' );
+
+/**
+ * Validate and store a bounded public-safe run manifest from the publisher.
+ * Publication already succeeded before this optional observer write occurs.
+ *
+ * @param WP_REST_Request $request Request.
+ * @return WP_REST_Response|WP_Error
+ */
+function hunt_news_store_briefing_manifest( $request ) {
+	$payload = $request->get_json_params();
+	if ( ! is_array( $payload ) || 'briefing-manifest.v1' !== ( $payload['contract_version'] ?? '' ) || empty( $payload['complete'] ) ) {
+		return new WP_Error( 'invalid_briefing_contract', '완료된 briefing-manifest.v1만 저장할 수 있습니다.', array( 'status' => 400 ) );
+	}
+	$run_id = sanitize_text_field( (string) ( $payload['run_id'] ?? '' ) );
+	if ( ! preg_match( '/^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{10}$/', $run_id ) ) {
+		return new WP_Error( 'invalid_briefing_run', 'run_id 형식이 올바르지 않습니다.', array( 'status' => 400 ) );
+	}
+	$published = isset( $payload['published'] ) && is_array( $payload['published'] ) ? $payload['published'] : array();
+	if ( 2 !== count( $published ) ) {
+		return new WP_Error( 'invalid_briefing_publications', '검증된 공개 글 두 건이 필요합니다.', array( 'status' => 400 ) );
+	}
+	$safe_posts = array();
+	foreach ( $published as $item ) {
+		$post_id = absint( $item['post_id'] ?? 0 );
+		$post    = get_post( $post_id );
+		if ( ! $post || 'post' !== $post->post_type || 'publish' !== $post->post_status ) {
+			return new WP_Error( 'invalid_briefing_post', '공개 상태인 WordPress 글만 연결할 수 있습니다.', array( 'status' => 400 ) );
+		}
+		$safe_posts[] = array(
+			'run_id'                        => $run_id,
+			'topic_id'                      => sanitize_text_field( (string) ( $item['topic_id'] ?? '' ) ),
+			'post_id'                       => $post_id,
+			'url'                           => get_permalink( $post ),
+			'published_at'                  => sanitize_text_field( (string) ( $item['published_at'] ?? '' ) ),
+			'title'                         => get_the_title( $post ),
+			'category'                      => sanitize_text_field( (string) ( $item['category'] ?? '' ) ),
+			'primary_keyword'               => sanitize_text_field( (string) ( $item['primary_keyword'] ?? '' ) ),
+			'selection_track'               => sanitize_key( (string) ( $item['selection_track'] ?? '' ) ),
+			'selection_reason'              => sanitize_text_field( (string) ( $item['selection_reason'] ?? '' ) ),
+			'reader_action'                 => sanitize_text_field( (string) ( $item['reader_action'] ?? '' ) ),
+			'life_impact'                   => sanitize_text_field( (string) ( $item['life_impact'] ?? '' ) ),
+			'effective_date'                => sanitize_text_field( (string) ( $item['effective_date'] ?? '' ) ),
+			'google_trends_approx_traffic'  => absint( $item['google_trends_approx_traffic'] ?? 0 ),
+			'whereispost_total_searches'    => absint( $item['whereispost_total_searches'] ?? 0 ),
+			'source_count'                  => min( 20, absint( $item['source_count'] ?? 0 ) ),
+			'source_domains'                => array_slice( array_map( 'sanitize_text_field', (array) ( $item['source_domains'] ?? array() ) ), 0, 20 ),
+		);
+	}
+	$top_topics = array();
+	foreach ( array_slice( (array) ( $payload['collection']['top_topics'] ?? array() ), 0, 7 ) as $topic ) {
+		$name = sanitize_text_field( (string) ( $topic['topic'] ?? '' ) );
+		if ( '' !== $name ) {
+			$top_topics[] = array(
+				'topic'             => $name,
+				'approx_traffic'    => absint( $topic['approx_traffic'] ?? 0 ),
+				'last_seen_at'      => sanitize_text_field( (string) ( $topic['last_seen_at'] ?? '' ) ),
+				'news_source_count' => min( 20, absint( $topic['news_source_count'] ?? 0 ) ),
+			);
+		}
+	}
+	$safe = array(
+		'contract_version'    => 'briefing-manifest.v1',
+		'generated_at'        => sanitize_text_field( (string) ( $payload['generated_at'] ?? '' ) ),
+		'run_id'              => $run_id,
+		'complete'            => true,
+		'source_snapshot_hash'=> sanitize_text_field( (string) ( $payload['source_snapshot_hash'] ?? '' ) ),
+		'collection'          => array(
+			'provider'             => sanitize_key( (string) ( $payload['collection']['provider'] ?? '' ) ),
+			'checked_at'           => sanitize_text_field( (string) ( $payload['collection']['checked_at'] ?? '' ) ),
+			'status'               => in_array( ( $payload['collection']['status'] ?? '' ), array( 'fresh', 'stale', 'unavailable' ), true ) ? $payload['collection']['status'] : 'unavailable',
+			'age_minutes'          => absint( $payload['collection']['age_minutes'] ?? 0 ),
+			'retention_hours'      => absint( $payload['collection']['retention_hours'] ?? 0 ),
+			'observed_topic_count' => absint( $payload['collection']['observed_topic_count'] ?? 0 ),
+			'top_topics'           => $top_topics,
+		),
+		'selection'           => array(
+			'candidate_count' => absint( $payload['selection']['candidate_count'] ?? 0 ),
+			'legacy_top2'     => array_slice( array_map( 'sanitize_text_field', (array) ( $payload['selection']['legacy_top2'] ?? array() ) ), 0, 2 ),
+			'shadow_top2'     => array_slice( array_map( 'sanitize_text_field', (array) ( $payload['selection']['shadow_top2'] ?? array() ) ), 0, 2 ),
+			'overlap_count'   => min( 2, absint( $payload['selection']['overlap_count'] ?? 0 ) ),
+			'shadow_status'   => sanitize_key( (string) ( $payload['selection']['shadow_status'] ?? '' ) ),
+			'fallback_used'   => ! empty( $payload['selection']['fallback_used'] ),
+		),
+		'published'           => $safe_posts,
+		'stored_at'           => current_time( 'mysql', true ),
+	);
+	update_option( 'hunt_news_briefing_manifest', $safe, false );
+	return rest_ensure_response( array( 'stored' => true, 'run_id' => $run_id, 'post_ids' => wp_list_pluck( $safe_posts, 'post_id' ) ) );
+}
 
 /**
  * Explain the editorial promise and offer category-first discovery on home.
@@ -384,9 +711,141 @@ function hunt_news_home_sections() {
 		'culture-entertainment' => array( '문화·엔터', '콘텐츠·공연·플랫폼·계약' ),
 		'it'                    => array( 'IT', 'AI·앱·플랫폼·작동 원리' ),
 	);
+	$brief_posts  = $is_category ? array() : hunt_news_briefing_posts( 12 );
+	$manifest     = $is_category ? array() : hunt_news_latest_briefing_manifest();
+	$manifest_map = $is_category ? array() : hunt_news_manifest_publications_by_post( $manifest );
+	$signal_posts = $is_category ? array() : hunt_news_manifest_signal_posts( $brief_posts, $manifest );
+	$keywords     = $is_category ? array() : ( $manifest ? hunt_news_manifest_keywords( $manifest ) : hunt_news_briefing_keywords( $brief_posts, 7 ) );
+	$timeline     = $is_category ? array() : hunt_news_briefing_timeline( $brief_posts );
 	?>
+	<?php if ( ! $is_category && $brief_posts ) : ?>
+	<section id="hunt-news-briefing-board" class="hunt-news-briefing-board" aria-labelledby="hunt-news-briefing-title">
+		<header class="hunt-news-briefing-board__toolbar">
+			<div>
+				<p>오늘의 헌팅 대시보드</p>
+				<h2 id="hunt-news-briefing-title">생활에 닿는 변화부터 봅니다</h2>
+			</div>
+			<div class="hunt-news-briefing-board__date" aria-label="브리핑 기준">
+				<strong><?php echo esc_html( wp_date( 'Y-m-d' ) ); ?></strong>
+				<span>최신 공개 글 기준</span>
+			</div>
+		</header>
+		<?php if ( $manifest ) : ?>
+		<section class="hunt-news-pipeline-status" aria-label="수집부터 발행까지의 실행 상태">
+			<div><span>수집</span><strong><?php echo esc_html( (string) absint( $manifest['collection']['observed_topic_count'] ?? 0 ) ); ?>개</strong><small><?php echo 'fresh' === ( $manifest['collection']['status'] ?? '' ) ? 'Google Trends 최신 캐시' : ( 'stale' === ( $manifest['collection']['status'] ?? '' ) ? 'Google Trends 캐시 지연' : '수집 캐시 미연결' ); ?></small></div>
+			<div><span>선정</span><strong><?php echo esc_html( (string) absint( $manifest['selection']['candidate_count'] ?? 0 ) ); ?> → 2</strong><small>Legacy 실제 발행 후보</small></div>
+			<div><span>검증</span><strong><?php echo esc_html( (string) count( (array) ( $manifest['published'] ?? array() ) ) ); ?>건</strong><small>Reviewer·Publisher 통과</small></div>
+			<div><span>Shadow</span><strong><?php echo esc_html( (string) absint( $manifest['selection']['overlap_count'] ?? 0 ) ); ?>/2</strong><small>비발행 병렬 비교</small></div>
+		</section>
+		<?php endif; ?>
+
+		<div class="hunt-news-briefing-overview">
+			<section class="hunt-news-signal-panel" aria-labelledby="hunt-news-signal-title">
+				<header class="hunt-news-panel-heading">
+					<div><span aria-hidden="true">●</span><h3 id="hunt-news-signal-title">핵심 신호</h3></div>
+					<p>최근 공개 글 중 먼저 읽을 변화 3개</p>
+				</header>
+				<div class="hunt-news-signal-list">
+					<?php foreach ( $signal_posts as $index => $post ) :
+						$category = hunt_news_briefing_category( $post );
+						$tones    = array( 'green', 'amber', 'violet' );
+						$observed = $manifest_map[ $post->ID ] ?? array();
+						$summary  = ! empty( $observed['life_impact'] ) ? $observed['life_impact'] : ( ! empty( $observed['selection_reason'] ) ? $observed['selection_reason'] : hunt_news_briefing_summary( $post ) );
+						?>
+						<article class="hunt-news-signal-card hunt-news-signal-card--<?php echo esc_attr( $tones[ $index ] ); ?>">
+							<div class="hunt-news-signal-card__dot" aria-hidden="true"></div>
+							<div>
+								<p><a href="<?php echo esc_url( $category['url'] ); ?>"><?php echo esc_html( $category['name'] ); ?></a> · <?php echo esc_html( get_the_date( 'm.d', $post ) ); ?></p>
+								<h4><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h4>
+								<span><?php echo esc_html( wp_html_excerpt( $summary, 120, '…' ) ); ?></span>
+							</div>
+							<a class="hunt-news-signal-card__action" href="<?php echo esc_url( get_permalink( $post ) ); ?>">핵심 확인 <b aria-hidden="true">→</b></a>
+						</article>
+					<?php endforeach; ?>
+				</div>
+			</section>
+
+			<aside class="hunt-news-keyword-panel" aria-labelledby="hunt-news-keyword-title">
+				<header class="hunt-news-panel-heading">
+					<div><span aria-hidden="true">▥</span><h3 id="hunt-news-keyword-title">오늘의 키워드</h3></div>
+					<p><?php echo $manifest ? '수집 캐시 실측값' : '최근 글 태그·분야 관측'; ?></p>
+				</header>
+				<ol class="hunt-news-keyword-list">
+					<?php foreach ( $keywords as $index => $keyword ) : ?>
+						<li>
+							<a href="<?php echo esc_url( $keyword['url'] ); ?>"><span><?php echo esc_html( $keyword['name'] ); ?></span><b><?php echo esc_html( (string) ( $keyword['label'] ?? ( $keyword['count'] . '건' ) ) ); ?></b></a>
+							<div aria-hidden="true"><i style="width:<?php echo esc_attr( (string) $keyword['percent'] ); ?>%"></i></div>
+						</li>
+					<?php endforeach; ?>
+				</ol>
+			</aside>
+		</div>
+
+		<section class="hunt-news-action-timeline" aria-labelledby="hunt-news-timeline-title">
+			<header class="hunt-news-panel-heading">
+				<div><span aria-hidden="true">⚡</span><h3 id="hunt-news-timeline-title">확인 타임라인</h3></div>
+				<p>발행 시점에 따라 다시 볼 뉴스를 나눴습니다</p>
+			</header>
+			<ol>
+				<?php foreach ( $timeline as $index => $row ) : ?>
+					<li>
+						<span class="hunt-news-action-timeline__marker" aria-hidden="true"></span>
+						<strong><?php echo esc_html( $row['label'] ); ?></strong>
+						<small><?php echo esc_html( $row['description'] ); ?></small>
+						<a href="<?php echo esc_url( get_permalink( $row['post'] ) ); ?>"><?php echo esc_html( wp_html_excerpt( get_the_title( $row['post'] ), 46, '…' ) ); ?></a>
+					</li>
+				<?php endforeach; ?>
+			</ol>
+		</section>
+
+		<?php $lead = $brief_posts[0]; ?>
+		<section class="hunt-news-focus" aria-labelledby="hunt-news-focus-title">
+			<div class="hunt-news-focus__heading">
+				<p>오늘의 핵심</p>
+				<h3 id="hunt-news-focus-title"><?php echo esc_html( get_the_title( $lead ) ); ?></h3>
+				<a href="<?php echo esc_url( get_permalink( $lead ) ); ?>">전체 내용 읽기 <b aria-hidden="true">→</b></a>
+			</div>
+			<div class="hunt-news-focus__points">
+				<?php foreach ( $signal_posts as $index => $post ) :
+					$category = hunt_news_briefing_category( $post );
+					$observed = $manifest_map[ $post->ID ] ?? array();
+					$action   = ! empty( $observed['reader_action'] ) ? $observed['reader_action'] : '지금 확인할 것 보기';
+					?>
+					<article>
+						<span><?php echo esc_html( $category['name'] ); ?></span>
+						<strong><?php echo esc_html( wp_html_excerpt( get_the_title( $post ), 44, '…' ) ); ?></strong>
+						<a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( wp_html_excerpt( $action, 44, '…' ) ); ?></a>
+					</article>
+				<?php endforeach; ?>
+			</div>
+		</section>
+
+		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
+			<header class="hunt-news-must-read__header">
+				<div><p>편집 기준 필독</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 뉴스</h3></div>
+				<div class="hunt-news-must-read__modes" role="group" aria-label="표시할 필독 기사 수">
+					<button type="button" data-brief-limit="2" aria-pressed="true">필독 2</button>
+					<button type="button" data-brief-limit="5" aria-pressed="false">5개</button>
+					<button type="button" data-brief-limit="all" aria-pressed="false">전체</button>
+				</div>
+			</header>
+			<div class="hunt-news-must-read__grid">
+				<?php foreach ( array_slice( $brief_posts, 0, 10 ) as $index => $post ) :
+					$category = hunt_news_briefing_category( $post );
+					?>
+					<article class="hunt-news-brief-card" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>"<?php echo $index >= 2 ? ' hidden' : ''; ?>>
+						<div><span><?php echo esc_html( $category['name'] ); ?></span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $post ) ); ?>"><?php echo esc_html( get_the_date( 'm.d H:i', $post ) ); ?></time></div>
+						<h4><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h4>
+						<p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p>
+						<a href="<?php echo esc_url( get_permalink( $post ) ); ?>">브리핑 읽기 <b aria-hidden="true">→</b></a>
+					</article>
+				<?php endforeach; ?>
+			</div>
+		</section>
+	</section>
+	<?php endif; ?>
 	<aside id="hunt-news-home-notices" class="hunt-news-home-notices" aria-label="Hunt News 이용 안내">
-		<a class="hunt-news-home-notices__primary" href="<?php echo esc_url( home_url( '/about/' ) ); ?>"><strong>오늘의 변화</strong><span>대상·금액·시점·내가 할 일부터 빠르게 확인하세요</span><b aria-hidden="true">→</b></a>
+		<a class="hunt-news-home-notices__primary" href="<?php echo esc_url( home_url( '/about/' ) ); ?>"><strong>읽는 기준</strong><span>대상·금액·시점·내가 할 일부터 빠르게 확인하세요</span><b aria-hidden="true">→</b></a>
 		<a class="hunt-news-home-notices__secondary" href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>"><span>공식 원문과 실제 적용 단계를 나눠 설명합니다</span><b aria-hidden="true">→</b></a>
 	</aside>
 	<?php hunt_news_render_popular_news(); ?>
@@ -416,7 +875,7 @@ function hunt_news_home_sections() {
 	</section>
 	<?php endif; ?>
 	<script id="hunt-news-home-sections-position">
-	document.addEventListener('DOMContentLoaded',function(){var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News</p><h2>최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}if(section){shell.insertAdjacentElement('afterend',section);}}if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
+	document.addEventListener('DOMContentLoaded',function(){var board=document.getElementById('hunt-news-briefing-board');var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News Archive</p><h2>분야별 최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(board){parent.insertBefore(board,main);}if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}if(section){shell.insertAdjacentElement('afterend',section);}}var limitButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-limit]'));var briefCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-index]'));limitButtons.forEach(function(button){button.addEventListener('click',function(){var value=button.getAttribute('data-brief-limit');var limit=value==='all'?briefCards.length:parseInt(value,10);limitButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});briefCards.forEach(function(card){card.hidden=parseInt(card.getAttribute('data-brief-card-index'),10)>=limit;});});});if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
 	</script>
 	<?php
 }

@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 from scripts.collect_google_trends_cache import (
     TrendsCollectorError,
+    canonical_hash,
+    discovery_score,
     merge_rows,
     parse_approx_traffic,
     parse_feed,
@@ -42,6 +44,9 @@ class GoogleTrendsCollectorTests(unittest.TestCase):
         self.assertEqual(rows[0]["approx_traffic"], 10000)
         self.assertEqual(rows[0]["news_source_count"], 1)
         self.assertEqual(rows[0]["news_items"][0]["source"], "Example News")
+        self.assertEqual(rows[0]["observation_count"], 1)
+        self.assertEqual(rows[0]["peak_traffic"], 10000)
+        self.assertGreater(rows[0]["discovery_score"], 0)
 
     def test_merge_preserves_first_seen_and_drops_stale_rows(self):
         now = datetime(2026, 8, 19, 8, 10, tzinfo=UTC)
@@ -73,6 +78,18 @@ class GoogleTrendsCollectorTests(unittest.TestCase):
         self.assertEqual(
             merged[0]["first_seen_at"], (now - timedelta(hours=3)).isoformat()
         )
+        self.assertEqual(merged[0]["observation_count"], 2)
+        self.assertEqual(merged[0]["peak_traffic"], 20000)
+        self.assertEqual(merged[0]["traffic_delta"], -10000)
+
+    def test_discovery_score_is_observed_and_deterministic(self):
+        now = datetime(2026, 8, 19, 8, 10, tzinfo=UTC)
+        row = parse_feed(RSS, collected_at=now)[0]
+        self.assertEqual(
+            discovery_score(row, collected_at=now),
+            discovery_score(dict(reversed(list(row.items()))), collected_at=now),
+        )
+        self.assertEqual(canonical_hash(row), canonical_hash(dict(reversed(list(row.items())))))
 
 
 if __name__ == "__main__":
