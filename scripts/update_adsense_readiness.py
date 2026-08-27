@@ -49,30 +49,59 @@ PRIVACY_HTML = """
 
 
 ABOUT_HTML = """
-<p><strong>Hunt News는 매일 AI와 개발 기술 변화를 골라 개발자가 지금 이해하고 적용할 행동까지 정리합니다.</strong></p>
-<p>AI/ML, 오픈소스, 클라우드, 데이터, 보안, 국내 IT와 기술 정책을 발표 제목으로 끝내지 않습니다. 무엇이 바뀌었는지, 어떤 버전과 팀에 영향을 주는지, 코드·운영·비용·보안에는 무엇이 달라지는지, 지금 무엇을 확인해야 하는지까지 설명합니다.</p>
-<h2>운영과 편집 책임</h2>
-<p>HuntLab이 사이트를 운영하고 공개 작성자명인 <strong>Hunt News 편집팀</strong>이 주제 선정, 근거 확인, 원고 검수와 정정 판단을 담당합니다. 공식 문서와 실제 관측 범위를 넘어선 경험·숫자·성과를 만들지 않으며, 오류 제보는 <a href="https://huntlab.app/contact/">문의 페이지</a>에서 받습니다.</p>
-<h2>주제는 어떻게 고르나</h2>
+<p><strong>Hunt News는 매일 AI와 개발 기술 변화를 한 화면에 정리하는 날짜별 기술 브리핑입니다.</strong></p>
+<p>뉴스 제목을 나열하는 데서 멈추지 않고 무엇이 바뀌었는지, 개발과 운영에 어떤 영향을 주는지, 지금 무엇을 확인해야 하는지까지 연결합니다. 최신 브리핑은 홈에서 보고, 지난 브리핑은 날짜 아카이브에서 다시 찾을 수 있습니다.</p>
+<h2>30초 활용 흐름</h2>
 <ol>
-<li>등록된 기술 뉴스 RSS·Atom과 Google Trends 한국 RSS를 매시간 수집해 후보 발견 신호로 확인합니다.</li>
-<li>정부·공공기관·법령·공시·기업 공식 발표 같은 1차 자료를 우선 확인하고, 공식 원문이 없으면 서로 독립적인 출처를 교차 검토합니다.</li>
-<li>Search Console에서 Hunt News에 실제 노출된 검색 의도와 직접 연결되면 제한적으로 가산합니다.</li>
-<li>수집 카드와 검색 신호는 사실 근거로 사용하지 않고 공식 원문과 독립 출처로 다시 확인합니다.</li>
-<li>실무 영향, 지금 할 수 있는 행동, 기존 글과의 중복, 근거의 충분성을 함께 검토해 최종 주제를 정합니다.</li>
+<li><strong>핵심 신호</strong>에서 오늘 먼저 확인할 변화와 즉시 할 일을 봅니다.</li>
+<li><strong>오늘의 키워드</strong>에서 기술별 중요도와 방향을 훑습니다.</li>
+<li><strong>기술 영향력 매트릭스</strong>에서 지금 집중할 일과 지켜볼 일을 구분합니다.</li>
+<li><strong>AI 선정 오늘의 필독 5</strong>와 분야별 카드에서 근거 원문을 확인합니다.</li>
 </ol>
-<p>현재 실제 발행 주제는 기존 Topic Planner가 결정합니다. 별도의 News Worthiness Scorer는 동일 후보를 Shadow Mode로 평가해 비교 기록만 남기며, 검증 기간에는 발행 주제를 바꾸지 않습니다.</p>
-<h2>글은 어떻게 확인하나</h2>
+<h2>페이지 구성</h2>
 <ul>
-<li>Research가 출처, 확인 시각, 확정·미확정 정보와 한계를 기록합니다.</li>
-<li>Writer는 확인된 범위에서 대상 환경·버전·적용 시점·선택을 설명합니다.</li>
-<li>Reviewer가 사실성, 고유 가치, 출처 연결, 반복성, 이미지와 발행 계약을 승인한 글만 공개합니다.</li>
-<li>Publisher가 승인된 원고 해시와 공개 상태를 확인하고, 발행 후 URL과 미디어를 다시 검증합니다.</li>
+<li><strong>오늘의 현황 대시보드:</strong> 핵심 신호, 키워드, 기술 영향도와 행동 타임라인을 먼저 보여줍니다.</li>
+<li><strong>오늘의 인사이트:</strong> 여러 원문을 함께 읽어 드러난 공통 변화와 개발자 관점의 의미를 정리합니다.</li>
+<li><strong>오늘의 기사:</strong> 필독 5개와 AI/ML 핵심, 개발 트렌드, AI 공식 블로그, 국내 IT·시사 원문을 나눠 제공합니다.</li>
+<li><strong>날짜 아카이브:</strong> 월별 목록에서 원하는 날짜의 브리핑으로 이동합니다.</li>
 </ul>
-<h2>AI는 어디까지 사용하나</h2>
-<p>AI는 후보 구조화, 조사 정리와 초안 작성을 보조합니다. AI의 표현이나 점수를 사실로 간주하지 않으며, 검색 수요는 관측값으로 분리하고 최종 점수 계산과 발행 조건은 재현 가능한 규칙으로 처리합니다. 자세한 기준은 <a href="https://huntlab.app/editorial-policy/">편집 및 AI 활용 원칙</a>에서 공개합니다.</p>
-<h2>기존 글과 날짜별 브리핑</h2>
-<p>기존 글과 URL은 보존합니다. 매일 날짜별 브리핑에서 수집 카드와 필독 목록을 제공하고, 최종 TOP2는 검색과 심층 읽기를 위한 독립 기사로 발행합니다.</p>
+<h2>신호와 키워드 읽는 법</h2>
+<ul>
+<li><strong>초록:</strong> 기회, 비용 절감이나 상승 신호입니다.</li>
+<li><strong>빨강:</strong> 규제, 보안, 호환성이나 하락 위험을 먼저 확인해야 한다는 뜻입니다.</li>
+<li><strong>노랑:</strong> 아직 판단을 서두르기보다 계속 관측해야 하는 변화입니다.</li>
+<li><strong>키워드 막대:</strong> 당일 수집 원문에서 확인된 중요도와 변화 방향을 비교합니다.</li>
+</ul>
+<h2>기술 영향력과 행동 타임라인</h2>
+<p>영향력 매트릭스는 기술의 새로움이 아니라 개발자가 언제 행동해야 하는지를 보여줍니다. 지금 집중할 변화, 미리 준비할 변화, 즉시 적용할 변화와 계속 관측할 변화를 나누고, 행동 타임라인은 오늘·이번 주·이번 달·올해 말의 확인 항목으로 연결합니다.</p>
+<h2>필독·5개·10개·전체의 차이</h2>
+<ul>
+<li><strong>필독:</strong> 오늘 가장 먼저 읽을 5개만 표시합니다.</li>
+<li><strong>5개:</strong> 필독 5개를 유지해 빠르게 훑습니다.</li>
+<li><strong>10개:</strong> 필독 5개에 다음 우선순위 원문 5개를 더합니다.</li>
+<li><strong>전체:</strong> 그날 브리핑에 연결된 모든 원문 카드를 펼칩니다.</li>
+</ul>
+<p>카드의 제목과 ‘근거 원문’을 누르면 해당 매체나 공식 발표로 이동합니다. 영어 제목에는 가능한 경우 한국어 보조 제목을 함께 표시하지만, 세부 수치와 적용 조건은 반드시 연결된 원문에서 다시 확인하세요.</p>
+<h2>지난 브리핑 찾기</h2>
+<p>홈의 <strong>날짜 아카이브</strong>에서 월을 펼치고 날짜를 선택하면 해당 날짜의 브리핑으로 이동합니다. 독립 해설이 필요한 주제는 별도 기사로 연결하고, 한 주의 흐름은 <a href="https://huntlab.app/category/weekly-tech-review/">주간 기술 회고</a>에서 다시 정리합니다.</p>
+<h2>자주 묻는 질문</h2>
+<h3>영어 기사가 많은 이유는 무엇인가요?</h3>
+<p>제품 릴리스, 보안 공지와 기술 변화는 공식 영문 원문에서 먼저 발표되는 경우가 많습니다. Hunt News는 한국어 보조 제목과 적용 관점을 제공하되 원문의 의미를 임의로 바꾸지 않습니다.</p>
+<h3>카드가 사실 확인을 대신하나요?</h3>
+<p>아닙니다. 수집 카드와 요약은 발견과 판단을 돕는 안내입니다. 버전, 가격, 일정, 보안 영향과 정책 적용 범위는 카드에 연결된 공식 원문에서 확인해야 합니다.</p>
+<h3>오류나 오래된 정보는 어디에 알리나요?</h3>
+<p>관련 URL과 확인한 공식 자료를 <a href="https://huntlab.app/contact/">문의 페이지</a>에 남겨 주세요. 편집팀이 원문을 대조해 정정 여부를 검토합니다.</p>
+<h2>뉴스를 고르는 기준</h2>
+<ul>
+<li>제품 릴리스, 공식 블로그, 보안 공지와 기술 문서를 먼저 확인합니다.</li>
+<li>개발 방식, 운영 비용, 보안이나 호환성에 실제 변화가 있는 뉴스를 우선합니다.</li>
+<li>비슷한 소식은 하나로 묶고, 원문으로 확인할 수 없는 내용은 확정적으로 쓰지 않습니다.</li>
+<li>국내 개발자에게 필요한 맥락과 지금 확인할 행동이 있는지 함께 봅니다.</li>
+</ul>
+<h2>AI 활용과 확인</h2>
+<p>AI는 많은 원문을 분류하고 요약하는 일을 돕습니다. 중요한 수치, 일정, 버전과 적용 조건은 연결된 원문을 기준으로 확인하며, 자세한 기준은 <a href="https://huntlab.app/editorial-policy/">편집 및 AI 활용 원칙</a>에서 공개합니다.</p>
+<h2>운영과 편집 책임</h2>
+<p>HuntLab이 사이트를 운영하고 <strong>Hunt News 편집팀</strong>이 주제 선정, 원문 확인과 정정을 담당합니다. 오류나 오래된 정보는 <a href="https://huntlab.app/contact/">문의 페이지</a>에서 알려 주세요.</p>
 """.strip()
 
 
@@ -110,7 +139,7 @@ EDITORIAL_HTML = """
 
 PUBLIC_PAGE_SPECS = {
     "privacy-policy": {"title": "개인정보처리방침", "content": PRIVACY_HTML},
-    "about": {"title": "Hunt News 소개", "content": ABOUT_HTML},
+    "about": {"title": "Hunt News 이용 가이드", "content": ABOUT_HTML},
     "contact": {"title": "문의", "content": CONTACT_HTML},
     "editorial-policy": {"title": "편집 및 AI 활용 원칙", "content": EDITORIAL_HTML},
 }
@@ -172,10 +201,17 @@ def write_backup(path: Path, pages: list[dict[str, Any]], plan: list[dict[str, A
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def apply_plan(client: WordPressClient, pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def apply_plan(
+    client: WordPressClient,
+    pages: list[dict[str, Any]],
+    *,
+    selected_slugs: set[str] | None = None,
+) -> list[dict[str, Any]]:
     by_slug = {str(page.get("slug", "")): page for page in pages}
     applied: list[dict[str, Any]] = []
     for slug, spec in PUBLIC_PAGE_SPECS.items():
+        if selected_slugs is not None and slug not in selected_slugs:
+            continue
         page = by_slug.get(slug)
         payload = {"title": spec["title"], "content": spec["content"], "status": "publish"}
         if page:
@@ -204,6 +240,42 @@ def apply_plan(client: WordPressClient, pages: list[dict[str, Any]]) -> list[dic
     return applied
 
 
+def sync_about_menu_label(client: WordPressClient) -> list[dict[str, Any]]:
+    """Keep every public menu link to /about/ aligned with the page title."""
+    items = client.request(
+        "GET", "menu-items?context=edit&per_page=100", expected=(200,)
+    )
+    updated: list[dict[str, Any]] = []
+    target_title = PUBLIC_PAGE_SPECS["about"]["title"]
+    for item in items:
+        url = str(item.get("url", "")).rstrip("/")
+        if not url.endswith("/about"):
+            continue
+        current_title = str(item.get("title", {}).get("raw", ""))
+        if current_title != target_title:
+            client.request(
+                "POST",
+                f"menu-items/{item['id']}",
+                payload={"title": target_title},
+                expected=(200,),
+            )
+        verified = client.request(
+            "GET", f"menu-items/{item['id']}?context=edit", expected=(200,)
+        )
+        if str(verified.get("title", {}).get("raw", "")) != target_title:
+            raise RuntimeError("about menu label verification failed")
+        updated.append(
+            {
+                "menu_item_id": int(item["id"]),
+                "title": target_title,
+                "url": verified.get("url", item.get("url")),
+            }
+        )
+    if not updated:
+        raise RuntimeError("about menu item was not found")
+    return updated
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update Hunt News AdSense trust pages")
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
@@ -212,13 +284,24 @@ def main() -> int:
     )
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--yes", action="store_true")
+    parser.add_argument(
+        "--slug",
+        action="append",
+        choices=tuple(PUBLIC_PAGE_SPECS),
+        help="Limit planning and application to one page; may be repeated.",
+    )
     args = parser.parse_args()
     if args.apply and not args.yes:
         parser.error("--apply requires --yes")
 
     client = WordPressClient(WordPressConfig.from_environment(args.env_file))
     pages = fetch_pages(client)
-    plan = build_plan(pages)
+    selected_slugs = set(args.slug) if args.slug else None
+    plan = [
+        row
+        for row in build_plan(pages)
+        if selected_slugs is None or row["slug"] in selected_slugs
+    ]
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     backup_path = args.backup_dir / f"public-pages-{timestamp}.json"
     write_backup(backup_path, pages, plan)
@@ -228,7 +311,11 @@ def main() -> int:
         "plan": plan,
     }
     if args.apply:
-        result["applied"] = apply_plan(client, pages)
+        result["applied"] = apply_plan(
+            client, pages, selected_slugs=selected_slugs
+        )
+        if selected_slugs is None or "about" in selected_slugs:
+            result["menu_applied"] = sync_about_menu_label(client)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

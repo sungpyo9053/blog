@@ -246,7 +246,7 @@ def apply_migration(
         client.request(
             "POST",
             f"pages/{about['id']}",
-            payload={"title": "Hunt News 소개", "content": ABOUT_HTML, "status": "publish"},
+            payload={"title": "Hunt News 이용 가이드", "content": ABOUT_HTML, "status": "publish"},
             expected=(200,),
         )
     else:
@@ -254,7 +254,7 @@ def apply_migration(
             "POST",
             "pages",
             payload={
-                "title": "Hunt News 소개",
+                "title": "Hunt News 이용 가이드",
                 "slug": "about",
                 "content": ABOUT_HTML,
                 "status": "publish",

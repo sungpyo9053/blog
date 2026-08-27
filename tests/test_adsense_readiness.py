@@ -9,7 +9,9 @@ from scripts.update_adsense_readiness import (
     EDITORIAL_HTML,
     PRIVACY_HTML,
     PUBLIC_PAGE_SPECS,
+    apply_plan,
     build_plan,
+    sync_about_menu_label,
 )
 
 
@@ -22,13 +24,23 @@ class AdSenseReadinessTests(unittest.TestCase):
         self.assertIn("IP 주소", PRIVACY_HTML)
         self.assertIn("policies.google.com/technologies/partner-sites", PRIVACY_HTML)
 
-    def test_about_describes_actual_signal_boundaries(self):
-        self.assertIn("Google Trends 한국 RSS", ABOUT_HTML)
-        self.assertIn("Search Console", ABOUT_HTML)
-        self.assertIn("기술 뉴스 RSS·Atom", ABOUT_HTML)
-        self.assertIn("사실 근거로 사용하지 않고", ABOUT_HTML)
-        self.assertIn("Shadow Mode", ABOUT_HTML)
-        self.assertIn("발행 주제를 바꾸지 않습니다", ABOUT_HTML)
+    def test_about_is_a_reader_facing_briefing_guide(self):
+        self.assertEqual(PUBLIC_PAGE_SPECS["about"]["title"], "Hunt News 이용 가이드")
+        self.assertIn("30초 활용 흐름", ABOUT_HTML)
+        self.assertIn("페이지 구성", ABOUT_HTML)
+        self.assertIn("신호와 키워드 읽는 법", ABOUT_HTML)
+        self.assertIn("기술 영향력과 행동 타임라인", ABOUT_HTML)
+        self.assertIn("필독·5개·10개·전체의 차이", ABOUT_HTML)
+        self.assertIn("지난 브리핑 찾기", ABOUT_HTML)
+        self.assertIn("자주 묻는 질문", ABOUT_HTML)
+        self.assertIn("뉴스를 고르는 기준", ABOUT_HTML)
+        self.assertIn("제품 릴리스, 공식 블로그, 보안 공지", ABOUT_HTML)
+        self.assertIn("AI 활용과 확인", ABOUT_HTML)
+        self.assertIn("운영과 편집 책임", ABOUT_HTML)
+        self.assertNotIn("Topic Planner", ABOUT_HTML)
+        self.assertNotIn("Shadow Mode", ABOUT_HTML)
+        self.assertNotIn("Research", ABOUT_HTML)
+        self.assertNotIn("Search Console", ABOUT_HTML)
 
     def test_contact_exposes_operator_editor_and_correction_path(self):
         self.assertIn("HuntLab이 사이트를 운영", CONTACT_HTML)
@@ -51,6 +63,67 @@ class AdSenseReadinessTests(unittest.TestCase):
             for index, (slug, spec) in enumerate(PUBLIC_PAGE_SPECS.items(), start=1)
         ]
         self.assertTrue(all(not row["needs_update"] for row in build_plan(pages)))
+
+    def test_apply_plan_can_limit_changes_to_one_public_page(self):
+        class Client:
+            def __init__(self):
+                self.posts = []
+
+            def request(self, method, endpoint, payload=None, expected=()):
+                if method == "POST":
+                    self.posts.append((endpoint, payload))
+                    return {"id": 97}
+                return {
+                    "id": 97,
+                    "slug": "about",
+                    "status": "publish",
+                    "content": {"raw": ABOUT_HTML},
+                    "link": "https://huntlab.app/about/",
+                }
+
+        client = Client()
+        pages = [{"id": 97, "slug": "about"}]
+        applied = apply_plan(client, pages, selected_slugs={"about"})
+        self.assertEqual([row["slug"] for row in applied], ["about"])
+        self.assertEqual([endpoint for endpoint, _ in client.posts], ["pages/97"])
+
+    def test_about_menu_label_sync_updates_only_about_links(self):
+        class Client:
+            def __init__(self):
+                self.title = "Hunt News 소개"
+                self.posts = []
+
+            def request(self, method, endpoint, payload=None, expected=()):
+                if endpoint == "menu-items?context=edit&per_page=100":
+                    return [
+                        {
+                            "id": 167,
+                            "url": "https://huntlab.app/about/",
+                            "title": {"raw": self.title},
+                        },
+                        {
+                            "id": 168,
+                            "url": "https://huntlab.app/contact/",
+                            "title": {"raw": "문의"},
+                        },
+                    ]
+                if method == "POST":
+                    self.posts.append((endpoint, payload))
+                    self.title = payload["title"]
+                    return {"id": 167}
+                return {
+                    "id": 167,
+                    "url": "https://huntlab.app/about/",
+                    "title": {"raw": self.title},
+                }
+
+        client = Client()
+        result = sync_about_menu_label(client)
+        self.assertEqual(result[0]["menu_item_id"], 167)
+        self.assertEqual(
+            client.posts,
+            [("menu-items/167", {"title": "Hunt News 이용 가이드"})],
+        )
 
     def test_repetition_audit_ignores_standard_headings_and_finds_material_duplicates(self):
         html = """
