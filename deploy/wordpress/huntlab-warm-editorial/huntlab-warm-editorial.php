@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.2
+ * Version: 5.6.3
  * Author: Hunt News
  */
 
@@ -1115,7 +1115,7 @@ function hunt_news_store_briefing_manifest( $request ) {
 }
 
 /**
- * Explain the editorial promise and offer category-first discovery on home.
+ * Render the briefing-first home and category discovery surfaces.
  */
 function hunt_news_home_sections() {
 	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) ) {
@@ -1124,18 +1124,6 @@ function hunt_news_home_sections() {
 
 	$is_category = is_category();
 
-	$categories = array(
-		'ai-ml-core'            => array( 'AI/ML 핵심', '모델·에이전트·평가·AI 인프라' ),
-		'development-trends'    => array( '개발 트렌드', '오픈소스·클라우드·데이터·보안' ),
-		'ai-official-blogs'     => array( 'AI 공식 블로그', '공식 발표·연구·릴리스 노트' ),
-		'korea-it'              => array( '국내 IT', '기업·플랫폼·반도체·클라우드' ),
-		'korea-current-affairs' => array( '국내 시사', '기술 정책·산업·일자리 영향' ),
-		'weekly-tech-review'    => array( '주간 기술 회고', '이번 주의 변화·영향·다음 주 확인 신호' ),
-	);
-	$weekly_category = get_category_by_slug( 'weekly-tech-review' );
-	if ( ! $weekly_category || 1 > (int) $weekly_category->count ) {
-		unset( $categories['weekly-tech-review'] );
-	}
 	$brief_posts  = $is_category ? array() : hunt_news_briefing_posts( 12 );
 	$manifest     = $is_category ? array() : hunt_news_latest_briefing_manifest();
 	if ( is_singular( 'hunt_briefing' ) && $manifest ) {
@@ -1490,33 +1478,8 @@ function hunt_news_home_sections() {
 		<a class="hunt-news-home-notices__secondary" href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>"><span>공식 원문, 독립 보도와 직접 검증을 구분합니다</span><b aria-hidden="true">→</b></a>
 	</aside>
 	<?php if ( $is_category ) { hunt_news_render_popular_news(); } ?>
-	<?php if ( ! $is_category ) : ?>
-	<section id="hunt-news-reading-guide" class="hunt-news-reading-guide" aria-labelledby="hunt-news-reading-guide-title">
-		<h2 id="hunt-news-reading-guide-title">기술 뉴스를 읽고 남는 세 가지</h2>
-		<div class="hunt-news-reading-guide__steps">
-			<article><span>1</span><h3>무엇이 바뀌었나</h3><p>발표 제목이 아니라 실제 변경점과 현재 단계를 확인합니다.</p></article>
-			<article><span>2</span><h3>개발에 무엇이 달라지나</h3><p>아키텍처, 비용, 보안과 운영 조건이 어떻게 바뀌는지 설명합니다.</p></article>
-			<article><span>3</span><h3>지금 무엇을 적용하나</h3><p>오늘, 이번 주, 이번 달과 올해 말의 행동을 나눕니다.</p></article>
-		</div>
-		<h2 class="hunt-news-reading-guide__categories-title">분야별로 보기</h2>
-		<nav class="hunt-news-category-grid" aria-label="Hunt News 분야별 글">
-			<?php foreach ( $categories as $slug => $data ) :
-				$category = get_category_by_slug( $slug );
-				if ( ! $category ) {
-					continue;
-				}
-				$url = get_category_link( $category->term_id );
-				if ( is_wp_error( $url ) ) {
-					continue;
-				}
-				?>
-				<a href="<?php echo esc_url( $url ); ?>"><strong><?php echo esc_html( $data[0] ); ?></strong><span><?php echo esc_html( $data[1] ); ?></span><em><?php echo esc_html( (string) $category->count ); ?>개</em></a>
-			<?php endforeach; ?>
-		</nav>
-	</section>
-	<?php endif; ?>
 	<script id="hunt-news-home-sections-position">
-	document.addEventListener('DOMContentLoaded',function(){var board=document.getElementById('hunt-news-briefing-board');var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var section=document.getElementById('hunt-news-reading-guide');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News Archive</p><h2>분야별 최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(board){parent.insertBefore(board,main);}if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}if(section){shell.insertAdjacentElement('afterend',section);}}if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
+	document.addEventListener('DOMContentLoaded',function(){var board=document.getElementById('hunt-news-briefing-board');var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News Archive</p><h2>분야별 최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(board){parent.insertBefore(board,main);}if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}}if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
 	</script>
 	<script id="hunt-news-brief-view-controls">
 	document.addEventListener('DOMContentLoaded',function(){var viewButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-view]'));var mustReadCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="must-read"]'));var feedCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="feed"]'));var viewStatus=document.querySelector('[data-brief-view-status]');viewButtons.forEach(function(button){button.addEventListener('click',function(){var view=button.getAttribute('data-brief-view');var extraLimit=view==='all'?feedCards.length:Math.max(0,parseInt(view,10)-mustReadCards.length);viewButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});mustReadCards.forEach(function(card){card.hidden=false;});feedCards.forEach(function(card){card.hidden=view==='must-read'||parseInt(card.getAttribute('data-brief-card-index'),10)>=extraLimit;});if(viewStatus){viewStatus.textContent=view==='must-read'?'AI가 근거와 영향도를 검토해 고른 5개입니다.':view==='all'?'필독 5개를 포함한 오늘의 기술 뉴스 전체입니다.':'필독 5개를 포함해 '+view+'개까지 펼쳤습니다.';}var track=window.gtag||window.__gtagTracker;if(typeof track==='function'){track('event','huntlab_briefing_filter',{briefing_view:view,visible_card_count:mustReadCards.length+(view==='all'?feedCards.length:extraLimit),transport_type:'beacon'});}});});});
