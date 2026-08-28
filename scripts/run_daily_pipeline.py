@@ -128,7 +128,7 @@ LEGACY_CONTENT_TYPE_BY_CATEGORY = {
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
 RECENT_STYLE_LIMIT = 5
 REVIEW_STATUS_PATTERN = re.compile(
-    r"(?im)^\s*(?:-\s*)?(?:status|decision)\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
+    r"(?im)^\s*(?:-\s*)?(?:status|decision|verdict)\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
     r"|^\s*(APPROVED|REJECTED)\s*$"
 )
 

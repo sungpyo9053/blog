@@ -1302,6 +1302,23 @@ class DailyPipelineIsolationTests(unittest.TestCase):
 
             self.assertEqual(read_review_decision(context), "APPROVED")
 
+    def test_review_decision_accepts_reviewer_verdict_field(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-review" / "topic-review"
+            directory.mkdir(parents=True)
+            context = TopicContext(
+                title="검토 verdict 필드",
+                run_id="run-review",
+                topic_id="topic-review",
+                directory=directory,
+            )
+            (directory / "review.md").write_text(
+                "# Reviewer 결과\n\n- verdict: APPROVED\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(read_review_decision(context), "APPROVED")
+
     def test_repair_cycle_reuses_existing_agents_and_preserves_reviewer(self):
         context = make_topic_context("run-repair", "검증 근거 보정")
         stages = review_repair_stages(context, attempt=1)
