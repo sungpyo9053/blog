@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.1
+ * Version: 5.6.2
  * Author: Hunt News
  */
 
@@ -1663,9 +1663,9 @@ add_action( 'wp_footer', 'huntlab_warm_editorial_engaged_read_signal', 100 );
 function huntlab_warm_editorial_late_brand_overrides() {
 	?>
 	<style id="huntlab-warm-editorial-late-overrides">
-		.huntlab-category-tabs{background:#fff!important;border-color:#dfe2e5!important;box-shadow:none!important}
-		.huntlab-category-tabs__link{background:#fff!important;border-color:#d9dde1!important;border-radius:2px!important;color:#30343a!important}
-		.huntlab-category-tabs__link:hover,.huntlab-category-tabs__link:focus-visible{background:#f3f5f6!important;border-color:#111820!important;color:#111820!important}
+		.huntlab-category-tabs{-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);background:rgba(255,253,248,.7)!important;border-color:rgba(255,255,255,.72)!important;box-shadow:0 14px 34px rgba(17,25,39,.08)!important}
+		.huntlab-category-tabs__link{background:rgba(255,255,255,.58)!important;border-color:rgba(17,25,39,.12)!important;border-radius:2px!important;color:#30343a!important}
+		.huntlab-category-tabs__link:hover,.huntlab-category-tabs__link:focus-visible{background:rgba(255,255,255,.9)!important;border-color:#111820!important;color:#111820!important}
 		.huntlab-category-tabs__link.is-active{background:#111820!important;border-color:#111820!important;color:#fff!important}
 		.site-branding .brand::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 40'%3E%3Cg fill='%23292621'%3E%3Cpath d='M24 13C34 9 61 9 70 14c4 2 7 1 12-4 1 7-2 11-9 14v6h-7l-1-6H36l-2 7h-7l1-9c-4-2-6-5-6-8l2-1Z'/%3E%3Cpath d='M25 13c-2-7-11-9-17-3l-5 4 6 3c-1 7 5 11 13 8l7-5-4-7Z'/%3E%3Cpath d='M14 8c-6 3-5 12 2 15 3-5 5-11 3-14l-5-1Z' fill='%23a95f49'/%3E%3Ccircle cx='10' cy='13' r='1.4' fill='%23fffaf2'/%3E%3C/g%3E%3C/svg%3E")!important}
 	</style>

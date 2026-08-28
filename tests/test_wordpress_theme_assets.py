@@ -56,7 +56,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.1", php)
+        self.assertIn("Version: 5.6.2", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -66,14 +66,16 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertNotIn(".menu-toggle-open-container .menu-toggle-open", css)
 
     def test_briefing_glass_effect_stays_on_navigation_and_emphasis_surfaces(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
         self.assertIn("--hunt-brief-glass-light", css)
         self.assertIn("body.home #masthead {\n\t-webkit-backdrop-filter", css)
-        self.assertIn("body.home .huntlab-home-intro__copy {\n\t-webkit-backdrop-filter", css)
         self.assertIn(".hunt-news-date-nav {\n\talign-self: start;\n\t-webkit-backdrop-filter", css)
         self.assertIn(".hunt-news-must-read__modes {\n\talign-items: center;\n\t-webkit-backdrop-filter", css)
         self.assertIn(".hunt-news-brief-card {\n\tbackground: #fff;", css)
+        self.assertIn(".huntlab-category-tabs{-webkit-backdrop-filter:blur(16px)", php)
+        self.assertNotIn("body.home .huntlab-home-intro__copy {\n\t-webkit-backdrop-filter", css)
 
     def test_home_prioritizes_latest_posts_and_unifies_schema_identity(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
@@ -217,7 +219,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.1", php)
+        self.assertIn("Version: 5.6.2", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
