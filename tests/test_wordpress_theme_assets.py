@@ -57,7 +57,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.3", php)
+        self.assertIn("Version: 5.6.4", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -155,6 +155,10 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("get_the_tags", php)
         self.assertIn("function hunt_news_briefing_timeline", php)
         self.assertIn("function hunt_news_latest_briefing_manifest", php)
+        self.assertIn("function hunt_news_briefing_display_date", php)
+        self.assertIn("$manifest['analysis']['generated_at']", php)
+        self.assertIn("hunt_news_briefing_display_date( $manifest )", php)
+        self.assertNotIn("Hunt News <?php echo esc_html( is_singular( 'hunt_briefing' ) ? get_the_date( 'Y-m-d', get_queried_object_id() ) : wp_date( 'Y-m-d' ) ); ?>", php)
         self.assertIn("function hunt_news_manifest_signal_posts", php)
         self.assertIn("function hunt_news_store_briefing_manifest", php)
         self.assertIn("'/briefing-run'", php)
@@ -220,7 +224,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.3", php)
+        self.assertIn("Version: 5.6.4", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)

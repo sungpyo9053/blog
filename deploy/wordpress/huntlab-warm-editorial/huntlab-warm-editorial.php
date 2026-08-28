@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.3
+ * Version: 5.6.4
  * Author: Hunt News
  */
 
@@ -362,6 +362,23 @@ function hunt_news_latest_briefing_manifest() {
 }
 
 /**
+ * Use the stored analysis timestamp instead of the wall clock for report labels.
+ * A failed daily run must not make yesterday's manifest look like today's report.
+ *
+ * @param array<string,mixed> $manifest Stored briefing manifest.
+ * @param string              $format   WordPress date format.
+ * @return string
+ */
+function hunt_news_briefing_display_date( $manifest, $format = 'Y-m-d' ) {
+	if ( is_singular( 'hunt_briefing' ) ) {
+		return get_the_date( $format, get_queried_object_id() );
+	}
+	$generated_at = (string) ( $manifest['analysis']['generated_at'] ?? $manifest['generated_at'] ?? '' );
+	$timestamp    = strtotime( $generated_at );
+	return $timestamp ? wp_date( $format, $timestamp ) : '';
+}
+
+/**
  * Prefer the two verified publications from the latest manifest, then fill the
  * third briefing slot with the next public post.
  *
@@ -646,7 +663,7 @@ function huntlab_warm_editorial_home_intro() {
 			</ul>
 			<?php if ( ! $is_category ) : ?>
 				<div class="huntlab-home-intro__status" aria-label="브리핑 상태">
-					<span><?php echo esc_html( is_singular( 'hunt_briefing' ) ? get_the_date( 'Y.m.d', get_queried_object_id() ) : wp_date( 'Y.m.d' ) ); ?></span>
+					<span><?php echo esc_html( hunt_news_briefing_display_date( $brief_manifest, 'Y.m.d' ) ); ?></span>
 					<span>매일 한 장의 기술 보고서</span>
 					<?php if ( $brief_manifest ) : ?><span>핵심 변화 · 근거 원문 · 행동 가이드</span><?php endif; ?>
 					<a href="#hunt-news-briefing-board">오늘 브리핑 보기 <b aria-hidden="true">↓</b></a>
@@ -1256,7 +1273,7 @@ function hunt_news_home_sections() {
 		<header class="hunt-news-briefing-board__toolbar">
 			<div>
 				<p>매일 발행하는 AI·개발 기술 보고서</p>
-				<h2 id="hunt-news-briefing-title">Hunt News <?php echo esc_html( is_singular( 'hunt_briefing' ) ? get_the_date( 'Y-m-d', get_queried_object_id() ) : wp_date( 'Y-m-d' ) ); ?></h2>
+				<h2 id="hunt-news-briefing-title">Hunt News <?php echo esc_html( hunt_news_briefing_display_date( $manifest ) ); ?></h2>
 			</div>
 			<div class="hunt-news-briefing-board__date" aria-label="브리핑 기준">
 				<strong>DAILY REPORT</strong>

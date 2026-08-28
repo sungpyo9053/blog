@@ -1916,7 +1916,7 @@ def daily_briefing_stage(
 
 def freeze_previous_daily_briefing(
     *, run_id: str, run_directory: Path
-) -> tuple[Path | None, str, list[str]]:
+) -> tuple[Path | None, str, list[str], list[dict[str, Any]]]:
     """Freeze the latest valid prior analysis as the retrospective input."""
     try:
         current_report_date = (
@@ -1924,7 +1924,7 @@ def freeze_previous_daily_briefing(
             + timedelta(hours=9)
         ).date()
     except ValueError:
-        return None, "", []
+        return None, "", [], []
     previous_report_date = current_report_date - timedelta(days=1)
 
     def is_previous_report(path: Path) -> bool:
@@ -1962,8 +1962,8 @@ def freeze_previous_daily_briefing(
         atomic_write_manifest(destination, snapshot)
         snapshot_hash = hashlib.sha256(destination.read_bytes()).hexdigest()
         labels = [str(row["label"]) for row in snapshot["core_signals"]]
-        return destination, snapshot_hash, labels
-    return None, "", []
+        return destination, snapshot_hash, labels, list(snapshot["core_signals"])
+    return None, "", [], []
 
 
 def run_daily_briefing_analysis(
@@ -1979,7 +1979,7 @@ def run_daily_briefing_analysis(
     analysis_path = run_directory / "daily-briefing-analysis.json"
     source_snapshot_path = run_directory / "editorial-sources-snapshot.json"
     try:
-        previous_path, previous_hash, previous_labels = freeze_previous_daily_briefing(
+        previous_path, previous_hash, previous_labels, previous_signals = freeze_previous_daily_briefing(
             run_id=run_id,
             run_directory=run_directory,
         )
@@ -1997,6 +1997,7 @@ def run_daily_briefing_analysis(
                     source_snapshot_hash=source_hash,
                     previous_snapshot_hash=previous_hash,
                     previous_signal_labels=previous_labels or None,
+                    previous_core_signals=previous_signals or None,
                     retrospective_required=True,
                 )
             except DailyBriefingError:
@@ -2024,6 +2025,7 @@ def run_daily_briefing_analysis(
                 source_snapshot_hash=source_hash,
                 previous_snapshot_hash=previous_hash,
                 previous_signal_labels=previous_labels or None,
+                previous_core_signals=previous_signals or None,
                 retrospective_required=True,
             )
         logger.info(

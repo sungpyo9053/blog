@@ -24,7 +24,7 @@ def analysis_payload(source_hash: str = "a" * 64):
             "items": [],
         },
         "core_signals": [
-            {"metric": str(index), "label": f"신호 {index}", "detail": "변화 설명", "action": "설정을 확인한다", "tone": tone, "evidence_urls": evidence}
+            {"metric": str(index), "label": f"신호 {index}", "detail": "변화 설명", "action": "설정을 확인한다", "tone": tone, "evidence_urls": evidence, "event_key": f"event-{index}", "continuity": "new", "change_basis": ""}
             for index, tone in enumerate(("green", "amber", "red"), 1)
         ],
         "keywords": [
@@ -78,7 +78,7 @@ class DailyBriefingTests(unittest.TestCase):
             )
 
             with mock.patch.object(pipeline, "RUNS_DIR", runs):
-                path, snapshot_hash, labels = pipeline.freeze_previous_daily_briefing(
+                path, snapshot_hash, labels, signals = pipeline.freeze_previous_daily_briefing(
                     run_id=current.name,
                     run_directory=current,
                 )
@@ -86,6 +86,7 @@ class DailyBriefingTests(unittest.TestCase):
             self.assertEqual(path, current / "previous-daily-briefing.json")
             self.assertEqual(len(snapshot_hash), 64)
             self.assertEqual(labels, ["신호 1", "신호 2", "신호 3"])
+            self.assertEqual([row["event_key"] for row in signals], ["event-1", "event-2", "event-3"])
             snapshot = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(
                 snapshot["contract_version"],
@@ -299,6 +300,47 @@ class DailyBriefingTests(unittest.TestCase):
                 [item["verdict"] for item in safe["retrospective"]["items"]],
                 ["confirmed", "changed", "unresolved"],
             )
+
+    def test_rejects_repeated_core_signal_without_new_follow_up_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            payload["core_signals"][0]["continuity"] = "follow_up"
+            payload["core_signals"][0]["change_basis"] = "새로운 변경이 확인됐다"
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            previous = [
+                {
+                    "label": "전일 신호",
+                    "event_key": "event-1",
+                    "evidence_urls": ["https://example.com/evidence"],
+                }
+            ]
+            with self.assertRaises(DailyBriefingError):
+                load_daily_briefing(path, previous_core_signals=previous)
+
+    def test_accepts_follow_up_with_explicit_change_and_new_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            signal = payload["core_signals"][0]
+            signal["continuity"] = "follow_up"
+            signal["change_basis"] = "새 공식 결정문이 공개됐다"
+            signal["evidence_urls"] = [
+                "https://example.com/evidence",
+                "https://example.com/new-decision",
+            ]
+            payload["core_signals"][1]["evidence_urls"] = ["https://example.com/signal-2"]
+            payload["core_signals"][2]["evidence_urls"] = ["https://example.com/signal-3"]
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            previous = [
+                {
+                    "label": "전일 신호",
+                    "event_key": "event-1",
+                    "evidence_urls": ["https://example.com/evidence"],
+                }
+            ]
+            safe = load_daily_briefing(path, previous_core_signals=previous)
+            self.assertEqual(safe["core_signals"][0]["continuity"], "follow_up")
 
 
 if __name__ == "__main__":

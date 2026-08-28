@@ -40,7 +40,8 @@ tools:
   `items`는 이전 `core_signals` 순서대로 정확히 3개를 작성한다.
 - `retrospective.items`: `previous_signal_index` 1~3, 원문 그대로의 `previous_label`,
   `previous_detail`, `verdict`, `current_status`, `action`, `evidence_urls`
-- `core_signals`: 정확히 3개. `metric`, `label`, `detail`, `action`, `tone`, `evidence_urls`
+- `core_signals`: 정확히 3개. `metric`, `label`, `detail`, `action`, `tone`,
+  `evidence_urls`, `event_key`, `continuity`, `change_basis`
 - `keywords`: 정확히 7개. `keyword`, 0~10 정수 `score`, `direction`, `basis`
 - `matrix`: 정확히 4개. `quadrant`, `label`, `meaning`, `action`, `evidence_urls`
 - `timeline`: 정확히 4개. `horizon`, `action`, `reason`, `evidence_urls`
@@ -63,6 +64,7 @@ tools:
 - horizon: `today`, `week`, `month`, `year`를 각각 한 번
 - category: `AI/ML 핵심`, `개발 트렌드`, `AI 공식 블로그`, `국내 IT`, `국내 시사`
 - retrospective verdict: `confirmed`, `changed`, `unresolved`
+- core signal continuity: `new`, `follow_up`
 
 `metric`은 근거로 확인된 수치가 있을 때만 수치를 사용한다. 그렇지 않으면 `보안`,
 `호환성`, `비용`, `운영`처럼 짧은 신호어를 사용한다. 키워드 score는 실제 검색량이
@@ -73,7 +75,16 @@ tools:
 확인하고, 변화가 확인되지 않거나 근거가 부족하면 `unresolved`로 둔다. 검색 노출,
 체류시간, 클릭률처럼 아직 입력으로 제공되지 않은 성과를 추정하지 않는다.
 
+각 핵심 신호의 `event_key`는 날짜나 표현을 바꿔도 같은 사건이면 동일하게 유지하는
+짧은 식별자다. 전일 핵심 신호와 제목, 대표 근거 URL 또는 사건군이 겹치면
+`continuity`를 `follow_up`으로 쓰고, 전일에 없던 새 근거 URL과 실제로 달라진 사실을
+`change_basis`에 적는다. 새 근거와 변화가 없으면 그 사건은 복기에만 남기고 오늘의
+핵심 신호로 다시 선정하지 않는다. 겹치지 않는 신호는 `continuity: new`,
+`change_basis: ""`로 작성한다.
+
 필독 5의 `why_it_matters`는 제목을 바꿔 말하지 말고 실제 영향과 선택을 설명한다.
 `action`은 독자가 오늘 확인할 문서·설정·조건을 구체적으로 적는다.
 번역 제목은 원문을 대체하지 않는다. 고유명사·모델명·버전·수치를 바꾸거나 새로운
 사실을 덧붙이지 말고, UI에서 원문 아래에 붙는 한국어 보조 제목으로만 작성한다.
+제품명만으로 된 원문도 `모델 페이지`, `공식 저장소`처럼 실제 대상을 설명하는 한글을
+최소 한 단어 포함한다.

@@ -16,6 +16,7 @@ QUADRANTS = {"focus", "future", "apply", "watch"}
 HORIZONS = {"today", "week", "month", "year"}
 RETROSPECTIVE_STATUSES = {"baseline", "available"}
 RETROSPECTIVE_VERDICTS = {"confirmed", "changed", "unresolved"}
+SIGNAL_CONTINUITIES = {"new", "follow_up"}
 
 
 class DailyBriefingError(RuntimeError):
@@ -54,6 +55,7 @@ def validate_daily_briefing(
     source_snapshot_hash: str = "",
     previous_snapshot_hash: str = "",
     previous_signal_labels: list[str] | None = None,
+    previous_core_signals: list[dict[str, Any]] | None = None,
     retrospective_required: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
@@ -147,13 +149,57 @@ def validate_daily_briefing(
         tone = _text(row.get("tone"), f"core_signals[{index}].tone", limit=20)
         if tone not in TONES:
             raise DailyBriefingError("invalid signal tone")
+        continuity = str(row.get("continuity") or "").strip()
+        event_key = str(row.get("event_key") or "").strip()[:120]
+        change_basis = str(row.get("change_basis") or "").strip()[:320]
+        if previous_core_signals and continuity not in SIGNAL_CONTINUITIES:
+            raise DailyBriefingError(
+                f"core_signals[{index}].continuity must be new or follow_up"
+            )
+        if previous_core_signals and not event_key:
+            raise DailyBriefingError(f"core_signals[{index}].event_key is required")
+        evidence_urls = _urls(row.get("evidence_urls"), "evidence_urls")
+        label = _text(row.get("label"), "label", limit=100)
+        normalized_label = "".join(label.lower().split())
+        overlapping_previous = []
+        for previous in previous_core_signals or []:
+            previous_urls = set(previous.get("evidence_urls") or [])
+            previous_event_key = str(previous.get("event_key") or "").strip().lower()
+            previous_label = "".join(str(previous.get("label") or "").lower().split())
+            if (
+                set(evidence_urls) & previous_urls
+                or (event_key and previous_event_key and event_key.lower() == previous_event_key)
+                or (normalized_label and normalized_label == previous_label)
+            ):
+                overlapping_previous.append(previous)
+        if overlapping_previous:
+            if continuity != "follow_up" or not change_basis:
+                raise DailyBriefingError(
+                    f"core_signals[{index}] overlaps the previous report without a follow-up basis"
+                )
+            previous_urls = {
+                url
+                for previous in overlapping_previous
+                for url in previous.get("evidence_urls") or []
+            }
+            if not set(evidence_urls) - previous_urls:
+                raise DailyBriefingError(
+                    f"core_signals[{index}] follow_up requires new evidence"
+                )
+        elif previous_core_signals and continuity != "new":
+            raise DailyBriefingError(
+                f"core_signals[{index}] is marked follow_up without previous overlap"
+            )
         safe["core_signals"].append({
             "metric": _text(row.get("metric"), "metric", limit=40),
-            "label": _text(row.get("label"), "label", limit=100),
+            "label": label,
             "detail": _text(row.get("detail"), "detail", limit=320),
             "action": _text(row.get("action"), "action", limit=240),
             "tone": tone,
-            "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
+            "evidence_urls": evidence_urls,
+            "event_key": event_key,
+            "continuity": continuity,
+            "change_basis": change_basis,
         })
 
     safe["keywords"] = []
@@ -266,6 +312,7 @@ def load_daily_briefing(
     source_snapshot_hash: str = "",
     previous_snapshot_hash: str = "",
     previous_signal_labels: list[str] | None = None,
+    previous_core_signals: list[dict[str, Any]] | None = None,
     retrospective_required: bool = False,
 ) -> dict[str, Any]:
     if not path.is_file():
@@ -279,5 +326,6 @@ def load_daily_briefing(
         source_snapshot_hash=source_snapshot_hash,
         previous_snapshot_hash=previous_snapshot_hash,
         previous_signal_labels=previous_signal_labels,
+        previous_core_signals=previous_core_signals,
         retrospective_required=retrospective_required,
     )
