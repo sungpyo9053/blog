@@ -22,6 +22,9 @@
 화면에서 같은 사건을 반복하지 않습니다. 수집량, 후보 수, Legacy·Shadow 비교 같은 운영 정보는 공개하지 않고
 서버 로그와 실행 산출물에만 보존합니다.
 
+공개 UI는 불투명한 본문 카드의 가독성을 유지하면서 헤더·히어로·날짜 탐색·필터와
+핵심 판단 보조 카드에만 절제된 글래스 효과를 적용합니다.
+
 브리핑 필터 변경은 `huntlab_briefing_filter`, 외부 근거 원문 클릭은
 `huntlab_briefing_source_click`, 날짜 이동은 기존 `huntlab_internal_click`의
 `briefing_archive` 영역으로 기록해 완독과 별개로 실제 이용 가치를 확인합니다.
