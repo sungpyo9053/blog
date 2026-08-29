@@ -5,7 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.collect_editorial_sources import collect, matches_source_relevance, parse_feed
+from scripts.collect_editorial_sources import (
+    collect,
+    matches_source_relevance,
+    normalize_source_config,
+    parse_feed,
+)
 from scripts.search_signal_providers import load_editorial_source_cache
 
 
@@ -38,6 +43,15 @@ class EditorialSourceCollectorTests(unittest.TestCase):
         rows = parse_feed(feed, source, collected_at=self.now)
         self.assertEqual([row["url"] for row in rows], ["https://example.com/ai"])
         self.assertFalse(matches_source_relevance("Kusama Yayoi Dies at 97", source))
+
+    def test_public_taxonomy_and_broad_domestic_technology_filter(self):
+        reddit = normalize_source_config({"category": "AI 공식 블로그", "name": "r/artificial"})
+        self.assertEqual(reddit["category"], "AI/ML 핵심")
+
+        domestic = normalize_source_config({"category": "국내 IT", "name": "ZDNet Korea"})
+        self.assertEqual(domestic["relevance_profile"], "technology")
+        self.assertTrue(matches_source_relevance("애플이 만든 AI 서버 공개", domestic))
+        self.assertFalse(matches_source_relevance("기아 임단협 최종 타결", domestic))
 
     def test_failed_broad_source_does_not_restore_irrelevant_cached_row(self):
         with tempfile.TemporaryDirectory() as temporary:

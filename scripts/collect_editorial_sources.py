@@ -34,11 +34,45 @@ RELEVANCE_PROFILES = {
         "robot", "robots", "computer vision", "deepmind",
         "xai", "mcp",
     ),
+    "technology": (
+        "ai", "인공지능", "llm", "생성형", "머신러닝", "딥러닝", "모델",
+        "클라우드", "데이터센터", "데이터 센터", "서버", "반도체", "gpu",
+        "소프트웨어", "개발자", "개발", "프로그래밍", "오픈소스", "api",
+        "플랫폼", "보안", "사이버", "로봇", "자율주행", "스마트폰", "폴더블",
+        "통신", "네트워크", "데이터", "테크", "technology", "software",
+        "developer", "security", "cloud", "chip", "semiconductor", "robot",
+    ),
+}
+
+SOURCE_CATEGORY_OVERRIDES = {
+    "r/artificial": "AI/ML 핵심",
+    "VentureBeat AI": "AI/ML 핵심",
+}
+SOURCE_RELEVANCE_OVERRIDES = {
+    "ZDNet Korea": "technology",
+    "블로터": "technology",
+    "연합뉴스": "technology",
+    "매일경제 IT": "technology",
+    "한겨레": "technology",
+    "경향신문": "technology",
 }
 
 
 class EditorialSourceError(RuntimeError):
     pass
+
+
+def normalize_source_config(source: dict[str, Any]) -> dict[str, Any]:
+    """Apply public taxonomy and relevance defaults to configured or cached sources."""
+    normalized = dict(source)
+    name = str(normalized.get("name") or "").strip()
+    if name in SOURCE_CATEGORY_OVERRIDES:
+        normalized["category"] = SOURCE_CATEGORY_OVERRIDES[name]
+    if not str(normalized.get("relevance_profile") or "").strip():
+        profile = SOURCE_RELEVANCE_OVERRIDES.get(name)
+        if profile:
+            normalized["relevance_profile"] = profile
+    return normalized
 
 
 def matches_source_relevance(title: str, source: dict[str, Any]) -> bool:
@@ -86,6 +120,7 @@ def _published(value: str, fallback: datetime) -> str:
 
 
 def parse_feed(data: bytes, source: dict[str, Any], *, collected_at: datetime, limit: int = 20) -> list[dict[str, Any]]:
+    source = normalize_source_config(source)
     try:
         root = ET.fromstring(data)
     except ET.ParseError as exc:
@@ -113,6 +148,7 @@ def parse_feed(data: bytes, source: dict[str, Any], *, collected_at: datetime, l
             "category": source["category"], "source": source["name"],
             "title": title[:300], "url": link, "published_at": _published(published, collected_at),
             "collected_at": collected_at.astimezone(UTC).isoformat(),
+            "relevance_profile": str(source.get("relevance_profile") or ""),
         })
         if len(rows) >= limit:
             break
@@ -161,6 +197,7 @@ def collect(config_path: Path, cache_path: Path, *, now: datetime | None = None,
     sources = config.get("sources")
     if not isinstance(sources, list) or not sources:
         raise EditorialSourceError("source registry is empty")
+    sources = [normalize_source_config(source) for source in sources]
     results: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(sources))) as executor:
         futures = [executor.submit(fetch_source, source, collected_at=collected_at, timeout=timeout, limit=per_source) for source in sources]
@@ -179,14 +216,20 @@ def collect(config_path: Path, cache_path: Path, *, now: datetime | None = None,
             source_by_name.get(str(row.get("source", "")), {}),
         )
     ]
-    fallback_rows = [
-        row for row in _previous_rows(cache_path)
-        if row.get("source") in failed_names and row.get("source") not in successful_names
-        and matches_source_relevance(
-            str(row.get("title", "")),
-            source_by_name.get(str(row.get("source", "")), {}),
-        )
-    ]
+    fallback_rows = []
+    for previous_row in _previous_rows(cache_path):
+        source_name = str(previous_row.get("source", ""))
+        source = source_by_name.get(source_name, {})
+        if (
+            source_name not in failed_names
+            or source_name in successful_names
+            or not matches_source_relevance(str(previous_row.get("title", "")), source)
+        ):
+            continue
+        row = dict(previous_row)
+        row["category"] = str(source.get("category") or row.get("category") or "")
+        row["relevance_profile"] = str(source.get("relevance_profile") or "")
+        fallback_rows.append(row)
     if fallback_rows:
         rows.extend(fallback_rows)
         fallback_names = {str(row.get("source", "")) for row in fallback_rows}

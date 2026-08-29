@@ -69,6 +69,21 @@ def analysis_payload(source_hash: str = "a" * 64):
     }
 
 
+def source_rows_for_analysis():
+    return [
+        {
+            "category": category,
+            "source": "공식 원문",
+            "title": category,
+            "url": f"https://example.com/{index}",
+            "published_at": "2026-08-27T12:00:00+00:00",
+        }
+        for index, category in enumerate(
+            ("AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사")
+        )
+    ]
+
+
 class DailyBriefingTests(unittest.TestCase):
     def test_freezes_latest_valid_prior_briefing_for_retrospective(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,7 +128,7 @@ class DailyBriefingTests(unittest.TestCase):
                         "contract_version": "editorial-source-cache.v1",
                         "checked_at": "2026-08-27T12:00:00+00:00",
                         "source_snapshot_hash": "a" * 64,
-                        "rows": [{"category": "AI/ML 핵심", "source": "source", "title": "한국어 제목", "url": "https://example.com/item", "published_at": "2026-08-27T12:00:00+00:00"}],
+                        "rows": source_rows_for_analysis(),
                     },
                     ensure_ascii=False,
                 ),
@@ -160,15 +175,7 @@ class DailyBriefingTests(unittest.TestCase):
                         "contract_version": "editorial-source-cache.v1",
                         "checked_at": "2026-08-27T12:00:00+00:00",
                         "source_snapshot_hash": "a" * 64,
-                        "rows": [
-                            {
-                                "category": "AI/ML 핵심",
-                                "source": "source",
-                                "title": "한국어 제목",
-                                "url": "https://example.com/item",
-                                "published_at": "2026-08-27T12:00:00+00:00",
-                            }
-                        ],
+                        "rows": source_rows_for_analysis(),
                     },
                     ensure_ascii=False,
                 ),
@@ -210,6 +217,28 @@ class DailyBriefingTests(unittest.TestCase):
             self.assertEqual(len(safe["must_read"]), 5)
             self.assertEqual(safe["source_title_translations"][0]["korean_title"], "에이전트 평가를 운영 게이트로 전환")
             self.assertEqual({row["category"] for row in safe["must_read"]}, {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"})
+
+    def test_must_read_metadata_must_match_one_source_snapshot_row(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            safe = load_daily_briefing(
+                path,
+                source_snapshot_hash="a" * 64,
+                source_rows=source_rows_for_analysis(),
+            )
+            self.assertEqual(safe["must_read"][0]["source"], "공식 원문")
+
+            payload["must_read"][0]["source"] = "발견 게시판"
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(DailyBriefingError, "must match source snapshot"):
+                load_daily_briefing(
+                    path,
+                    source_snapshot_hash="a" * 64,
+                    source_rows=source_rows_for_analysis(),
+                )
 
     def test_rejects_non_korean_source_title_translation(self):
         with tempfile.TemporaryDirectory() as tmp:

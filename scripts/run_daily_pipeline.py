@@ -2004,6 +2004,7 @@ def run_daily_briefing_analysis(
                     previous_signal_labels=previous_labels or None,
                     previous_core_signals=previous_signals or None,
                     required_translation_urls=required_translation_urls,
+                    source_rows=source_cache["rows"],
                     retrospective_required=True,
                 )
             except DailyBriefingError:
@@ -2033,6 +2034,7 @@ def run_daily_briefing_analysis(
                 previous_signal_labels=previous_labels or None,
                 previous_core_signals=previous_signals or None,
                 required_translation_urls=required_translation_urls,
+                source_rows=source_cache["rows"],
                 retrospective_required=True,
             )
         logger.info(

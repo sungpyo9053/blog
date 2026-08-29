@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.4
+ * Version: 5.6.5
  * Author: Hunt News
  */
 
@@ -376,6 +376,23 @@ function hunt_news_briefing_display_date( $manifest, $format = 'Y-m-d' ) {
 	$generated_at = (string) ( $manifest['analysis']['generated_at'] ?? $manifest['generated_at'] ?? '' );
 	$timestamp    = strtotime( $generated_at );
 	return $timestamp ? wp_date( $format, $timestamp ) : '';
+}
+
+/**
+ * Show the date for cross-day source items and only the time for same-day items.
+ *
+ * @param string $published_at Source publication timestamp.
+ * @param string $report_at    Briefing analysis timestamp.
+ * @return string
+ */
+function hunt_news_source_time_label( $published_at, $report_at ) {
+	$published = strtotime( (string) $published_at );
+	$report    = strtotime( (string) $report_at );
+	if ( ! $published ) {
+		return '';
+	}
+	$format = $report && wp_date( 'Y-m-d', $published ) === wp_date( 'Y-m-d', $report ) ? 'H:i' : 'm.d H:i';
+	return wp_date( $format, $published );
 }
 
 /**
@@ -1167,7 +1184,7 @@ function hunt_news_home_sections() {
 	}
 	$source_groups = array();
 	$must_read_items = array();
-	$briefing_feed_items = array();
+	$source_items_by_url = array();
 	$source_title_translations = array();
 	foreach ( (array) ( $analysis['source_title_translations'] ?? array() ) as $translation ) {
 		$translation_url = (string) ( $translation['source_url'] ?? '' );
@@ -1178,19 +1195,25 @@ function hunt_news_home_sections() {
 	if ( ! $is_category && $manifest ) {
 		foreach ( (array) ( $manifest['editorial_sources']['items'] ?? array() ) as $source_item ) {
 			$source_category = (string) ( $source_item['category'] ?? '' );
+			$source_url      = (string) ( $source_item['url'] ?? '' );
+			if ( $source_url ) {
+				$source_items_by_url[ $source_url ] = $source_item;
+			}
 			if ( in_array( $source_category, array( 'AI/ML 핵심', '개발 트렌드', 'AI 공식 블로그', '국내 IT', '국내 시사' ), true ) ) {
 				$source_groups[ $source_category ][] = $source_item;
 			}
 		}
 		if ( ! empty( $analysis['must_read'] ) ) {
 			foreach ( $analysis['must_read'] as $item ) {
+				$source_url   = (string) ( $item['source_url'] ?? '' );
+				$source_match = $source_items_by_url[ $source_url ] ?? array();
 				$must_read_items[] = array(
-					'category' => (string) ( $item['category'] ?? '' ),
-					'source' => (string) ( $item['source'] ?? '' ),
-					'title' => (string) ( $item['title'] ?? '' ),
-					'korean_title' => (string) ( $item['korean_title'] ?? ( $source_title_translations[ (string) ( $item['source_url'] ?? '' ) ] ?? '' ) ),
-					'url' => (string) ( $item['source_url'] ?? '' ),
-					'published_at' => (string) ( $analysis['generated_at'] ?? '' ),
+					'category' => (string) ( $source_match['category'] ?? $item['category'] ?? '' ),
+					'source' => (string) ( $source_match['source'] ?? $item['source'] ?? '' ),
+					'title' => (string) ( $source_match['title'] ?? $item['title'] ?? '' ),
+					'korean_title' => (string) ( $item['korean_title'] ?? ( $source_title_translations[ $source_url ] ?? '' ) ),
+					'url' => $source_url,
+					'published_at' => (string) ( $source_match['published_at'] ?? $analysis['generated_at'] ?? '' ),
 					'why_it_matters' => (string) ( $item['why_it_matters'] ?? '' ),
 					'action' => (string) ( $item['action'] ?? '' ),
 				);
@@ -1218,22 +1241,6 @@ function hunt_news_home_sections() {
 				}
 				if ( count( $must_read_items ) >= 10 ) {
 					break;
-				}
-			}
-		}
-		$briefing_feed_urls = array_fill_keys( array_filter( array_column( $must_read_items, 'url' ) ), true );
-		for ( $round = 0; $round < 10; $round++ ) {
-			foreach ( array_keys( $source_groups ) as $source_category ) {
-				if ( isset( $source_groups[ $source_category ][ $round ] ) ) {
-					$feed_item = $source_groups[ $source_category ][ $round ];
-					$feed_url = (string) ( $feed_item['url'] ?? '' );
-					if ( $feed_url && isset( $briefing_feed_urls[ $feed_url ] ) ) {
-						continue;
-					}
-					$briefing_feed_items[] = $feed_item;
-					if ( $feed_url ) {
-						$briefing_feed_urls[ $feed_url ] = true;
-					}
 				}
 			}
 		}
@@ -1330,7 +1337,7 @@ function hunt_news_home_sections() {
 			<aside class="hunt-news-keyword-panel" aria-labelledby="hunt-news-keyword-title">
 				<header class="hunt-news-panel-heading">
 					<div><span aria-hidden="true">▥</span><h3 id="hunt-news-keyword-title">오늘의 키워드</h3></div>
-					<p><?php echo $manifest ? '수집 캐시 실측값' : '최근 글 태그·분야 관측'; ?></p>
+					<p><?php echo $manifest ? '브리핑 내 상대 중요도 · 관측 방향' : '최근 글 태그·분야 관측'; ?></p>
 				</header>
 				<ol class="hunt-news-keyword-list">
 					<?php foreach ( $keywords as $index => $keyword ) : ?>
@@ -1427,20 +1434,14 @@ function hunt_news_home_sections() {
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
 				<div><p>AI 선정 오늘의 필독 5</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
-				<div class="hunt-news-must-read__modes" role="group" aria-label="기술 뉴스 표시 방식">
-					<button type="button" data-brief-view="must-read" aria-pressed="true">필독</button>
-					<button type="button" data-brief-view="5" aria-pressed="false">5개</button>
-					<button type="button" data-brief-view="10" aria-pressed="false">10개</button>
-					<button type="button" data-brief-view="all" aria-pressed="false">전체</button>
-				</div>
 			</header>
-			<p class="hunt-news-must-read__status" data-brief-view-status aria-live="polite">AI가 근거와 영향도를 검토해 고른 5개입니다.</p>
+			<p class="hunt-news-must-read__status">AI가 근거와 영향도를 검토해 고른 5개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.</p>
 			<div class="hunt-news-must-read__grid" data-brief-view-grid>
 				<?php if ( $must_read_items ) : ?>
 					<?php foreach ( array_slice( $must_read_items, 0, 5 ) as $index => $item ) : ?>
 						<article class="hunt-news-brief-card hunt-news-brief-card--source" data-brief-card-kind="must-read">
 							<b class="hunt-news-brief-card__rank">#<?php echo esc_html( (string) ( $index + 1 ) ); ?></b>
-							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
+							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time datetime="<?php echo esc_attr( (string) ( $item['published_at'] ?? '' ) ); ?>"><?php echo esc_html( hunt_news_source_time_label( (string) ( $item['published_at'] ?? '' ), (string) ( $analysis['generated_at'] ?? '' ) ) ); ?></time></div>
 							<h4><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></h4>
 							<?php if ( ! empty( $item['korean_title'] ) && (string) $item['korean_title'] !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( (string) $item['korean_title'] ); ?></p><?php endif; ?>
 							<p><?php echo esc_html( ! empty( $item['why_it_matters'] ) ? (string) $item['why_it_matters'] : ( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 공식 원문과 독립 출처를 확인하세요.' ) ); ?></p>
@@ -1460,15 +1461,6 @@ function hunt_news_home_sections() {
 						</article>
 					<?php endforeach; ?>
 				<?php endif; ?>
-				<?php foreach ( $briefing_feed_items as $index => $item ) : ?>
-					<article class="hunt-news-brief-card hunt-news-brief-card--feed" data-brief-card-kind="feed" data-brief-card-index="<?php echo esc_attr( (string) $index ); ?>" hidden>
-						<div><span><?php echo esc_html( (string) ( $item['source'] ?? $item['category'] ?? '기술 뉴스' ) ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( (string) ( $item['published_at'] ?? '' ) ) ) ); ?></time></div>
-						<h4><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></h4>
-						<?php $feed_translated_title = (string) ( $source_title_translations[ (string) ( $item['url'] ?? '' ) ] ?? '' ); if ( $feed_translated_title && $feed_translated_title !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( $feed_translated_title ); ?></p><?php endif; ?>
-						<p><?php echo esc_html( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 원문에서 핵심 사실과 적용 조건을 확인하세요.' ); ?></p>
-						<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">원문 확인 <b aria-hidden="true">→</b></a>
-					</article>
-				<?php endforeach; ?>
 			</div>
 		</section>
 
@@ -1480,7 +1472,7 @@ function hunt_news_home_sections() {
 				<section class="hunt-news-source-column">
 					<h4><?php echo esc_html( $source_category ); ?></h4>
 					<?php foreach ( array_slice( $source_groups[ $source_category ], 0, 10 ) as $source_item ) : ?>
-					<article><div><span><?php echo esc_html( $source_item['source'] ); ?></span><time><?php echo esc_html( wp_date( 'H:i', strtotime( $source_item['published_at'] ) ) ); ?></time></div><h5><a href="<?php echo esc_url( $source_item['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $source_item['title'] ); ?></a></h5><?php $translated_title = (string) ( $source_title_translations[ (string) $source_item['url'] ] ?? '' ); if ( $translated_title && $translated_title !== (string) $source_item['title'] ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( $translated_title ); ?></p><?php endif; ?></article>
+					<article><div><span><?php echo esc_html( $source_item['source'] ); ?></span><time datetime="<?php echo esc_attr( (string) $source_item['published_at'] ); ?>"><?php echo esc_html( hunt_news_source_time_label( (string) $source_item['published_at'], (string) ( $analysis['generated_at'] ?? '' ) ) ); ?></time></div><h5><a href="<?php echo esc_url( $source_item['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $source_item['title'] ); ?></a></h5><?php $translated_title = (string) ( $source_title_translations[ (string) $source_item['url'] ] ?? '' ); if ( $translated_title && $translated_title !== (string) $source_item['title'] ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( $translated_title ); ?></p><?php endif; ?></article>
 					<?php endforeach; ?>
 				</section>
 				<?php endforeach; ?>
@@ -1497,9 +1489,6 @@ function hunt_news_home_sections() {
 	<?php if ( $is_category ) { hunt_news_render_popular_news(); } ?>
 	<script id="hunt-news-home-sections-position">
 	document.addEventListener('DOMContentLoaded',function(){var board=document.getElementById('hunt-news-briefing-board');var notices=document.getElementById('hunt-news-home-notices');var popular=document.getElementById('hunt-news-popular');var main=document.querySelector('#main,main.site-main');if(main&&main.parentNode){var parent=main.parentNode;var heading=document.createElement('div');var shell=document.createElement('div');var primary=document.createElement('div');heading.className='hunt-news-latest-heading';heading.innerHTML='<p>Hunt News Archive</p><h2>분야별 최신 뉴스</h2>';shell.className='hunt-news-content-shell';primary.className='hunt-news-content-shell__primary';if(board){parent.insertBefore(board,main);}if(notices){parent.insertBefore(notices,main);}parent.insertBefore(shell,main);primary.appendChild(heading);primary.appendChild(main);shell.appendChild(primary);if(popular){shell.appendChild(popular);}}if(popular){var toggle=popular.querySelector('.hunt-news-popular__toggle');var desktop=window.matchMedia('(min-width: 1200px)');var tabs=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-tab]'));var panels=Array.prototype.slice.call(popular.querySelectorAll('[data-popular-panel]'));var setTab=function(name,focus){tabs.forEach(function(tab){var active=tab.getAttribute('data-popular-tab')===name;tab.classList.toggle('is-active',active);tab.setAttribute('aria-selected',active?'true':'false');tab.setAttribute('tabindex',active?'0':'-1');if(active&&focus){tab.focus();}});panels.forEach(function(panel){panel.hidden=panel.getAttribute('data-popular-panel')!==name;});};tabs.forEach(function(tab,index){tab.addEventListener('click',function(){setTab(tab.getAttribute('data-popular-tab'),false);});tab.addEventListener('keydown',function(event){var next=index;if(event.key==='ArrowRight'){next=(index+1)%tabs.length;}else if(event.key==='ArrowLeft'){next=(index-1+tabs.length)%tabs.length;}else if(event.key==='Home'){next=0;}else if(event.key==='End'){next=tabs.length-1;}else{return;}event.preventDefault();setTab(tabs[next].getAttribute('data-popular-tab'),true);});});var setOpen=function(open){popular.classList.toggle('is-open',open);toggle.setAttribute('aria-expanded',open?'true':'false');};var syncLayout=function(){popular.classList.remove('is-open');toggle.setAttribute('aria-expanded',desktop.matches?'true':'false');};syncLayout();if(desktop.addEventListener){desktop.addEventListener('change',syncLayout);}toggle.addEventListener('click',function(){if(!desktop.matches){setOpen(!popular.classList.contains('is-open'));}});document.addEventListener('click',function(event){if(!desktop.matches&&popular.classList.contains('is-open')&&!popular.contains(event.target)){setOpen(false);}});document.addEventListener('keydown',function(event){if(event.key==='Escape'&&!desktop.matches&&popular.classList.contains('is-open')){setOpen(false);toggle.focus();}});}});
-	</script>
-	<script id="hunt-news-brief-view-controls">
-	document.addEventListener('DOMContentLoaded',function(){var viewButtons=Array.prototype.slice.call(document.querySelectorAll('[data-brief-view]'));var mustReadCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="must-read"]'));var feedCards=Array.prototype.slice.call(document.querySelectorAll('[data-brief-card-kind="feed"]'));var viewStatus=document.querySelector('[data-brief-view-status]');viewButtons.forEach(function(button){button.addEventListener('click',function(){var view=button.getAttribute('data-brief-view');var extraLimit=view==='all'?feedCards.length:Math.max(0,parseInt(view,10)-mustReadCards.length);viewButtons.forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});mustReadCards.forEach(function(card){card.hidden=false;});feedCards.forEach(function(card){card.hidden=view==='must-read'||parseInt(card.getAttribute('data-brief-card-index'),10)>=extraLimit;});if(viewStatus){viewStatus.textContent=view==='must-read'?'AI가 근거와 영향도를 검토해 고른 5개입니다.':view==='all'?'필독 5개를 포함한 오늘의 기술 뉴스 전체입니다.':'필독 5개를 포함해 '+view+'개까지 펼쳤습니다.';}var track=window.gtag||window.__gtagTracker;if(typeof track==='function'){track('event','huntlab_briefing_filter',{briefing_view:view,visible_card_count:mustReadCards.length+(view==='all'?feedCards.length:extraLimit),transport_type:'beacon'});}});});});
 	</script>
 	<script id="hunt-news-report-mode">
 	document.addEventListener('DOMContentLoaded',function(){var reportShell=document.querySelector('.hunt-news-report-shell');var board=document.getElementById('hunt-news-briefing-board');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');var archiveShell=main?main.closest('.hunt-news-content-shell'):null;if(reportShell&&board&&board.parentNode!==reportShell){reportShell.appendChild(board);}if(reportShell&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',reportShell);}else if(reportShell&&archiveShell&&archiveShell.parentNode){archiveShell.parentNode.insertBefore(reportShell,archiveShell);}if(document.body.classList.contains('hunt-news-briefing-mode')&&main){main.hidden=true;}var dateNav=document.getElementById('hunt-news-date-nav');var dateToggle=dateNav?dateNav.querySelector('.hunt-news-date-nav__toggle'):null;if(dateNav&&dateToggle){dateToggle.addEventListener('click',function(){var open=dateNav.classList.toggle('is-open');dateToggle.setAttribute('aria-expanded',open?'true':'false');});}});

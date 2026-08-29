@@ -23,6 +23,7 @@ from scripts.daily_briefing import (
     load_daily_briefing,
     required_source_translation_urls,
 )
+from scripts.collect_editorial_sources import normalize_source_config, matches_source_relevance
 
 
 CONTRACT_VERSION = "briefing-manifest.v1"
@@ -171,13 +172,20 @@ def _editorial_source_summary(cache_path: Path | None) -> dict[str, Any]:
     other_rows: list[dict[str, str]] = []
     seen: set[str] = set()
     for row in rows:
+        normalized_source = normalize_source_config({
+            "category": row.get("category", ""),
+            "name": row.get("source", ""),
+            "relevance_profile": row.get("relevance_profile", ""),
+        })
+        if not matches_source_relevance(str(row.get("title", "")), normalized_source):
+            continue
         url = str(row.get("url", "")).strip()
         title = str(row.get("title", "")).strip()
         if not url.startswith("https://") or not title or url in seen:
             continue
         seen.add(url)
         safe_row = {
-            "category": str(row.get("category", ""))[:40],
+            "category": str(normalized_source.get("category", ""))[:40],
             "source": str(row.get("source", ""))[:80],
             "title": title[:300], "url": url,
             "published_at": str(row.get("published_at", ""))[:40],
@@ -246,6 +254,7 @@ def build_briefing_manifest(
                 required_translation_urls=required_source_translation_urls(
                     list(editorial_sources.get("items", []))
                 ),
+                source_rows=list(editorial_sources.get("items", [])),
             )
         except DailyBriefingError:
             analysis = {}

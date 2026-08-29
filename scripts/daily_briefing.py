@@ -80,6 +80,7 @@ def validate_daily_briefing(
     previous_signal_labels: list[str] | None = None,
     previous_core_signals: list[dict[str, Any]] | None = None,
     required_translation_urls: set[str] | None = None,
+    source_rows: list[dict[str, Any]] | None = None,
     retrospective_required: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
@@ -315,6 +316,11 @@ def validate_daily_briefing(
 
     safe["must_read"] = []
     categories: set[str] = set()
+    source_rows_by_url = {
+        str(row.get("url") or "").strip(): row
+        for row in source_rows or []
+        if str(row.get("url") or "").startswith("https://")
+    }
     for row in _rows(payload, "must_read", 5):
         category = _text(row.get("category"), "category", limit=40)
         if category not in CATEGORIES or category in categories:
@@ -324,16 +330,29 @@ def validate_daily_briefing(
         if not source_url.startswith("https://"):
             raise DailyBriefingError("must_read source_url must use https")
         title = _text(row.get("title"), "title", limit=220)
+        source = _text(row.get("source"), "source", limit=80)
         korean_title = str(row.get("korean_title") or "").strip()[:220]
         if not contains_hangul(title) and not contains_hangul(korean_title):
             raise DailyBriefingError(
                 "must_read.korean_title must contain Korean text for non-Korean titles"
             )
+        if source_rows is not None:
+            source_row = source_rows_by_url.get(source_url)
+            if source_row is None:
+                raise DailyBriefingError("must_read source_url must exist in source snapshot")
+            if (
+                str(source_row.get("title") or "").strip() != title
+                or str(source_row.get("source") or "").strip() != source
+                or str(source_row.get("category") or "").strip() != category
+            ):
+                raise DailyBriefingError(
+                    "must_read title, source, and category must match source snapshot"
+                )
         safe["must_read"].append({
             "title": title,
             "korean_title": korean_title,
             "category": category,
-            "source": _text(row.get("source"), "source", limit=80),
+            "source": source,
             "source_url": source_url,
             "why_it_matters": _text(row.get("why_it_matters"), "why_it_matters", limit=420),
             "action": _text(row.get("action"), "action", limit=260),
@@ -349,6 +368,7 @@ def load_daily_briefing(
     previous_signal_labels: list[str] | None = None,
     previous_core_signals: list[dict[str, Any]] | None = None,
     required_translation_urls: set[str] | None = None,
+    source_rows: list[dict[str, Any]] | None = None,
     retrospective_required: bool = False,
 ) -> dict[str, Any]:
     if not path.is_file():
@@ -364,5 +384,6 @@ def load_daily_briefing(
         previous_signal_labels=previous_signal_labels,
         previous_core_signals=previous_core_signals,
         required_translation_urls=required_translation_urls,
+        source_rows=source_rows,
         retrospective_required=retrospective_required,
     )
