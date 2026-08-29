@@ -189,7 +189,12 @@ def _editorial_source_summary(
         title = str(row.get("title", "")).strip()
         if not url.startswith("https://") or not title or url in seen:
             continue
-        if translated_urls is not None and not contains_hangul(title) and url not in translated_urls:
+        if (
+            translated_urls is not None
+            and not contains_hangul(title)
+            and url not in translated_urls
+            and url not in preferred_urls
+        ):
             continue
         seen.add(url)
         safe_row = {
