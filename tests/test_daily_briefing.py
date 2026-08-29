@@ -86,6 +86,26 @@ def source_rows_for_analysis():
 
 
 class DailyBriefingTests(unittest.TestCase):
+    def test_daily_briefing_prompt_preserves_contract_and_editorial_roles(self):
+        guide = (Path(__file__).parents[1] / "agents/daily-briefing-agent.md").read_text(
+            encoding="utf-8"
+        )
+        stage = pipeline.daily_briefing_stage(
+            "20260829T170006Z-test",
+            Path("topics.md"),
+            Path("daily-briefing-analysis.json"),
+            Path("editorial-sources-snapshot.json"),
+        )
+
+        self.assertIn("출력 키, 필드 개수, 허용 값", guide)
+        self.assertIn("세 개의 핵심 신호를 한 문장에 연결하지 않는다", guide)
+        self.assertIn("`must_read.action`은 즉시 할 일이 분명하지 않으면 빈 문자열", guide)
+        self.assertIn("### 6. 출력 전 자체 점검", guide)
+        self.assertIn("오늘 가장 중요한 결정 하나만 1~2개의 짧은 문장", stage.prompt)
+        self.assertIn("중심 판단과 그 판단을 바꾸는 조건을 2~3문장", stage.prompt)
+        self.assertNotIn("편집 판단 한 문장", stage.prompt)
+        self.assertNotIn("한 문단으로만 설명", stage.prompt)
+
     def test_must_read_action_can_be_empty_when_no_immediate_action_exists(self):
         payload = analysis_payload()
         payload["must_read"][0]["action"] = ""
