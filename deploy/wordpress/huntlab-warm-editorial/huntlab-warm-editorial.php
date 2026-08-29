@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.5
+ * Version: 5.6.6
  * Author: Hunt News
  */
 
@@ -1156,7 +1156,8 @@ function hunt_news_home_sections() {
 		return;
 	}
 
-	$is_category = is_category();
+	$is_category        = is_category();
+	$is_briefing_detail = is_singular( 'hunt_briefing' );
 
 	$brief_posts  = $is_category ? array() : hunt_news_briefing_posts( 12 );
 	$manifest     = $is_category ? array() : hunt_news_latest_briefing_manifest();
@@ -1272,6 +1273,7 @@ function hunt_news_home_sections() {
 	$briefing_core_count      = ! empty( $analysis['core_signals'] ) ? count( $analysis['core_signals'] ) : min( 3, count( $signal_posts ) );
 	$briefing_timeline_count  = ! empty( $analysis['timeline'] ) ? count( $analysis['timeline'] ) : count( $timeline );
 	$briefing_must_read_count = ! empty( $analysis['must_read'] ) ? count( $analysis['must_read'] ) : min( 5, count( $must_read_items ) );
+	$briefing_detail_url      = home_url( '/briefing/' . hunt_news_briefing_display_date( $manifest ) . '/' );
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
 	<div class="hunt-news-report-shell">
@@ -1288,7 +1290,7 @@ function hunt_news_home_sections() {
 				<a href="<?php echo esc_url( get_post_type_archive_link( 'hunt_briefing' ) ); ?>">날짜 아카이브</a>
 			</div>
 		</header>
-		<?php if ( $manifest ) : ?>
+		<?php if ( $is_briefing_detail && $manifest ) : ?>
 		<section id="hunt-news-reader-summary" class="hunt-news-reader-summary" aria-label="오늘 브리핑 구성">
 			<div><span>핵심 변화</span><strong><?php echo esc_html( (string) $briefing_core_count ); ?>개</strong><small>오늘 먼저 볼 변화</small></div>
 			<div><span>연결된 근거</span><strong><?php echo esc_html( (string) count( $briefing_evidence_urls ) ); ?>개</strong><small>분석에 연결된 원문</small></div>
@@ -1297,7 +1299,7 @@ function hunt_news_home_sections() {
 		</section>
 		<?php endif; ?>
 
-		<div class="hunt-news-briefing-overview">
+		<div class="hunt-news-briefing-overview<?php echo $is_briefing_detail ? '' : ' hunt-news-briefing-overview--compact'; ?>">
 			<section class="hunt-news-signal-panel" aria-labelledby="hunt-news-signal-title">
 				<header class="hunt-news-panel-heading">
 					<div><span aria-hidden="true">●</span><h3 id="hunt-news-signal-title">핵심 신호</h3></div>
@@ -1334,6 +1336,7 @@ function hunt_news_home_sections() {
 				</div>
 			</section>
 
+			<?php if ( $is_briefing_detail ) : ?>
 			<aside class="hunt-news-keyword-panel" aria-labelledby="hunt-news-keyword-title">
 				<header class="hunt-news-panel-heading">
 					<div><span aria-hidden="true">▥</span><h3 id="hunt-news-keyword-title">오늘의 키워드</h3></div>
@@ -1348,9 +1351,10 @@ function hunt_news_home_sections() {
 					<?php endforeach; ?>
 				</ol>
 			</aside>
+			<?php endif; ?>
 		</div>
 
-		<?php if ( 'available' === ( $analysis['retrospective']['status'] ?? '' ) ) :
+		<?php if ( $is_briefing_detail && 'available' === ( $analysis['retrospective']['status'] ?? '' ) ) :
 			$retrospective_counts = array( 'confirmed' => 0, 'changed' => 0, 'unresolved' => 0 );
 			$retrospective_change = '';
 			foreach ( (array) $analysis['retrospective']['items'] as $review ) {
@@ -1379,6 +1383,7 @@ function hunt_news_home_sections() {
 		</section>
 		<?php endif; ?>
 
+		<?php if ( $is_briefing_detail ) : ?>
 		<section class="hunt-news-action-timeline" aria-labelledby="hunt-news-timeline-title">
 			<header class="hunt-news-panel-heading">
 				<div><span aria-hidden="true">⚡</span><h3 id="hunt-news-timeline-title">확인 타임라인</h3></div>
@@ -1430,12 +1435,19 @@ function hunt_news_home_sections() {
 				<?php endif; ?>
 			</div>
 		</section>
+		<?php endif; ?>
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
 				<div><p>AI 선정 오늘의 필독 5</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
 			</header>
-			<p class="hunt-news-must-read__status">AI가 근거와 영향도를 검토해 고른 5개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.</p>
+			<p class="hunt-news-must-read__status">
+				<?php if ( $is_briefing_detail ) : ?>
+					AI가 근거와 영향도를 검토해 고른 5개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.
+				<?php else : ?>
+					AI가 근거와 영향도를 검토해 고른 5개입니다. <a href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서와 수집원 보기 <b aria-hidden="true">→</b></a>
+				<?php endif; ?>
+			</p>
 			<div class="hunt-news-must-read__grid" data-brief-view-grid>
 				<?php if ( $must_read_items ) : ?>
 					<?php foreach ( array_slice( $must_read_items, 0, 5 ) as $index => $item ) : ?>
@@ -1445,7 +1457,6 @@ function hunt_news_home_sections() {
 							<h4><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></h4>
 							<?php if ( ! empty( $item['korean_title'] ) && (string) $item['korean_title'] !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( (string) $item['korean_title'] ); ?></p><?php endif; ?>
 							<p><?php echo esc_html( ! empty( $item['why_it_matters'] ) ? (string) $item['why_it_matters'] : ( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 공식 원문과 독립 출처를 확인하세요.' ) ); ?></p>
-							<?php if ( ! empty( $item['action'] ) ) : ?><strong class="hunt-news-brief-card__decision">→ <?php echo esc_html( (string) $item['action'] ); ?></strong><?php endif; ?>
 							<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">근거 원문 <b aria-hidden="true">→</b></a>
 						</article>
 					<?php endforeach; ?>
@@ -1464,7 +1475,7 @@ function hunt_news_home_sections() {
 			</div>
 		</section>
 
-		<?php if ( $source_groups ) : ?>
+		<?php if ( $is_briefing_detail && $source_groups ) : ?>
 		<section class="hunt-news-source-board" aria-labelledby="hunt-news-source-title">
 			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">▤</span><h3 id="hunt-news-source-title">오늘 수집한 기술 뉴스</h3></div><p>제목은 발견용이며 핵심 사실은 원문에서 확인합니다</p></header>
 			<div class="hunt-news-source-board__grid">

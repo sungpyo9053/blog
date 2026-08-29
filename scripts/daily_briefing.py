@@ -366,7 +366,7 @@ def validate_daily_briefing(
             "source": source,
             "source_url": source_url,
             "why_it_matters": _text(row.get("why_it_matters"), "why_it_matters", limit=420),
-            "action": _text(row.get("action"), "action", limit=260),
+            "action": str(row.get("action") or "").strip()[:260],
         })
     return safe
 

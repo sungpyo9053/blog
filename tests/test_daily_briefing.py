@@ -10,6 +10,7 @@ from scripts.daily_briefing import (
     DailyBriefingError,
     load_daily_briefing,
     required_source_translation_urls,
+    validate_daily_briefing,
 )
 
 
@@ -85,6 +86,17 @@ def source_rows_for_analysis():
 
 
 class DailyBriefingTests(unittest.TestCase):
+    def test_must_read_action_can_be_empty_when_no_immediate_action_exists(self):
+        payload = analysis_payload()
+        payload["must_read"][0]["action"] = ""
+
+        safe = validate_daily_briefing(
+            payload,
+            source_rows=source_rows_for_analysis(),
+        )
+
+        self.assertEqual(safe["must_read"][0]["action"], "")
+
     def test_translation_scope_uses_public_taxonomy_and_relevance_filter(self):
         required = required_source_translation_urls(
             [
