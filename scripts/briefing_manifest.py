@@ -19,6 +19,7 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from scripts.daily_briefing import (
+    contains_hangul,
     DailyBriefingError,
     load_daily_briefing,
     required_source_translation_urls,
@@ -166,6 +167,7 @@ def _collection_health(collection: Mapping[str, Any], generated: datetime) -> di
 def _editorial_source_summary(
     cache_path: Path | None,
     preferred_urls: set[str] | None = None,
+    translated_urls: set[str] | None = None,
 ) -> dict[str, Any]:
     payload = load_json(cache_path) if cache_path else {}
     rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
@@ -186,6 +188,8 @@ def _editorial_source_summary(
         url = str(row.get("url", "")).strip()
         title = str(row.get("title", "")).strip()
         if not url.startswith("https://") or not title or url in seen:
+            continue
+        if translated_urls is not None and not contains_hangul(title) and url not in translated_urls:
             continue
         seen.add(url)
         safe_row = {
@@ -277,9 +281,16 @@ def build_briefing_manifest(
         if isinstance(row, Mapping)
         and str(row.get("source_url") or "").startswith("https://")
     }
+    translated_source_urls = {
+        str(row.get("source_url") or "").strip()
+        for row in raw_analysis.get("source_title_translations", [])
+        if isinstance(row, Mapping)
+        and str(row.get("source_url") or "").startswith("https://")
+    }
     editorial_sources = _editorial_source_summary(
         editorial_source_cache_path,
         preferred_urls=preferred_source_urls,
+        translated_urls=translated_source_urls if raw_analysis else None,
     )
     analysis: dict[str, Any] = {}
     if daily_briefing_path:

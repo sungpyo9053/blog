@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from scripts.collect_editorial_sources import matches_source_relevance, normalize_source_config
+
 
 CONTRACT_VERSION = "daily-briefing-analysis.v1"
 CATEGORIES = {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"}
@@ -35,7 +37,16 @@ def required_source_translation_urls(
     counts = {category: 0 for category in CATEGORIES}
     required: set[str] = set()
     for row in rows:
-        category = str(row.get("category") or "").strip()
+        source = normalize_source_config(
+            {
+                "category": row.get("category", ""),
+                "name": row.get("source", ""),
+                "relevance_profile": row.get("relevance_profile", ""),
+            }
+        )
+        if not matches_source_relevance(str(row.get("title") or ""), source):
+            continue
+        category = str(source.get("category") or "").strip()
         if category not in counts or counts[category] >= category_limit:
             continue
         counts[category] += 1

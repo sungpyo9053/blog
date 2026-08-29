@@ -85,6 +85,25 @@ def source_rows_for_analysis():
 
 
 class DailyBriefingTests(unittest.TestCase):
+    def test_translation_scope_uses_public_taxonomy_and_relevance_filter(self):
+        required = required_source_translation_urls(
+            [
+                {
+                    "category": "국내 IT",
+                    "source": "ZDNet Korea",
+                    "title": "Company labor agreement finalized",
+                    "url": "https://example.com/general",
+                },
+                {
+                    "category": "국내 IT",
+                    "source": "ZDNet Korea",
+                    "title": "AI server platform released",
+                    "url": "https://example.com/tech",
+                },
+            ]
+        )
+        self.assertEqual(required, {"https://example.com/tech"})
+
     def test_freezes_latest_valid_prior_briefing_for_retrospective(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
