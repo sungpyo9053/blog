@@ -52,6 +52,7 @@ class EditorialSourceCollectorTests(unittest.TestCase):
         self.assertEqual(domestic["relevance_profile"], "technology")
         self.assertTrue(matches_source_relevance("애플이 만든 AI 서버 공개", domestic))
         self.assertFalse(matches_source_relevance("기아 임단협 최종 타결", domestic))
+        self.assertFalse(matches_source_relevance("재개발 세금 놓치면 낭패", domestic))
 
     def test_failed_broad_source_does_not_restore_irrelevant_cached_row(self):
         with tempfile.TemporaryDirectory() as temporary:
