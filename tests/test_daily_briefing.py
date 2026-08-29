@@ -6,7 +6,11 @@ from pathlib import Path
 from unittest import mock
 
 import scripts.run_daily_pipeline as pipeline
-from scripts.daily_briefing import DailyBriefingError, load_daily_briefing
+from scripts.daily_briefing import (
+    DailyBriefingError,
+    load_daily_briefing,
+    required_source_translation_urls,
+)
 
 
 def analysis_payload(source_hash: str = "a" * 64):
@@ -109,7 +113,7 @@ class DailyBriefingTests(unittest.TestCase):
                         "contract_version": "editorial-source-cache.v1",
                         "checked_at": "2026-08-27T12:00:00+00:00",
                         "source_snapshot_hash": "a" * 64,
-                        "rows": [{"category": "AI/ML 핵심", "source": "source", "title": "title", "url": "https://example.com/item", "published_at": "2026-08-27T12:00:00+00:00"}],
+                        "rows": [{"category": "AI/ML 핵심", "source": "source", "title": "한국어 제목", "url": "https://example.com/item", "published_at": "2026-08-27T12:00:00+00:00"}],
                     },
                     ensure_ascii=False,
                 ),
@@ -160,7 +164,7 @@ class DailyBriefingTests(unittest.TestCase):
                             {
                                 "category": "AI/ML 핵심",
                                 "source": "source",
-                                "title": "title",
+                                "title": "한국어 제목",
                                 "url": "https://example.com/item",
                                 "published_at": "2026-08-27T12:00:00+00:00",
                             }
@@ -214,6 +218,76 @@ class DailyBriefingTests(unittest.TestCase):
             payload["source_title_translations"][0]["korean_title"] = "English only"
             path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             with self.assertRaises(DailyBriefingError):
+                load_daily_briefing(path, source_snapshot_hash="a" * 64)
+
+    def test_requires_translation_for_visible_portuguese_source_title(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            portuguese_url = "https://example.com/minha-jornada"
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            with self.assertRaisesRegex(DailyBriefingError, "translations are incomplete"):
+                load_daily_briefing(
+                    path,
+                    source_snapshot_hash="a" * 64,
+                    required_translation_urls={portuguese_url},
+                )
+
+            payload["source_title_translations"].append({
+                "source_url": portuguese_url,
+                "korean_title": "하드웨어에서 프로그래밍까지, 나의 기술 여정",
+            })
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            safe = load_daily_briefing(
+                path,
+                source_snapshot_hash="a" * 64,
+                required_translation_urls={portuguese_url},
+            )
+            self.assertIn(
+                portuguese_url,
+                {row["source_url"] for row in safe["source_title_translations"]},
+            )
+
+    def test_translation_scope_includes_any_non_korean_language_in_top_ten(self):
+        rows = [
+            {
+                "category": "개발 트렌드",
+                "title": "Minha jornada na Tecnologia: do Hardware à Programação",
+                "url": "https://example.com/portuguese",
+            },
+            {
+                "category": "개발 트렌드",
+                "title": "한국어 제목",
+                "url": "https://example.com/korean",
+            },
+        ]
+        rows.extend(
+            {
+                "category": "개발 트렌드",
+                "title": f"English title {index}",
+                "url": f"https://example.com/english-{index}",
+            }
+            for index in range(2, 11)
+        )
+
+        required = required_source_translation_urls(rows)
+
+        self.assertIn("https://example.com/portuguese", required)
+        self.assertNotIn("https://example.com/korean", required)
+        self.assertNotIn("https://example.com/english-10", required)
+
+    def test_must_read_non_korean_title_requires_korean_subtitle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "daily-briefing-analysis.json"
+            payload = analysis_payload()
+            payload["must_read"][0]["title"] = (
+                "Minha jornada na Tecnologia: do Hardware à Programação"
+            )
+            payload["must_read"][0]["korean_title"] = ""
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            with self.assertRaisesRegex(DailyBriefingError, "must_read.korean_title"):
                 load_daily_briefing(path, source_snapshot_hash="a" * 64)
 
     def test_rejects_snapshot_drift_and_missing_evidence(self):

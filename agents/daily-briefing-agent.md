@@ -50,10 +50,11 @@ tools:
 - `developer_insights`: 3~4개. `title`, `analysis`, `action`, `evidence_urls`
 - `watchlist`: 2~3개. `title`, `reason`, `trigger`, `evidence_urls`
 - `source_title_translations`: 입력 cache에서 활성 카테고리별 앞 10개 안에 드는
-  영어 제목마다 `source_url`, `korean_title`. 원문 제목의 제품명·버전·수치는
-  보존하고 자연스러운 한국어 보조 제목으로 번역한다. 이미 한국어인 제목은 제외한다.
-- `must_read`: 정확히 5개. 활성 카테고리별 하나씩 원문 그대로의 `title`, 영어
-  제목일 때의 `korean_title`, `category`, `source`, `source_url`,
+  제목 중 한글이 없는 모든 제목마다 `source_url`, `korean_title`. 영어뿐 아니라
+  포르투갈어 등 언어와 관계없이 원문 제목의 제품명·버전·수치는 보존하고 자연스러운
+  한국어 보조 제목으로 번역한다. 이미 한글이 포함된 제목은 제외한다.
+- `must_read`: 정확히 5개. 활성 카테고리별 하나씩 원문 그대로의 `title`, 한글이
+  없는 제목일 때의 `korean_title`, `category`, `source`, `source_url`,
   `why_it_matters`, `action`
 
 허용 값:

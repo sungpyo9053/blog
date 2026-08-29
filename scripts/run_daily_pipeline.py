@@ -37,7 +37,11 @@ from scripts.briefing_manifest import (
     build_briefing_manifest,
     collect_run_publications,
 )
-from scripts.daily_briefing import DailyBriefingError, load_daily_briefing
+from scripts.daily_briefing import (
+    DailyBriefingError,
+    load_daily_briefing,
+    required_source_translation_urls,
+)
 from scripts.manage_whereispost_cache import (
     DEFAULT_CACHE as DEFAULT_WHEREISPOST_CACHE,
     DEFAULT_MAX_AGE_DAYS as DEFAULT_WHEREISPOST_MAX_AGE_DAYS,
@@ -1990,6 +1994,7 @@ def run_daily_briefing_analysis(
         source_hash = str(source_cache.get("source_snapshot_hash", ""))
         if not source_cache.get("rows") or not source_hash:
             raise DailyBriefingError("editorial source cache unavailable")
+        required_translation_urls = required_source_translation_urls(source_cache["rows"])
         if analysis_path.is_file():
             try:
                 payload = load_daily_briefing(
@@ -1998,6 +2003,7 @@ def run_daily_briefing_analysis(
                     previous_snapshot_hash=previous_hash,
                     previous_signal_labels=previous_labels or None,
                     previous_core_signals=previous_signals or None,
+                    required_translation_urls=required_translation_urls,
                     retrospective_required=True,
                 )
             except DailyBriefingError:
@@ -2026,6 +2032,7 @@ def run_daily_briefing_analysis(
                 previous_snapshot_hash=previous_hash,
                 previous_signal_labels=previous_labels or None,
                 previous_core_signals=previous_signals or None,
+                required_translation_urls=required_translation_urls,
                 retrospective_required=True,
             )
         logger.info(

@@ -18,7 +18,11 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlsplit
 
-from scripts.daily_briefing import DailyBriefingError, load_daily_briefing
+from scripts.daily_briefing import (
+    DailyBriefingError,
+    load_daily_briefing,
+    required_source_translation_urls,
+)
 
 
 CONTRACT_VERSION = "briefing-manifest.v1"
@@ -239,6 +243,9 @@ def build_briefing_manifest(
             analysis = load_daily_briefing(
                 daily_briefing_path,
                 source_snapshot_hash=editorial_sources.get("source_snapshot_hash", ""),
+                required_translation_urls=required_source_translation_urls(
+                    list(editorial_sources.get("items", []))
+                ),
             )
         except DailyBriefingError:
             analysis = {}

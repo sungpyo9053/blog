@@ -23,6 +23,29 @@ class DailyBriefingError(RuntimeError):
     """The analyst artifact is absent or violates its public contract."""
 
 
+def contains_hangul(value: Any) -> bool:
+    """Return whether a public title contains at least one Hangul syllable."""
+    return any("가" <= char <= "힣" for char in str(value or ""))
+
+
+def required_source_translation_urls(
+    rows: list[dict[str, Any]], *, category_limit: int = 10
+) -> set[str]:
+    """Find non-Korean source titles visible in each public category column."""
+    counts = {category: 0 for category in CATEGORIES}
+    required: set[str] = set()
+    for row in rows:
+        category = str(row.get("category") or "").strip()
+        if category not in counts or counts[category] >= category_limit:
+            continue
+        counts[category] += 1
+        title = str(row.get("title") or "").strip()
+        source_url = str(row.get("url") or "").strip()
+        if title and not contains_hangul(title) and source_url.startswith("https://"):
+            required.add(source_url)
+    return required
+
+
 def _text(value: Any, field: str, *, limit: int = 500) -> str:
     text = str(value or "").strip()
     if not text:
@@ -56,6 +79,7 @@ def validate_daily_briefing(
     previous_snapshot_hash: str = "",
     previous_signal_labels: list[str] | None = None,
     previous_core_signals: list[dict[str, Any]] | None = None,
+    required_translation_urls: set[str] | None = None,
     retrospective_required: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
@@ -276,13 +300,18 @@ def validate_daily_briefing(
         korean_title = _text(row.get("korean_title"), "korean_title", limit=220)
         if not source_url.startswith("https://") or source_url in translated_urls:
             raise DailyBriefingError("source title translations require unique https URLs")
-        if not any("가" <= char <= "힣" for char in korean_title):
+        if not contains_hangul(korean_title):
             raise DailyBriefingError("korean_title must contain Korean text")
         translated_urls.add(source_url)
         safe["source_title_translations"].append({
             "source_url": source_url,
             "korean_title": korean_title,
         })
+    missing_translation_urls = set(required_translation_urls or ()) - translated_urls
+    if missing_translation_urls:
+        raise DailyBriefingError(
+            "source title translations are incomplete for visible non-Korean titles"
+        )
 
     safe["must_read"] = []
     categories: set[str] = set()
@@ -294,9 +323,15 @@ def validate_daily_briefing(
         source_url = _text(row.get("source_url"), "source_url", limit=500)
         if not source_url.startswith("https://"):
             raise DailyBriefingError("must_read source_url must use https")
+        title = _text(row.get("title"), "title", limit=220)
+        korean_title = str(row.get("korean_title") or "").strip()[:220]
+        if not contains_hangul(title) and not contains_hangul(korean_title):
+            raise DailyBriefingError(
+                "must_read.korean_title must contain Korean text for non-Korean titles"
+            )
         safe["must_read"].append({
-            "title": _text(row.get("title"), "title", limit=220),
-            "korean_title": str(row.get("korean_title") or "").strip()[:220],
+            "title": title,
+            "korean_title": korean_title,
             "category": category,
             "source": _text(row.get("source"), "source", limit=80),
             "source_url": source_url,
@@ -313,6 +348,7 @@ def load_daily_briefing(
     previous_snapshot_hash: str = "",
     previous_signal_labels: list[str] | None = None,
     previous_core_signals: list[dict[str, Any]] | None = None,
+    required_translation_urls: set[str] | None = None,
     retrospective_required: bool = False,
 ) -> dict[str, Any]:
     if not path.is_file():
@@ -327,5 +363,6 @@ def load_daily_briefing(
         previous_snapshot_hash=previous_snapshot_hash,
         previous_signal_labels=previous_signal_labels,
         previous_core_signals=previous_core_signals,
+        required_translation_urls=required_translation_urls,
         retrospective_required=retrospective_required,
     )
