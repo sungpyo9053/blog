@@ -85,6 +85,11 @@ class BriefingManifestTests(unittest.TestCase):
                 {item["category"] for item in summary["items"]}, set(categories)
             )
 
+            preferred_url = "https://example.com/0/19"
+            preferred = _editorial_source_summary(cache, preferred_urls={preferred_url})
+            self.assertEqual(len(preferred["items"]), 60)
+            self.assertIn(preferred_url, {item["url"] for item in preferred["items"]})
+
     def test_wordpress_client_uses_authenticated_custom_manifest_route(self):
         response = mock.MagicMock()
         response.status = 200

@@ -163,9 +163,13 @@ def _collection_health(collection: Mapping[str, Any], generated: datetime) -> di
     }
 
 
-def _editorial_source_summary(cache_path: Path | None) -> dict[str, Any]:
+def _editorial_source_summary(
+    cache_path: Path | None,
+    preferred_urls: set[str] | None = None,
+) -> dict[str, Any]:
     payload = load_json(cache_path) if cache_path else {}
     rows = payload.get("rows") if isinstance(payload.get("rows"), list) else []
+    preferred_urls = preferred_urls or set()
     category_rows: dict[str, list[dict[str, str]]] = {
         category: [] for category in EDITORIAL_CATEGORY_ORDER
     }
@@ -210,6 +214,28 @@ def _editorial_source_summary(cache_path: Path | None) -> dict[str, Any]:
         round_index += 1
     if len(safe_rows) < MAX_PUBLIC_SOURCE_ITEMS:
         safe_rows.extend(other_rows[: MAX_PUBLIC_SOURCE_ITEMS - len(safe_rows)])
+    safe_by_url = {row["url"]: row for row in safe_rows}
+    eligible_by_url = {
+        row["url"]: row
+        for bucket in category_rows.values()
+        for row in bucket
+    }
+    eligible_by_url.update({row["url"]: row for row in other_rows})
+    for preferred_url in sorted(preferred_urls):
+        if preferred_url in safe_by_url or preferred_url not in eligible_by_url:
+            continue
+        replacement_index = next(
+            (
+                index
+                for index in range(len(safe_rows) - 1, -1, -1)
+                if safe_rows[index]["url"] not in preferred_urls
+            ),
+            None,
+        )
+        if replacement_index is None:
+            break
+        safe_rows[replacement_index] = eligible_by_url[preferred_url]
+        safe_by_url = {row["url"]: row for row in safe_rows}
     return {
         "provider": str(payload.get("provider", "hunt_news_editorial_sources")),
         "checked_at": str(payload.get("checked_at", "")),
@@ -244,7 +270,17 @@ def build_briefing_manifest(
     fallback = load_json(fallback_path)
     collection = _collection_summary(trends_cache_path)
     collection.update(_collection_health(collection, generated))
-    editorial_sources = _editorial_source_summary(editorial_source_cache_path)
+    raw_analysis = load_json(daily_briefing_path) if daily_briefing_path else {}
+    preferred_source_urls = {
+        str(row.get("source_url") or "").strip()
+        for row in raw_analysis.get("must_read", [])
+        if isinstance(row, Mapping)
+        and str(row.get("source_url") or "").startswith("https://")
+    }
+    editorial_sources = _editorial_source_summary(
+        editorial_source_cache_path,
+        preferred_urls=preferred_source_urls,
+    )
     analysis: dict[str, Any] = {}
     if daily_briefing_path:
         try:
