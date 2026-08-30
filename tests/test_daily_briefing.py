@@ -70,6 +70,32 @@ def analysis_payload(source_hash: str = "a" * 64):
     }
 
 
+def variable_analysis_payload(source_hash: str = "a" * 64):
+    payload = analysis_payload(source_hash)
+    payload["contract_version"] = "daily-briefing-analysis.v2"
+    payload["core_signals"] = payload["core_signals"][:2]
+    payload["keywords"] = payload["keywords"][:4]
+    payload["matrix"] = payload["matrix"][:1]
+    payload["timeline"] = payload["timeline"][:2]
+    payload["insight_cards"] = payload["insight_cards"][:1]
+    payload["themes"] = payload["themes"][:1]
+    payload["developer_insights"] = []
+    payload["watchlist"] = payload["watchlist"][:1]
+    payload["must_read"] = payload["must_read"][:3]
+    for field in (
+        "core_signals",
+        "matrix",
+        "timeline",
+        "insight_cards",
+        "themes",
+        "must_read",
+    ):
+        for row in payload[field]:
+            row["action"] = ""
+    payload["core_signals"][0]["action"] = "공식 변경 문서가 나오면 현재 설정을 다시 판단한다"
+    return payload
+
+
 def source_rows_for_analysis():
     return [
         {
@@ -103,8 +129,78 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertIn("### 6. 출력 전 자체 점검", guide)
         self.assertIn("오늘 가장 중요한 결정 하나만 1~2개의 짧은 문장", stage.prompt)
         self.assertIn("중심 판단과 그 판단을 바꾸는 조건을 2~3문장", stage.prompt)
+        self.assertIn("전체 비어 있지 않은 action은 최대 7개", stage.prompt)
         self.assertNotIn("편집 판단 한 문장", stage.prompt)
         self.assertNotIn("한 문단으로만 설명", stage.prompt)
+
+    def test_v2_accepts_variable_sections_and_keeps_v1_compatible(self):
+        v1 = validate_daily_briefing(analysis_payload())
+        v2 = validate_daily_briefing(variable_analysis_payload())
+
+        self.assertEqual(v1["contract_version"], "daily-briefing-analysis.v1")
+        self.assertEqual(v2["contract_version"], "daily-briefing-analysis.v2")
+        self.assertEqual(len(v2["core_signals"]), 2)
+        self.assertEqual(len(v2["keywords"]), 4)
+        self.assertEqual(len(v2["matrix"]), 1)
+        self.assertEqual(len(v2["must_read"]), 3)
+        self.assertEqual(v2["developer_insights"], [])
+
+    def test_v2_rejects_both_optional_synthesis_sections(self):
+        payload = variable_analysis_payload()
+        payload["developer_insights"] = [analysis_payload()["developer_insights"][0]]
+        payload["developer_insights"][0]["action"] = ""
+
+        with self.assertRaisesRegex(DailyBriefingError, "choosing themes or developer_insights"):
+            validate_daily_briefing(payload)
+
+    def test_v2_rejects_more_than_seven_actions(self):
+        payload = variable_analysis_payload()
+        action_rows = [
+            *payload["core_signals"],
+            *payload["matrix"],
+            *payload["timeline"],
+            *payload["insight_cards"],
+            *payload["themes"],
+            *payload["must_read"],
+        ]
+        for index, row in enumerate(action_rows[:8]):
+            row["action"] = f"담당 팀이 설정 {index}을 확인하고 실패하면 되돌린다"
+
+        with self.assertRaisesRegex(DailyBriefingError, "at most seven"):
+            validate_daily_briefing(payload)
+
+    def test_v2_retrospective_matches_variable_previous_signal_count(self):
+        payload = variable_analysis_payload()
+        payload["retrospective"] = {
+            "status": "available",
+            "previous_generated_at": "2026-08-29T02:00:00+09:00",
+            "previous_snapshot_hash": "b" * 64,
+            "items": [
+                {
+                    "previous_signal_index": index,
+                    "previous_label": f"이전 신호 {index}",
+                    "previous_detail": "이전 판단",
+                    "verdict": "unresolved",
+                    "current_status": "새 공식 근거가 없다",
+                    "action": "",
+                    "evidence_urls": [f"https://example.com/previous/{index}"],
+                }
+                for index in (1, 2)
+            ],
+        }
+
+        safe = validate_daily_briefing(
+            payload,
+            previous_snapshot_hash="b" * 64,
+            previous_signal_labels=["이전 신호 1", "이전 신호 2"],
+            previous_core_signals=[
+                {"label": "이전 신호 1", "evidence_urls": ["https://old.example/1"]},
+                {"label": "이전 신호 2", "evidence_urls": ["https://old.example/2"]},
+            ],
+            retrospective_required=True,
+        )
+
+        self.assertEqual(len(safe["retrospective"]["items"]), 2)
 
     def test_must_read_action_can_be_empty_when_no_immediate_action_exists(self):
         payload = analysis_payload()

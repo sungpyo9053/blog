@@ -10,7 +10,9 @@ from typing import Any
 from scripts.collect_editorial_sources import matches_source_relevance, normalize_source_config
 
 
-CONTRACT_VERSION = "daily-briefing-analysis.v1"
+CONTRACT_VERSION_V1 = "daily-briefing-analysis.v1"
+CONTRACT_VERSION = "daily-briefing-analysis.v2"
+SUPPORTED_CONTRACT_VERSIONS = {CONTRACT_VERSION_V1, CONTRACT_VERSION}
 CATEGORIES = {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"}
 TONES = {"green", "amber", "red", "violet"}
 DIRECTIONS = {"up", "down", "stable"}
@@ -64,6 +66,10 @@ def _text(value: Any, field: str, *, limit: int = 500) -> str:
     return text[:limit]
 
 
+def _optional_text(value: Any, *, limit: int = 500) -> str:
+    return str(value or "").strip()[:limit]
+
+
 def _urls(value: Any, field: str, *, minimum: int = 1) -> list[str]:
     if not isinstance(value, list):
         raise DailyBriefingError(f"{field} must be a list")
@@ -94,13 +100,15 @@ def validate_daily_briefing(
     source_rows: list[dict[str, Any]] | None = None,
     retrospective_required: bool = False,
 ) -> dict[str, Any]:
-    if not isinstance(payload, dict) or payload.get("contract_version") != CONTRACT_VERSION:
+    if not isinstance(payload, dict) or payload.get("contract_version") not in SUPPORTED_CONTRACT_VERSIONS:
         raise DailyBriefingError("invalid daily briefing contract")
+    contract_version = str(payload["contract_version"])
+    variable_sections = contract_version == CONTRACT_VERSION
     artifact_hash = _text(payload.get("source_snapshot_hash"), "source_snapshot_hash", limit=128)
     if source_snapshot_hash and artifact_hash != source_snapshot_hash:
         raise DailyBriefingError("source snapshot hash mismatch")
     safe: dict[str, Any] = {
-        "contract_version": CONTRACT_VERSION,
+        "contract_version": contract_version,
         "generated_at": _text(payload.get("generated_at"), "generated_at", limit=40),
         "source_snapshot_hash": artifact_hash,
         "headline": _text(payload.get("headline"), "headline", limit=180),
@@ -142,8 +150,15 @@ def validate_daily_briefing(
             raise DailyBriefingError("invalid previous briefing snapshot hash")
         if previous_snapshot_hash and artifact_previous_hash != previous_snapshot_hash:
             raise DailyBriefingError("previous briefing snapshot hash mismatch")
-        if len(retrospective_rows) != 3:
-            raise DailyBriefingError("available retrospective requires three rows")
+        expected_previous_count = len(previous_signal_labels or previous_core_signals or [])
+        if not variable_sections:
+            expected_previous_count = 3
+        elif not expected_previous_count:
+            expected_previous_count = len(retrospective_rows)
+        if not 1 <= expected_previous_count <= 3 or len(retrospective_rows) != expected_previous_count:
+            raise DailyBriefingError(
+                "available retrospective must match the previous core signal count"
+            )
         safe_rows = []
         used_indexes: set[int] = set()
         for row in retrospective_rows:
@@ -151,8 +166,10 @@ def validate_daily_briefing(
                 signal_index = int(row.get("previous_signal_index", 0))
             except (TypeError, ValueError) as exc:
                 raise DailyBriefingError("previous signal index must be an integer") from exc
-            if signal_index not in {1, 2, 3} or signal_index in used_indexes:
-                raise DailyBriefingError("retrospective requires unique signal indexes 1..3")
+            if signal_index not in set(range(1, expected_previous_count + 1)) or signal_index in used_indexes:
+                raise DailyBriefingError(
+                    "retrospective requires unique indexes for every previous core signal"
+                )
             used_indexes.add(signal_index)
             previous_label = _text(row.get("previous_label"), "previous_label", limit=100)
             if previous_signal_labels and previous_label != previous_signal_labels[signal_index - 1]:
@@ -166,7 +183,11 @@ def validate_daily_briefing(
                 "previous_detail": _text(row.get("previous_detail"), "previous_detail", limit=320),
                 "verdict": verdict,
                 "current_status": _text(row.get("current_status"), "current_status", limit=420),
-                "action": _text(row.get("action"), "action", limit=240),
+                "action": (
+                    _optional_text(row.get("action"), limit=240)
+                    if variable_sections
+                    else _text(row.get("action"), "action", limit=240)
+                ),
                 "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
             })
         safe["retrospective"] = {
@@ -181,7 +202,9 @@ def validate_daily_briefing(
         }
 
     safe["core_signals"] = []
-    for index, row in enumerate(_rows(payload, "core_signals", 3)):
+    for index, row in enumerate(
+        _rows(payload, "core_signals", (1, 3) if variable_sections else 3)
+    ):
         tone = _text(row.get("tone"), f"core_signals[{index}].tone", limit=20)
         if tone not in TONES:
             raise DailyBriefingError("invalid signal tone")
@@ -230,7 +253,11 @@ def validate_daily_briefing(
             "metric": _text(row.get("metric"), "metric", limit=40),
             "label": label,
             "detail": _text(row.get("detail"), "detail", limit=320),
-            "action": _text(row.get("action"), "action", limit=240),
+            "action": (
+                _optional_text(row.get("action"), limit=240)
+                if variable_sections
+                else _text(row.get("action"), "action", limit=240)
+            ),
             "tone": tone,
             "evidence_urls": evidence_urls,
             "event_key": event_key,
@@ -239,7 +266,7 @@ def validate_daily_briefing(
         })
 
     safe["keywords"] = []
-    for row in _rows(payload, "keywords", 7):
+    for row in _rows(payload, "keywords", (3, 5) if variable_sections else 7):
         direction = _text(row.get("direction"), "direction", limit=12)
         if direction not in DIRECTIONS:
             raise DailyBriefingError("invalid keyword direction")
@@ -256,7 +283,7 @@ def validate_daily_briefing(
 
     safe["matrix"] = []
     quadrants: set[str] = set()
-    for row in _rows(payload, "matrix", 4):
+    for row in _rows(payload, "matrix", (0, 2) if variable_sections else 4):
         quadrant = _text(row.get("quadrant"), "quadrant", limit=12)
         if quadrant not in QUADRANTS or quadrant in quadrants:
             raise DailyBriefingError("matrix requires four unique quadrants")
@@ -265,36 +292,66 @@ def validate_daily_briefing(
             "quadrant": quadrant,
             "label": _text(row.get("label"), "label", limit=90),
             "meaning": _text(row.get("meaning"), "meaning", limit=260),
-            "action": _text(row.get("action"), "action", limit=220),
+            "action": (
+                _optional_text(row.get("action"), limit=220)
+                if variable_sections
+                else _text(row.get("action"), "action", limit=220)
+            ),
             "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
         })
 
     safe["timeline"] = []
     horizons: set[str] = set()
-    for row in _rows(payload, "timeline", 4):
+    for row in _rows(payload, "timeline", (1, 3) if variable_sections else 4):
         horizon = _text(row.get("horizon"), "horizon", limit=12)
         if horizon not in HORIZONS or horizon in horizons:
             raise DailyBriefingError("timeline requires four unique horizons")
         horizons.add(horizon)
         safe["timeline"].append({
             "horizon": horizon,
-            "action": _text(row.get("action"), "action", limit=240),
+            "action": (
+                _optional_text(row.get("action"), limit=240)
+                if variable_sections
+                else _text(row.get("action"), "action", limit=240)
+            ),
             "reason": _text(row.get("reason"), "reason", limit=260),
             "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
         })
 
-    for field, expected in (("insight_cards", 3), ("themes", (3, 4)), ("developer_insights", (3, 4))):
+    section_counts = (
+        (
+            ("insight_cards", (1, 2)),
+            ("themes", (0, 2)),
+            ("developer_insights", (0, 2)),
+        )
+        if variable_sections
+        else (
+            ("insight_cards", 3),
+            ("themes", (3, 4)),
+            ("developer_insights", (3, 4)),
+        )
+    )
+    for field, expected in section_counts:
         safe[field] = []
         for row in _rows(payload, field, expected):
             safe[field].append({
                 "title": _text(row.get("title"), "title", limit=140),
                 "analysis": _text(row.get("analysis"), "analysis", limit=700),
-                "action": _text(row.get("action"), "action", limit=260),
+                "action": (
+                    _optional_text(row.get("action"), limit=260)
+                    if variable_sections
+                    else _text(row.get("action"), "action", limit=260)
+                ),
                 "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
             })
 
     safe["watchlist"] = []
-    for row in _rows(payload, "watchlist", (2, 3)):
+    if variable_sections and safe["themes"] and safe["developer_insights"]:
+        raise DailyBriefingError(
+            "v2 requires choosing themes or developer_insights, not both"
+        )
+
+    for row in _rows(payload, "watchlist", (0, 2) if variable_sections else (2, 3)):
         safe["watchlist"].append({
             "title": _text(row.get("title"), "title", limit=140),
             "reason": _text(row.get("reason"), "reason", limit=500),
@@ -332,10 +389,10 @@ def validate_daily_briefing(
         for row in source_rows or []
         if str(row.get("url") or "").startswith("https://")
     }
-    for row in _rows(payload, "must_read", 5):
+    for row in _rows(payload, "must_read", (3, 5) if variable_sections else 5):
         category = _text(row.get("category"), "category", limit=40)
         if category not in CATEGORIES or category in categories:
-            raise DailyBriefingError("must_read requires one item per active category")
+            raise DailyBriefingError("must_read requires unique active categories")
         categories.add(category)
         source_url = _text(row.get("source_url"), "source_url", limit=500)
         if not source_url.startswith("https://"):
@@ -368,6 +425,25 @@ def validate_daily_briefing(
             "why_it_matters": _text(row.get("why_it_matters"), "why_it_matters", limit=420),
             "action": str(row.get("action") or "").strip()[:260],
         })
+    if variable_sections:
+        action_count = sum(
+            bool(str(row.get("action") or "").strip())
+            for field in (
+                "core_signals",
+                "matrix",
+                "timeline",
+                "insight_cards",
+                "themes",
+                "developer_insights",
+                "must_read",
+            )
+            for row in safe[field]
+        ) + sum(
+            bool(str(row.get("action") or "").strip())
+            for row in safe["retrospective"]["items"]
+        )
+        if action_count > 7:
+            raise DailyBriefingError("v2 allows at most seven non-empty actions")
     return safe
 
 
