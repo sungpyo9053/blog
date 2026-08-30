@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.7
+ * Version: 5.6.8
  * Author: Hunt News
  */
 
@@ -1300,6 +1300,7 @@ function hunt_news_home_sections() {
 	$briefing_core_count      = ! empty( $analysis['core_signals'] ) ? count( $analysis['core_signals'] ) : min( 3, count( $signal_posts ) );
 	$briefing_timeline_count  = ! empty( $analysis['timeline'] ) ? count( $analysis['timeline'] ) : count( $timeline );
 	$briefing_must_read_count = ! empty( $analysis['must_read'] ) ? count( $analysis['must_read'] ) : min( 5, count( $must_read_items ) );
+	$must_read_display_count  = min( 5, count( $must_read_items ) );
 	$briefing_detail_url      = home_url( '/briefing/' . hunt_news_briefing_display_date( $manifest ) . '/' );
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
@@ -1462,6 +1463,70 @@ function hunt_news_home_sections() {
 				<?php endif; ?>
 			</div>
 		</section>
+
+		<?php if ( ! empty( $analysis['matrix'] ) ) :
+			$quadrant_labels = array( 'focus' => '지금 집중', 'future' => '미래 준비', 'apply' => '적용 검토', 'watch' => '계속 관찰' ); ?>
+		<section class="hunt-news-decision-matrix" aria-labelledby="hunt-news-decision-matrix-title">
+			<header class="hunt-news-panel-heading">
+				<div><span aria-hidden="true">⌁</span><h3 id="hunt-news-decision-matrix-title">적용 판단</h3></div>
+				<p>무엇을 적용하고 무엇을 더 지켜볼지 나눴습니다</p>
+			</header>
+			<div class="hunt-news-decision-matrix__grid">
+				<?php foreach ( $analysis['matrix'] as $row ) :
+					$matrix_evidence_url = (string) ( $row['evidence_urls'][0] ?? '' ); ?>
+				<article class="hunt-news-decision-matrix__item hunt-news-decision-matrix__item--<?php echo esc_attr( (string) $row['quadrant'] ); ?>">
+					<span><?php echo esc_html( $quadrant_labels[ $row['quadrant'] ] ?? '판단 보류' ); ?></span>
+					<h4><?php echo esc_html( (string) $row['label'] ); ?></h4>
+					<p><?php echo esc_html( (string) $row['meaning'] ); ?></p>
+					<?php if ( ! empty( $row['action'] ) ) : ?><strong><?php echo esc_html( (string) $row['action'] ); ?></strong><?php endif; ?>
+					<?php if ( $matrix_evidence_url ) : ?><a href="<?php echo esc_url( $matrix_evidence_url ); ?>" target="_blank" rel="noopener noreferrer">근거 원문 <b aria-hidden="true">→</b></a><?php endif; ?>
+				</article>
+				<?php endforeach; ?>
+			</div>
+		</section>
+		<?php endif; ?>
+
+		<?php
+		$synthesis_rows  = ! empty( $analysis['developer_insights'] ) ? (array) $analysis['developer_insights'] : (array) ( $analysis['themes'] ?? array() );
+		$synthesis_title = ! empty( $analysis['developer_insights'] ) ? '개발자 인사이트' : '핵심 테마';
+		if ( $synthesis_rows || ! empty( $analysis['watchlist'] ) ) : ?>
+		<section class="hunt-news-synthesis" aria-labelledby="hunt-news-synthesis-title">
+			<header class="hunt-news-panel-heading">
+				<div><span aria-hidden="true">◈</span><h3 id="hunt-news-synthesis-title">판단을 바꾸는 조건</h3></div>
+				<p>기사 요약이 아니라 채택 조건과 후속 확인 신호입니다</p>
+			</header>
+			<div class="hunt-news-synthesis__grid">
+				<?php if ( $synthesis_rows ) : ?>
+				<section>
+					<h4><?php echo esc_html( $synthesis_title ); ?></h4>
+					<?php foreach ( $synthesis_rows as $row ) :
+						$synthesis_evidence_url = (string) ( $row['evidence_urls'][0] ?? '' ); ?>
+					<article>
+						<h5><?php echo esc_html( (string) $row['title'] ); ?></h5>
+						<p><?php echo esc_html( (string) $row['analysis'] ); ?></p>
+						<?php if ( ! empty( $row['action'] ) ) : ?><strong><?php echo esc_html( (string) $row['action'] ); ?></strong><?php endif; ?>
+						<?php if ( $synthesis_evidence_url ) : ?><a href="<?php echo esc_url( $synthesis_evidence_url ); ?>" target="_blank" rel="noopener noreferrer">근거 원문 <b aria-hidden="true">→</b></a><?php endif; ?>
+					</article>
+					<?php endforeach; ?>
+				</section>
+				<?php endif; ?>
+				<?php if ( ! empty( $analysis['watchlist'] ) ) : ?>
+				<section class="hunt-news-synthesis__watch">
+					<h4>지켜볼 것</h4>
+					<?php foreach ( $analysis['watchlist'] as $row ) :
+						$watch_evidence_url = (string) ( $row['evidence_urls'][0] ?? '' ); ?>
+					<article>
+						<h5><?php echo esc_html( (string) $row['title'] ); ?></h5>
+						<p><?php echo esc_html( (string) $row['reason'] ); ?></p>
+						<strong>다시 판단할 신호 · <?php echo esc_html( (string) $row['trigger'] ); ?></strong>
+						<?php if ( $watch_evidence_url ) : ?><a href="<?php echo esc_url( $watch_evidence_url ); ?>" target="_blank" rel="noopener noreferrer">근거 원문 <b aria-hidden="true">→</b></a><?php endif; ?>
+					</article>
+					<?php endforeach; ?>
+				</section>
+				<?php endif; ?>
+			</div>
+		</section>
+		<?php endif; ?>
 		<?php endif; ?>
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
@@ -1470,14 +1535,14 @@ function hunt_news_home_sections() {
 			</header>
 			<p class="hunt-news-must-read__status">
 				<?php if ( $is_briefing_detail ) : ?>
-					AI가 근거와 영향도를 검토해 고른 5개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.
+					AI가 근거와 영향도를 검토해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.
 				<?php else : ?>
-					AI가 근거와 영향도를 검토해 고른 5개입니다. <a href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서와 수집원 보기 <b aria-hidden="true">→</b></a>
+					AI가 근거와 영향도를 검토해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. <a href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서와 수집원 보기 <b aria-hidden="true">→</b></a>
 				<?php endif; ?>
 			</p>
 			<div class="hunt-news-must-read__grid" data-brief-view-grid>
 				<?php if ( $must_read_items ) : ?>
-					<?php foreach ( array_slice( $must_read_items, 0, 5 ) as $index => $item ) : ?>
+					<?php foreach ( array_slice( $must_read_items, 0, $must_read_display_count ) as $index => $item ) : ?>
 						<article class="hunt-news-brief-card hunt-news-brief-card--source" data-brief-card-kind="must-read">
 							<b class="hunt-news-brief-card__rank">#<?php echo esc_html( (string) ( $index + 1 ) ); ?></b>
 							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time datetime="<?php echo esc_attr( (string) ( $item['published_at'] ?? '' ) ); ?>"><?php echo esc_html( hunt_news_source_time_label( (string) ( $item['published_at'] ?? '' ), (string) ( $analysis['generated_at'] ?? '' ) ) ); ?></time></div>
