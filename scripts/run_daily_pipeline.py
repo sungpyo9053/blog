@@ -1885,10 +1885,10 @@ def daily_briefing_stage(
 ) -> Stage:
     if previous_briefing_path:
         retrospective_prompt = (
-            f" 이전 보고서 스냅샷 {str(previous_briefing_path)!r}의 core_signals를 "
+            f" 이전 보고서 스냅샷 {str(previous_briefing_path)!r}의 core_signals 3개를 "
             "현재 수집 자료와 필요한 공식 원문으로 각각 재검증하세요. retrospective.status는 "
             "available, previous_generated_at은 스냅샷 값, previous_snapshot_hash는 "
-            f"{previous_snapshot_hash!r}로 기록하고 items는 이전 core_signals의 개수와 순서를 유지하세요. "
+            f"{previous_snapshot_hash!r}로 기록하고 items는 이전 순서 1..3을 유지하세요. "
             "판정은 confirmed, changed, unresolved 중 하나이며 새 evidence URL 없이 확정하지 마세요."
         )
     else:
@@ -1903,19 +1903,23 @@ def daily_briefing_stage(
             f"현재 run_id는 {run_id!r}입니다. "
             f"기술 뉴스 cache {str(editorial_source_path)!r}와 Planner 후보 {str(topics_path)!r}를 "
             "읽고 중복 사건을 합친 뒤, 가이드의 핵심 신호·키워드 방향·영향 매트릭스·"
-            "액션 타임라인·종합 인사이트·필독 원문을 생성하세요. "
+            "액션 타임라인·종합 인사이트·필독 5를 생성하세요. "
             + retrospective_prompt
             + " "
             "headline은 오늘 가장 중요한 결정 하나만 1~2개의 짧은 문장으로 작성하세요. "
             "summary는 중심 판단과 그 판단을 바꾸는 조건을 2~3문장으로 설명하세요. "
             "core_signals, insight_cards, themes, developer_insights에서 같은 "
             "사실·결론·행동 문장을 되풀이하지 말고 각 항목이 서로 다른 질문에 답하게 하세요. "
+            "특히 matrix는 채택 조건, timeline은 재확인 시점, insight_cards는 종합 판단만 맡기고 "
+            "같은 결론을 세 섹션에서 표현만 바꿔 반복하지 마세요. "
             "같은 원문을 여러 항목의 대표 근거로 재사용해야 한다면 새 판단이 추가되는 경우로 제한하세요. "
+            "evidence_urls는 cache에 있거나 직접 열어 정상 응답을 확인한 원문만 사용하고, "
+            "Planner의 sources를 열지 않은 채 복사하지 마세요. "
             f"결과 JSON은 {str(analysis_path)!r}에만 저장하세요. "
             "원문 기사 나열을 보고서 본문으로 대체하지 말고 각 판단에 근거 URL을 연결하세요. "
             "즉시 행동할 근거가 부족하면 새로운 작업을 만들지 말고 현재 설정을 유지할 조건과 "
-            "재검토 계기를 적으세요. 전체 비어 있지 않은 action은 최대 7개이며, 중요한 변화가 "
-            "적은 날에는 선택 섹션을 빈 배열로 두세요. WordPress와 다른 외부 시스템은 변경하지 마세요."
+            "재검토 계기를 적으세요. 가이드에 고정된 각 섹션 개수를 모두 채우되 같은 사실을 "
+            "표현만 바꿔 반복하지 마세요. WordPress와 다른 외부 시스템은 변경하지 마세요."
         ),
     )
 

@@ -123,6 +123,8 @@ JSON을 작성하기 전에 오늘 수집 자료에서 가장 중요한 결정 �
 6. 즉시 행동할 근거가 없는 기사에 가짜 할 일을 만들지 않았는가.
 7. 원문에 없는 수치, 결과, 시점 또는 경험을 추가하지 않았는가.
 8. `추가한다·기록한다·검증한다·보류한다` 종결이 연속되지 않는가.
+9. 같은 판단이 `matrix`, `timeline`, `insight_cards`에서 시점이나 필드명만 바뀌어 반복되지 않는가.
+10. 모든 `evidence_urls`는 입력 cache에 있거나 실제로 연 원문이며, 404 주소를 포함하지 않는가.
 
 ## 출력 계약
 
@@ -132,31 +134,28 @@ JSON을 작성하기 전에 오늘 수집 자료에서 가장 중요한 결정 �
 이 산출물은 일일 발행의 필수 게이트다. 파일 누락, 스키마 위반, 근거 누락 또는
 `source_snapshot_hash` 불일치가 있으면 Publisher 단계로 진행하지 않는다.
 
-- `contract_version`: `daily-briefing-analysis.v2`
+- `contract_version`: `daily-briefing-analysis.v1`
 - `generated_at`, `source_snapshot_hash`, `headline`, `summary`
 - `retrospective`: 전일 보고서가 없으면 `status: baseline`, 빈
   `previous_generated_at`, `previous_snapshot_hash`, `items`. 전일 스냅샷이 있으면
   `status: available`, 스냅샷의 생성 시각과 전달받은 SHA-256을 그대로 기록하고
-  `items`는 이전 `core_signals` 순서와 개수대로 1~3개를 작성한다.
+  `items`는 이전 `core_signals` 순서대로 정확히 3개를 작성한다.
 - `retrospective.items`: `previous_signal_index` 1~3, 원문 그대로의 `previous_label`,
   `previous_detail`, `verdict`, `current_status`, `action`, `evidence_urls`
-- `core_signals`: 1~3개. `metric`, `label`, `detail`, `action`, `tone`,
+- `core_signals`: 정확히 3개. `metric`, `label`, `detail`, `action`, `tone`,
   `evidence_urls`, `event_key`, `continuity`, `change_basis`
-- `keywords`: 3~5개. `keyword`, 0~10 정수 `score`, `direction`, `basis`
-- `matrix`: 필요할 때만 0~2개. `quadrant`, `label`, `meaning`, `action`, `evidence_urls`
-- `timeline`: 1~3개. `horizon`, `action`, `reason`, `evidence_urls`
-- `insight_cards`: 1~2개. `title`, `analysis`, `action`, `evidence_urls`
-- `themes`: 필요할 때만 0~2개. `title`, `analysis`, `action`, `evidence_urls`
-- `developer_insights`: 필요할 때만 0~2개. `title`, `analysis`, `action`, `evidence_urls`
-- `themes`와 `developer_insights`는 둘 다 채우지 않는다. 기사 간 공통 변화가 중요하면
-  `themes`, 코드·운영 차이가 중요하면 `developer_insights`만 선택하며 둘 다 불필요하면
-  모두 빈 배열로 둔다.
-- `watchlist`: 필요할 때만 0~2개. `title`, `reason`, `trigger`, `evidence_urls`
+- `keywords`: 정확히 7개. `keyword`, 0~10 정수 `score`, `direction`, `basis`
+- `matrix`: 정확히 4개. `quadrant`, `label`, `meaning`, `action`, `evidence_urls`
+- `timeline`: 정확히 4개. `horizon`, `action`, `reason`, `evidence_urls`
+- `insight_cards`: 정확히 3개. `title`, `analysis`, `action`, `evidence_urls`
+- `themes`: 3~4개. `title`, `analysis`, `action`, `evidence_urls`
+- `developer_insights`: 3~4개. `title`, `analysis`, `action`, `evidence_urls`
+- `watchlist`: 2~3개. `title`, `reason`, `trigger`, `evidence_urls`
 - `source_title_translations`: 입력 cache에서 활성 카테고리별 앞 10개 안에 드는
   제목 중 한글이 없는 모든 제목마다 `source_url`, `korean_title`. 영어뿐 아니라
   포르투갈어 등 언어와 관계없이 원문 제목의 제품명·버전·수치는 보존하고 자연스러운
   한국어 보조 제목으로 번역한다. 이미 한글이 포함된 제목은 제외한다.
-- `must_read`: 3~5개. 서로 다른 활성 카테고리에서 원문 그대로의 `title`, 한글이
+- `must_read`: 정확히 5개. 활성 카테고리별 하나씩 원문 그대로의 `title`, 한글이
   없는 제목일 때의 `korean_title`, `category`, `source`, `source_url`,
   `why_it_matters`, `action`. 즉시 할 일이 없으면 `action`은 빈 문자열로 둔다.
 
@@ -164,8 +163,8 @@ JSON을 작성하기 전에 오늘 수집 자료에서 가장 중요한 결정 �
 
 - tone: `green`, `amber`, `red`, `violet`
 - direction: `up`, `down`, `stable`
-- quadrant: `focus`, `future`, `apply`, `watch` 중 중복 없이 선택
-- horizon: `today`, `week`, `month`, `year` 중 중복 없이 선택
+- quadrant: `focus`, `future`, `apply`, `watch`를 각각 한 번
+- horizon: `today`, `week`, `month`, `year`를 각각 한 번
 - category: `AI/ML 핵심`, `개발 트렌드`, `AI 공식 블로그`, `국내 IT`, `국내 시사`
 - retrospective verdict: `confirmed`, `changed`, `unresolved`
 - core signal continuity: `new`, `follow_up`
@@ -174,11 +173,6 @@ JSON을 작성하기 전에 오늘 수집 자료에서 가장 중요한 결정 �
 `호환성`, `비용`, `운영`처럼 짧은 신호어를 사용한다. 키워드 score는 실제 검색량이
 아니라 오늘 브리핑 안에서의 상대적 중요도다. direction은 캐시의 반복·시각 관측이나
 공식 변화가 없으면 `stable`로 둔다.
-
-모든 섹션을 합쳐 비어 있지 않은 `action`은 최대 7개다. `action` 필드 자체는 항상
-유지하되 즉시 행동할 근거가 없으면 빈 문자열로 둔다. 중요한 변화가 한 개뿐인 날에는
-`core_signals`를 억지로 세 개 채우지 않으며, `matrix`, `themes`,
-`developer_insights`, `watchlist`도 빈 배열을 허용한다.
 
 전일 판단을 단순 재서술하지 않는다. 오늘 수집 자료나 새 공식 원문으로 상태를 다시
 확인하고, 변화가 확인되지 않거나 근거가 부족하면 `unresolved`로 둔다. 검색 노출,
@@ -191,7 +185,7 @@ JSON을 작성하기 전에 오늘 수집 자료에서 가장 중요한 결정 �
 핵심 신호로 다시 선정하지 않는다. 겹치지 않는 신호는 `continuity: new`,
 `change_basis: ""`로 작성한다.
 
-필독 원문의 `why_it_matters`는 제목을 바꿔 말하지 말고 실제 영향과 선택을 설명한다.
+필독 5의 `why_it_matters`는 제목을 바꿔 말하지 말고 실제 영향과 선택을 설명한다.
 `action`은 독자가 오늘 확인할 문서·설정·조건이 분명할 때만 구체적으로 적고,
 소개·관찰 성격의 기사라면 빈 문자열로 둔다.
 `must_read`의 `title`, `category`, `source`, `source_url`은 입력 cache의 같은 행에서

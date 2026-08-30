@@ -7,6 +7,7 @@ from unittest import mock
 
 import scripts.run_daily_pipeline as pipeline
 from scripts.daily_briefing import (
+    CONTRACT_VERSION,
     DailyBriefingError,
     load_daily_briefing,
     required_source_translation_urls,
@@ -129,7 +130,14 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertIn("### 6. 출력 전 자체 점검", guide)
         self.assertIn("오늘 가장 중요한 결정 하나만 1~2개의 짧은 문장", stage.prompt)
         self.assertIn("중심 판단과 그 판단을 바꾸는 조건을 2~3문장", stage.prompt)
-        self.assertIn("전체 비어 있지 않은 action은 최대 7개", stage.prompt)
+        self.assertEqual(CONTRACT_VERSION, "daily-briefing-analysis.v1")
+        self.assertIn("필독 5를 생성하세요", stage.prompt)
+        self.assertIn("가이드에 고정된 각 섹션 개수를 모두 채우되", stage.prompt)
+        self.assertNotIn("전체 비어 있지 않은 action은 최대 7개", stage.prompt)
+        self.assertIn("matrix는 채택 조건, timeline은 재확인 시점", stage.prompt)
+        self.assertIn("Planner의 sources를 열지 않은 채 복사하지 마세요", stage.prompt)
+        self.assertIn("같은 판단이 `matrix`, `timeline`, `insight_cards`", guide)
+        self.assertIn("404 주소를 포함하지 않는가", guide)
         self.assertNotIn("편집 판단 한 문장", stage.prompt)
         self.assertNotIn("한 문단으로만 설명", stage.prompt)
 

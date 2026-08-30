@@ -11,8 +11,9 @@ from scripts.collect_editorial_sources import matches_source_relevance, normaliz
 
 
 CONTRACT_VERSION_V1 = "daily-briefing-analysis.v1"
-CONTRACT_VERSION = "daily-briefing-analysis.v2"
-SUPPORTED_CONTRACT_VERSIONS = {CONTRACT_VERSION_V1, CONTRACT_VERSION}
+CONTRACT_VERSION_V2 = "daily-briefing-analysis.v2"
+CONTRACT_VERSION = CONTRACT_VERSION_V1
+SUPPORTED_CONTRACT_VERSIONS = {CONTRACT_VERSION_V1, CONTRACT_VERSION_V2}
 CATEGORIES = {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"}
 TONES = {"green", "amber", "red", "violet"}
 DIRECTIONS = {"up", "down", "stable"}
@@ -103,7 +104,7 @@ def validate_daily_briefing(
     if not isinstance(payload, dict) or payload.get("contract_version") not in SUPPORTED_CONTRACT_VERSIONS:
         raise DailyBriefingError("invalid daily briefing contract")
     contract_version = str(payload["contract_version"])
-    variable_sections = contract_version == CONTRACT_VERSION
+    variable_sections = contract_version == CONTRACT_VERSION_V2
     artifact_hash = _text(payload.get("source_snapshot_hash"), "source_snapshot_hash", limit=128)
     if source_snapshot_hash and artifact_hash != source_snapshot_hash:
         raise DailyBriefingError("source snapshot hash mismatch")
