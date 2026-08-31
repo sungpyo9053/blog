@@ -16,7 +16,7 @@ from scripts.collect_editorial_sources import matches_source_relevance, normaliz
 
 CONTRACT_VERSION_V1 = "daily-briefing-analysis.v1"
 CONTRACT_VERSION_V2 = "daily-briefing-analysis.v2"
-CONTRACT_VERSION = CONTRACT_VERSION_V1
+CONTRACT_VERSION = CONTRACT_VERSION_V2
 SUPPORTED_CONTRACT_VERSIONS = {CONTRACT_VERSION_V1, CONTRACT_VERSION_V2}
 CATEGORIES = {"AI/ML 핵심", "개발 트렌드", "AI 공식 블로그", "국내 IT", "국내 시사"}
 TONES = {"green", "amber", "red", "violet"}
