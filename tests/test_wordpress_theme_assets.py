@@ -57,7 +57,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.10", php)
+        self.assertIn("Version: 5.6.11", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -235,7 +235,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.10", php)
+        self.assertIn("Version: 5.6.11", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -248,6 +248,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("'post_date' => wp_date( 'Y-m-d H:i:s', $briefing_timestamp )", php)
         self.assertIn("'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $briefing_timestamp )", php)
         self.assertIn("$key = get_the_date( 'Y.m', $post )", php)
+        self.assertIn("$current_datetime = current_datetime()", php)
+        self.assertIn("$current_datetime->modify( '+1 day' )->format( 'Y.m' )", php)
         self.assertIn("$tomorrow_month !== $current_month", php)
         self.assertIn("$months = array( $tomorrow_month => array() ) + $months", php)
         self.assertIn("내일 02시 첫 브리핑이 발행됩니다.", php)

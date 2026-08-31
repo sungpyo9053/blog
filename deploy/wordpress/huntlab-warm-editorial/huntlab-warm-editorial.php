@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.10
+ * Version: 5.6.11
  * Author: Hunt News
  */
 
@@ -149,8 +149,9 @@ function hunt_news_briefing_archive_months() {
 		$key = get_the_date( 'Y.m', $post );
 		$months[ $key ][] = $post;
 	}
-	$current_month = wp_date( 'Y.m', current_time( 'timestamp' ) );
-	$tomorrow_month = wp_date( 'Y.m', current_time( 'timestamp' ) + DAY_IN_SECONDS );
+	$current_datetime = current_datetime();
+	$current_month    = $current_datetime->format( 'Y.m' );
+	$tomorrow_month   = $current_datetime->modify( '+1 day' )->format( 'Y.m' );
 	if ( $tomorrow_month !== $current_month && ! isset( $months[ $tomorrow_month ] ) ) {
 		$months = array( $tomorrow_month => array() ) + $months;
 	}
