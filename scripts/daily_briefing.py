@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import json
+import socket
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +92,63 @@ def _rows(payload: dict[str, Any], field: str, expected: int | tuple[int, int]) 
     if not low <= len(rows) <= high:
         raise DailyBriefingError(f"{field} requires {low}..{high} rows")
     return rows
+
+
+def public_evidence_urls(payload: dict[str, Any]) -> list[str]:
+    """Return the unique external URLs exposed by one public briefing."""
+    urls: list[str] = []
+    for field in (
+        "core_signals",
+        "matrix",
+        "timeline",
+        "insight_cards",
+        "themes",
+        "developer_insights",
+        "watchlist",
+    ):
+        for row in payload.get(field, []):
+            urls.extend(str(url) for url in row.get("evidence_urls", []))
+    for row in payload.get("retrospective", {}).get("items", []):
+        urls.extend(str(url) for url in row.get("evidence_urls", []))
+    urls.extend(str(row.get("source_url") or "") for row in payload.get("must_read", []))
+    return list(dict.fromkeys(url for url in urls if url.startswith("https://")))
+
+
+def reject_confirmed_broken_evidence_urls(
+    payload: dict[str, Any],
+    *,
+    opener: Any = urllib.request.urlopen,
+    timeout: float = 10.0,
+    workers: int = 6,
+) -> None:
+    """Fail only for confirmed permanent link failures, not transient outages."""
+
+    def status(url: str) -> tuple[str, int]:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "HuntNewsEvidenceAudit/1.0",
+                "Range": "bytes=0-0",
+            },
+            method="GET",
+        )
+        try:
+            with opener(request, timeout=timeout) as response:
+                return url, int(response.getcode() or 200)
+        except urllib.error.HTTPError as exc:
+            return url, int(exc.code)
+        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+            return url, 0
+
+    urls = public_evidence_urls(payload)
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(urls) or 1))) as executor:
+        results = list(executor.map(status, urls))
+    broken = [url for url, code in results if code in {404, 410}]
+    if broken:
+        raise DailyBriefingError(
+            "daily briefing contains confirmed broken evidence URL(s): "
+            + ", ".join(broken)
+        )
 
 
 def validate_daily_briefing(

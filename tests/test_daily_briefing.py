@@ -2,6 +2,7 @@ import json
 import logging
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -10,6 +11,8 @@ from scripts.daily_briefing import (
     CONTRACT_VERSION,
     DailyBriefingError,
     load_daily_briefing,
+    public_evidence_urls,
+    reject_confirmed_broken_evidence_urls,
     required_source_translation_urls,
     validate_daily_briefing,
 )
@@ -113,6 +116,31 @@ def source_rows_for_analysis():
 
 
 class DailyBriefingTests(unittest.TestCase):
+    def test_public_evidence_urls_are_unique_across_sections(self):
+        payload = variable_analysis_payload()
+        payload["must_read"][0]["source_url"] = "https://example.com/evidence"
+
+        urls = public_evidence_urls(payload)
+
+        self.assertEqual(urls.count("https://example.com/evidence"), 1)
+
+    def test_confirmed_404_evidence_url_fails_closed(self):
+        payload = variable_analysis_payload()
+
+        def opener(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+        with self.assertRaisesRegex(DailyBriefingError, "confirmed broken evidence"):
+            reject_confirmed_broken_evidence_urls(payload, opener=opener)
+
+    def test_transient_evidence_error_does_not_claim_a_broken_link(self):
+        payload = variable_analysis_payload()
+
+        def opener(request, timeout):
+            raise urllib.error.URLError("temporary DNS failure")
+
+        reject_confirmed_broken_evidence_urls(payload, opener=opener)
+
     def test_daily_briefing_prompt_preserves_contract_and_editorial_roles(self):
         guide = (Path(__file__).parents[1] / "agents/daily-briefing-agent.md").read_text(
             encoding="utf-8"
@@ -301,6 +329,8 @@ class DailyBriefingTests(unittest.TestCase):
                 pipeline, "RUNS_DIR", root / "isolated-runs"
             ), mock.patch.object(
                 pipeline, "run_stage", side_effect=fake_run_stage
+            ), mock.patch.object(
+                pipeline, "reject_confirmed_broken_evidence_urls"
             ):
                 result = pipeline.run_daily_briefing_analysis(
                     "codex",

@@ -40,6 +40,7 @@ from scripts.briefing_manifest import (
 from scripts.daily_briefing import (
     DailyBriefingError,
     load_daily_briefing,
+    reject_confirmed_broken_evidence_urls,
     required_source_translation_urls,
 )
 from scripts.manage_whereispost_cache import (
@@ -2043,6 +2044,7 @@ def run_daily_briefing_analysis(
                 source_rows=source_cache["rows"],
                 retrospective_required=True,
             )
+        reject_confirmed_broken_evidence_urls(payload)
         logger.info(
             "daily_briefing event=ready failed=false run_id=%s signals=%d must_read=%d "
             "retrospective=%s artifact=%s",

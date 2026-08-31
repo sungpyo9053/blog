@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.8
+ * Version: 5.6.9
  * Author: Hunt News
  */
 
@@ -1155,7 +1155,8 @@ function hunt_news_store_briefing_manifest( $request ) {
 		'stored_at'           => current_time( 'mysql', true ),
 	);
 	update_option( 'hunt_news_briefing_manifest', $safe, false );
-	$briefing_date = wp_date( 'Y-m-d', strtotime( $safe['generated_at'] ) );
+	$briefing_timestamp = strtotime( $safe['generated_at'] );
+	$briefing_date      = wp_date( 'Y-m-d', $briefing_timestamp );
 	$existing = get_posts( array( 'post_type' => 'hunt_briefing', 'post_status' => 'any', 'name' => $briefing_date, 'posts_per_page' => 1, 'fields' => 'ids' ) );
 	$links = '';
 	foreach ( $safe_posts as $safe_post ) {
@@ -1164,6 +1165,8 @@ function hunt_news_store_briefing_manifest( $request ) {
 	$briefing_post = array(
 		'ID' => $existing ? absint( $existing[0] ) : 0,
 		'post_type' => 'hunt_briefing', 'post_status' => 'publish', 'post_name' => $briefing_date,
+		'post_date' => wp_date( 'Y-m-d H:i:s', $briefing_timestamp ),
+		'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $briefing_timestamp ),
 		'post_title' => 'Hunt News ' . $briefing_date,
 		'post_excerpt' => 'AI·개발 기술 변화와 근거, 영향, 지금 할 일을 한 장에 정리한 일일 보고서입니다.',
 		'post_content' => '<p>이 날짜의 Hunt News 기술 보고서입니다. 수집 신호, 선정 근거, 영향과 실행 항목을 한 화면에서 확인할 수 있습니다.</p><ul>' . $links . '</ul>',
