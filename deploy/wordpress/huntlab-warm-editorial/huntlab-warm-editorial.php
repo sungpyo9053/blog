@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.9
+ * Version: 5.6.10
  * Author: Hunt News
  */
 
@@ -149,6 +149,11 @@ function hunt_news_briefing_archive_months() {
 		$key = get_the_date( 'Y.m', $post );
 		$months[ $key ][] = $post;
 	}
+	$current_month = wp_date( 'Y.m', current_time( 'timestamp' ) );
+	$tomorrow_month = wp_date( 'Y.m', current_time( 'timestamp' ) + DAY_IN_SECONDS );
+	if ( $tomorrow_month !== $current_month && ! isset( $months[ $tomorrow_month ] ) ) {
+		$months = array( $tomorrow_month => array() ) + $months;
+	}
 	return $months;
 }
 
@@ -179,11 +184,13 @@ function hunt_news_render_briefing_navigation() {
 				?>
 				<details<?php echo $contains_active ? ' open' : ''; ?>>
 					<summary>Hunt News [<?php echo esc_html( $month ); ?>]</summary>
-					<ul>
+					<?php if ( ! $posts ) : ?>
+						<p class="hunt-news-date-nav__empty">내일 02시 첫 브리핑이 발행됩니다.</p>
+					<?php else : ?><ul>
 						<?php foreach ( $posts as $post ) : ?>
 							<li><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"<?php echo $post->ID === $active_id ? ' aria-current="page"' : ''; ?>>Hunt News <?php echo esc_html( get_the_date( 'Y-m-d', $post ) ); ?></a></li>
 						<?php endforeach; ?>
-					</ul>
+					</ul><?php endif; ?>
 				</details>
 			<?php endforeach; ?>
 		</div>
