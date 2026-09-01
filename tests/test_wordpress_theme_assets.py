@@ -57,7 +57,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.11", php)
+        self.assertIn("Version: 5.6.12", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -176,7 +176,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("$analysis['retrospective']['items']", php)
         self.assertIn("$retrospective_counts", php)
         self.assertIn("hunt-news-retrospective__summary", php)
-        self.assertIn("AI 선정 오늘의 필독", php)
+        self.assertIn("Hunt News 선정 오늘의 필독", php)
+        self.assertIn("공식 원문, 독립 출처와 실무 영향을 대조해 고른", php)
         self.assertIn("$must_read_display_count", php)
         self.assertIn("고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개", php)
         self.assertNotIn("고른 5개입니다", php)
@@ -235,7 +236,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.11", php)
+        self.assertIn("Version: 5.6.12", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -288,6 +289,17 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr))", css)
         self.assertIn(".hunt-news-brief-card--source h4", css)
         self.assertNotIn('<h4><a href="<?php echo esc_url( (string) ( $item[\'url\'] ?? \'\' ) ); ?>"', php)
+
+    def test_empty_category_archives_do_not_become_low_value_landing_pages(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
+
+        self.assertIn("function hunt_news_noindex_empty_category_archives", php)
+        self.assertIn("add_filter( 'wp_robots', 'hunt_news_noindex_empty_category_archives'", php)
+        self.assertIn("function hunt_news_redirect_empty_weekly_review", php)
+        self.assertIn("is_category( 'weekly-tech-review' )", php)
+        self.assertIn("get_post_type_archive_link( 'hunt_briefing' )", php)
+        self.assertIn("wp_safe_redirect", php)
+        self.assertIn("302", php)
 
     def test_real_read_signal_requires_visible_time_and_scroll_depth(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")

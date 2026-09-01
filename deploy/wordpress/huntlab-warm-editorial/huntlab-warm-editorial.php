@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.11
+ * Version: 5.6.12
  * Author: Hunt News
  */
 
@@ -209,6 +209,48 @@ function hunt_news_remove_legacy_category_hero() {
 	}
 }
 add_action( 'wp', 'hunt_news_remove_legacy_category_hero', 20 );
+
+/**
+ * Keep unfinished category shells out of search results. An empty archive is
+ * useful while the first issue is being prepared, but it is not a useful
+ * landing page for readers or an advertising review surface.
+ *
+ * @param array<string,bool> $robots Current WordPress robots directives.
+ * @return array<string,bool>
+ */
+function hunt_news_noindex_empty_category_archives( $robots ) {
+	if ( ! is_category() ) {
+		return $robots;
+	}
+	$category = get_queried_object();
+	if ( $category instanceof WP_Term && 0 === (int) $category->count ) {
+		unset( $robots['index'] );
+		$robots['noindex'] = true;
+		$robots['follow']  = true;
+	}
+	return $robots;
+}
+add_filter( 'wp_robots', 'hunt_news_noindex_empty_category_archives', 20 );
+
+/**
+ * The weekly review remains part of the product, but its archive should not
+ * expose a theme-generated empty result before the first valid weekly issue.
+ * A temporary redirect preserves the future URL and automatically stops once
+ * the category contains a published post.
+ */
+function hunt_news_redirect_empty_weekly_review() {
+	if ( ! is_category( 'weekly-tech-review' ) ) {
+		return;
+	}
+	$category = get_queried_object();
+	if ( ! ( $category instanceof WP_Term ) || 0 < (int) $category->count ) {
+		return;
+	}
+	$target = get_post_type_archive_link( 'hunt_briefing' );
+	wp_safe_redirect( $target ? $target : home_url( '/briefing/' ), 302, 'Hunt News' );
+	exit;
+}
+add_action( 'template_redirect', 'hunt_news_redirect_empty_weekly_review', 1 );
 
 /**
  * Return a stable, public-only snapshot for the home briefing board.
@@ -1542,13 +1584,13 @@ function hunt_news_home_sections() {
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
-				<div><p>AI 선정 오늘의 필독</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
+				<div><p>Hunt News 선정 오늘의 필독</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
 			</header>
 			<p class="hunt-news-must-read__status">
 				<?php if ( $is_briefing_detail ) : ?>
-					AI가 근거와 영향도를 검토해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.
+					공식 원문, 독립 출처와 실무 영향을 대조해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.
 				<?php else : ?>
-					AI가 근거와 영향도를 검토해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. <a href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서와 수집원 보기 <b aria-hidden="true">→</b></a>
+					공식 원문, 독립 출처와 실무 영향을 대조해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. <a href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서와 수집원 보기 <b aria-hidden="true">→</b></a>
 				<?php endif; ?>
 			</p>
 			<div class="hunt-news-must-read__grid" data-brief-view-grid>
