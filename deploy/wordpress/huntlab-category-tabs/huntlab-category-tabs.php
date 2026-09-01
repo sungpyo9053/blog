@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Category Tabs
  * Description: Adds fast briefing navigation for Hunt News readers.
- * Version: 3.1.2
+ * Version: 3.2.0
  * Author: Hunt News
  */
 
@@ -34,6 +34,8 @@ function huntlab_category_tabs_items() {
 	$source_url = $latest_briefings ? trailingslashit( get_permalink( $latest_briefings[0] ) ) . '#hunt-news-source-title' : home_url( '/#hunt-news-source-title' );
 	$weekly_category = get_category_by_slug( 'weekly-tech-review' );
 	$weekly_url = $weekly_category ? get_category_link( $weekly_category->term_id ) : home_url( '/category/weekly-tech-review/' );
+	$explainer_category = get_category_by_slug( 'technical-explainer' );
+	$explainer_url = $explainer_category ? get_category_link( $explainer_category->term_id ) : home_url( '/category/technical-explainer/' );
 
 	$items = array(
 		array(
@@ -49,6 +51,14 @@ function huntlab_category_tabs_items() {
 			'meta'  => '날짜별',
 		),
 	);
+	if ( $explainer_category && 0 < (int) $explainer_category->count ) {
+		$items[] = array(
+			'label' => '기술 해설',
+			'url'   => $explainer_url,
+			'slug'  => 'explainer',
+			'meta'  => '깊이 읽기',
+		);
+	}
 	if ( $weekly_category && 0 < (int) $weekly_category->count ) {
 		$items[] = array(
 			'label' => '주간 회고',
@@ -72,7 +82,10 @@ function huntlab_category_tabs_items() {
  * @return string
  */
 function huntlab_category_tabs_active_slug() {
-	if ( is_category( 'weekly-tech-review' ) ) {
+	if ( is_category( 'technical-explainer' ) || ( is_singular( 'post' ) && has_category( 'technical-explainer' ) ) ) {
+		return 'explainer';
+	}
+	if ( is_category( 'weekly-tech-review' ) || ( is_singular( 'post' ) && has_category( 'weekly-tech-review' ) ) ) {
 		return 'weekly';
 	}
 	if ( is_post_type_archive( 'hunt_briefing' ) ) {

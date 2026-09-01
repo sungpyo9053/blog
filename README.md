@@ -5,6 +5,9 @@
 날짜 아카이브를 핵심 제품으로 두며, 상세 글은 보고서의 근거·확장 읽기 역할을 합니다.
 매주 일요일에는 그 주의 일일 브리핑을 다시 합성한 `주간 기술 회고` 한 건을 별도
 카테고리에 발행해 반복된 변화와 다음 주 확인 신호를 남깁니다.
+매주 수요일과 토요일에는 최근 7일 브리핑 중 Google Trends 또는 Search Console에서
+수요가 관측된 주제 하나를 예제 중심의 `기술 해설`로 승격합니다. 검색 신호나 근거가
+부족하면 발행량을 채우지 않고 건너뜁니다.
 
 공개 사이트는 [huntlab.app](https://huntlab.app/)을 유지하며 기존 URL, 글,
 미디어와 검색 색인을 보존합니다.
@@ -53,6 +56,7 @@
 - `publisher/`: WordPress REST API 검증·업로드·발행 모듈
 - `scripts/run_daily_pipeline.py`: TOP2 실행 Harness
 - `scripts/run_weekly_review.py`: 일일 브리핑 5개 이상을 근거로 만드는 주간 회고 Harness
+- `scripts/run_technical_explainer.py`: 최근 브리핑과 검색 신호를 연결하는 주 2회 기술 해설 Harness
 - `scripts/update_adsense_readiness.py`: 개인정보·소개·문의 페이지를 백업 후 갱신하는 plan/apply 도구
 - `scripts/audit_content_repetition.py`: 공통 UI 제목을 제외하고 도입·H2 흐름·결론의 실질 중복을 점검
 - `tests/`: 단계 간 계약과 Publisher 회귀 테스트
@@ -165,6 +169,18 @@ WordPress 태그는 게시물당 재사용 가능한 3~4개만 허용합니다. 
 ./.venv/bin/python scripts/run_weekly_review.py --dry-run --week-end 2026-08-30
 ```
 
+## 기술 해설
+
+기술 해설은 최근 7일의 유효한 브리핑 3개 이상에서 후보를 모으고 Google Trends 또는
+Search Console에 실제 관측값이 있을 때만 한 건을 계획합니다. 뉴스 번역이나 목록 대신
+`문제 → 예제 → 정상·실패 판정 → 적용 조건`으로 설명하며 `기술 해설`
+(`technical-explainer`) 카테고리에 독립 URL로 발행합니다. 카테고리는 WordPress에 미리
+생성되어 있어야 하며 Harness가 자동 생성하지 않습니다.
+
+```bash
+./.venv/bin/python scripts/run_technical_explainer.py --dry-run --run-date 2026-09-02
+```
+
 ## 실패 실행 재개
 
 완료된 단계는 재사용하고 TOP2 중 실패한 순위만 재개할 수 있습니다.
@@ -187,6 +203,7 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 - `deploy/huntlab-daily-pipeline.service`
 - `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Trends·기술 뉴스 소스·Search Console 캐시 참고
 - `deploy/huntlab-weekly-review.timer`: 매주 일요일 20:30 KST, 주간 기술 회고 한 건
+- `deploy/huntlab-technical-explainer.timer`: 매주 수·토요일 20:30 KST, 검색 수요 기반 기술 해설 최대 한 건
 - `deploy/huntlab-google-trends-collector.service`
 - `deploy/huntlab-google-trends-collector.timer`: 매시간 10분, 한국 급상승 RSS 누적
 - `deploy/huntlab-editorial-source-collector.service`

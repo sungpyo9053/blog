@@ -161,6 +161,7 @@ def validate_daily_briefing(
     required_translation_urls: set[str] | None = None,
     source_rows: list[dict[str, Any]] | None = None,
     retrospective_required: bool = False,
+    deep_analysis_required: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("contract_version") not in SUPPORTED_CONTRACT_VERSIONS:
         raise DailyBriefingError("invalid daily briefing contract")
@@ -407,6 +408,17 @@ def validate_daily_briefing(
                 "evidence_urls": _urls(row.get("evidence_urls"), "evidence_urls"),
             })
 
+    if variable_sections and deep_analysis_required:
+        deep_analyses = [
+            row["analysis"]
+            for row in safe["insight_cards"]
+            if 400 <= len(row["analysis"].strip()) <= 700
+        ]
+        if not deep_analyses:
+            raise DailyBriefingError(
+                "v2 requires at least one 400-700 character insight analysis"
+            )
+
     safe["watchlist"] = []
     if variable_sections and safe["themes"] and safe["developer_insights"]:
         raise DailyBriefingError(
@@ -519,6 +531,7 @@ def load_daily_briefing(
     required_translation_urls: set[str] | None = None,
     source_rows: list[dict[str, Any]] | None = None,
     retrospective_required: bool = False,
+    deep_analysis_required: bool = False,
 ) -> dict[str, Any]:
     if not path.is_file():
         raise DailyBriefingError(f"daily briefing artifact missing: {path}")
@@ -535,4 +548,5 @@ def load_daily_briefing(
         required_translation_urls=required_translation_urls,
         source_rows=source_rows,
         retrospective_required=retrospective_required,
+        deep_analysis_required=deep_analysis_required,
     )

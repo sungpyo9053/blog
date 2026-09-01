@@ -17,6 +17,7 @@ ACTIVE_EDITOR_CATEGORIES = {
     "국내 IT",
     "국내 시사",
 }
+SPECIAL_EDITOR_CATEGORIES = {"기술 해설", "주간 기술 회고"}
 LEGACY_EDITOR_CATEGORIES = {
     "생활", "경제", "부동산", "사회", "정치", "문화·엔터", "IT",
     "Tech",
@@ -32,7 +33,7 @@ LEGACY_EDITOR_CATEGORIES = {
 }
 # Old approved runs can still be resumed, while every newly planned run uses
 # the active Hunt News categories above.
-EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
+EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
 FORBIDDEN_TERMS = (
     "100%",
     "무조건",

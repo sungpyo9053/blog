@@ -76,6 +76,7 @@ ACTIVE_EDITOR_CATEGORIES = {
     "국내 IT",
     "국내 시사",
 }
+SPECIAL_EDITOR_CATEGORIES = {"기술 해설", "주간 기술 회고"}
 ACTIVE_CATEGORY_SLUGS = {
     "ai-ml-core": "AI/ML 핵심",
     "development-trends": "개발 트렌드",
@@ -96,7 +97,7 @@ LEGACY_EDITOR_CATEGORIES = {
     "Harness Engineering",
     "System Architecture",
 }
-EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
+EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
 CONTENT_TYPE_GUIDES = {
     "tutorial_troubleshooting": PROJECT_ROOT / "guides/content-types/tutorial-troubleshooting.md",
     "concept_architecture": PROJECT_ROOT / "guides/content-types/concept-architecture.md",
@@ -129,6 +130,8 @@ LEGACY_CONTENT_TYPE_BY_CATEGORY = {
     "정치": "life_impact_explainer",
     "문화·엔터": "life_impact_explainer",
     "IT": "tutorial_troubleshooting",
+    "기술 해설": "tutorial_troubleshooting",
+    "주간 기술 회고": "concept_architecture",
 }
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
 RECENT_STYLE_LIMIT = 5
@@ -2013,6 +2016,7 @@ def run_daily_briefing_analysis(
                     required_translation_urls=required_translation_urls,
                     source_rows=source_cache["rows"],
                     retrospective_required=True,
+                    deep_analysis_required=True,
                 )
             except DailyBriefingError:
                 invalid_path = analysis_path.with_suffix(".invalid.json")
@@ -2043,6 +2047,7 @@ def run_daily_briefing_analysis(
                 required_translation_urls=required_translation_urls,
                 source_rows=source_cache["rows"],
                 retrospective_required=True,
+                deep_analysis_required=True,
             )
         reject_confirmed_broken_evidence_urls(payload)
         logger.info(

@@ -199,6 +199,11 @@ Frontmatter는 Markdown 문서 상단의 구조화된 게시 메타데이터다.
 - `Uncategorized`를 자동 또는 대체 Category로 연결하는 것을 금지한다.
 - `주간 기술 회고`(`weekly-tech-review`)는 사람이 WordPress에 미리 생성한 별도
   카테고리다. 주간 회고 파이프라인만 이 카테고리를 사용하며 일일 TOP2에는 할당하지 않는다.
+- `기술 해설`(`technical-explainer`)은 사람이 WordPress에 미리 생성한 별도
+  카테고리다. 검색 수요와 최근 브리핑 근거를 고정한 기술 해설 파이프라인만 사용하며
+  일일 TOP2에는 할당하지 않는다.
+- 기술 해설은 최근 7일의 유효한 브리핑 3개 이상, Google Trends 또는 Search Console의
+  실제 관측 신호, 고유 근거 URL 2개 이상과 Reviewer 승인 해시가 있어야 Publish할 수 있다.
 - 주간 회고는 월요일부터 일요일까지 유효한 일일 브리핑 분석 5개 이상과 고유 근거 URL
   5개 이상을 고정한 입력 스냅샷, Reviewer 승인 해시를 모두 갖춰야 Publish할 수 있다.
 

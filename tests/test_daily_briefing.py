@@ -82,6 +82,7 @@ def variable_analysis_payload(source_hash: str = "a" * 64):
     payload["matrix"] = payload["matrix"][:1]
     payload["timeline"] = payload["timeline"][:2]
     payload["insight_cards"] = payload["insight_cards"][:1]
+    payload["insight_cards"][0]["analysis"] = "가" * 420
     payload["themes"] = payload["themes"][:1]
     payload["developer_insights"] = []
     payload["watchlist"] = payload["watchlist"][:1]
@@ -166,6 +167,8 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertIn("Planner의 sources를 열지 않은 채 복사하지 마세요", stage.prompt)
         self.assertIn("같은 판단이 `matrix`, `timeline`, `insight_cards`", guide)
         self.assertIn("404 주소를 포함하지 않는가", guide)
+        self.assertIn("최소 1개는 편집자의 심층분석", guide)
+        self.assertIn("변경점·비교·영향 조건·반전 조건", guide)
         self.assertNotIn("편집 판단 한 문장", stage.prompt)
         self.assertNotIn("한 문단으로만 설명", stage.prompt)
 
@@ -180,6 +183,20 @@ class DailyBriefingTests(unittest.TestCase):
         self.assertEqual(len(v2["matrix"]), 1)
         self.assertEqual(len(v2["must_read"]), 3)
         self.assertEqual(v2["developer_insights"], [])
+
+    def test_v2_requires_one_substantive_insight_analysis(self):
+        payload = variable_analysis_payload()
+        payload["insight_cards"][0]["analysis"] = "짧은 요약"
+        with self.assertRaisesRegex(DailyBriefingError, "400-700"):
+            validate_daily_briefing(payload, deep_analysis_required=True)
+
+    def test_historical_v2_remains_readable_without_new_generation_gate(self):
+        payload = variable_analysis_payload()
+        payload["insight_cards"][0]["analysis"] = "기존 짧은 분석"
+        self.assertEqual(
+            validate_daily_briefing(payload)["insight_cards"][0]["analysis"],
+            "기존 짧은 분석",
+        )
 
     def test_v2_rejects_both_optional_synthesis_sections(self):
         payload = variable_analysis_payload()

@@ -148,6 +148,8 @@ class PublisherTests(unittest.TestCase):
             "AI 공식 블로그",
             "국내 IT",
             "국내 시사",
+            "기술 해설",
+            "주간 기술 회고",
         ):
             with self.subTest(category=category), tempfile.TemporaryDirectory() as tmp:
                 markdown = VALID_MARKDOWN.replace("category: Tech", f"category: {category}")

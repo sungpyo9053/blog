@@ -57,7 +57,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.12", php)
+        self.assertIn("Version: 5.7.0", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -236,7 +236,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 5.6.12", php)
+        self.assertIn("Version: 5.7.0", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -295,8 +295,9 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
 
         self.assertIn("function hunt_news_noindex_empty_category_archives", php)
         self.assertIn("add_filter( 'wp_robots', 'hunt_news_noindex_empty_category_archives'", php)
-        self.assertIn("function hunt_news_redirect_empty_weekly_review", php)
-        self.assertIn("is_category( 'weekly-tech-review' )", php)
+        self.assertIn("function hunt_news_redirect_empty_special_editorial_archive", php)
+        self.assertIn("array( 'weekly-tech-review', 'technical-explainer' )", php)
+        self.assertIn("'technical-explainer'", php)
         self.assertIn("get_post_type_archive_link( 'hunt_briefing' )", php)
         self.assertIn("wp_safe_redirect", php)
         self.assertIn("302", php)
@@ -368,11 +369,16 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
 
     def test_category_tabs_include_briefing_navigation(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
-        self.assertIn("Version: 3.1.2", php)
+        self.assertIn("Version: 3.2.0", php)
         self.assertIn("오늘 브리핑", php)
         self.assertIn("날짜 아카이브", php)
         self.assertIn("주간 회고", php)
         self.assertIn("weekly-tech-review", php)
+        self.assertIn("기술 해설", php)
+        self.assertIn("technical-explainer", php)
+        self.assertIn("is_category( 'technical-explainer' )", php)
+        self.assertIn("has_category( 'technical-explainer' )", php)
+        self.assertIn("has_category( 'weekly-tech-review' )", php)
         self.assertIn("is_category( 'weekly-tech-review' )", php)
         self.assertIn("0 < (int) $weekly_category->count", php)
         self.assertNotIn('id="hunt-news-reading-guide"', (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8"))
@@ -388,6 +394,17 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("intro.insertAdjacentElement('afterend',nav)", php)
         self.assertIn("margin-left:calc(50% - 50vw)", php)
         self.assertIn("min-height:44px", php)
+
+    def test_home_exposes_latest_explainer_only_after_publication(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
+        css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
+
+        self.assertIn("function hunt_news_latest_special_post", php)
+        self.assertIn("hunt_news_latest_special_post( 'technical-explainer' )", php)
+        self.assertIn('id="hunt-news-deep-read-title"', php)
+        self.assertIn("이번 주 깊이 읽기", php)
+        self.assertIn("기술 해설 모아보기", php)
+        self.assertIn(".hunt-news-deep-read", css)
 
     def test_category_tabs_remove_empty_category_counts(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")

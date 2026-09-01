@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.6.12
+ * Version: 5.7.0
  * Author: Hunt News
  */
 
@@ -233,13 +233,13 @@ function hunt_news_noindex_empty_category_archives( $robots ) {
 add_filter( 'wp_robots', 'hunt_news_noindex_empty_category_archives', 20 );
 
 /**
- * The weekly review remains part of the product, but its archive should not
- * expose a theme-generated empty result before the first valid weekly issue.
+ * Special editorial series remain part of the product, but their archives
+ * should not expose a theme-generated empty result before the first valid issue.
  * A temporary redirect preserves the future URL and automatically stops once
  * the category contains a published post.
  */
-function hunt_news_redirect_empty_weekly_review() {
-	if ( ! is_category( 'weekly-tech-review' ) ) {
+function hunt_news_redirect_empty_special_editorial_archive() {
+	if ( ! is_category( array( 'weekly-tech-review', 'technical-explainer' ) ) ) {
 		return;
 	}
 	$category = get_queried_object();
@@ -250,7 +250,7 @@ function hunt_news_redirect_empty_weekly_review() {
 	wp_safe_redirect( $target ? $target : home_url( '/briefing/' ), 302, 'Hunt News' );
 	exit;
 }
-add_action( 'template_redirect', 'hunt_news_redirect_empty_weekly_review', 1 );
+add_action( 'template_redirect', 'hunt_news_redirect_empty_special_editorial_archive', 1 );
 
 /**
  * Return a stable, public-only snapshot for the home briefing board.
@@ -271,6 +271,34 @@ function hunt_news_briefing_posts( $limit = 12 ) {
 			'update_post_meta_cache' => false,
 		)
 	);
+}
+
+/**
+ * Return the latest published post in a reader-facing special category.
+ * Empty categories intentionally return null so no placeholder surface leaks.
+ *
+ * @param string $slug Category slug.
+ * @return WP_Post|null
+ */
+function hunt_news_latest_special_post( $slug ) {
+	$category = get_category_by_slug( sanitize_title( $slug ) );
+	if ( ! $category || 0 === (int) $category->count ) {
+		return null;
+	}
+	$posts = get_posts(
+		array(
+			'post_type'              => 'post',
+			'post_status'            => 'publish',
+			'posts_per_page'         => 1,
+			'category'               => (int) $category->term_id,
+			'orderby'                => 'date',
+			'order'                  => 'DESC',
+			'ignore_sticky_posts'    => true,
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+		)
+	);
+	return $posts ? $posts[0] : null;
 }
 
 /**
@@ -573,6 +601,14 @@ function huntlab_warm_editorial_category_intros() {
 			'promises'    => array( '반복된 변화', '개발자 영향', '다음 주 신호' ),
 			'image'       => 'system-architecture.webp',
 			'alt'         => '일주일의 기술 변화와 다음 주 확인 신호를 연결한 주간 기술 회고 미니어처',
+		),
+		'technical-explainer'   => array(
+			'label'       => '기술 해설',
+			'title'       => '뉴스보다 깊게,<br>예제로 끝까지.',
+			'description' => '검색 수요가 확인된 기술 변화를 코드·설정·비교와 실패 조건까지 독립 해설로 풀어냅니다.',
+			'promises'    => array( '구체적인 문제', '따라 할 예제', '실패와 적용 조건' ),
+			'image'       => 'tech.webp',
+			'alt'         => '기술 문서와 코드 예제, 성공과 실패 결과가 이어지는 기술 해설 미니어처',
 		),
 		'life'                => array(
 			'label'       => '생활',
@@ -1355,6 +1391,7 @@ function hunt_news_home_sections() {
 	$briefing_must_read_count = ! empty( $analysis['must_read'] ) ? count( $analysis['must_read'] ) : min( 5, count( $must_read_items ) );
 	$must_read_display_count  = min( 5, count( $must_read_items ) );
 	$briefing_detail_url      = home_url( '/briefing/' . hunt_news_briefing_display_date( $manifest ) . '/' );
+	$latest_explainer         = $is_category ? null : hunt_news_latest_special_post( 'technical-explainer' );
 	?>
 	<?php if ( ! $is_category && $brief_posts ) : ?>
 	<div class="hunt-news-report-shell">
@@ -1619,6 +1656,25 @@ function hunt_news_home_sections() {
 				<?php endif; ?>
 			</div>
 		</section>
+
+		<?php if ( $latest_explainer ) :
+			$explainer_category = get_category_by_slug( 'technical-explainer' );
+			$explainer_archive  = $explainer_category ? get_category_link( $explainer_category->term_id ) : home_url( '/category/technical-explainer/' );
+			?>
+		<section class="hunt-news-deep-read" aria-labelledby="hunt-news-deep-read-title">
+			<div>
+				<p>검색 수요에서 고른 독립 기술 해설</p>
+				<h3 id="hunt-news-deep-read-title">이번 주 깊이 읽기</h3>
+				<span>뉴스 요약이 아니라 예제, 실패 조건과 적용 판단까지 설명합니다.</span>
+			</div>
+			<article>
+				<time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $latest_explainer ) ); ?>"><?php echo esc_html( get_the_date( 'Y.m.d', $latest_explainer ) ); ?></time>
+				<h4><a href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>"><?php echo esc_html( get_the_title( $latest_explainer ) ); ?></a></h4>
+				<p><?php echo esc_html( hunt_news_briefing_summary( $latest_explainer ) ); ?></p>
+				<div><a href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>">해설 읽기 <b aria-hidden="true">→</b></a><a href="<?php echo esc_url( $explainer_archive ); ?>">기술 해설 모아보기</a></div>
+			</article>
+		</section>
+		<?php endif; ?>
 
 		<?php if ( $is_briefing_detail && $source_groups ) : ?>
 		<section class="hunt-news-source-board" aria-labelledby="hunt-news-source-title">
