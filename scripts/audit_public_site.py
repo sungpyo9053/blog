@@ -167,6 +167,8 @@ def fetch(
                     "curl",
                     "-sS",
                     "-L",
+                    "-H",
+                    "Cache-Control: no-cache",
                     "-X",
                     method,
                     "--max-time",
@@ -217,6 +219,17 @@ def sitemap_urls(xml_body: bytes) -> list[str]:
                 urls.append((node.text or "").strip())
                 break
     return urls
+
+
+def sitemap_kind(url: str) -> str:
+    """Classify a sitemap without treating post-type archives as articles."""
+    name = urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1]
+    if name.startswith("post-archive-"):
+        return "archive"
+    return next(
+        (kind for kind in ("post", "page", "category") if name.startswith(f"{kind}-")),
+        "",
+    )
 
 
 def normalize_internal_link(url: str, base_url: str) -> str | None:
@@ -274,7 +287,15 @@ def inspect_page(result: FetchResult, base_url: str) -> PageFacts:
                 block,
                 re.IGNORECASE | re.DOTALL,
             )
-            value = re.sub(r"<[^>]+>", " ", value_match.group(1)) if value_match else ""
+            if value_match:
+                value = re.sub(r"<[^>]+>", " ", value_match.group(1))
+            else:
+                plain_match = re.search(
+                    rf'<li\b[^>]*>\s*{label}\s*:\s*(.*?)</li>',
+                    block,
+                    re.IGNORECASE | re.DOTALL,
+                )
+                value = re.sub(r"<[^>]+>", " ", plain_match.group(1)) if plain_match else ""
             facts.quick_summary_fields[label] = " ".join(html.unescape(value).split())
     facts.has_article_toc = parser.has_article_toc
     facts.evidence_signals = [term for term in EVIDENCE_TERMS if term in visible_text]
@@ -305,16 +326,21 @@ def audit_site(base_url: str, *, timeout: float = 6.0) -> dict:
     sitemap_result = endpoints["sitemap"]
     child_sitemaps = sitemap_urls(sitemap_result.body) if sitemap_result.status == 200 else []
     child_results = _parallel_fetch(child_sitemaps, timeout)
-    urls_by_kind: dict[str, list[str]] = {"post": [], "page": [], "category": []}
+    urls_by_kind: dict[str, list[str]] = {"post": [], "page": [], "archive": [], "category": []}
     for result in child_results:
         if result.status != 200:
             continue
-        name = urllib.parse.urlsplit(result.url).path.rsplit("/", 1)[-1]
-        kind = next((key for key in urls_by_kind if name.startswith(f"{key}-")), "")
+        kind = sitemap_kind(result.url)
         if kind:
             urls_by_kind[kind].extend(sitemap_urls(result.body))
 
-    content_urls = urls_by_kind["post"] + urls_by_kind["page"] + urls_by_kind["category"] + [base_url]
+    content_urls = (
+        urls_by_kind["post"]
+        + urls_by_kind["page"]
+        + urls_by_kind["archive"]
+        + urls_by_kind["category"]
+        + [base_url]
+    )
     page_results = _parallel_fetch(content_urls, timeout)
     pages = [inspect_page(result, base_url) for result in page_results]
     known_urls = {page.url for page in pages}

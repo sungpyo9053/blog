@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from scripts.audit_public_site import FetchResult, fetch, inspect_page, normalize_internal_link, render_markdown, sitemap_urls
+from scripts.audit_public_site import FetchResult, fetch, inspect_page, normalize_internal_link, render_markdown, sitemap_kind, sitemap_urls
 
 
 class PublicSiteAuditTests(unittest.TestCase):
@@ -28,11 +28,16 @@ class PublicSiteAuditTests(unittest.TestCase):
 
         self.assertEqual(result.status, 200)
         self.assertEqual(result.body, b"ok")
+        self.assertIn("Cache-Control: no-cache", " ".join(run.call_args_list[0].args[0]))
         sleep.assert_called_once_with(0.75)
 
     def test_sitemap_urls_handles_namespaces(self):
         xml = b'''<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"><url><loc>https://huntlab.app/post/</loc><image:image><image:loc>https://huntlab.app/image.webp</image:loc></image:image></url></urlset>'''
         self.assertEqual(sitemap_urls(xml), ["https://huntlab.app/post/"])
+
+    def test_post_archive_sitemap_is_not_counted_as_articles(self):
+        self.assertEqual(sitemap_kind("https://huntlab.app/post-sitemap.xml"), "post")
+        self.assertEqual(sitemap_kind("https://huntlab.app/post-archive-sitemap.xml"), "archive")
 
     def test_inspect_page_collects_author_media_and_evidence(self):
         html = '''<html><head><title>Test</title><meta name="author" content="admin"><meta property="article:published_time" content="2026-07-31T17:00:00+00:00"><meta property="og:image" content="https://huntlab.app/a.webp"><link rel="canonical" href="https://huntlab.app/post/"></head><body><time class="entry-date published" datetime="2026-08-01T02:00:00+09:00" itemprop="datePublished">2026-08-01</time><img class="wp-post-image" alt="diagram"><section class="huntlab-article-quick-summary"><ul><li><strong>무엇</strong><span>검사 대상</span></li><li><strong>왜</strong><span>판단 이유</span></li><li><strong>어떻게</strong><span>확인 순서</span></li></ul></section><aside class="huntlab-article-toc">목차</aside><p>검증 환경과 실행 결과를 확인했다.</p><a href="/next/">next</a></body></html>'''.encode("utf-8")
@@ -59,6 +64,15 @@ class PublicSiteAuditTests(unittest.TestCase):
 
     def test_inspect_page_recognizes_standard_markdown_summary_without_plugin_wrapper(self):
         html = '''<html><body><h2>20초 핵심 요약</h2><ul><li><strong>무엇:</strong> 대상</li><li><strong>왜:</strong> 이유</li><li><strong>어떻게:</strong> 순서</li></ul></body></html>'''.encode("utf-8")
+        facts = inspect_page(FetchResult("https://huntlab.app/post/", 200, "text/html", html), "https://huntlab.app/")
+        self.assertTrue(facts.has_quick_summary)
+        self.assertEqual(
+            {"무엇": "대상", "왜": "이유", "어떻게": "순서"},
+            facts.quick_summary_fields,
+        )
+
+    def test_inspect_page_recognizes_plain_markdown_summary_labels(self):
+        html = '''<html><body><h2>20초 핵심 요약</h2><ul><li>무엇: 대상</li><li>왜: 이유</li><li>어떻게: 순서</li></ul></body></html>'''.encode("utf-8")
         facts = inspect_page(FetchResult("https://huntlab.app/post/", 200, "text/html", html), "https://huntlab.app/")
         self.assertTrue(facts.has_quick_summary)
         self.assertEqual(
