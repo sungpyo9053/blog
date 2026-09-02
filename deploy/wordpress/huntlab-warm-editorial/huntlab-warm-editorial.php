@@ -123,7 +123,8 @@ function hunt_news_briefing_aioseo_sitemap_indexes( $indexes ) {
 			(array) $indexes,
 			function ( $index ) {
 				$location = is_array( $index ) ? (string) ( $index['loc'] ?? '' ) : '';
-				return false === strpos( $location, '/hunt_briefing-sitemap' );
+				return false === strpos( $location, '/hunt_briefing-sitemap' )
+					&& false === strpos( $location, '/post-archive-sitemap.xml' );
 			}
 		)
 	);

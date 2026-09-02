@@ -283,6 +283,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("$robots['noindex'] = 'noindex'", php)
         self.assertIn("hunt_news_briefing_aioseo_sitemap_indexes", php)
         self.assertIn("'/hunt_briefing-sitemap'", php)
+        self.assertIn("'/post-archive-sitemap.xml'", php)
         self.assertIn("add_filter( 'aioseo_sitemap_posts', 'hunt_news_briefing_aioseo_sitemap_posts', 20, 2 )", php)
         self.assertIn("add_filter( 'aioseo_sitemap_post_archives', 'hunt_news_briefing_aioseo_sitemap_archives'", php)
         self.assertIn("add_filter( 'aioseo_title', 'hunt_news_briefing_search_title'", php)
