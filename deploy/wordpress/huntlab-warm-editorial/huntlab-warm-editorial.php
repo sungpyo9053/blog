@@ -116,6 +116,38 @@ function hunt_news_briefing_aioseo_robots( $robots ) {
 }
 add_filter( 'aioseo_robots_meta', 'hunt_news_briefing_aioseo_robots', 20 );
 
+/** Keep noindexed briefing reports out of AIOSEO discovery sitemaps. */
+function hunt_news_briefing_aioseo_sitemap_indexes( $indexes ) {
+	return array_values(
+		array_filter(
+			(array) $indexes,
+			function ( $index ) {
+				$location = is_array( $index ) ? (string) ( $index['loc'] ?? '' ) : '';
+				return false === strpos( $location, '/hunt_briefing-sitemap' );
+			}
+		)
+	);
+}
+add_filter( 'aioseo_sitemap_indexes', 'hunt_news_briefing_aioseo_sitemap_indexes', 20 );
+
+function hunt_news_briefing_aioseo_sitemap_posts( $entries, $post_type ) {
+	return 'hunt_briefing' === $post_type ? array() : $entries;
+}
+add_filter( 'aioseo_sitemap_posts', 'hunt_news_briefing_aioseo_sitemap_posts', 20, 2 );
+
+function hunt_news_briefing_aioseo_sitemap_archives( $entries ) {
+	return array_values(
+		array_filter(
+			(array) $entries,
+			function ( $entry ) {
+				$location = is_array( $entry ) ? (string) ( $entry['loc'] ?? '' ) : '';
+				return false === strpos( $location, '/briefing/' );
+			}
+		)
+	);
+}
+add_filter( 'aioseo_sitemap_post_archives', 'hunt_news_briefing_aioseo_sitemap_archives', 20 );
+
 /** Use a keyword-rich title only in document/search metadata. */
 function hunt_news_briefing_search_title( $title ) {
 	$home_metadata = hunt_news_home_search_metadata();
