@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 6.0.1
+ * Version: 6.1.0
  * Author: Hunt News
  */
 
@@ -377,6 +377,21 @@ function hunt_news_special_posts( $slug, $limit = 6 ) {
 }
 
 /**
+ * Estimate reading time from the published body without inventing engagement data.
+ *
+ * Korean and Latin word-like tokens are counted together. The value is only a
+ * navigation aid, not an analytics metric.
+ *
+ * @param WP_Post $post Post object.
+ * @return int
+ */
+function hunt_news_reading_minutes( $post ) {
+	$text  = wp_strip_all_tags( strip_shortcodes( $post->post_content ) );
+	$count = preg_match_all( '/[\p{L}\p{N}]+/u', $text, $matches );
+	return max( 1, (int) ceil( max( 0, (int) $count ) / 250 ) );
+}
+
+/**
  * Remove the legacy posts loop from the editorial homepage at query time.
  *
  * The original-analysis homepage is rendered from curated explainer and review
@@ -403,9 +418,10 @@ add_filter( 'the_posts', 'hunt_news_remove_legacy_home_loop', 99, 2 );
 
 /** Render an original-analysis homepage while keeping daily reports in their archive. */
 function hunt_news_render_editorial_home() {
-	$explainers       = hunt_news_special_posts( 'technical-explainer', 6 );
+	$explainers       = hunt_news_special_posts( 'technical-explainer', 8 );
 	$reviews          = hunt_news_special_posts( 'weekly-tech-review', 3 );
 	$latest_explainer = $explainers ? $explainers[0] : null;
+	$explainer_feed   = $explainers ? array_slice( $explainers, 1 ) : array();
 	$latest_review    = $reviews ? $reviews[0] : null;
 	$manifest         = hunt_news_latest_briefing_manifest();
 	$analysis         = ! empty( $manifest['analysis'] ) && is_array( $manifest['analysis'] ) ? $manifest['analysis'] : array();
@@ -416,33 +432,30 @@ function hunt_news_render_editorial_home() {
 	$review_url       = $review_term ? get_category_link( $review_term->term_id ) : home_url( '/category/weekly-tech-review/' );
 	?>
 	<div id="hunt-news-originals" class="hunt-news-editorial-home">
-		<section class="hunt-news-editorial-lead" aria-labelledby="hunt-news-editorial-lead-title">
-			<header><p>ORIGINAL ANALYSIS</p><h2 id="hunt-news-editorial-lead-title">이번 주, 직접 판단할 기술 변화</h2><span>요약보다 비교·예제·실패 조건을 먼저 봅니다.</span></header>
-			<div class="hunt-news-editorial-lead__grid">
+		<nav class="hunt-news-feed-tabs" aria-label="Hunt News 글 탐색"><a class="is-active" href="#hunt-news-editor-picks">에디터 선정</a><a href="<?php echo esc_url( $explainer_url ); ?>">최신 해설</a><a href="<?php echo esc_url( $briefing_url ); ?>">날짜별 브리핑</a></nav>
+
+		<div class="hunt-news-devto-layout">
+			<section id="hunt-news-editor-picks" class="hunt-news-devto-feed" aria-labelledby="hunt-news-feed-title">
+				<header class="hunt-news-feed-heading"><div><p>EDITOR'S PICK</p><h2 id="hunt-news-feed-title">직접 적용할 수 있는 기술 해설</h2></div><span>근거·예제·실패 조건을 확인한 글만 고릅니다.</span></header>
 				<?php if ( $latest_explainer ) : ?>
-				<article class="hunt-news-editorial-feature">
-					<p>기술 해설</p><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $latest_explainer ) ); ?>"><?php echo esc_html( get_the_date( 'Y.m.d', $latest_explainer ) ); ?></time>
-					<h3><a href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>"><?php echo esc_html( get_the_title( $latest_explainer ) ); ?></a></h3>
-					<span><?php echo esc_html( hunt_news_briefing_summary( $latest_explainer ) ); ?></span>
-					<ul><li>변경 전후</li><li>따라 할 예제</li><li>적용하지 않을 조건</li></ul>
-					<a href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>">해설 읽기 <b aria-hidden="true">→</b></a>
+				<article class="hunt-news-feed-feature">
+					<?php if ( has_post_thumbnail( $latest_explainer ) ) : ?><a class="hunt-news-feed-feature__image" href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>" tabindex="-1" aria-hidden="true"><?php echo get_the_post_thumbnail( $latest_explainer, 'large', array( 'loading' => 'eager' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></a><?php endif; ?>
+					<div class="hunt-news-feed-feature__body"><div class="hunt-news-feed-meta"><span>기술 해설</span><span>Hunt News 편집팀</span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $latest_explainer ) ); ?>"><?php echo esc_html( get_the_date( 'Y.m.d', $latest_explainer ) ); ?></time><span><?php echo esc_html( (string) hunt_news_reading_minutes( $latest_explainer ) ); ?>분 읽기</span></div><h3><a href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>"><?php echo esc_html( get_the_title( $latest_explainer ) ); ?></a></h3><p><?php echo esc_html( hunt_news_briefing_summary( $latest_explainer ) ); ?></p><a class="hunt-news-feed-read" href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>">근거와 예제 읽기 <span aria-hidden="true">→</span></a></div>
 				</article>
 				<?php endif; ?>
-				<div class="hunt-news-editorial-side">
-					<?php if ( $latest_review ) : ?><article><p>주간 기술 회고</p><h3><a href="<?php echo esc_url( get_permalink( $latest_review ) ); ?>"><?php echo esc_html( get_the_title( $latest_review ) ); ?></a></h3><span><?php echo esc_html( hunt_news_briefing_summary( $latest_review ) ); ?></span><a href="<?php echo esc_url( get_permalink( $latest_review ) ); ?>">이번 주 판단 보기 →</a></article><?php endif; ?>
-					<article class="hunt-news-editorial-briefing"><p>오늘의 브리핑 · <?php echo esc_html( hunt_news_briefing_display_date( $manifest, 'Y.m.d' ) ); ?></p><h3><?php echo esc_html( (string) ( $analysis['headline'] ?? '오늘 수집한 기술 변화를 날짜별 보고서로 정리했습니다.' ) ); ?></h3><span>브리핑은 매일 유지하며 검색용 독립 글로 쪼개지 않습니다.</span><a href="<?php echo esc_url( $briefing_url ); ?>">날짜별 브리핑 보기 →</a></article>
-				</div>
-			</div>
-		</section>
 
-		<?php if ( $explainers ) : ?>
-		<section class="hunt-news-original-grid" aria-labelledby="hunt-news-original-grid-title">
-			<header><div><p>DEEP READS</p><h2 id="hunt-news-original-grid-title">문제를 해결하는 기술 해설</h2></div><a href="<?php echo esc_url( $explainer_url ); ?>">전체 해설 보기 →</a></header>
-			<div><?php foreach ( $explainers as $index => $post ) : ?><article><span><?php echo esc_html( sprintf( '%02d', $index + 1 ) ); ?></span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $post ) ); ?>"><?php echo esc_html( get_the_date( 'Y.m.d', $post ) ); ?></time><h3><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h3><p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p><a href="<?php echo esc_url( get_permalink( $post ) ); ?>">근거와 예제 보기 →</a></article><?php endforeach; ?></div>
-		</section>
-		<?php endif; ?>
+				<?php if ( $explainer_feed ) : ?><div class="hunt-news-feed-list"><?php foreach ( $explainer_feed as $post ) : ?><article class="<?php echo esc_attr( 'hunt-news-feed-card' . ( has_post_thumbnail( $post ) ? '' : ' hunt-news-feed-card--no-image' ) ); ?>"><div class="hunt-news-feed-card__body"><div class="hunt-news-feed-meta"><span>기술 해설</span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $post ) ); ?>"><?php echo esc_html( get_the_date( 'Y.m.d', $post ) ); ?></time><span><?php echo esc_html( (string) hunt_news_reading_minutes( $post ) ); ?>분 읽기</span></div><h3><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h3><p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p></div><?php if ( has_post_thumbnail( $post ) ) : ?><a class="hunt-news-feed-card__image" href="<?php echo esc_url( get_permalink( $post ) ); ?>" tabindex="-1" aria-hidden="true"><?php echo get_the_post_thumbnail( $post, 'medium_large', array( 'loading' => 'lazy' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></a><?php endif; ?></article><?php endforeach; ?></div><?php endif; ?>
+				<a class="hunt-news-feed-more" href="<?php echo esc_url( $explainer_url ); ?>">기술 해설 전체 보기 →</a>
+			</section>
 
-		<section class="hunt-news-editorial-method" aria-labelledby="hunt-news-editorial-method-title"><div><p>HOW WE WORK</p><h2 id="hunt-news-editorial-method-title">한 글에 남기는 네 가지</h2></div><ol><li><strong>무엇이 바뀌었나</strong><span>원문과 버전을 확인합니다.</span></li><li><strong>기존과 무엇이 다른가</strong><span>비교 대상과 전제를 밝힙니다.</span></li><li><strong>누구에게 적용되나</strong><span>환경과 적용 범위를 제한합니다.</span></li><li><strong>어디서 실패하나</strong><span>반례와 롤백 조건을 남깁니다.</span></li></ol><nav><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">편집 원칙</a><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">만드는 사람과 방식</a><a href="<?php echo esc_url( $review_url ); ?>">주간 회고</a></nav></section>
+			<aside class="hunt-news-devto-sidebar" aria-label="Hunt News 편집 안내">
+				<article class="hunt-news-sidebar-card hunt-news-editorial-briefing"><p>DAILY BRIEF · <?php echo esc_html( hunt_news_briefing_display_date( $manifest, 'Y.m.d' ) ); ?></p><h2><?php echo esc_html( (string) ( $analysis['headline'] ?? '오늘 수집한 기술 변화를 날짜별 보고서로 정리했습니다.' ) ); ?></h2><span>브리핑은 매일 한 편으로 유지합니다.</span><a href="<?php echo esc_url( $briefing_url ); ?>">오늘 브리핑 보기 →</a></article>
+				<?php if ( $latest_review ) : ?><article class="hunt-news-sidebar-card"><p>WEEKLY REVIEW</p><h2><a href="<?php echo esc_url( get_permalink( $latest_review ) ); ?>"><?php echo esc_html( get_the_title( $latest_review ) ); ?></a></h2><span><?php echo esc_html( hunt_news_briefing_summary( $latest_review ) ); ?></span><a href="<?php echo esc_url( get_permalink( $latest_review ) ); ?>">이번 주 판단 보기 →</a></article><?php endif; ?>
+				<article class="hunt-news-sidebar-card hunt-news-sidebar-standard"><p>EDITORIAL STANDARD</p><h2>글을 고르는 기준</h2><ul><li>원문과 독립 자료를 대조했는가</li><li>따라 할 예제나 비교 결과가 있는가</li><li>실패·비추천 조건을 숨기지 않았는가</li></ul><nav><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">편집 원칙</a><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">만드는 방식</a></nav></article>
+			</aside>
+		</div>
+
+		<section class="hunt-news-editorial-method" aria-labelledby="hunt-news-editorial-method-title"><div><p>HOW WE WORK</p><h2 id="hunt-news-editorial-method-title">한 글에 남기는 네 가지</h2></div><ol><li><strong>실제 문제</strong><span>누가 어떤 조건에서 막혔는지 밝힙니다.</span></li><li><strong>확인한 근거</strong><span>원문·코드·실행 결과를 가까이 둡니다.</span></li><li><strong>달라진 결과</strong><span>같은 조건의 전후 차이를 보여줍니다.</span></li><li><strong>남은 한계</strong><span>적용하지 않을 조건까지 남깁니다.</span></li></ol><nav><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">편집 원칙</a><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">만드는 사람과 방식</a><a href="<?php echo esc_url( $review_url ); ?>">주간 회고</a></nav></section>
 	</div>
 	<script id="hunt-news-editorial-home-position">document.addEventListener('DOMContentLoaded',function(){var home=document.getElementById('hunt-news-originals');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(home&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',home);}if(main){main.hidden=true;}});</script>
 	<?php

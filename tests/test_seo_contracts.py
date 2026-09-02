@@ -227,6 +227,21 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("최근 독립 해설의 문장 골격", reviewer)
         self.assertIn("고정 문형", reviewer)
 
+    def test_community_style_keeps_evidence_led_story_without_fake_experience(self):
+        planner = read("agents/technical-explainer-agent.md")
+        writer = read("agents/writer.md")
+        reviewer = read("agents/reviewer.md")
+        style = read("guides/style-guide.md")
+
+        self.assertIn("처음 세운 가설", planner)
+        self.assertIn("실제 실패 기록이 없으면 실패담을 만들지", planner)
+        self.assertIn("가설이 틀렸다면", writer)
+        self.assertIn("같은 조건의 변경 전후", writer)
+        self.assertIn("Research의 시간 순서", reviewer)
+        self.assertIn("좋아요·조회수·성과 수치", reviewer)
+        self.assertIn("커뮤니티형 기술 글의 장점 적용", style)
+        self.assertIn("있는 것처럼 꾸미지 않는다", style)
+
 
 class SEOImageAndPublisherPolicyTests(unittest.TestCase):
     def test_image_policy_blocks_sensitive_fabrication(self):
