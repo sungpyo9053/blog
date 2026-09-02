@@ -217,6 +217,16 @@ class SEOAgentContractTests(unittest.TestCase):
         self.assertIn("하루 발행량보다 품질 기준", policy)
         self.assertIn("유사 글 증산보다", policy)
 
+    def test_explainer_title_shape_is_checked_across_recent_posts(self):
+        planner = read("agents/technical-explainer-agent.md")
+        reviewer = read("agents/reviewer.md")
+
+        self.assertIn("최근 독립 해설 제목과 문장 골격", planner)
+        self.assertIn("질문형, 실패 사례", planner)
+        self.assertIn("A보다 B", planner)
+        self.assertIn("최근 독립 해설의 문장 골격", reviewer)
+        self.assertIn("고정 문형", reviewer)
+
 
 class SEOImageAndPublisherPolicyTests(unittest.TestCase):
     def test_image_policy_blocks_sensitive_fabrication(self):

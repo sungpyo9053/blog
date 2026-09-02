@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 6.0.0
+ * Version: 6.0.1
  * Author: Hunt News
  */
 
@@ -376,6 +376,31 @@ function hunt_news_special_posts( $slug, $limit = 6 ) {
 	);
 }
 
+/**
+ * Remove the legacy posts loop from the editorial homepage at query time.
+ *
+ * The original-analysis homepage is rendered from curated explainer and review
+ * queries below. Leaving the theme's normal posts loop in the response and
+ * hiding it only with JavaScript duplicates titles, publication dates and
+ * summaries for crawlers that inspect the server HTML.
+ *
+ * @param array<int, WP_Post> $posts Main-query posts.
+ * @param WP_Query            $query Query instance.
+ * @return array<int, WP_Post>
+ */
+function hunt_news_remove_legacy_home_loop( $posts, $query ) {
+	if ( is_admin() || ! $query instanceof WP_Query || ! $query->is_main_query() ) {
+		return $posts;
+	}
+	if ( ! $query->is_home() && ! $query->is_front_page() ) {
+		return $posts;
+	}
+	$query->found_posts    = 0;
+	$query->max_num_pages = 0;
+	return array();
+}
+add_filter( 'the_posts', 'hunt_news_remove_legacy_home_loop', 99, 2 );
+
 /** Render an original-analysis homepage while keeping daily reports in their archive. */
 function hunt_news_render_editorial_home() {
 	$explainers       = hunt_news_special_posts( 'technical-explainer', 6 );
@@ -417,7 +442,7 @@ function hunt_news_render_editorial_home() {
 		</section>
 		<?php endif; ?>
 
-		<section class="hunt-news-editorial-method" aria-labelledby="hunt-news-editorial-method-title"><div><p>HOW WE WORK</p><h2 id="hunt-news-editorial-method-title">한 글에 남기는 네 가지</h2></div><ol><li><b>1</b><strong>무엇이 바뀌었나</strong><span>원문과 버전을 확인합니다.</span></li><li><b>2</b><strong>기존과 무엇이 다른가</strong><span>비교 대상과 전제를 밝힙니다.</span></li><li><b>3</b><strong>누구에게 적용되나</strong><span>환경과 적용 범위를 제한합니다.</span></li><li><b>4</b><strong>어디서 실패하나</strong><span>반례와 롤백 조건을 남깁니다.</span></li></ol><nav><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">편집 원칙</a><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">만드는 사람과 방식</a><a href="<?php echo esc_url( $review_url ); ?>">주간 회고</a></nav></section>
+		<section class="hunt-news-editorial-method" aria-labelledby="hunt-news-editorial-method-title"><div><p>HOW WE WORK</p><h2 id="hunt-news-editorial-method-title">한 글에 남기는 네 가지</h2></div><ol><li><strong>무엇이 바뀌었나</strong><span>원문과 버전을 확인합니다.</span></li><li><strong>기존과 무엇이 다른가</strong><span>비교 대상과 전제를 밝힙니다.</span></li><li><strong>누구에게 적용되나</strong><span>환경과 적용 범위를 제한합니다.</span></li><li><strong>어디서 실패하나</strong><span>반례와 롤백 조건을 남깁니다.</span></li></ol><nav><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">편집 원칙</a><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">만드는 사람과 방식</a><a href="<?php echo esc_url( $review_url ); ?>">주간 회고</a></nav></section>
 	</div>
 	<script id="hunt-news-editorial-home-position">document.addEventListener('DOMContentLoaded',function(){var home=document.getElementById('hunt-news-originals');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(home&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',home);}if(main){main.hidden=true;}});</script>
 	<?php

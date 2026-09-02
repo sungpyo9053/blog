@@ -57,7 +57,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 6.0.0", php)
+        self.assertIn("Version: 6.0.1", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -236,7 +236,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 6.0.0", php)
+        self.assertIn("Version: 6.0.1", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -417,6 +417,19 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("이번 주 깊이 읽기", php)
         self.assertIn("기술 해설 모아보기", php)
         self.assertIn(".hunt-news-deep-read", css)
+
+    def test_editorial_home_removes_legacy_loop_from_server_response(self):
+        php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
+        css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
+
+        self.assertIn("Version: 6.0.1", php)
+        self.assertIn("function hunt_news_remove_legacy_home_loop", php)
+        self.assertIn("$query->is_main_query()", php)
+        self.assertIn("add_filter( 'the_posts', 'hunt_news_remove_legacy_home_loop', 99, 2 )", php)
+        self.assertIn("$query->found_posts    = 0", php)
+        self.assertNotIn("<li><b>1</b><strong>무엇이 바뀌었나</strong>", php)
+        self.assertIn("counter-reset:hunt-news-method", css)
+        self.assertIn("counter(hunt-news-method,decimal-leading-zero)", css)
 
     def test_category_tabs_remove_empty_category_counts(self):
         php = CATEGORY_TABS.read_text(encoding="utf-8")
