@@ -106,7 +106,11 @@ def apply_plan(client: WordPressClient, plan: list[dict[str, Any]], *, backup_di
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
-    parser.add_argument("--backup-dir", type=Path, default=ROOT / "artifacts" / "wordpress-backups")
+    parser.add_argument(
+        "--backup-dir",
+        type=Path,
+        default=ROOT / "output" / "backups" / "original-library",
+    )
     parser.add_argument("--post-id", type=int, action="append", dest="post_ids")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--yes", action="store_true")
