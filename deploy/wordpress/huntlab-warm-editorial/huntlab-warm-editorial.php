@@ -105,6 +105,17 @@ function hunt_news_briefing_robots( $robots ) {
 }
 add_filter( 'wp_robots', 'hunt_news_briefing_robots', 20 );
 
+/** Mirror the briefing robots contract into AIOSEO, which suppresses Core output. */
+function hunt_news_briefing_aioseo_robots( $robots ) {
+	if ( is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) {
+		unset( $robots['index'], $robots['nofollow'] );
+		$robots['noindex'] = 'noindex';
+		$robots['follow']  = 'follow';
+	}
+	return $robots;
+}
+add_filter( 'aioseo_robots_meta', 'hunt_news_briefing_aioseo_robots', 20 );
+
 /** Use a keyword-rich title only in document/search metadata. */
 function hunt_news_briefing_search_title( $title ) {
 	$home_metadata = hunt_news_home_search_metadata();
