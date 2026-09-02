@@ -48,12 +48,17 @@ Harness가 지정한 `technical-explainer-plan.json` 하나만 생성한다. 다
 - `demand_signal_basis`: 입력에 있는 관측값과 시점
 - `candidate_source_url`: 입력 후보에 실제 존재하는 URL
 - `reader_outcome`, `hands_on_example`, `failure_or_limit`
+- `verification_mode`: `direct`, `controlled_comparison`, `not_directly_tested` 중 하나
+- `original_artifact`: 독자가 재사용할 코드·설정 diff·판단표·체크리스트 중 하나
+- `counterexample`: 권장 결론이 성립하지 않는 구체적인 환경 또는 반례
 - `original_value_plan`, `evidence_plan`, `duplicate_check`
 - `internal_link_candidates`, `topic_cluster`, `pillar_candidate`
 - `problem_origin`, `editorial_thesis`, `chosen_focus`, `rejected_angle`
 - `recommended_images`, `sources`, `evidence_urls`
 
 제목에는 `primary_keyword`를 자연스럽게 포함한다. `evidence_urls`는 입력 스냅샷에
-존재하는 고유 URL을 최소 2개 사용한다. 직접 실행하지 않은 내용을 사용 후기나 실험
+존재하는 고유 URL을 최소 2개 사용한다. `not_directly_tested`라면 직접 검증했다고
+표현하지 않고 원문 종합과 편집 판단을 구분한다. 모든 모드에서 `original_artifact`와
+`counterexample`이 없으면 계획을 만들지 않는다. 직접 실행하지 않은 내용을 사용 후기나 실험
 결과로 쓰지 않는다. 검색 신호가 주제와 연결되지 않거나 기존 글과 중복되면 계획을
 만들지 말고 실패 이유를 보고한다.

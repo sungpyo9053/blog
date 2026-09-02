@@ -48,12 +48,16 @@ class ScheduleContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("--use-google-trends-cache", service)
+        self.assertIn("--briefing-only", service)
         self.assertIn("--topic-workers 2", service)
 
     def test_legacy_macos_schedule_matches_production_start(self):
         with (ROOT / "deploy/com.huntlab.daily-pipeline.plist").open("rb") as handle:
-            schedule = plistlib.load(handle)["StartCalendarInterval"]
+            payload = plistlib.load(handle)
+            schedule = payload["StartCalendarInterval"]
         self.assertEqual(schedule, {"Hour": 2, "Minute": 0})
+        self.assertIn("--briefing-only", payload["ProgramArguments"])
+        self.assertNotIn("--use-whereispost-cache", payload["ProgramArguments"])
 
 
 if __name__ == "__main__":

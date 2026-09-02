@@ -265,6 +265,7 @@ def build_briefing_manifest(
     shadow_path: Path,
     fallback_path: Path,
     daily_briefing_path: Path | None = None,
+    publication_mode: str = "legacy_top2",
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     generated = (generated_at or datetime.now(UTC)).astimezone(UTC)
@@ -374,6 +375,7 @@ def build_briefing_manifest(
     }
     source_contract = {
         "run_id": run_id,
+        "publication_mode": publication_mode,
         "candidate_count": len(candidates),
         "legacy_top2": legacy_top2,
         "publication_ids": [item["post_id"] for item in public_posts],
@@ -381,16 +383,21 @@ def build_briefing_manifest(
         "shadow_source_snapshot_hash": shadow.get("source_snapshot_hash", ""),
     }
     analysis_complete = bool(analysis)
-    publications_complete = len(public_posts) == 2
+    if publication_mode not in {"legacy_top2", "briefing_only"}:
+        raise ValueError("unsupported publication_mode")
+    expected_publication_count = 0 if publication_mode == "briefing_only" else 2
+    publications_complete = len(public_posts) == expected_publication_count
     return {
         "contract_version": CONTRACT_VERSION,
         "generated_at": generated.isoformat(),
         "run_id": run_id,
+        "publication_mode": publication_mode,
         "complete": analysis_complete and publications_complete,
         "completion": {
             "analysis_complete": analysis_complete,
             "publications_complete": publications_complete,
             "published_count": len(public_posts),
+            "expected_publication_count": expected_publication_count,
         },
         "source_snapshot_hash": _sha256(source_contract),
         "collection": collection,

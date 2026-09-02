@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 5.7.0
+ * Version: 6.0.0
  * Author: Hunt News
  */
 
@@ -84,16 +84,26 @@ function hunt_news_briefing_search_metadata() {
 	return array( 'title' => $title, 'description' => $description );
 }
 
-/** Keep the homepage search promise aligned with the briefing-first product. */
+/** Keep the homepage search promise aligned with the original editorial product. */
 function hunt_news_home_search_metadata() {
 	if ( ! ( is_home() || is_front_page() ) ) {
 		return array( 'title' => '', 'description' => '' );
 	}
 	return array(
-		'title'       => 'AI·개발 기술 브리핑 | 오늘의 핵심 변화와 원문 - Hunt News',
-		'description' => '매일 오전 2시 AI·개발 기술 변화의 핵심 신호, 개발자 영향, 지금 할 일과 확인할 공식 원문을 한 장의 날짜별 브리핑으로 정리합니다.',
+		'title'       => 'AI·개발 기술 해설과 실무 판단 - Hunt News',
+		'description' => 'AI와 개발 기술의 변경점을 공식 원문, 비교, 예제와 실패 조건으로 검증해 실제 적용 여부를 판단할 수 있게 설명합니다. 일일 브리핑과 주간 회고도 제공합니다.',
 	);
 }
+
+/** Keep automated daily report archives public but out of the searchable article corpus. */
+function hunt_news_briefing_robots( $robots ) {
+	if ( is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) {
+		$robots['noindex'] = true;
+		$robots['follow']  = true;
+	}
+	return $robots;
+}
+add_filter( 'wp_robots', 'hunt_news_briefing_robots', 20 );
 
 /** Use a keyword-rich title only in document/search metadata. */
 function hunt_news_briefing_search_title( $title ) {
@@ -299,6 +309,74 @@ function hunt_news_latest_special_post( $slug ) {
 		)
 	);
 	return $posts ? $posts[0] : null;
+}
+
+/** Return recent original articles from one editorial category. */
+function hunt_news_special_posts( $slug, $limit = 6 ) {
+	$category = get_category_by_slug( sanitize_title( $slug ) );
+	if ( ! $category || 0 === (int) $category->count ) {
+		return array();
+	}
+	return get_posts(
+		array(
+			'post_type'              => 'post',
+			'post_status'            => 'publish',
+			'posts_per_page'         => max( 1, min( 12, absint( $limit ) ) ),
+			'category'               => (int) $category->term_id,
+			'orderby'                => 'date',
+			'order'                  => 'DESC',
+			'ignore_sticky_posts'    => true,
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+		)
+	);
+}
+
+/** Render an original-analysis homepage while keeping daily reports in their archive. */
+function hunt_news_render_editorial_home() {
+	$explainers       = hunt_news_special_posts( 'technical-explainer', 6 );
+	$reviews          = hunt_news_special_posts( 'weekly-tech-review', 3 );
+	$latest_explainer = $explainers ? $explainers[0] : null;
+	$latest_review    = $reviews ? $reviews[0] : null;
+	$manifest         = hunt_news_latest_briefing_manifest();
+	$analysis         = ! empty( $manifest['analysis'] ) && is_array( $manifest['analysis'] ) ? $manifest['analysis'] : array();
+	$briefing_url     = get_post_type_archive_link( 'hunt_briefing' );
+	$explainer_term   = get_category_by_slug( 'technical-explainer' );
+	$review_term      = get_category_by_slug( 'weekly-tech-review' );
+	$explainer_url    = $explainer_term ? get_category_link( $explainer_term->term_id ) : home_url( '/category/technical-explainer/' );
+	$review_url       = $review_term ? get_category_link( $review_term->term_id ) : home_url( '/category/weekly-tech-review/' );
+	?>
+	<div id="hunt-news-originals" class="hunt-news-editorial-home">
+		<section class="hunt-news-editorial-lead" aria-labelledby="hunt-news-editorial-lead-title">
+			<header><p>ORIGINAL ANALYSIS</p><h2 id="hunt-news-editorial-lead-title">이번 주, 직접 판단할 기술 변화</h2><span>요약보다 비교·예제·실패 조건을 먼저 봅니다.</span></header>
+			<div class="hunt-news-editorial-lead__grid">
+				<?php if ( $latest_explainer ) : ?>
+				<article class="hunt-news-editorial-feature">
+					<p>기술 해설</p><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $latest_explainer ) ); ?>"><?php echo esc_html( get_the_date( 'Y.m.d', $latest_explainer ) ); ?></time>
+					<h3><a href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>"><?php echo esc_html( get_the_title( $latest_explainer ) ); ?></a></h3>
+					<span><?php echo esc_html( hunt_news_briefing_summary( $latest_explainer ) ); ?></span>
+					<ul><li>변경 전후</li><li>따라 할 예제</li><li>적용하지 않을 조건</li></ul>
+					<a href="<?php echo esc_url( get_permalink( $latest_explainer ) ); ?>">해설 읽기 <b aria-hidden="true">→</b></a>
+				</article>
+				<?php endif; ?>
+				<div class="hunt-news-editorial-side">
+					<?php if ( $latest_review ) : ?><article><p>주간 기술 회고</p><h3><a href="<?php echo esc_url( get_permalink( $latest_review ) ); ?>"><?php echo esc_html( get_the_title( $latest_review ) ); ?></a></h3><span><?php echo esc_html( hunt_news_briefing_summary( $latest_review ) ); ?></span><a href="<?php echo esc_url( get_permalink( $latest_review ) ); ?>">이번 주 판단 보기 →</a></article><?php endif; ?>
+					<article class="hunt-news-editorial-briefing"><p>오늘의 브리핑 · <?php echo esc_html( hunt_news_briefing_display_date( $manifest, 'Y.m.d' ) ); ?></p><h3><?php echo esc_html( (string) ( $analysis['headline'] ?? '오늘 수집한 기술 변화를 날짜별 보고서로 정리했습니다.' ) ); ?></h3><span>브리핑은 매일 유지하며 검색용 독립 글로 쪼개지 않습니다.</span><a href="<?php echo esc_url( $briefing_url ); ?>">날짜별 브리핑 보기 →</a></article>
+				</div>
+			</div>
+		</section>
+
+		<?php if ( $explainers ) : ?>
+		<section class="hunt-news-original-grid" aria-labelledby="hunt-news-original-grid-title">
+			<header><div><p>DEEP READS</p><h2 id="hunt-news-original-grid-title">문제를 해결하는 기술 해설</h2></div><a href="<?php echo esc_url( $explainer_url ); ?>">전체 해설 보기 →</a></header>
+			<div><?php foreach ( $explainers as $index => $post ) : ?><article><span><?php echo esc_html( sprintf( '%02d', $index + 1 ) ); ?></span><time datetime="<?php echo esc_attr( get_the_date( DATE_W3C, $post ) ); ?>"><?php echo esc_html( get_the_date( 'Y.m.d', $post ) ); ?></time><h3><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h3><p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p><a href="<?php echo esc_url( get_permalink( $post ) ); ?>">근거와 예제 보기 →</a></article><?php endforeach; ?></div>
+		</section>
+		<?php endif; ?>
+
+		<section class="hunt-news-editorial-method" aria-labelledby="hunt-news-editorial-method-title"><div><p>HOW WE WORK</p><h2 id="hunt-news-editorial-method-title">한 글에 남기는 네 가지</h2></div><ol><li><b>1</b><strong>무엇이 바뀌었나</strong><span>원문과 버전을 확인합니다.</span></li><li><b>2</b><strong>기존과 무엇이 다른가</strong><span>비교 대상과 전제를 밝힙니다.</span></li><li><b>3</b><strong>누구에게 적용되나</strong><span>환경과 적용 범위를 제한합니다.</span></li><li><b>4</b><strong>어디서 실패하나</strong><span>반례와 롤백 조건을 남깁니다.</span></li></ol><nav><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">편집 원칙</a><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">만드는 사람과 방식</a><a href="<?php echo esc_url( $review_url ); ?>">주간 회고</a></nav></section>
+	</div>
+	<script id="hunt-news-editorial-home-position">document.addEventListener('DOMContentLoaded',function(){var home=document.getElementById('hunt-news-originals');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(home&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',home);}if(main){main.hidden=true;}});</script>
+	<?php
 }
 
 /**
@@ -756,20 +834,20 @@ function huntlab_warm_editorial_home_intro() {
 	?>
 	<section id="huntlab-home-intro" class="huntlab-home-intro<?php echo $is_category ? ' huntlab-home-intro--category' : ''; ?>" aria-labelledby="huntlab-home-intro-title">
 		<div class="huntlab-home-intro__copy">
-			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt Brief · 매일 02:00 KST'; ?></p>
-			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '오늘의 기술 변화,<br>한눈에 파악하세요.'; ?></h1>
-			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : 'AI·개발 뉴스를 단순히 나열하지 않습니다. 중요한 변화가 개발 업무에 미치는 영향, 확인할 원문, 지금 해야 할 일을 한 장의 브리핑으로 정리합니다.'; ?></p>
+			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt News · 기술을 판단하는 편집'; ?></p>
+			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '무엇이 바뀌었고,<br>어디까지 적용할 수 있나.'; ?></h1>
+			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '발표를 다시 요약하는 대신 공식 원문과 독립 자료를 대조하고, 예제와 실패 조건을 통해 개발자가 실제로 적용할 수 있는 범위를 설명합니다.'; ?></p>
 			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'Hunt News 콘텐츠 원칙' ); ?>">
-				<?php foreach ( $is_category ? $intro['promises'] : array( '핵심 신호', '영향과 조건', '지금 할 일' ) as $promise ) : ?>
+				<?php foreach ( $is_category ? $intro['promises'] : array( '근거 대조', '예제와 비교', '실패 조건' ) as $promise ) : ?>
 					<li><?php echo esc_html( $promise ); ?></li>
 				<?php endforeach; ?>
 			</ul>
 			<?php if ( ! $is_category ) : ?>
 				<div class="huntlab-home-intro__status" aria-label="브리핑 상태">
 					<span><?php echo esc_html( hunt_news_briefing_display_date( $brief_manifest, 'Y.m.d' ) ); ?></span>
-					<span>매일 한 장의 기술 보고서</span>
-					<?php if ( $brief_manifest ) : ?><span>핵심 변화 · 근거 원문 · 행동 가이드</span><?php endif; ?>
-					<a href="#hunt-news-briefing-board">오늘 브리핑 보기 <b aria-hidden="true">↓</b></a>
+					<span>독립 해설 주 2회 · 주간 회고 1회</span>
+					<?php if ( $brief_manifest ) : ?><span>날짜별 기술 브리핑은 매일 유지</span><?php endif; ?>
+					<a href="#hunt-news-originals">최신 해설 보기 <b aria-hidden="true">↓</b></a>
 				</div>
 			<?php endif; ?>
 		</div>
@@ -1145,9 +1223,14 @@ function hunt_news_store_briefing_manifest( $request ) {
 	if ( ! preg_match( '/^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{10}$/', $run_id ) ) {
 		return new WP_Error( 'invalid_briefing_run', 'run_id 형식이 올바르지 않습니다.', array( 'status' => 400 ) );
 	}
+	$publication_mode = sanitize_key( (string) ( $payload['publication_mode'] ?? 'legacy_top2' ) );
+	if ( ! in_array( $publication_mode, array( 'legacy_top2', 'briefing_only' ), true ) ) {
+		return new WP_Error( 'invalid_briefing_publication_mode', '브리핑 발행 모드가 올바르지 않습니다.', array( 'status' => 400 ) );
+	}
 	$published = isset( $payload['published'] ) && is_array( $payload['published'] ) ? $payload['published'] : array();
-	if ( 2 !== count( $published ) ) {
-		return new WP_Error( 'invalid_briefing_publications', '검증된 공개 글 두 건이 필요합니다.', array( 'status' => 400 ) );
+	$expected_publications = 'briefing_only' === $publication_mode ? 0 : 2;
+	if ( $expected_publications !== count( $published ) ) {
+		return new WP_Error( 'invalid_briefing_publications', '발행 모드와 검증된 공개 글 수가 일치하지 않습니다.', array( 'status' => 400 ) );
 	}
 	$safe_posts = array();
 	foreach ( $published as $item ) {
@@ -1210,6 +1293,7 @@ function hunt_news_store_briefing_manifest( $request ) {
 		'contract_version'    => 'briefing-manifest.v1',
 		'generated_at'        => sanitize_text_field( (string) ( $payload['generated_at'] ?? '' ) ),
 		'run_id'              => $run_id,
+		'publication_mode'    => $publication_mode,
 		'complete'            => true,
 		'source_snapshot_hash'=> sanitize_text_field( (string) ( $payload['source_snapshot_hash'] ?? '' ) ),
 		'collection'          => array(
@@ -1269,6 +1353,10 @@ function hunt_news_store_briefing_manifest( $request ) {
  */
 function hunt_news_home_sections() {
 	if ( is_admin() || ! ( is_home() || is_front_page() || is_category() || is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) ) {
+		return;
+	}
+	if ( is_home() || is_front_page() ) {
+		hunt_news_render_editorial_home();
 		return;
 	}
 
@@ -1872,7 +1960,7 @@ function hunt_news_editorial_organization_schema( $graphs ) {
 		'@id'         => $organization_id,
 		'name'        => 'Hunt News 편집팀',
 		'url'         => home_url( '/' ),
-		'description' => '매일 AI와 개발 기술 변화를 골라 개발자가 지금 이해하고 적용할 행동까지 정리합니다.',
+		'description' => 'AI와 개발 기술의 변경점을 공식 원문, 비교, 예제와 실패 조건으로 검증해 실제 적용 여부를 판단할 수 있게 설명합니다.',
 		'sameAs'      => array( 'https://github.com/sungpyo9053/blog' ),
 		'logo'        => array(
 			'@type' => 'ImageObject',

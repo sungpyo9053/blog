@@ -1,8 +1,8 @@
 # Hunt News Daily Briefing Pipeline
 
-매일 AI와 개발 기술 변화를 수집·검증해 한 장의 날짜별 기술 보고서로 발행하는
-`Hunt News` 운영 시스템입니다. 개별 글 생산보다 매일 02시에 공개되는 브리핑과
-날짜 아카이브를 핵심 제품으로 두며, 상세 글은 보고서의 근거·확장 읽기 역할을 합니다.
+AI와 개발 기술 변화를 수집·검증해 독립 기술 해설, 주간 회고와 날짜별 보고서로
+발행하는 `Hunt News` 운영 시스템입니다. 공개 홈과 검색의 중심은 고유한 비교·예제·
+실패 조건이 있는 기술 해설이며, 매일 02시 브리핑은 수집 신호를 보존하는 공개 자료실입니다.
 매주 일요일에는 그 주의 일일 브리핑을 다시 합성한 `주간 기술 회고` 한 건을 별도
 카테고리에 발행해 반복된 변화와 다음 주 확인 신호를 남깁니다.
 매주 수요일과 토요일에는 최근 7일 브리핑 중 Google Trends 또는 Search Console에서
@@ -12,13 +12,14 @@
 공개 사이트는 [huntlab.app](https://huntlab.app/)을 유지하며 기존 URL, 글,
 미디어와 검색 색인을 보존합니다.
 
-## Hunt Brief 홈
+## Hunt News 홈과 날짜별 브리핑
 
-홈 화면은 최신 일일 기술 보고서를 바로 보여줍니다. PC 왼쪽에는 월별 접이식 날짜
-목록을, 모바일에는 날짜 선택 서랍을 제공하며 `/briefing/YYYY-MM-DD/`에서 당시
+홈 화면은 최신 기술 해설과 주간 회고를 먼저 보여주고, 최신 브리핑은 한 개의 요약
+카드로 연결합니다. PC 브리핑 화면 왼쪽에는 월별 접이식 날짜 목록을, 모바일에는 날짜
+선택 서랍을 제공하며 `/briefing/YYYY-MM-DD/`에서 당시
 핵심 변화·연결된 근거·키워드·한 줄 편집 판단·실행 타임라인·분야별 필독을 다시 볼 수
-있습니다. TOP2 상세 글은 보고서 안의 근거·확장 읽기로 유지하고 기존 글·URL·미디어는
-삭제하거나 재분류하지 않습니다.
+있습니다. 브리핑과 날짜 아카이브는 `noindex,follow`로 공개 유지하고, 기술 해설과 주간
+회고만 검색 가능한 독립 글로 운영합니다. 기존 글·URL·미디어는 삭제하지 않습니다.
 
 공개 브리핑에는 독자가 바로 활용할 수 있는 핵심 변화·근거·행동 시점·적용 판단·
 개발자 인사이트·후속 확인 신호·분야별 필독을 요약합니다. 각 섹션은 서로 다른 질문에
@@ -41,12 +42,10 @@
 `huntlab_briefing_source_click`, 날짜 이동은 기존 `huntlab_internal_click`의
 `briefing_archive` 영역으로 기록해 완독과 별개로 실제 이용 가치를 확인합니다.
 
-정규 Daily Pipeline은 글 두 건의 Publisher 감사 로그를 확인한 뒤
-`briefing-manifest.json`을 원자적으로 생성합니다. 이 파일은 Google Trends와 24개
-기술 뉴스 소스의 수집 상태, 전체 후보 수, Legacy·Shadow 비교와 실제 공개 Post ID를
-연결합니다.
-완료된 두 건만 인증된 WordPress REST 경로로 최신 홈 브리핑에 동기화하며,
-동기화 실패는 경고로 격리되어 이미 성공한 02시 발행을 실패로 바꾸지 않습니다.
+정규 Daily Pipeline은 `--briefing-only` 모드로 분석과 Shadow 비교를 마친 뒤
+`briefing-manifest.json`을 원자적으로 생성합니다. 이 파일은 Google Trends와 기술 뉴스
+소스의 수집 상태, 후보 수와 분석 근거를 연결하며 일일 독립 글은 만들지 않습니다.
+완료된 보고서는 인증된 WordPress REST 경로로 날짜별 브리핑에 동기화합니다.
 
 ## 구성
 
@@ -54,7 +53,7 @@
   Publisher, Analytics Optimizer 역할별 지침
 - `guides/`: 문체, Google SEO, 이미지, 발행, 분석·수익화 정책
 - `publisher/`: WordPress REST API 검증·업로드·발행 모듈
-- `scripts/run_daily_pipeline.py`: TOP2 실행 Harness
+- `scripts/run_daily_pipeline.py`: 일일 브리핑 분석·Shadow·WordPress 동기화 Harness
 - `scripts/run_weekly_review.py`: 일일 브리핑 5개 이상을 근거로 만드는 주간 회고 Harness
 - `scripts/run_technical_explainer.py`: 최근 브리핑과 검색 신호를 연결하는 주 2회 기술 해설 Harness
 - `scripts/update_adsense_readiness.py`: 개인정보·소개·문의 페이지를 백업 후 갱신하는 plan/apply 도구
@@ -65,24 +64,15 @@
 
 ## Workflow
 
-1. Topic Planner → 카테고리 할당 없이 후보 35개 이상, TOP10, TOP2
-2. Research Agent → `research.md`
-3. Writer Agent → `draft.md`
-4. Image Maker Agent → 대표 이미지와 본문 이미지
-5. Assembler Agent → `final.md`, `final.html`
-6. Reviewer Agent → `publish.md`, 승인 SHA-256
-7. Publisher Agent → WordPress 공개 발행과 감사 로그
+1. 일일 브리핑: Collector → Topic Planner → Daily Briefing Analyst → Shadow → WordPress 날짜 보고서
+2. 기술 해설·주간 회고: Planner → Research → Writer → Image Maker → Assembler → Reviewer → Publisher
 
 Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/source 식별자,
 카테고리·태그와 대표 이미지 계약이 모두 일치해야 공개 발행합니다.
 
-Research는 `READY` 또는 `INSUFFICIENT`를 명시하며, `INSUFFICIENT`는 Writer 전에
-중단합니다. Research 근거 부족 또는 Reviewer 최종 거절처럼 콘텐츠 품질 문제인
-경우에만 legacy TOP10의 차순위 후보를 순서대로 검증해 일일 2건을 보충합니다.
-Shadow TOP2는 보충 후보로 사용하지 않으며 기존 Shadow artifact도 수정하지 않습니다.
-보충 과정은 별도 `publication-fallback.json`에 기록합니다. Publisher·네트워크·
-인증 오류는 후보 품질 문제가 아니므로 다른 후보로 우회하지 않고 기존 재시도
-정책을 유지합니다.
+02시 `briefing-only` 실행은 Writer와 Publisher를 호출하지 않습니다. 독립 기술 해설과
+주간 회고에서만 Research가 `READY` 또는 `INSUFFICIENT`를 명시하고, 근거가 부족하면
+발행량을 채우지 않고 중단합니다. Shadow TOP2는 관측용이며 발행 권한이 없습니다.
 
 ### Topic Planner 선정 원칙
 
@@ -140,13 +130,13 @@ WordPress 태그는 게시물당 재사용 가능한 3~4개만 허용합니다. 
 ## 일일 실행
 
 ```bash
-./.venv/bin/python scripts/run_daily_pipeline.py
+./.venv/bin/python scripts/run_daily_pipeline.py --briefing-only
 ```
 
 추가 키워드는 선택적으로 전달할 수 있습니다.
 
 ```bash
-./.venv/bin/python scripts/run_daily_pipeline.py --keywords "AWS,FastAPI"
+./.venv/bin/python scripts/run_daily_pipeline.py --briefing-only --keywords "AWS,FastAPI"
 ```
 
 외부 호출과 WordPress 변경 없이 Planner 계약, TOP2 파싱과 단계별 명령을
@@ -173,12 +163,23 @@ WordPress 태그는 게시물당 재사용 가능한 3~4개만 허용합니다. 
 
 기술 해설은 최근 7일의 유효한 브리핑 3개 이상에서 후보를 모으고 Google Trends 또는
 Search Console에 실제 관측값이 있을 때만 한 건을 계획합니다. 뉴스 번역이나 목록 대신
-`문제 → 예제 → 정상·실패 판정 → 적용 조건`으로 설명하며 `기술 해설`
+`변경점 → 기존과 비교 → 적용 범위 → 반례·실패 조건`으로 설명하고, 재사용 가능한 코드·
+설정 diff·판단표·체크리스트 중 하나를 반드시 남깁니다. 직접 실행하지 않았으면
+`not_directly_tested`로 구분하며 `기술 해설`
 (`technical-explainer`) 카테고리에 독립 URL로 발행합니다. 카테고리는 WordPress에 미리
 생성되어 있어야 하며 Harness가 자동 생성하지 않습니다.
 
 ```bash
 ./.venv/bin/python scripts/run_technical_explainer.py --dry-run --run-date 2026-09-02
+```
+
+기존 글을 새 홈의 초기 해설 라이브러리로 편입할 때는 URL과 기존 분류를
+보존하는 계획 우선 명령을 사용합니다. 기본 대상은 코드·설정·비교·실패 조건과
+외부 근거를 공개 점검한 5편입니다.
+
+```bash
+./.venv/bin/python scripts/bootstrap_original_library.py
+./.venv/bin/python scripts/bootstrap_original_library.py --apply --yes
 ```
 
 ## 실패 실행 재개

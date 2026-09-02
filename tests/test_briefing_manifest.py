@@ -199,6 +199,7 @@ class BriefingManifestTests(unittest.TestCase):
                     "analysis_complete": False,
                     "publications_complete": True,
                     "published_count": 2,
+                    "expected_publication_count": 2,
                 },
             )
             self.assertEqual(payload["collection"]["observed_topic_count"], 2)
@@ -216,6 +217,40 @@ class BriefingManifestTests(unittest.TestCase):
             destination = root / "briefing-manifest.json"
             atomic_write_manifest(destination, payload)
             self.assertEqual(json.loads(destination.read_text()), payload)
+
+    def test_briefing_only_manifest_completes_without_independent_posts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trends = root / "trends.json"
+            analysis = root / "daily.json"
+            trends.write_text(
+                json.dumps({
+                    "provider": "google_trends_kr_rss",
+                    "checked_at": "2026-09-02T00:00:00+00:00",
+                    "rows": [],
+                }),
+                encoding="utf-8",
+            )
+            analysis.write_text("{}", encoding="utf-8")
+            with mock.patch(
+                "scripts.briefing_manifest.load_daily_briefing",
+                return_value={"contract_version": "daily-briefing-analysis.v1"},
+            ):
+                payload = build_briefing_manifest(
+                    run_id=RUN_ID,
+                    plan_document={"candidates": [], "top2": []},
+                    publications=[],
+                    trends_cache_path=trends,
+                    shadow_path=root / "shadow.json",
+                    fallback_path=root / "fallback.json",
+                    daily_briefing_path=analysis,
+                    publication_mode="briefing_only",
+                    generated_at=datetime(2026, 9, 2, 1, 0, tzinfo=UTC),
+                )
+            self.assertTrue(payload["complete"])
+            self.assertEqual(payload["publication_mode"], "briefing_only")
+            self.assertEqual(payload["completion"]["expected_publication_count"], 0)
+            self.assertEqual(payload["published"], [])
 
     def test_publication_collector_requires_success_audit_and_url(self):
         with tempfile.TemporaryDirectory() as tmp:

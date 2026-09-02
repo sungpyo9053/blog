@@ -1395,6 +1395,7 @@ class DailyRetryTests(unittest.TestCase):
     def test_noon_retry_starts_fresh_without_a_run(self):
         command = choose_command("pipeline event=failed reason=planner")
         self.assertIsNotNone(command)
+        self.assertIn("--briefing-only", command)
         self.assertNotIn("--resume-run-id", command)
 
     def test_noon_retry_replans_manufactured_build_log(self):
@@ -1402,6 +1403,7 @@ class DailyRetryTests(unittest.TestCase):
             "pipeline event=failed reason=topic: Build Log는 existing_work_record 근거만 허용합니다."
         )
         self.assertIsNotNone(command)
+        self.assertIn("--briefing-only", command)
         self.assertNotIn("--resume-run-id", command)
 
 

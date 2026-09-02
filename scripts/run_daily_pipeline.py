@@ -1437,6 +1437,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--briefing-only",
+        action="store_true",
+        help=(
+            "일일 분석과 날짜별 브리핑만 공개하고 TOP2 독립 글은 발행하지 않음. "
+            "기술 해설과 주간 회고 발행기는 별도 일정으로 유지"
+        ),
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=3600,
@@ -2433,6 +2441,7 @@ def write_and_sync_briefing_manifest(
     run_directory: Path,
     plan_document: dict[str, Any],
     logger: logging.Logger,
+    publication_mode: str = "legacy_top2",
 ) -> Path:
     """Persist and synchronise the required end-to-end briefing manifest."""
     destination = run_directory / "briefing-manifest.json"
@@ -2448,6 +2457,7 @@ def write_and_sync_briefing_manifest(
         shadow_path=run_directory / "news-worthiness-shadow.json",
         fallback_path=run_directory / "publication-fallback.json",
         daily_briefing_path=run_directory / "daily-briefing-analysis.json",
+        publication_mode=publication_mode,
     )
     atomic_write_manifest(destination, payload)
     logger.info(
@@ -2638,7 +2648,15 @@ def main() -> int:
             [context.topic_id for context in contexts],
         )
 
-        if args.start_rank == 1 and args.limit == 2:
+        publication_mode = "briefing_only" if args.briefing_only else "legacy_top2"
+        if args.briefing_only:
+            results = []
+            logger.info(
+                "pipeline event=publication_skipped failed=false run_id=%s "
+                "publication_mode=briefing_only reason=editorial_value_policy",
+                run_id,
+            )
+        elif args.start_rank == 1 and args.limit == 2:
             results = run_topics_with_quality_fallback(
                 codex,
                 contexts,
@@ -2664,6 +2682,7 @@ def main() -> int:
             run_directory=run_directory,
             plan_document=plan_document,
             logger=logger,
+            publication_mode=publication_mode,
         )
         logger.info(
             "pipeline event=end failed=false run_id=%s topics=%r posts=%r "

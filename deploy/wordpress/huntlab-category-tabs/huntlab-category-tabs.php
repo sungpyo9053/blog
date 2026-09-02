@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Category Tabs
  * Description: Adds fast briefing navigation for Hunt News readers.
- * Version: 3.2.0
+ * Version: 4.0.0
  * Author: Hunt News
  */
 
@@ -31,26 +31,12 @@ function huntlab_category_tabs_items() {
 	if ( ! $archive_url ) {
 		$archive_url = home_url( '/briefing/' );
 	}
-	$source_url = $latest_briefings ? trailingslashit( get_permalink( $latest_briefings[0] ) ) . '#hunt-news-source-title' : home_url( '/#hunt-news-source-title' );
 	$weekly_category = get_category_by_slug( 'weekly-tech-review' );
 	$weekly_url = $weekly_category ? get_category_link( $weekly_category->term_id ) : home_url( '/category/weekly-tech-review/' );
 	$explainer_category = get_category_by_slug( 'technical-explainer' );
 	$explainer_url = $explainer_category ? get_category_link( $explainer_category->term_id ) : home_url( '/category/technical-explainer/' );
 
-	$items = array(
-		array(
-			'label' => '오늘 브리핑',
-			'url'   => $today_url,
-			'slug'  => 'today',
-			'meta'  => '최신',
-		),
-		array(
-			'label' => '날짜 아카이브',
-			'url'   => $archive_url,
-			'slug'  => 'archive',
-			'meta'  => '날짜별',
-		),
-	);
+	$items = array();
 	if ( $explainer_category && 0 < (int) $explainer_category->count ) {
 		$items[] = array(
 			'label' => '기술 해설',
@@ -68,10 +54,22 @@ function huntlab_category_tabs_items() {
 		);
 	}
 	$items[] = array(
-		'label' => '원문 모아보기',
-		'url'   => $source_url,
-		'slug'  => 'sources',
-		'meta'  => '수집원',
+		'label' => '오늘 브리핑',
+		'url'   => $today_url,
+		'slug'  => 'today',
+		'meta'  => '최신',
+	);
+	$items[] = array(
+		'label' => '날짜 아카이브',
+		'url'   => $archive_url,
+		'slug'  => 'archive',
+		'meta'  => '날짜별',
+	);
+	$items[] = array(
+		'label' => '이용 가이드',
+		'url'   => home_url( '/about/' ),
+		'slug'  => 'about',
+		'meta'  => '편집 기준',
 	);
 	return $items;
 }
@@ -91,6 +89,9 @@ function huntlab_category_tabs_active_slug() {
 	if ( is_post_type_archive( 'hunt_briefing' ) ) {
 		return 'archive';
 	}
+	if ( is_page( 'about' ) || is_page( 'editorial-policy' ) ) {
+		return 'about';
+	}
 
 	return ( is_home() || is_front_page() || is_singular( 'hunt_briefing' ) ) ? 'today' : '';
 }
@@ -105,7 +106,7 @@ function huntlab_render_category_tabs() {
 
 	$active_slug = huntlab_category_tabs_active_slug();
 	?>
-	<nav id="huntlab-category-tabs" class="huntlab-category-tabs" aria-label="Hunt News 브리핑 탐색">
+	<nav id="huntlab-category-tabs" class="huntlab-category-tabs" aria-label="Hunt News 콘텐츠 탐색">
 		<?php foreach ( huntlab_category_tabs_items() as $item ) :
 			$aria_label = $item['label'] . ', ' . $item['meta'];
 			?>
@@ -142,7 +143,7 @@ add_action( 'wp_head', 'huntlab_category_tabs_styles', 30 );
 function huntlab_category_tabs_script() {
 	?>
 	<script id="huntlab-category-tabs-js">
-	document.addEventListener('DOMContentLoaded',function(){var nav=document.getElementById('huntlab-category-tabs');var intro=document.getElementById('huntlab-home-intro');var header=document.querySelector('#masthead,.site-header');if(nav&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',nav);}else if(nav&&header&&header.parentNode){header.insertAdjacentElement('afterend',nav);}if(!nav){return;}var links=Array.prototype.slice.call(nav.querySelectorAll('[data-hunt-news-nav]'));var sync=function(){if(window.location.hash==='#hunt-news-source-title'){links.forEach(function(link){var active=link.getAttribute('data-hunt-news-nav')==='sources';link.classList.toggle('is-active',active);if(active){link.setAttribute('aria-current','location');}else{link.removeAttribute('aria-current');}});}};sync();window.addEventListener('hashchange',sync);});
+	document.addEventListener('DOMContentLoaded',function(){var nav=document.getElementById('huntlab-category-tabs');var intro=document.getElementById('huntlab-home-intro');var header=document.querySelector('#masthead,.site-header');if(nav&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',nav);}else if(nav&&header&&header.parentNode){header.insertAdjacentElement('afterend',nav);}});
 	</script>
 	<?php
 }

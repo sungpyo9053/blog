@@ -8,4 +8,5 @@ export PATH="/Users/sungpyo/.local/bin:/Users/sungpyo/blog/.venv/bin:/opt/homebr
 cd "/Users/sungpyo/blog"
 mkdir -p "/Users/sungpyo/blog/logs"
 exec "/Users/sungpyo/blog/.venv/bin/python" \
-  "/Users/sungpyo/blog/scripts/run_daily_pipeline.py"
+  "/Users/sungpyo/blog/scripts/run_daily_pipeline.py" \
+  --briefing-only

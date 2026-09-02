@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retry at 17:00 KST only when today's 07:30 editorial run did not succeed."""
+"""Retry at 17:00 KST only when today's 02:00 briefing run did not succeed."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ def choose_command(log_text: str) -> list[str] | None:
         return [
             str(ROOT / ".venv/bin/python"),
             str(ROOT / "scripts/run_daily_pipeline.py"),
+            "--briefing-only",
         ]
     run_ids = RUN_ID_PATTERN.findall(log_text)
     python = str(ROOT / ".venv/bin/python")
@@ -50,8 +51,8 @@ def choose_command(log_text: str) -> list[str] | None:
     if run_ids:
         run_id = run_ids[-1]
         if (RUNS_DIR / run_id / "topics.md").is_file():
-            return [python, runner, "--resume-run-id", run_id]
-    return [python, runner]
+            return [python, runner, "--briefing-only", "--resume-run-id", run_id]
+    return [python, runner, "--briefing-only"]
 
 
 def main() -> int:

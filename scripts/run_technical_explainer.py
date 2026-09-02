@@ -69,6 +69,7 @@ ALLOWED_STRUCTURE_MODES = {
     "code_walkthrough",
 }
 ALLOWED_DEMAND_SOURCES = {"google_trends", "search_console", "both"}
+ALLOWED_VERIFICATION_MODES = {"direct", "controlled_comparison", "not_directly_tested"}
 
 
 def _canonical_json(value: Any) -> str:
@@ -257,7 +258,8 @@ def validate_explainer_plan(path: Path, *, input_payload: dict[str, Any], run_da
         "secondary_keywords", "target_reader", "reason", "search_intent",
         "research_focus", "demand_signal_source", "demand_signal_basis",
         "candidate_source_url", "reader_outcome", "hands_on_example",
-        "failure_or_limit", "original_value_plan", "evidence_plan",
+        "failure_or_limit", "verification_mode", "original_artifact",
+        "counterexample", "original_value_plan", "evidence_plan",
         "duplicate_check", "internal_link_candidates", "topic_cluster",
         "pillar_candidate", "problem_origin", "editorial_thesis", "chosen_focus",
         "rejected_angle", "recommended_images", "sources", "evidence_urls",
@@ -271,6 +273,8 @@ def validate_explainer_plan(path: Path, *, input_payload: dict[str, Any], run_da
         raise PipelineError("기술 해설 structure_mode가 허용되지 않습니다.")
     if plan["demand_signal_source"] not in ALLOWED_DEMAND_SOURCES:
         raise PipelineError("기술 해설 검색 수요 출처가 허용되지 않습니다.")
+    if plan["verification_mode"] not in ALLOWED_VERIFICATION_MODES:
+        raise PipelineError("기술 해설 검증 모드가 허용되지 않습니다.")
     signals = input_payload.get("demand_signals", {})
     if plan["demand_signal_source"] in {"google_trends", "both"} and not signals.get("google_trends"):
         raise PipelineError("기술 해설 계획이 존재하지 않는 Google Trends 신호를 인용합니다.")
@@ -408,6 +412,9 @@ def main() -> int:
                 f"기술 해설 입력 스냅샷 {input_path}과 계획 근거만 사용한다. "
                 f"독자가 따라갈 예시는 {plan['hands_on_example']}. "
                 f"실패 또는 비추천 조건은 {plan['failure_or_limit']}. "
+                f"검증 모드는 {plan['verification_mode']}. "
+                f"독자에게 남길 고유 산출물은 {plan['original_artifact']}. "
+                f"결론이 성립하지 않는 반례는 {plan['counterexample']}. "
                 + str(plan["research_focus"])
             ),
             content_type=str(plan["content_type"]),
