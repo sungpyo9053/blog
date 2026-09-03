@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 6.1.0
+ * Version: 6.1.1
  * Author: Hunt News
  */
 
@@ -596,7 +596,12 @@ function hunt_news_latest_briefing_manifest() {
 		return array();
 	}
 	$published = isset( $manifest['published'] ) && is_array( $manifest['published'] ) ? $manifest['published'] : array();
-	return 2 === count( $published ) ? $manifest : array();
+	$publication_mode = (string) ( $manifest['publication_mode'] ?? 'legacy_top2' );
+	if ( ! in_array( $publication_mode, array( 'legacy_top2', 'briefing_only' ), true ) ) {
+		return array();
+	}
+	$expected_publications = 'briefing_only' === $publication_mode ? 0 : 2;
+	return $expected_publications === count( $published ) ? $manifest : array();
 }
 
 /**
@@ -1563,7 +1568,7 @@ function hunt_news_home_sections() {
 	$briefing_detail_url      = home_url( '/briefing/' . hunt_news_briefing_display_date( $manifest ) . '/' );
 	$latest_explainer         = $is_category ? null : hunt_news_latest_special_post( 'technical-explainer' );
 	?>
-	<?php if ( ! $is_category && $brief_posts ) : ?>
+	<?php if ( ! $is_category && ( $manifest || $brief_posts ) ) : ?>
 	<div class="hunt-news-report-shell">
 		<?php hunt_news_render_briefing_navigation(); ?>
 	<section id="hunt-news-briefing-board" class="hunt-news-briefing-board" aria-labelledby="hunt-news-briefing-title">
@@ -1696,7 +1701,7 @@ function hunt_news_home_sections() {
 			</ol>
 		</section>
 
-		<?php $lead = $brief_posts[0]; ?>
+		<?php $lead = $brief_posts ? $brief_posts[0] : null; ?>
 		<section class="hunt-news-focus" aria-labelledby="hunt-news-focus-title">
 			<div class="hunt-news-focus__heading">
 				<p>Hunt News 한 줄 판단</p>
