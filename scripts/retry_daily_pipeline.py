@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retry at 17:00 KST only when today's 02:00 briefing run did not succeed."""
+"""Retry at 17:00 KST only when today's 04:00 briefing run did not succeed."""
 
 from __future__ import annotations
 

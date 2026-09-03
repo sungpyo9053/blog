@@ -2621,7 +2621,7 @@ def main() -> int:
             timeout_seconds=args.timeout,
         )
         # Shadow ranking is observability-only. Failure cannot replace, reorder,
-        # or block the legacy TOP2 and therefore cannot affect 02:00 publishing.
+        # or block the legacy TOP2 and therefore cannot affect 04:00 publishing.
         run_news_worthiness_shadow(run_directory, plan_document, logger)
         topics = [plan["title"] for plan in plans]
         selected_plans = plans[

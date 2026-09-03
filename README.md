@@ -2,7 +2,7 @@
 
 AI와 개발 기술 변화를 수집·검증해 독립 기술 해설, 주간 회고와 날짜별 보고서로
 발행하는 `Hunt News` 운영 시스템입니다. 공개 홈과 검색의 중심은 고유한 비교·예제·
-실패 조건이 있는 기술 해설이며, 매일 02시 브리핑은 수집 신호를 보존하는 공개 자료실입니다.
+실패 조건이 있는 기술 해설이며, 매일 04시 브리핑은 수집 신호를 보존하는 공개 자료실입니다.
 매주 일요일에는 그 주의 일일 브리핑을 다시 합성한 `주간 기술 회고` 한 건을 별도
 카테고리에 발행해 반복된 변화와 다음 주 확인 신호를 남깁니다.
 매주 수요일과 토요일에는 최근 7일 브리핑 중 Google Trends 또는 Search Console에서
@@ -70,7 +70,7 @@ AI와 개발 기술 변화를 수집·검증해 독립 기술 해설, 주간 회
 Publisher만 외부 변경 권한을 가집니다. 승인 해시, run/topic/source 식별자,
 카테고리·태그와 대표 이미지 계약이 모두 일치해야 공개 발행합니다.
 
-02시 `briefing-only` 실행은 Writer와 Publisher를 호출하지 않습니다. 독립 기술 해설과
+04시 `briefing-only` 실행은 Writer와 Publisher를 호출하지 않습니다. 독립 기술 해설과
 주간 회고에서만 Research가 `READY` 또는 `INSUFFICIENT`를 명시하고, 근거가 부족하면
 발행량을 채우지 않고 중단합니다. Shadow TOP2는 관측용이며 발행 권한이 없습니다.
 
@@ -97,11 +97,11 @@ Google Trends 한국 RSS 수집기는 매시간 급상승 검색어, 대략적�
 기술 뉴스 수집기는 매시간 Hacker News, MIT Tech Review, The Verge AI, GitHub Blog,
 Google AI Blog, 국내 IT·시사 매체 등 등록된 RSS·Atom을 병렬 수집합니다. 개별 소스
 실패는 격리하고 72시간 정상 캐시를 보존하며 canonical snapshot hash를 남깁니다.
-Whereispost는 자동 실행과 02시 선정 경로에서 제외합니다. 검색 수요는 Google Trends와
+Whereispost는 자동 실행과 04시 선정 경로에서 제외합니다. 검색 수요는 Google Trends와
 Search Console 관측만 사용하고, 수집 카드 자체는 사실 근거가 아니므로 TOP2 전에 공식
 원문 하나와 독립 보도 하나 또는 독립 출처 두 개 이상으로 확인합니다.
 
-02시 Planner가 후보를 확정하면 `Daily Briefing Analyst`가 같은 기술 뉴스 snapshot과
+04시 Planner가 후보를 확정하면 `Daily Briefing Analyst`가 같은 기술 뉴스 snapshot과
 Planner 후보를 읽고 `daily-briefing-analysis.json`을 생성합니다. 이 산출물은 기사
 목록이 아니라 핵심 신호 3개, 키워드 방향 7개, 영향 매트릭스, 오늘·이번 주·이번 달·
 올해 말 행동, 종합 테마, 개발자 인사이트, 주시 항목과 카테고리별 필독 5를 근거 URL과
@@ -202,7 +202,7 @@ Reviewer가 `REJECTED`한 글은 자동 우회하지 않습니다. 사실·검�
 다음 systemd unit을 사용합니다.
 
 - `deploy/huntlab-daily-pipeline.service`
-- `deploy/huntlab-daily-pipeline.timer`: 매일 02:00 KST, Trends·기술 뉴스 소스·Search Console 캐시 참고
+- `deploy/huntlab-daily-pipeline.timer`: 매일 04:00 KST, Trends·기술 뉴스 소스·Search Console 캐시 참고
 - `deploy/huntlab-weekly-review.timer`: 매주 일요일 20:30 KST, 주간 기술 회고 한 건
 - `deploy/huntlab-technical-explainer.timer`: 매주 수·토요일 20:30 KST, 검색 수요 기반 기술 해설 최대 한 건
 - `deploy/huntlab-google-trends-collector.service`
@@ -232,7 +232,7 @@ Humanize 상태 기록과 WordPress Publisher는 잠금으로 직렬화해 공�
 수 있습니다.
 
 Analytics Optimizer는 Search Console 데이터 지연과 API 호출 비용을 고려해
-매일 01:00 KST에 한 번 실행합니다. 생성된 최신 리포트는 같은 날 02:00
+매일 01:00 KST에 한 번 실행합니다. 생성된 최신 리포트는 같은 날 04:00
 Topic Planner가 읽습니다.
 
 ## Analytics·SEO Lifecycle

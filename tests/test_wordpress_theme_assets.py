@@ -57,7 +57,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 6.1.1", php)
+        self.assertIn("Version: 6.1.2", php)
         self.assertIn(".single-content pre code", css)
         self.assertIn("color: #f7f3ea !important", css)
         self.assertIn("color: inherit !important", css)
@@ -241,7 +241,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 6.1.1", php)
+        self.assertIn("Version: 6.1.2", php)
         self.assertIn("function hunt_news_briefing_archive_months", php)
         self.assertIn("function hunt_news_render_briefing_navigation", php)
         self.assertIn("class=\"hunt-news-report-shell\"", php)
@@ -258,7 +258,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("$current_datetime->modify( '+1 day' )->format( 'Y.m' )", php)
         self.assertIn("$tomorrow_month !== $current_month", php)
         self.assertIn("$months = array( $tomorrow_month => array() ) + $months", php)
-        self.assertIn("내일 02시 첫 브리핑이 발행됩니다.", php)
+        self.assertIn("내일 04시 첫 브리핑이 발행됩니다.", php)
         self.assertIn("날짜별 기술 브리핑은 매일 유지", php)
         self.assertIn("body.hunt-news-briefing-mode #main.site-main", css)
         self.assertIn("grid-template-columns: 238px minmax(0, 1fr)", css)
@@ -427,7 +427,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/warm-editorial.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 6.1.1", php)
+        self.assertIn("Version: 6.1.2", php)
         self.assertIn("function hunt_news_remove_legacy_home_loop", php)
         self.assertIn("$query->is_main_query()", php)
         self.assertIn("add_filter( 'the_posts', 'hunt_news_remove_legacy_home_loop', 99, 2 )", php)

@@ -8,7 +8,7 @@ TopicReranker`의 Shadow 운영 및 production 승격 기준에 대한 운영 SS
 ## 불변 경계
 
 - 기존 TopicPlanner TOP2가 유일한 production 선정 결과다.
-- Shadow 오류, 누락, 지연은 Writer/Reviewer/Publisher와 02시 발행을 막지 않는다.
+- Shadow 오류, 누락, 지연은 Writer/Reviewer/Publisher와 04시 발행을 막지 않는다.
 - CandidateEvaluator는 Adapter다. Planner에 실제 존재하는 값과 근거만 옮기며
   새로운 점수나 근거를 추론하지 않는다.
 - 원점수가 있어도 근거가 없으면 `none × 0.0`으로 effective score를 0으로 만든다.
@@ -62,4 +62,4 @@ Replay에서 한 번에 비교한다. 2026-09-04 05:00 KST의 일회성 systemd 
 - source snapshot으로 점수를 재현할 수 없는 경우
 - 고위험 주제의 근거 계약 위반 후보가 Shadow TOP2에 포함된 경우
 
-중단 시에도 legacy 02시 발행 경로는 유지하고 Shadow만 비활성화하거나 수정한다.
+중단 시에도 legacy 04시 발행 경로는 유지하고 Shadow만 비활성화하거나 수정한다.

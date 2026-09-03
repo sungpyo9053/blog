@@ -9,11 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ScheduleContractTests(unittest.TestCase):
-    def test_production_pipeline_runs_at_0200_kst(self):
+    def test_production_pipeline_runs_at_0400_kst(self):
         timer = (ROOT / "deploy/huntlab-daily-pipeline.timer").read_text(
             encoding="utf-8"
         )
-        self.assertIn("OnCalendar=*-*-* 02:00:00 Asia/Seoul", timer)
+        self.assertIn("OnCalendar=*-*-* 04:00:00 Asia/Seoul", timer)
         self.assertNotIn("OnCalendar=*-*-* 07:30:00", timer)
         self.assertIn("Persistent=false", timer)
 
@@ -55,7 +55,7 @@ class ScheduleContractTests(unittest.TestCase):
         with (ROOT / "deploy/com.huntlab.daily-pipeline.plist").open("rb") as handle:
             payload = plistlib.load(handle)
             schedule = payload["StartCalendarInterval"]
-        self.assertEqual(schedule, {"Hour": 2, "Minute": 0})
+        self.assertEqual(schedule, {"Hour": 4, "Minute": 0})
         self.assertIn("--briefing-only", payload["ProgramArguments"])
         self.assertNotIn("--use-whereispost-cache", payload["ProgramArguments"])
 

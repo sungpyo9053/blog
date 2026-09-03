@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 6.1.1
+ * Version: 6.1.2
  * Author: Hunt News
  */
 
@@ -25,7 +25,7 @@ function huntlab_warm_editorial_enqueue_styles() {
 }
 add_action( 'wp_enqueue_scripts', 'huntlab_warm_editorial_enqueue_styles', 100 );
 
-/** Register one public briefing archive entry per completed 02:00 run. */
+/** Register one public briefing archive entry per completed 04:00 run. */
 function hunt_news_register_briefing_type() {
 	register_post_type(
 		'hunt_briefing',
@@ -240,7 +240,7 @@ function hunt_news_render_briefing_navigation() {
 				<details<?php echo $contains_active ? ' open' : ''; ?>>
 					<summary>Hunt News [<?php echo esc_html( $month ); ?>]</summary>
 					<?php if ( ! $posts ) : ?>
-						<p class="hunt-news-date-nav__empty">내일 02시 첫 브리핑이 발행됩니다.</p>
+						<p class="hunt-news-date-nav__empty">내일 04시 첫 브리핑이 발행됩니다.</p>
 					<?php else : ?><ul>
 						<?php foreach ( $posts as $post ) : ?>
 							<li><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"<?php echo $post->ID === $active_id ? ' aria-current="page"' : ''; ?>>Hunt News <?php echo esc_html( get_the_date( 'Y-m-d', $post ) ); ?></a></li>
@@ -1579,7 +1579,7 @@ function hunt_news_home_sections() {
 			</div>
 			<div class="hunt-news-briefing-board__date" aria-label="브리핑 기준">
 				<strong>DAILY REPORT</strong>
-				<span>매일 02시 발행</span>
+				<span>매일 04시 발행</span>
 				<a href="<?php echo esc_url( get_post_type_archive_link( 'hunt_briefing' ) ); ?>">날짜 아카이브</a>
 			</div>
 		</header>
