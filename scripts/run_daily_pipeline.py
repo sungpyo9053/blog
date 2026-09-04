@@ -2079,19 +2079,80 @@ def run_daily_briefing_analysis(
         ) from exc
 
 
-def planner_retry_stage(stage: Stage, topics_path: Path) -> Stage:
-    """Retry a Planner that returned without its required topics artifact."""
+def planner_retry_stage(
+    stage: Stage,
+    topics_path: Path,
+    validation_error: str | None = None,
+) -> Stage:
+    """Retry a Planner whose required topics artifact is missing or invalid."""
+    failure_detail = (
+        f"이전 topics.md는 계약 검증에 실패했습니다: {validation_error}. "
+        "기존 파일을 그대로 승인하거나 필드 이름과 값을 서로 이동하지 말고, "
+        "각 후보의 problem_origin에는 real_project, public_codebase, "
+        "observed_search_question, controlled_lab, official_change 중 하나만, "
+        "structure_mode에는 problem_first, decision_memo, experiment_diary, "
+        "code_walkthrough, field_note, impact_timeline, household_case, "
+        "before_after, eligibility_check 중 하나만 기록해 전체 문서를 교정하세요. "
+        if validation_error
+        else f"이전 실행은 {str(topics_path)!r}를 생성하지 못했습니다. "
+    )
     return Stage(
         stage.name,
         stage.agent_file,
         stage.prompt
-        + f"\n\n재시도입니다. 이전 실행은 {str(topics_path)!r}를 생성하지 못했습니다. "
-        "원래 지시에 명시된 가이드, 기존 WordPress 글, output 기록과 수요 신호는 "
+        + "\n\n재시도입니다. "
+        + failure_detail
+        + "원래 지시에 명시된 가이드, 기존 WordPress 글, output 기록과 수요 신호는 "
         "필요한 범위에서 읽기 전용으로 다시 확인하세요. 다른 파일이나 외부 시스템은 수정하지 "
         "말고, 검증을 통과한 최소 35개 후보와 TOP10/TOP2를 "
         f"{str(topics_path)!r}에 저장하세요. 유일하게 변경할 파일은 topics.md이며, "
         "저장 후에만 짧게 완료를 보고하세요.",
     )
+
+
+def run_planner_with_contract_retry(
+    codex: str,
+    planner: Stage,
+    topics_path: Path,
+    logger: logging.Logger,
+    *,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Run Planner once and retry once for either a missing or invalid artifact."""
+    run_stage(codex, planner, logger, timeout_seconds=timeout_seconds)
+    validation_error: str | None = None
+    if topics_path.is_file():
+        try:
+            return parse_topic_plan_document(topics_path)
+        except PipelineError as exc:
+            validation_error = str(exc)
+            logger.warning(
+                "planner event=invalid_topics retry=true path=%s reason=%s",
+                topics_path,
+                validation_error,
+            )
+    else:
+        logger.warning(
+            "planner event=missing_topics retry=true path=%s",
+            topics_path,
+        )
+
+    retry = planner_retry_stage(
+        planner,
+        topics_path,
+        validation_error=validation_error,
+    )
+    run_stage(codex, retry, logger, timeout_seconds=timeout_seconds)
+    if not topics_path.is_file():
+        raise PipelineError(
+            f"Topic Planner가 재시도 후에도 {topics_path}를 생성하지 않았습니다."
+        )
+    try:
+        return parse_topic_plan_document(topics_path)
+    except PipelineError as exc:
+        raise PipelineError(
+            f"Topic Planner 산출물이 재시도 후에도 계약 위반입니다: {exc}"
+        ) from exc
 
 
 def run_topic_pipeline(
@@ -2598,19 +2659,15 @@ def main() -> int:
             # operator-selected ceiling as the evidence-heavy topic stages;
             # a hidden 15-minute cap caused valid planning runs to time out.
             planner_timeout = args.timeout
-            run_stage(codex, planner, logger, timeout_seconds=planner_timeout)
-            if not topics_path.is_file():
-                logger.warning(
-                    "planner event=missing_topics retry=true path=%s",
-                    topics_path,
-                )
-                retry = planner_retry_stage(planner, topics_path)
-                run_stage(codex, retry, logger, timeout_seconds=planner_timeout)
-            if not topics_path.is_file():
-                raise PipelineError(
-                    f"Topic Planner가 재시도 후에도 {topics_path}를 생성하지 않았습니다."
-                )
-        plan_document = parse_topic_plan_document(topics_path)
+            plan_document = run_planner_with_contract_retry(
+                codex,
+                planner,
+                topics_path,
+                logger,
+                timeout_seconds=planner_timeout,
+            )
+        if args.resume_run_id:
+            plan_document = parse_topic_plan_document(topics_path)
         plans = plan_document["top2"]
         run_daily_briefing_analysis(
             codex,

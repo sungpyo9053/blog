@@ -34,6 +34,7 @@ from scripts.run_daily_pipeline import (
     run_selected_topics,
     run_topics_with_quality_fallback,
     run_news_worthiness_shadow,
+    run_planner_with_contract_retry,
     run_stage,
     run_topic_pipeline,
     topic_stages,
@@ -334,6 +335,97 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("읽기 전용으로 다시 확인", retry.prompt)
         self.assertIn("유일하게 변경할 파일은 topics.md", retry.prompt)
         self.assertNotIn("다른 파일을 읽거나 수정하지 말고", retry.prompt)
+
+    def test_planner_retries_an_invalid_topics_contract_once(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            topics_path = Path(temporary) / "topics.md"
+            stage = Stage(
+                "Topic Planner Agent",
+                Path("agents/topic-planner-agent.md"),
+                "원래 지시",
+            )
+
+            def render(problem_origin: str) -> str:
+                candidates = []
+                for index in range(1, 36):
+                    title = f"기술 후보 {index}"
+                    candidates.append(
+                        f"## {index}. {title}\n\n"
+                        f"- title: {title}\n"
+                        "- category: Tech\n"
+                        "- tags: Tech, Python, Automation\n"
+                        "- score: 80/90\n"
+                        "- score_breakdown: 계약 검증\n"
+                        "- reason: 기술 독자의 실제 문제 해결\n"
+                        "- evergreen: 높음\n"
+                        f"- primary_keyword: {title}\n"
+                        "- search_intent: 구현 방법 확인\n"
+                        "- research_focus: 공식 문서와 재현 절차\n"
+                        "- recommended_images: 구조도\n"
+                        "- duplicate_check: 중복 없음\n"
+                        "- internal_link_candidates: 없음\n"
+                        "- topic_cluster: 기술 운영\n"
+                        "- pillar_candidate: 향후 검토\n"
+                        f"- problem_origin: {problem_origin}\n"
+                        "- editorial_thesis: 기술 문제를 실제 근거로 해결한다\n"
+                        "- chosen_focus: 구현 방법\n"
+                        "- rejected_angle: 일반론은 제외\n"
+                        "- structure_mode: problem_first\n"
+                    )
+                top10 = "\n".join(
+                    f"{index}. 기술 후보 {index}" for index in range(1, 11)
+                )
+                return (
+                    "# Topic Candidates\n\n"
+                    + "\n".join(candidates)
+                    + "\n## TOP10\n\n"
+                    + top10
+                    + "\n\n## TOP2\n\n1. 기술 후보 1\n2. 기술 후보 2\n"
+                )
+
+            attempts = 0
+
+            def fake_run(*args, **kwargs):
+                nonlocal attempts
+                attempts += 1
+                value = "필드가 한 칸 밀린 설명문" if attempts == 1 else "official_change"
+                topics_path.write_text(render(value), encoding="utf-8")
+
+            with patch(
+                "scripts.run_daily_pipeline.run_stage",
+                side_effect=fake_run,
+            ):
+                document = run_planner_with_contract_retry(
+                    "codex",
+                    stage,
+                    topics_path,
+                    logging.getLogger("planner-contract-retry-test"),
+                    timeout_seconds=30,
+                )
+
+            self.assertEqual(attempts, 2)
+            self.assertEqual(
+                [item["problem_origin"] for item in document["top2"]],
+                ["official_change", "official_change"],
+            )
+
+    def test_planner_invalid_retry_prompt_names_the_failed_contract(self):
+        topics_path = Path("/tmp/run/topics.md")
+        stage = Stage(
+            "Topic Planner Agent",
+            Path("agents/topic-planner-agent.md"),
+            "원래 지시",
+        )
+
+        retry = planner_retry_stage(
+            stage,
+            topics_path,
+            validation_error="후보 1: 허용되지 않은 problem_origin",
+        )
+
+        self.assertIn("허용되지 않은 problem_origin", retry.prompt)
+        self.assertIn("problem_origin에는 real_project", retry.prompt)
+        self.assertIn("전체 문서를 교정", retry.prompt)
 
     def test_planner_uses_operator_timeout_without_hidden_cap(self):
         from scripts.run_daily_pipeline import main
@@ -1404,6 +1496,19 @@ class DailyRetryTests(unittest.TestCase):
         )
         self.assertIsNotNone(command)
         self.assertIn("--briefing-only", command)
+        self.assertNotIn("--resume-run-id", command)
+
+    def test_noon_retry_replans_invalid_planner_contract(self):
+        log_text = (
+            "2026-09-05 INFO pipeline event=start "
+            "run_id=20260904T190017Z-49bec4e5fa\n"
+            "2026-09-05 ERROR pipeline event=failed "
+            "reason=후보: 허용되지 않은 problem_origin\n"
+        )
+
+        command = choose_command(log_text)
+
+        self.assertIsNotNone(command)
         self.assertNotIn("--resume-run-id", command)
 
 

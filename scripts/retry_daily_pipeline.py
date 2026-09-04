@@ -21,6 +21,12 @@ RUN_ID_PATTERN = re.compile(
 SUCCESS_PATTERN = re.compile(
     r"(?m)^[^\n ]+ INFO pipeline event=end failed=false run_id="
 )
+PLANNER_REPLAN_MARKERS = (
+    "planner event=invalid_topics",
+    "Topic Planner 산출물이 재시도 후에도 계약 위반",
+    "허용되지 않은 problem_origin",
+    "허용되지 않은 structure_mode",
+)
 
 
 def active_pipeline_pid() -> int | None:
@@ -37,22 +43,23 @@ def active_pipeline_pid() -> int | None:
 def choose_command(log_text: str) -> list[str] | None:
     if SUCCESS_PATTERN.search(log_text):
         return None
+    python = str(ROOT / ".venv/bin/python")
+    runner = str(ROOT / "scripts/run_daily_pipeline.py")
+    fresh_command = [python, runner, "--briefing-only"]
     # A manufactured Build Log is a planner classification error, not a
     # resumable stage failure. Re-plan at the 17:00 check after the strengthened gate.
     if "Build Log는 existing_work_record 근거만 허용합니다" in log_text:
-        return [
-            str(ROOT / ".venv/bin/python"),
-            str(ROOT / "scripts/run_daily_pipeline.py"),
-            "--briefing-only",
-        ]
+        return fresh_command
+    # A malformed Planner artifact cannot be repaired by resuming downstream
+    # stages. Start a fresh plan so the contract-aware Planner retry can run.
+    if any(marker in log_text for marker in PLANNER_REPLAN_MARKERS):
+        return fresh_command
     run_ids = RUN_ID_PATTERN.findall(log_text)
-    python = str(ROOT / ".venv/bin/python")
-    runner = str(ROOT / "scripts/run_daily_pipeline.py")
     if run_ids:
         run_id = run_ids[-1]
         if (RUNS_DIR / run_id / "topics.md").is_file():
             return [python, runner, "--briefing-only", "--resume-run-id", run_id]
-    return [python, runner, "--briefing-only"]
+    return fresh_command
 
 
 def main() -> int:
