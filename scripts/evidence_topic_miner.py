@@ -255,9 +255,9 @@ def enrich_pilot_events(repo: Path, events: dict[str, Event], inventory: Sequenc
                 event.test_runs.append({"test": str(item.get("command", "")), "status": str(item["result"]).upper(), "exit_code": 0 if str(item["result"]).upper() == "PASS" else None, "recorded_at": datetime.fromtimestamp(approval_path.stat().st_mtime, UTC).isoformat(), "source": approval_path.relative_to(repo).as_posix(), "output_sha256": ""})
 
 def load_evidence_manifests(repo: Path, events: dict[str, Event]) -> list[dict[str, Any]]:
-    results, directory = [], repo / "output/topic-miner/evidence-events"
-    if not directory.is_dir(): return results
-    for path in sorted(directory.glob("*.json")):
+    results = []
+    paths = sorted((repo / "evidence/topic-events").glob("*.json")) + sorted((repo / "output/topic-miner/evidence-events").glob("*.json"))
+    for path in paths:
         if path.is_symlink() or path.stat().st_size > 256_000: continue
         data = json.loads(path.read_text(encoding="utf-8")); trigger = str(data.get("trigger_commit", "")); anchor = safe_relative_path(repo, str(data.get("anchor", "")))
         event = next((e for e in events.values() if e.anchor == anchor and trigger in e.commits), None)
@@ -274,6 +274,20 @@ def load_evidence_manifests(repo: Path, events: dict[str, Event]) -> list[dict[s
         event.recommended_format = str(data.get("recommended_format", ""))
         event.contract_fields = dict(data.get("contract_fields") or {})
         event.public_access_verified = data.get("public_access_verified") is True
+        if data.get("title_seed"): event.title = redact_text(str(data["title_seed"]))
+        if data.get("real_trigger") or data.get("problem"):
+            event.subjects = [redact_text(str(data.get("real_trigger", ""))), redact_text(str(data.get("problem", "")))]
+        resolved = {str(value) for value in data.get("resolved_ambiguities") or []}
+        event.ambiguous_evidence = [value for value in event.ambiguous_evidence if value not in resolved]
+        for value in data.get("evidence_files") or []:
+            safe = safe_relative_path(repo, str(value))
+            if safe not in event.files: event.files.append(safe)
+        for value in data.get("tests") or []:
+            clean = redact_text(str(value))
+            if clean not in event.tests: event.tests.append(clean)
+        for value in data.get("logs") or []:
+            safe = safe_relative_path(repo, str(value))
+            if safe not in event.logs: event.logs.append(safe)
         for url in data.get("public_urls") or []:
             clean = sanitize_url(str(url))
             if clean.startswith("https://") and clean not in event.public_urls: event.public_urls.append(clean)

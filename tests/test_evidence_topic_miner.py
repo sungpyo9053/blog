@@ -393,6 +393,12 @@ class EvidenceTopicMinerTests(unittest.TestCase):
         result = evaluate_event(event, [], "repo", inventory_complete=False)
         self.assertIn("current_public_and_draft_overlap_checked", result["missing_evidence"])
 
+    def test_manifest_can_resolve_only_explicitly_named_ambiguities(self):
+        event = Event(anchor="scripts/worker.py", ambiguous_evidence=["multi_file_commit_requires_review", "rename_requires_explicit_event_manifest"])
+        resolved = {"multi_file_commit_requires_review"}
+        event.ambiguous_evidence = [value for value in event.ambiguous_evidence if value not in resolved]
+        self.assertEqual(event.ambiguous_evidence, ["rename_requires_explicit_event_manifest"])
+
     def test_same_head_rerun_validates_outputs_and_becomes_noop(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
