@@ -1,14 +1,57 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
-from scripts.publish_adsense_pilot import checked_html
+from scripts.publish_adsense_pilot import checked_html, main
 
 
 class PilotPublishContractTests(unittest.TestCase):
+    def test_dry_run_never_initializes_wordpress_or_sends_a_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            html_path = Path(directory) / "final.html"
+            approval_path = Path(directory) / "approval.json"
+            html_path.write_bytes(b"<p>pagination</p>\n")
+            digest = hashlib.sha256(html_path.read_bytes()).hexdigest()
+            approval_path.write_text(
+                json.dumps(
+                    {
+                        "decision": "APPROVED",
+                        "post_id": 132,
+                        "sha256": digest,
+                        "title": "pagination",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            argv = [
+                "publish_adsense_pilot.py",
+                "--post-id",
+                "132",
+                "--html",
+                str(html_path),
+                "--approval",
+                str(approval_path),
+            ]
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment") as config,
+                patch("scripts.publish_adsense_pilot.WordPressClient") as client,
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                self.assertEqual(main(), 0)
+
+        config.assert_not_called()
+        client.assert_not_called()
+        self.assertIn("status=DRY_RUN post_id=132", output.getvalue())
+
     def test_publisher_reads_back_the_cli_selected_post(self):
         source = Path("scripts/publish_adsense_pilot.py").read_text(encoding="utf-8")
 
