@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from publisher.config import ConfigurationError, WordPressConfig
 from publisher.frontmatter import FrontmatterError, load_document
 from publisher.service import DraftPublisher
+from publisher.validation import validate_document
 from publisher.wordpress import WordPressClient
 
 
@@ -53,11 +55,44 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Read-only duplicate lookup; do not create or update WordPress resources.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate the immutable article and approval without any WordPress call.",
+    )
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.dry_run:
+        try:
+            document = load_document(args.markdown_file)
+        except FrontmatterError as exc:
+            print(json.dumps({"status": "Failed", "message": str(exc)}, ensure_ascii=False))
+            return 2
+        report = validate_document(document, reviewer_approved=args.reviewer_approved)
+        digest = hashlib.sha256(args.markdown_file.read_bytes()).hexdigest()
+        expected = {
+            "run_id": args.expected_run_id or "",
+            "topic_id": args.expected_topic_id or "",
+            "source_id": args.expected_source_id or "",
+            "category": args.expected_category or "",
+        }
+        identity_ok = all(value and document.metadata.get(key) == value for key, value in expected.items())
+        review = args.review_file.read_text(encoding="utf-8") if args.review_file and args.review_file.is_file() else ""
+        approval_ok = all(token and token in review for token in ("APPROVED", digest, expected["run_id"], expected["topic_id"]))
+        passed = report.passed and identity_ok and approval_ok
+        print(json.dumps({
+            "status": "Success" if passed else "Failed",
+            "action": "DryRun",
+            "wordpress_calls": 0,
+            "sha256": digest,
+            "identity_ok": identity_ok,
+            "approval_ok": approval_ok,
+            "validation": report.to_dict(),
+        }, ensure_ascii=False, indent=2))
+        return 0 if passed else 1
     try:
         config = WordPressConfig.from_environment(args.env_file)
     except ConfigurationError as exc:

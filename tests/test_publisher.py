@@ -107,22 +107,28 @@ class FakeWordPressClient:
     def create_post(self, payload: dict[str, Any], *, status: str):
         self.created_payload = payload
         self.created_payload["status"] = status
-        return {
+        post = {
             "id": 123,
             "status": status,
             "slug": payload.get("slug"),
+            "title": {"raw": payload.get("title", ""), "rendered": payload.get("title", "")},
             "link": "https://huntlab.app/?p=123",
         }
+        self.posts[123] = post
+        return post
 
     def update_post(self, post_id: int, payload: dict[str, Any], *, status: str):
         self.created_payload = dict(payload)
         self.created_payload["status"] = status
-        return {
+        post = {
             "id": post_id,
             "status": status,
             "slug": payload.get("slug"),
+            "title": {"raw": payload.get("title", ""), "rendered": payload.get("title", "")},
             "link": f"https://huntlab.app/?p={post_id}",
         }
+        self.posts[post_id] = post
+        return post
 
 
 class PublisherTests(unittest.TestCase):
@@ -278,6 +284,26 @@ class PublisherTests(unittest.TestCase):
                 "invalid_tag_count",
                 {issue.code for issue in report.errors},
             )
+
+    def test_verified_case_requires_evidence_metadata_and_sends_registered_meta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = VALID_MARKDOWN.replace(
+                "publish_mode: draft",
+                "publish_mode: draft\ncontent_type: verified_case\nproblem_group: REST API 발행\nverification_method: 통제 fixture 비교\nevidence_date: '2026-09-05'\nevidence_url: https://github.com/example/repo/commit/abc\nasset_url: https://github.com/example/repo/blob/abc/tool.py\nevidence_badges:\n  - 직접 재현\n  - 회귀 테스트\n  - 공개 코드",
+            )
+            client = FakeWordPressClient()
+            result = DraftPublisher(client, audit_log=root / "audit.jsonl").publish_file(self._write_document(root, text), reviewer_approved=True)
+            self.assertEqual(result.status, "Success")
+            self.assertEqual(client.created_payload["meta"]["_hunt_news_content_type"], "verified_case")
+            self.assertIn("회귀 테스트", client.created_payload["meta"]["_hunt_news_evidence_badges"])
+
+    def test_verified_case_without_evidence_contract_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN.replace("publish_mode: draft", "publish_mode: draft\ncontent_type: verified_case")
+            report = validate_document(load_document(self._write_document(Path(tmp), text)), reviewer_approved=True)
+            self.assertFalse(report.passed)
+            self.assertIn("missing_problem_group", {issue.code for issue in report.errors})
 
     def test_validation_allows_explicit_secret_placeholder(self):
         with tempfile.TemporaryDirectory() as tmp:

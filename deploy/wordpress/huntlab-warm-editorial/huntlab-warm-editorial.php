@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 6.1.2
+ * Version: 7.0.0
  * Author: Hunt News
  */
 
@@ -24,6 +24,18 @@ function huntlab_warm_editorial_enqueue_styles() {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'huntlab_warm_editorial_enqueue_styles', 100 );
+
+/** Register evidence fields used by the verified problem-solving library. */
+function hunt_news_register_evidence_meta() {
+	$fields = array(
+		'_hunt_news_content_type', '_hunt_news_problem_group', '_hunt_news_verification_method',
+		'_hunt_news_evidence_date', '_hunt_news_evidence_badges', '_hunt_news_evidence_url', '_hunt_news_asset_url',
+	);
+	foreach ( $fields as $field ) {
+		register_post_meta( 'post', $field, array( 'type' => 'string', 'single' => true, 'show_in_rest' => true, 'sanitize_callback' => 'sanitize_text_field', 'auth_callback' => static function () { return current_user_can( 'edit_posts' ); } ) );
+	}
+}
+add_action( 'init', 'hunt_news_register_evidence_meta' );
 
 /** Register one public briefing archive entry per completed 04:00 run. */
 function hunt_news_register_briefing_type() {
@@ -90,8 +102,8 @@ function hunt_news_home_search_metadata() {
 		return array( 'title' => '', 'description' => '' );
 	}
 	return array(
-		'title'       => 'AI·개발 기술 해설과 실무 판단 - Hunt News',
-		'description' => 'AI와 개발 기술의 변경점을 공식 원문, 비교, 예제와 실패 조건으로 검증해 실제 적용 여부를 판단할 수 있게 설명합니다. 일일 브리핑과 주간 회고도 제공합니다.',
+		'title'       => 'WordPress 자동발행 문제 해결 라이브러리 - Hunt News',
+		'description' => 'WordPress REST API, 자동발행, sitemap과 운영 문제를 실제 코드·로그·회귀 테스트로 재현하고 해결한 검증 사례를 제공합니다.',
 	);
 }
 
@@ -180,6 +192,15 @@ function hunt_news_briefing_body_class( $classes ) {
 	return $classes;
 }
 add_filter( 'body_class', 'hunt_news_briefing_body_class' );
+
+/** Scope case-study presentation changes to verified articles only. */
+function hunt_news_verified_case_body_class( $classes ) {
+	if ( is_singular( 'post' ) && hunt_news_is_verified_case() ) {
+		$classes[] = 'hunt-news-verified-case';
+	}
+	return $classes;
+}
+add_filter( 'body_class', 'hunt_news_verified_case_body_class', 20 );
 
 /**
  * Return all public daily reports grouped by local calendar month.
@@ -391,6 +412,46 @@ function hunt_news_reading_minutes( $post ) {
 	return max( 1, (int) ceil( max( 0, (int) $count ) / 250 ) );
 }
 
+/** Resolve verified metadata without rewriting the two approved pilot bodies. */
+function hunt_news_case_meta( $post ) {
+	$post_id   = (int) $post->ID;
+	$fallbacks = array(
+		50  => array( 'problem_group' => 'REST API 발행', 'method' => '통제 비교', 'date' => '2026-09-05', 'badges' => array( '직접 재현', '회귀 테스트', '공개 코드', '통제 비교' ), 'evidence_url' => 'https://github.com/sungpyo9053/blog/commit/adc57d3d8d3812a86bc3de3208d705df38247709' ),
+		132 => array( 'problem_group' => 'REST API 발행', 'method' => '통제 비교', 'date' => '2026-09-05', 'badges' => array( '직접 재현', '회귀 테스트', '공개 코드', '통제 비교' ), 'evidence_url' => 'https://github.com/sungpyo9053/blog/commit/40bd2a83fe307d3b0fd5c3305f0d0518ca771109' ),
+	);
+	$badges = json_decode( (string) get_post_meta( $post_id, '_hunt_news_evidence_badges', true ), true );
+	$meta   = array(
+		'content_type' => (string) get_post_meta( $post_id, '_hunt_news_content_type', true ),
+		'problem_group' => (string) get_post_meta( $post_id, '_hunt_news_problem_group', true ),
+		'method'        => (string) get_post_meta( $post_id, '_hunt_news_verification_method', true ),
+		'date'          => (string) get_post_meta( $post_id, '_hunt_news_evidence_date', true ),
+		'badges'        => is_array( $badges ) ? array_slice( array_map( 'sanitize_text_field', $badges ), 0, 4 ) : array(),
+		'evidence_url'  => (string) get_post_meta( $post_id, '_hunt_news_evidence_url', true ),
+		'asset_url'     => (string) get_post_meta( $post_id, '_hunt_news_asset_url', true ),
+	);
+	if ( isset( $fallbacks[ $post_id ] ) ) {
+		$meta                 = array_merge( $fallbacks[ $post_id ], array_filter( $meta ) );
+		$meta['content_type'] = 'verified_case';
+	}
+	return $meta;
+}
+
+function hunt_news_is_verified_case( $post = null ) {
+	$post = get_post( $post );
+	return $post instanceof WP_Post && 'verified_case' === (string) ( hunt_news_case_meta( $post )['content_type'] ?? '' );
+}
+
+/** Post 50 and 132 remain the first proof cases; later cases follow modification time. */
+function hunt_news_verified_posts( $limit = 12 ) {
+	$fixed   = get_posts( array( 'post_type' => 'post', 'post_status' => 'publish', 'post__in' => array( 50, 132 ), 'orderby' => 'post__in', 'posts_per_page' => 2, 'no_found_rows' => true ) );
+	$dynamic = get_posts( array( 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => max( 1, absint( $limit ) ), 'meta_key' => '_hunt_news_content_type', 'meta_value' => 'verified_case', 'orderby' => array( 'modified' => 'DESC' ), 'post__not_in' => array( 50, 132 ), 'no_found_rows' => true ) );
+	$rows    = array();
+	foreach ( array_merge( $fixed, $dynamic ) as $post ) {
+		$rows[ $post->ID ] = $post;
+	}
+	return array_slice( array_values( $rows ), 0, max( 1, absint( $limit ) ) );
+}
+
 /**
  * Remove the legacy posts loop from the editorial homepage at query time.
  *
@@ -456,6 +517,40 @@ function hunt_news_render_editorial_home() {
 		</div>
 
 		<section class="hunt-news-editorial-method" aria-labelledby="hunt-news-editorial-method-title"><div><p>HOW WE WORK</p><h2 id="hunt-news-editorial-method-title">한 글에 남기는 네 가지</h2></div><ol><li><strong>실제 문제</strong><span>누가 어떤 조건에서 막혔는지 밝힙니다.</span></li><li><strong>확인한 근거</strong><span>원문·코드·실행 결과를 가까이 둡니다.</span></li><li><strong>달라진 결과</strong><span>같은 조건의 전후 차이를 보여줍니다.</span></li><li><strong>남은 한계</strong><span>적용하지 않을 조건까지 남깁니다.</span></li></ol><nav><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">편집 원칙</a><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">만드는 사람과 방식</a><a href="<?php echo esc_url( $review_url ); ?>">주간 회고</a></nav></section>
+	</div>
+	<script id="hunt-news-editorial-home-position">document.addEventListener('DOMContentLoaded',function(){var home=document.getElementById('hunt-news-originals');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(home&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',home);}if(main){main.hidden=true;}});</script>
+	<?php
+}
+
+/** Render the evidence library; Daily Briefing stays a visually separate record. */
+function hunt_news_render_evidence_library_home() {
+	$verified        = hunt_news_verified_posts( 12 );
+	$featured        = array_slice( $verified, 0, 2 );
+	$latest_verified = array_slice( $verified, 2 );
+	$manifest        = hunt_news_latest_briefing_manifest();
+	$analysis        = ! empty( $manifest['analysis'] ) && is_array( $manifest['analysis'] ) ? $manifest['analysis'] : array();
+	$briefing_url    = get_post_type_archive_link( 'hunt_briefing' );
+	$groups          = array();
+	foreach ( $verified as $post ) {
+		$group = (string) ( hunt_news_case_meta( $post )['problem_group'] ?? '' );
+		if ( $group ) {
+			$groups[ $group ] = ( $groups[ $group ] ?? 0 ) + 1;
+		}
+	}
+	?>
+	<div id="hunt-news-originals" class="hunt-news-editorial-home hunt-news-library-home">
+		<nav class="hunt-news-feed-tabs" aria-label="문제 해결 탐색"><a class="is-active" href="#hunt-news-editor-picks">검증된 해결책</a><a href="#hunt-news-problem-groups">문제별 찾아보기</a><a href="<?php echo esc_url( $briefing_url ); ?>">Daily Briefing</a></nav>
+		<section id="hunt-news-editor-picks" class="hunt-news-case-section" aria-labelledby="hunt-news-feed-title">
+			<header class="hunt-news-feed-heading"><div><p>VERIFIED CASE</p><h2 id="hunt-news-feed-title">대표 해결 사례</h2></div><span>실패와 해결을 같은 조건의 테스트로 확인한 글입니다.</span></header>
+			<div class="hunt-news-case-grid">
+			<?php foreach ( $featured as $post ) : $meta = hunt_news_case_meta( $post ); ?>
+				<article class="hunt-news-case-card"><p><?php echo esc_html( $meta['problem_group'] ); ?> · VERIFIED CASE</p><h3><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h3><div class="hunt-news-evidence-badges"><?php foreach ( $meta['badges'] as $badge ) : ?><span><?php echo esc_html( $badge ); ?></span><?php endforeach; ?></div><p class="hunt-news-case-result"><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p><footer><span>검증일 <?php echo esc_html( str_replace( '-', '.', $meta['date'] ) ); ?> · <?php echo esc_html( (string) hunt_news_reading_minutes( $post ) ); ?>분</span><a href="<?php echo esc_url( get_permalink( $post ) ); ?>">해결 과정 보기 →</a></footer></article>
+			<?php endforeach; ?>
+			</div>
+		</section>
+		<?php if ( $groups ) : ?><section id="hunt-news-problem-groups" class="hunt-news-problem-groups"><header><p>FIND BY PROBLEM</p><h2>문제별 찾아보기</h2></header><div><?php foreach ( $groups as $group => $count ) : ?><a href="#hunt-news-latest-verified"><strong><?php echo esc_html( $group ); ?></strong><span><?php echo esc_html( (string) $count ); ?>개 검증 사례</span></a><?php endforeach; ?></div></section><?php endif; ?>
+		<section id="hunt-news-latest-verified" class="hunt-news-latest-verified"><header><p>VERIFICATION LIBRARY</p><h2>최신 검증 글</h2></header><div><?php foreach ( $latest_verified as $post ) : $meta = hunt_news_case_meta( $post ); ?><article><span><?php echo esc_html( $meta['problem_group'] ); ?></span><h3><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h3><p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p><small>검증일 <?php echo esc_html( str_replace( '-', '.', $meta['date'] ) ); ?> · <?php echo esc_html( (string) hunt_news_reading_minutes( $post ) ); ?>분</small></article><?php endforeach; ?></div></section>
+		<aside class="hunt-news-library-briefing"><div><p>DAILY BRIEF · <?php echo esc_html( hunt_news_briefing_display_date( $manifest, 'Y.m.d' ) ); ?></p><h2><?php echo esc_html( (string) ( $analysis['headline'] ?? '오늘 수집한 WordPress·개발 변경을 한 페이지에 기록합니다.' ) ); ?></h2></div><a href="<?php echo esc_url( $briefing_url ); ?>">브리핑 보기 →</a></aside>
 	</div>
 	<script id="hunt-news-editorial-home-position">document.addEventListener('DOMContentLoaded',function(){var home=document.getElementById('hunt-news-originals');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(home&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',home);}if(main){main.hidden=true;}});</script>
 	<?php
@@ -921,20 +1016,18 @@ function huntlab_warm_editorial_home_intro() {
 	?>
 	<section id="huntlab-home-intro" class="huntlab-home-intro<?php echo $is_category ? ' huntlab-home-intro--category' : ''; ?>" aria-labelledby="huntlab-home-intro-title">
 		<div class="huntlab-home-intro__copy">
-			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt News · 기술을 판단하는 편집'; ?></p>
-			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : '무엇이 바뀌었고,<br>어디까지 적용할 수 있나.'; ?></h1>
-			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : '발표를 다시 요약하는 대신 공식 원문과 독립 자료를 대조하고, 예제와 실패 조건을 통해 개발자가 실제로 적용할 수 있는 범위를 설명합니다.'; ?></p>
+			<p class="huntlab-home-intro__eyebrow"><?php echo $is_category ? esc_html( 'Hunt News · ' . $intro['label'] ) : 'Hunt News · 검증된 문제 해결 라이브러리'; ?></p>
+			<h1 id="huntlab-home-intro-title"><?php echo $is_category ? wp_kses( $intro['title'], array( 'br' => array() ) ) : 'WordPress 자동화 문제를<br>코드와 테스트로 검증합니다.'; ?></h1>
+			<p class="huntlab-home-intro__description"><?php echo $is_category ? esc_html( $intro['description'] ) : 'REST API 발행, 자동화 누락, sitemap과 플러그인 충돌을 직접 재현하고 같은 조건의 회귀 테스트로 해결 범위를 확인합니다.'; ?></p>
 			<ul class="huntlab-home-intro__promises" aria-label="<?php echo esc_attr( $is_category ? $intro['label'] . ' 콘텐츠 원칙' : 'Hunt News 콘텐츠 원칙' ); ?>">
-				<?php foreach ( $is_category ? $intro['promises'] : array( '근거 대조', '예제와 비교', '실패 조건' ) as $promise ) : ?>
+				<?php foreach ( $is_category ? $intro['promises'] : array( '직접 재현', '회귀 테스트', '공개 코드' ) as $promise ) : ?>
 					<li><?php echo esc_html( $promise ); ?></li>
 				<?php endforeach; ?>
 			</ul>
 			<?php if ( ! $is_category ) : ?>
 				<div class="huntlab-home-intro__status" aria-label="브리핑 상태">
-					<span><?php echo esc_html( hunt_news_briefing_display_date( $brief_manifest, 'Y.m.d' ) ); ?></span>
-					<span>독립 해설 주 2회 · 주간 회고 1회</span>
-					<?php if ( $brief_manifest ) : ?><span>날짜별 기술 브리핑은 매일 유지</span><?php endif; ?>
-					<a href="#hunt-news-originals">최신 해설 보기 <b aria-hidden="true">↓</b></a>
+					<a href="#hunt-news-editor-picks">검증된 해결책 보기 <b aria-hidden="true">↓</b></a>
+					<a href="#hunt-news-problem-groups">문제별 찾아보기 <b aria-hidden="true">↓</b></a>
 				</div>
 			<?php endif; ?>
 		</div>
@@ -1443,7 +1536,7 @@ function hunt_news_home_sections() {
 		return;
 	}
 	if ( is_home() || is_front_page() ) {
-		hunt_news_render_editorial_home();
+		hunt_news_render_evidence_library_home();
 		return;
 	}
 
@@ -1884,6 +1977,52 @@ function hunt_news_home_sections() {
 }
 add_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
 
+/** Put the problem and evidence state before a verified article's first paragraph. */
+function hunt_news_verified_case_header( $content ) {
+	if ( is_admin() || ! is_singular( 'post' ) || ! in_the_loop() || ! is_main_query() || ! hunt_news_is_verified_case() ) {
+		return $content;
+	}
+	$post = get_post();
+	$meta = hunt_news_case_meta( $post );
+	$actions = '<a href="' . esc_url( $meta['evidence_url'] ) . '" target="_blank" rel="noopener noreferrer">공개 코드 보기</a>';
+	if ( ! empty( $meta['asset_url'] ) ) {
+		$actions .= '<a href="' . esc_url( $meta['asset_url'] ) . '" target="_blank" rel="noopener noreferrer">진단 도구 보기</a>';
+	}
+	$badges = '';
+	foreach ( $meta['badges'] as $badge ) {
+		$badges .= '<span>' . esc_html( $badge ) . '</span>';
+	}
+	$intro = '<aside class="hunt-news-case-header" aria-label="검증 상태"><p>' . esc_html( $meta['problem_group'] ) . ' · VERIFIED CASE</p><h2>이 글이 해결하는 문제</h2><span>' . esc_html( get_the_excerpt( $post ) ) . '</span><div class="hunt-news-evidence-status"><strong>' . esc_html( $meta['method'] ) . '</strong>' . $badges . '<time datetime="' . esc_attr( $meta['date'] ) . '">마지막 검증 ' . esc_html( str_replace( '-', '.', $meta['date'] ) ) . '</time></div><nav>' . $actions . '</nav><small>HuntLab 운영자 · <a href="https://github.com/sungpyo9053/blog" target="_blank" rel="noopener noreferrer">GitHub 프로젝트</a> · 수정 ' . esc_html( get_the_modified_date( 'Y.m.d', $post ) ) . '</small></aside>';
+	return $intro . $content;
+}
+add_filter( 'the_content', 'hunt_news_verified_case_header', 8 );
+
+/** Related links must share the same problem group; chronological navigation is hidden. */
+function hunt_news_verified_case_related( $content ) {
+	if ( is_admin() || ! is_singular( 'post' ) || ! in_the_loop() || ! is_main_query() || ! hunt_news_is_verified_case() ) {
+		return $content;
+	}
+	$current = get_post();
+	$group   = (string) ( hunt_news_case_meta( $current )['problem_group'] ?? '' );
+	$items   = array();
+	foreach ( hunt_news_verified_posts( 20 ) as $post ) {
+		if ( $post->ID !== $current->ID && $group === (string) ( hunt_news_case_meta( $post )['problem_group'] ?? '' ) ) {
+			$items[] = $post;
+		}
+		if ( 3 === count( $items ) ) { break; }
+	}
+	if ( ! $items ) { return $content; }
+	$html = '<aside class="hunt-news-case-related"><h2>같은 문제군의 검증 글</h2><ul>';
+	foreach ( $items as $post ) { $html .= '<li><a href="' . esc_url( get_permalink( $post ) ) . '">' . esc_html( get_the_title( $post ) ) . '</a></li>'; }
+	return $content . $html . '</ul></aside>';
+}
+add_filter( 'the_content', 'hunt_news_verified_case_related', 35 );
+
+function hunt_news_verified_case_comments( $open, $post_id ) {
+	return hunt_news_is_verified_case( $post_id ) ? false : $open;
+}
+add_filter( 'comments_open', 'hunt_news_verified_case_comments', 20, 2 );
+
 /**
  * Add one explicit, measurable share action after article content.
  * The event is recorded only after the native share sheet or link copy succeeds.
@@ -1893,6 +2032,9 @@ add_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
  */
 function hunt_news_article_share_action( $content ) {
 	if ( is_admin() || ! is_singular( 'post' ) || ! in_the_loop() || ! is_main_query() ) {
+		return $content;
+	}
+	if ( hunt_news_is_verified_case() ) {
 		return $content;
 	}
 
@@ -2045,9 +2187,9 @@ function hunt_news_editorial_organization_schema( $graphs ) {
 	$organization     = array(
 		'@type'       => 'Organization',
 		'@id'         => $organization_id,
-		'name'        => 'Hunt News 편집팀',
+		'name'        => 'HuntLab 운영자',
 		'url'         => home_url( '/' ),
-		'description' => 'AI와 개발 기술의 변경점을 공식 원문, 비교, 예제와 실패 조건으로 검증해 실제 적용 여부를 판단할 수 있게 설명합니다.',
+		'description' => 'WordPress 자동발행과 운영 문제를 코드, 로그와 회귀 테스트로 직접 검증하는 HuntLab 운영 주체입니다.',
 		'sameAs'      => array( 'https://github.com/sungpyo9053/blog' ),
 		'logo'        => array(
 			'@type' => 'ImageObject',
@@ -2108,7 +2250,7 @@ function hunt_news_editorial_author_name( $name ) {
 	if ( is_admin() ) {
 		return $name;
 	}
-	return 'Hunt News 편집팀';
+	return 'HuntLab 운영자';
 }
 add_filter( 'the_author', 'hunt_news_editorial_author_name', 20 );
 add_filter( 'get_the_author_display_name', 'hunt_news_editorial_author_name', 20 );

@@ -34,6 +34,7 @@ LEGACY_EDITOR_CATEGORIES = {
 # Old approved runs can still be resumed, while every newly planned run uses
 # the active Hunt News categories above.
 EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
+CONTENT_TYPES = {"verified_case", "technical_explainer"}
 FORBIDDEN_TERMS = (
     "100%",
     "무조건",
@@ -192,6 +193,17 @@ def validate_document(
             "existing_post_id must be a positive WordPress post ID.",
             "existing_post_id",
         )
+
+    content_type = metadata.get("content_type")
+    if content_type is not None and content_type not in CONTENT_TYPES:
+        _add_error(report, "invalid_content_type", "content_type must be verified_case or technical_explainer.", "content_type")
+    if content_type == "verified_case":
+        for field in ("problem_group", "verification_method", "evidence_date", "evidence_url"):
+            if not isinstance(metadata.get(field), str) or not str(metadata.get(field)).strip():
+                _add_error(report, f"missing_{field}", f"{field} is required for verified_case.", field)
+        badges = metadata.get("evidence_badges")
+        if not isinstance(badges, list) or not 2 <= len({str(value).strip() for value in badges if str(value).strip()}) <= 4:
+            _add_error(report, "invalid_evidence_badges", "verified_case requires 2 to 4 unique evidence badges.", "evidence_badges")
 
     if not markdown:
         _add_error(report, "missing_markdown", "Markdown body is required.", "markdown")

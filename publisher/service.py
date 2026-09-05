@@ -485,6 +485,16 @@ class DraftPublisher:
         excerpt = metadata.get("excerpt") or metadata.get("meta_description")
         if isinstance(excerpt, str) and excerpt.strip():
             payload["excerpt"] = excerpt.strip()
+        if metadata.get("content_type"):
+            payload["meta"] = {
+                "_hunt_news_content_type": str(metadata.get("content_type", "")),
+                "_hunt_news_problem_group": str(metadata.get("problem_group", "")),
+                "_hunt_news_verification_method": str(metadata.get("verification_method", "")),
+                "_hunt_news_evidence_date": str(metadata.get("evidence_date", "")),
+                "_hunt_news_evidence_badges": json.dumps(metadata.get("evidence_badges") or [], ensure_ascii=False),
+                "_hunt_news_evidence_url": str(metadata.get("evidence_url", "")),
+                "_hunt_news_asset_url": str(metadata.get("asset_url", "")),
+            }
 
         if target_post_id is None:
             post = self.client.create_post(payload, status=publish_mode)
@@ -495,6 +505,22 @@ class DraftPublisher:
                 status=publish_mode,
             )
         post_id = int(post["id"])
+        readback = self.client.get_post(post_id)
+        readback_title = _normalized(_plain_text(readback.get("title")))
+        readback_slug = str(readback.get("slug", "")).strip()
+        readback_status = str(readback.get("status", "")).strip()
+        if (
+            int(readback.get("id", 0)) != post_id
+            or readback_title != _normalized(title)
+            or (slug and readback_slug != slug)
+            or readback_status != publish_mode
+        ):
+            raise WordPressError(
+                "readback",
+                "WordPress REST read-back did not match the approved post identity.",
+            )
+        report.checks["wordpress_readback"] = "passed"
+        post = readback
         draft_url = (
             f"{self.client.config.base_url}/wp-admin/post.php"
             f"?post={post_id}&action=edit"
