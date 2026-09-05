@@ -1164,6 +1164,16 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertIn("`## 20초 핵심 요약`", writer.prompt)
         self.assertIn("`무엇`, `왜`, `어떻게`", writer.prompt)
 
+    def test_evidence_deep_article_does_not_require_quick_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-evidence" / "topic-evidence"
+            directory.mkdir(parents=True)
+            context = TopicContext(title="실제 기능 구현 기록", run_id="run-evidence", topic_id="topic-evidence", directory=directory, category="개발 트렌드", tags=("개발 기록",), content_type="evidence_deep_article")
+            writer = next(stage for stage in topic_stages(context) if stage.name == "Writer Agent")
+            self.assertIn("20초 핵심 요약`, FAQ, 표를 필수로 넣지 마세요", writer.prompt)
+            self._write_approved_publish(context, "## 구현 결과\n\n실제 테스트와 구현 diff를 대조했다.\n")
+            self.assertTrue(validate_publish_contract(context))
+
     def test_selected_planner_evidence_is_copied_into_topic_boundary(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "run-planner" / "topic-test"

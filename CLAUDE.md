@@ -2,10 +2,11 @@
 
 ## 목적
 
-복잡한 변화를 근거 기반 일일 보고서로 합성하고, 검색 질문에 답하는 상세글 2개를
-리서치, 글쓰기, 이미지 제작, 최종 조립 순서로 만든다. 일일 보고서 분석이 유효해야
-상세글 발행을 시작하며, 완성된 글은 Reviewer 승인 이후 Publisher Agent가 WordPress
-발행 정책에 따라 처리한다.
+운영은 두 lane으로 분리한다. Lane A는 AI·개발 변화를 한 페이지에 정리하는 매일의
+Daily Briefing이며 항상 `noindex, follow`다. Lane B는 Git·test·log·배포·결정 기록에서
+실제 사건을 찾는 Evidence-first Deep Article이다. 하루 두 번 평가하되 READY가 있을
+때만 회당 최대 한 편을 처리하며, READY가 없으면 `no_publishable_topic`으로 정상 종료한다.
+뉴스·RSS·Trends만으로 독립 글 주제를 만들지 않는다.
 
 ## 폴더 구조
 
@@ -24,6 +25,17 @@
 - Publisher Agent: `agents/publisher-agent.md`
 
 ## 주제 처리 순서
+
+현재 운영 기본 경로는 다음과 같다.
+
+1. 04:00 Daily Briefing을 `briefing_only`로 실행한다.
+2. 10:00과 22:00 Evidence-first Topic Miner를 실행한다.
+3. 실제 사건을 묶고 현재 공개 글·Draft와 검색 의도를 대조한다.
+4. READY가 없으면 Publisher를 호출하지 않고 `failed=false`로 종료한다.
+5. READY가 있으면 최대 한 편만 Research → Writer → Image Maker → Assembler →
+   Reviewer → Publisher로 전달하고 공개 HTML을 다시 감사한다.
+
+아래 TOP2 흐름은 과거 호환 코드이며 Evidence-first 운영의 토픽 소스로 사용하지 않는다.
 
 1. `agents/topic-planner-agent.md`의 편집장(Editor)에 따라 10개 카테고리 후보 생성 → 평가 → TOP10 → TOP2 → `output/topics.md`
 2. 전체 수집 자료, TOP2와 전일 보고서 스냅샷을 `agents/daily-briefing-agent.md`에 전달 → 전일 핵심 신호 3개 재검증을 포함한 필수 일일 보고서 분석 생성

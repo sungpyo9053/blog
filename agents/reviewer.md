@@ -93,15 +93,17 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
   `editorial_thesis` 한 문장이 본문 선택을 지배하며, `chosen_focus`는 충분히 깊고
   `rejected_angle`은 분량 채우기로 되살아나지 않았다. 하나라도 비거나 추적되지 않으면
   REJECT한다.
-- 정확한 `## 20초 핵심 요약`에 근거 있는 `무엇`, `왜`, `어떻게`가 모두 있지만,
+- 일반 콘텐츠 유형은 정확한 `## 20초 핵심 요약`에 근거 있는 `무엇`, `왜`, `어떻게`가 모두 있지만,
   나머지 H2와 결론까지 같은 삼단 구조로 대칭화하지 않았다.
-- `## 20초 핵심 요약`은 정확히 한 번이며 `왜`가 실제 손실·오작동·선택 이유를
+- 일반 콘텐츠 유형에서 `## 20초 핵심 요약`은 정확히 한 번이며 `왜`가 실제 손실·오작동·선택 이유를
   말한다. UI 제목 자체를 이유로 삼거나 `문제 또는 판단 기준을 놓치지 않기
   위해서`, `순서로 확인합니다` 같은 자동 생성 문구가 있으면 REJECT한다.
 - Build Log는 Research의 `evidence_origin`이 `existing_work_record`이고
   `work_trigger`, `actual_sequence`, `friction_or_surprise`, `decision_log`,
   `unfinished_edge`가 본문에 대응한다. 목적성 테스트를 운영 경험처럼 포장하거나
   성공 과정만 남겼으면 REJECT한다.
+- `content_type=evidence_deep_article`에는 20초 요약, FAQ, 표를 강제하지 않는다.
+  대신 planner-context의 evidence contract와 실제 근거 흐름을 검사한다.
 - 프로젝트 딥다이브라면 핵심 명제, mental model, 전체 처리 흐름, 구현·코드 진입점과 도입 판단이 서로 이어지고 검증 범위가 본문을 압도하지 않는다.
 - 기능을 나열하는 데 그치지 않고 구조, 작동 원리, 선택 이유와 적용 조건을 설명한다.
 - 직접 검증, 공식 자료, 해석과 미검증 영역이 독자에게 혼동되지 않게 구분돼 있다.

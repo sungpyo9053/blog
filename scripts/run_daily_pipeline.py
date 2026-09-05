@@ -106,6 +106,7 @@ CONTENT_TYPE_GUIDES = {
     "build_log_operations": PROJECT_ROOT / "guides/content-types/build-log-operations.md",
     "current_affairs_policy": PROJECT_ROOT / "guides/content-types/current-affairs-policy.md",
     "life_impact_explainer": PROJECT_ROOT / "guides/content-types/life-impact-explainer.md",
+    "evidence_deep_article": PROJECT_ROOT / "guides/content-types/evidence-deep-article.md",
 }
 LEGACY_CONTENT_TYPE_BY_CATEGORY = {
     "AI/ML 핵심": "concept_architecture",
@@ -723,6 +724,8 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "topic_cluster": plan.get("topic_cluster", ""),
         "pillar_candidate": plan.get("pillar_candidate", ""),
         "sources": plan.get("sources", ""),
+        "evidence_candidate": plan.get("evidence_candidate", {}),
+        "evidence_contract": plan.get("evidence_contract", {}),
         "existing_post_id": plan.get("existing_post_id", ""),
         "existing_slug": plan.get("existing_slug", ""),
         **editorial_fields,
@@ -850,6 +853,16 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         "삼거나 범용 자동 문구를 사용해도 REJECT하세요. WordPress의 기존 `한눈에 보기` 자동 목차를 "
         "삭제하거나 대체하지 마세요. "
     )
+    if context.content_type == "evidence_deep_article":
+        quick_view_writer = (
+            "이 글에는 `20초 핵심 요약`, FAQ, 표를 필수로 넣지 마세요. evidence_candidate의 "
+            "recommended_format과 실제 증거 흐름에 맞춰 문제 해결 기록, 기능 구현기, 마이그레이션, "
+            "실험 일지, 결정 기록 또는 장애 회고 중 하나로 구성하세요. "
+        )
+        quick_view_review = (
+            "`20초 핵심 요약`, FAQ 또는 표의 유무를 승인 조건으로 삼지 마세요. 대신 "
+            "evidence_contract의 주장과 commit, test, log, public URL을 문장 단위로 대조하세요. "
+        )
     stages = [
         Stage(
             "Research Agent",
@@ -1320,16 +1333,16 @@ def validate_publish_contract(context: TopicContext) -> str:
         r"(?ms)^## 20초 핵심 요약\s*$\n(.*?)(?=^##\s|\Z)",
         document.markdown,
     ))
-    if len(summaries) != 1:
+    if context.content_type != "evidence_deep_article" and len(summaries) != 1:
         raise PipelineError(
             f"{context.topic_id}: `## 20초 핵심 요약`은 정확히 한 번이어야 합니다. "
             f"(actual={len(summaries)})"
         )
-    summary = summaries[0]
+    summary = summaries[0] if summaries else None
     missing_summary_fields = [
         label
         for label in ("무엇", "왜", "어떻게")
-        if not re.search(rf"(?m)(?:^|[*_\-\s]){label}(?:[*_\s]*[:：]|[*_]+)", summary.group(1))
+        if summary is not None and not re.search(rf"(?m)(?:^|[*_\-\s]){label}(?:[*_\s]*[:：]|[*_]+)", summary.group(1))
     ]
     if missing_summary_fields:
         raise PipelineError(
@@ -1341,7 +1354,7 @@ def validate_publish_contract(context: TopicContext) -> str:
         "순서로 확인합니다",
     )
     found_forbidden = [
-        phrase for phrase in forbidden_summary_phrases if phrase in summary.group(1)
+        phrase for phrase in forbidden_summary_phrases if summary is not None and phrase in summary.group(1)
     ]
     if found_forbidden:
         raise PipelineError(
