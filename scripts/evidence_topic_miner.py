@@ -291,21 +291,32 @@ def load_evidence_manifests(repo: Path, events: dict[str, Event]) -> list[dict[s
         for url in data.get("public_urls") or []:
             clean = sanitize_url(str(url))
             if clean.startswith("https://") and clean not in event.public_urls: event.public_urls.append(clean)
-        sha = str(data.get("fix_commit", ""))
-        if sha and sha not in event.commits: event.commits.append(sha); event.commit_times[sha] = str(data.get("fix_at", ""))
+        linked_commits = [(str(data.get("fix_commit", "")), str(data.get("fix_at", "")))]
+        linked_commits.extend((str(item.get("sha", "")), str(item.get("at", ""))) for item in data.get("related_commits") or [] if isinstance(item, dict))
+        for sha, recorded_at in linked_commits:
+            if sha and sha not in event.commits: event.commits.append(sha); event.commit_times[sha] = recorded_at
     return results
 
 def collect_artifact_metadata(repo: Path, events: Mapping[str, Event]) -> list[dict[str, Any]]:
     paths = {p for pattern in ARTIFACT_PATTERNS for p in repo.glob(pattern)}
     output = []
-    for path in sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)[:500]:
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000: continue
-        relative = safe_relative_path(repo, path.relative_to(repo).as_posix()); raw = path.read_bytes(); text = raw.decode(errors="replace"); matched = []
+    def mtime(path: Path) -> float:
+        try: return path.stat().st_mtime
+        except OSError: return 0.0
+    for path in sorted(paths, key=mtime, reverse=True)[:500]:
+        try:
+            stat = path.stat()
+            if path.is_symlink() or not path.is_file() or stat.st_size > 2_000_000: continue
+            relative = safe_relative_path(repo, path.relative_to(repo).as_posix()); raw = path.read_bytes()
+        except OSError as exc:
+            output.append({"path": path.relative_to(repo).as_posix(), "status": "unreadable", "error_type": type(exc).__name__, "matched_event_keys": []})
+            continue
+        text = raw.decode(errors="replace"); matched = []
         for key, event in events.items():
             if any(sha in text for sha in event.commits) or (event.post_id and re.search(rf'"post_id"\s*:\s*{event.post_id}\b', text)):
                 matched.append(key)
                 if relative not in event.logs: event.logs.append(relative)
-        output.append({"path": relative, "size": len(raw), "mtime": datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(), "sha256": hashlib.sha256(raw).hexdigest(), "matched_event_keys": sorted(matched)})
+        output.append({"path": relative, "status": "read", "size": len(raw), "mtime": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(), "sha256": hashlib.sha256(raw).hexdigest(), "matched_event_keys": sorted(matched)})
     return output
 
 def normalized_tokens(value: str) -> set[str]: return {x for x in re.findall(r"[0-9a-z가-힣]+", value.casefold()) if len(x) > 1}

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.evidence_topic_miner import (
+    collect_artifact_metadata,
     contains_secret,
     redact_text,
     run_git,
@@ -82,6 +83,14 @@ class TopicMinerSecurityTests(unittest.TestCase):
         self.assertNotIn('client.request("DELETE"', source)
         self.assertNotIn("update_post", source)
         self.assertNotIn("create_post", source)
+
+    def test_unreadable_artifact_is_not_used_as_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo=Path(directory); (repo/"logs").mkdir(); path=repo/"logs/private.log"; path.write_text("secret")
+            with patch("pathlib.Path.read_bytes", side_effect=PermissionError("denied")):
+                rows=collect_artifact_metadata(repo,{})
+        self.assertEqual(rows[0]["status"],"unreadable")
+        self.assertEqual(rows[0]["matched_event_keys"],[])
 
     def test_inventory_snapshot_paginates_publish_and_reads_draft_with_get_only(self):
         class Client:

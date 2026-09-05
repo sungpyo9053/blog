@@ -28,6 +28,9 @@ DAILY_LIMIT = 2
 def write_json_new(path: Path, payload: Mapping[str, Any]) -> None:
     atomic_write_new(path, (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode())
 
+def write_progress(path: Path, *, stage: str, wordpress_write_count: int | str) -> None:
+    atomic_replace(path, (json.dumps({"stage":stage,"wordpress_write_count":wordpress_write_count}, ensure_ascii=False, indent=2) + "\n").encode())
+
 
 def refresh_inventory() -> Path:
     destination = MINER_ROOT / "inventory-latest.json"
@@ -107,6 +110,8 @@ def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dic
 
 def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Callable[[Mapping[str, Any], str, logging.Logger], dict[str, Any]] = run_selected_candidate, public_auditor: Callable[[Mapping[str, Any], Mapping[str, Any]], dict[str, Any]] = audit_public, output_root: Path = OUTPUT, miner_root: Path = MINER_ROOT, repo: Path = ROOT, logger: logging.Logger | None = None) -> dict[str, Any]:
     now = datetime.now(KST); day = now.date().isoformat(); run_dir = output_root / run_id
+    progress_path = run_dir / "progress.json"
+    write_progress(progress_path, stage="pre_mining", wordpress_write_count=0)
     checkpoint_path = miner_root / "checkpoint.json"
     checkpoint = json.loads(checkpoint_path.read_text()) if checkpoint_path.is_file() else None
     payload, processing, next_checkpoint = build_payload(repo=repo, inventory_path=inventory_path, run_date=now.date(), checkpoint=checkpoint)
@@ -124,7 +129,9 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     candidate = payload["candidates"][0]
     if not apply:
         return {**base,"deep_article":"ready_not_published","candidate_id":candidate["candidate_id"]}
+    write_progress(progress_path, stage="publisher_started", wordpress_write_count="unknown")
     published = topic_runner(candidate, run_id, logger or configure_logger(now.date()))
+    write_progress(progress_path, stage="publisher_completed", wordpress_write_count=1)
     audit = public_auditor(published,candidate)
     advance_checkpoint()
     return {**base,"publication_mode":"dual_lane","deep_article":"published","wordpress_write_count":1,"candidate_id":candidate["candidate_id"],"publication":published,"public_audit":audit}
@@ -141,7 +148,10 @@ def main() -> int:
         write_json_new(OUTPUT/run_id/"result.json",result)
         print(json.dumps(result,ensure_ascii=False)); return 0
     except Exception as exc:
-        failure={"run_id":run_id,"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":"unknown" if args.apply else 0}
+        progress_path=OUTPUT/run_id/"progress.json"
+        try: write_count=json.loads(progress_path.read_text(encoding="utf-8")).get("wordpress_write_count", "unknown")
+        except Exception: write_count="unknown" if args.apply else 0
+        failure={"run_id":run_id,"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
         try: write_json_new(OUTPUT/run_id/"result.json",failure)
         except Exception: pass
         print(json.dumps(failure,ensure_ascii=False)); return 1
