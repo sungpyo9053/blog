@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 from publisher.config import WordPressConfig
 from publisher.wordpress import WordPressClient
-from scripts.evidence_topic_miner import atomic_write_new, build_payload, persist_miner_run
+from scripts.evidence_topic_miner import atomic_replace, atomic_write_new, build_payload, persist_miner_run
 from scripts.run_daily_pipeline import PipelineError, PipelineLock, configure_logger, make_run_id, make_topic_context, read_publish_result, resolve_codex, run_topic_pipeline
 from scripts.snapshot_topic_inventory import build_snapshot
 
@@ -36,7 +36,6 @@ def refresh_inventory() -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     archive = MINER_ROOT / "inventory" / f"{stamp}.json"
     atomic_write_new(archive, data)
-    from scripts.evidence_topic_miner import atomic_replace
     atomic_replace(destination, data)
     return destination
 
@@ -106,23 +105,29 @@ def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dic
     return {"url":url,"http_status":status,"title_present":title_ok,"evidence_links_present":evidence_ok,"checked_at":datetime.now(UTC).isoformat()}
 
 
-def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Callable[[Mapping[str, Any], str, logging.Logger], dict[str, Any]] = run_selected_candidate, public_auditor: Callable[[Mapping[str, Any], Mapping[str, Any]], dict[str, Any]] = audit_public, output_root: Path = OUTPUT, miner_root: Path = MINER_ROOT, repo: Path = ROOT) -> dict[str, Any]:
+def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Callable[[Mapping[str, Any], str, logging.Logger], dict[str, Any]] = run_selected_candidate, public_auditor: Callable[[Mapping[str, Any], Mapping[str, Any]], dict[str, Any]] = audit_public, output_root: Path = OUTPUT, miner_root: Path = MINER_ROOT, repo: Path = ROOT, logger: logging.Logger | None = None) -> dict[str, Any]:
     now = datetime.now(KST); day = now.date().isoformat(); run_dir = output_root / run_id
     checkpoint_path = miner_root / "checkpoint.json"
     checkpoint = json.loads(checkpoint_path.read_text()) if checkpoint_path.is_file() else None
     payload, processing, next_checkpoint = build_payload(repo=repo, inventory_path=inventory_path, run_date=now.date(), checkpoint=checkpoint)
     miner_dir = miner_root / day / run_id
-    persist_miner_run(miner_dir, checkpoint_path, payload, processing, next_checkpoint)
+    run_checkpoint = run_dir / "miner-checkpoint.json"
+    persist_miner_run(miner_dir, run_checkpoint, payload, processing, next_checkpoint)
+    def advance_checkpoint() -> None:
+        atomic_replace(checkpoint_path, (json.dumps(next_checkpoint, ensure_ascii=False, indent=2) + "\n").encode())
     base = {"run_id":run_id,"kst_date":day,"publication_mode":"briefing_only","failed":False,"wordpress_write_count":0,"candidate_count":len(payload["candidates"])}
     if published_today(output_root, day) >= DAILY_LIMIT:
         return {**base,"deep_article":"daily_limit_reached"}
     if not payload["candidates"]:
+        advance_checkpoint()
         return {**base,"deep_article":"no_publishable_topic"}
     candidate = payload["candidates"][0]
     if not apply:
         return {**base,"deep_article":"ready_not_published","candidate_id":candidate["candidate_id"]}
-    published = topic_runner(candidate, run_id, configure_logger(now.date()))
-    return {**base,"publication_mode":"dual_lane","deep_article":"published","wordpress_write_count":1,"candidate_id":candidate["candidate_id"],"publication":published,"public_audit":public_auditor(published,candidate)}
+    published = topic_runner(candidate, run_id, logger or configure_logger(now.date()))
+    audit = public_auditor(published,candidate)
+    advance_checkpoint()
+    return {**base,"publication_mode":"dual_lane","deep_article":"published","wordpress_write_count":1,"candidate_id":candidate["candidate_id"],"publication":published,"public_audit":audit}
 
 
 def main() -> int:
