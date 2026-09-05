@@ -2,119 +2,12 @@
 /**
  * Plugin Name: HuntLab Article Table of Contents
  * Description: Adds a warm, accessible H2/H3 table of contents to HuntLab posts.
- * Version: 1.1.6
+ * Version: 1.2.0
  * Author: HuntLab
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
-}
-
-/**
- * Convert rendered post HTML into a short, safe summary sentence.
- *
- * @param string $html Source HTML.
- * @param int    $limit Maximum character count.
- * @return string
- */
-function huntlab_article_summary_text( $html, $limit = 190 ) {
-	$text = trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $html ) ) );
-	if ( '' === $text ) {
-		return '';
-	}
-	if ( function_exists( 'mb_strlen' ) ) {
-		if ( mb_strlen( $text, 'UTF-8' ) > $limit ) {
-			return rtrim( mb_substr( $text, 0, $limit, 'UTF-8' ) ) . '…';
-		}
-		return $text;
-	}
-	if ( preg_match_all( '/./us', $text, $characters ) ) {
-		if ( count( $characters[0] ) > $limit ) {
-			return rtrim( implode( '', array_slice( $characters[0], 0, $limit ) ) ) . '…';
-		}
-		return $text;
-	}
-	return $text;
-}
-
-/**
- * Build a reversible quick summary for older posts from content already shown.
- *
- * New pipeline posts include an explicit "핵심 요약" section, so this fallback
- * is only used when that authored section is absent.
- *
- * @param string $content  Anchored post content.
- * @param array  $sections Parsed H2/H3 sections.
- * @return string
- */
-function huntlab_article_quick_summary( $content, $sections ) {
-	if ( preg_match( '/<h2\b[^>]*>\s*(?:<[^>]+>\s*)*(?:20초\s*)?핵심 요약\s*(?:<\/[^>]+>\s*)*<\/h2>/iu', $content ) ) {
-		return '';
-	}
-
-	$intro = $content;
-	if ( preg_match( '/<h2\b/i', $content, $first_heading, PREG_OFFSET_CAPTURE ) ) {
-		$intro = substr( $content, 0, $first_heading[0][1] );
-	}
-	preg_match_all( '/<p\b[^>]*>(.*?)<\/p>/is', $intro, $paragraph_matches );
-	$paragraphs = array();
-	foreach ( $paragraph_matches[1] as $paragraph ) {
-		$text = huntlab_article_summary_text( $paragraph );
-		if ( '' !== $text && strlen( $text ) >= 24 ) {
-			$paragraphs[] = $text;
-		}
-	}
-
-	$steps = array();
-	foreach ( $sections as $section ) {
-		if ( preg_match( '/^(?:(?:20초\s*)?핵심 요약|참고|함께 읽)/u', $section['title'] ) ) {
-			continue;
-		}
-		$steps[] = $section['title'];
-		if ( 3 === count( $steps ) ) {
-			break;
-		}
-	}
-
-	/*
-	 * Older posts often begin with an H2, so there is no introductory paragraph.
-	 * Do not request an automatic excerpt here: it applies content filters
-	 * again and can leave a recursively generated summary with an empty value.
-	 * Prefer a manual excerpt, then the first substantive paragraph in the post.
-	 */
-	$manual_excerpt = huntlab_article_summary_text( (string) get_post_field( 'post_excerpt', get_the_ID() ) );
-	if ( '' === $manual_excerpt && empty( $paragraphs ) ) {
-		preg_match_all( '/<p\b[^>]*>(.*?)<\/p>/is', $content, $content_paragraph_matches );
-		foreach ( $content_paragraph_matches[1] as $paragraph ) {
-			$text = huntlab_article_summary_text( $paragraph );
-			if ( '' !== $text && strlen( $text ) >= 24 ) {
-				$paragraphs[] = $text;
-				break;
-			}
-		}
-	}
-
-	$what = isset( $paragraphs[0] ) ? $paragraphs[0] : $manual_excerpt;
-	$why  = isset( $steps[0] )
-		? '“' . $steps[0] . '”라는 문제 또는 판단 기준을 놓치지 않기 위해서입니다.'
-		: '';
-	$how_steps = array_slice( $steps, 1, 3 );
-	if ( count( $how_steps ) < 2 ) {
-		$how_steps = $steps;
-	}
-
-	if ( '' === $what || '' === $why || count( $steps ) < 2 ) {
-		return '';
-	}
-
-	$how = implode( ' → ', $how_steps );
-	return '<section class="huntlab-article-quick-summary" aria-labelledby="huntlab-quick-summary">'
-		. '<h2 id="huntlab-quick-summary">20초 핵심 요약</h2>'
-		. '<ul>'
-		. '<li><strong>무엇</strong><span>' . esc_html( $what ) . '</span></li>'
-		. '<li><strong>왜</strong><span>' . esc_html( $why ) . '</span></li>'
-		. '<li><strong>어떻게</strong><span>' . esc_html( $how ) . ' 순서로 확인합니다.</span></li>'
-		. '</ul></section>';
 }
 
 /**
@@ -200,14 +93,12 @@ function huntlab_article_toc_content( $content ) {
 		. '<details open><summary>한눈에 보기</summary>'
 		. '<nav aria-label="글 섹션"><ol>' . $items . '</ol></nav>'
 		. '</details></aside>';
-	$quick_summary = huntlab_article_quick_summary( $content, $sections );
-
 	if ( ! preg_match( '/<h2\b/i', $content, $first_match, PREG_OFFSET_CAPTURE ) ) {
-		return $quick_summary . $toc . $content;
+		return $toc . $content;
 	}
 	$first_heading = $first_match[0][1];
 
-	return substr( $content, 0, $first_heading ) . $quick_summary . $toc . substr( $content, $first_heading );
+	return substr( $content, 0, $first_heading ) . $toc . substr( $content, $first_heading );
 }
 add_filter( 'the_content', 'huntlab_article_toc_content', 20 );
 

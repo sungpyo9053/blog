@@ -15,29 +15,24 @@ class HuntLabArticleTocTests(unittest.TestCase):
         self.assertIn("huntlab-section-", php)
         self.assertIn("한눈에 보기", php)
 
-    def test_plugin_backfills_grounded_quick_summary_without_replacing_toc(self):
+    def test_plugin_never_generates_an_unauthored_quick_summary(self):
         php = (PLUGIN / "huntlab-article-toc.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/article-toc.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 1.1.6", php)
-        self.assertIn("huntlab_article_quick_summary", php)
-        self.assertIn("20초 핵심 요약", php)
-        self.assertIn("<strong>무엇</strong>", php)
-        self.assertIn("<strong>왜</strong>", php)
-        self.assertIn("<strong>어떻게</strong>", php)
-        self.assertNotIn("get_the_excerpt(", php)
-        self.assertIn("get_post_field( 'post_excerpt', get_the_ID() )", php)
-        self.assertIn("content_paragraph_matches", php)
-        self.assertIn("preg_match_all( '/./us'", php)
-        self.assertIn("array_slice( $characters[0], 0, $limit )", php)
-        self.assertIn("if ( function_exists( 'mb_strlen' ) )", php)
-        self.assertNotIn("substr( $text, 0, $limit )", php)
-        self.assertIn("(?:20초\\s*)?핵심 요약", php)
-        self.assertIn("array_slice( $steps, 1, 3 )", php)
-        self.assertIn("핵심 요약", php)
+        self.assertIn("Version: 1.2.0", php)
+        self.assertNotIn("huntlab_article_quick_summary", php)
+        self.assertNotIn("20초 핵심 요약", php)
+        self.assertNotIn("huntlab-article-quick-summary", php)
         self.assertIn("huntlab-article-quick-summary", css)
         self.assertIn(".huntlab-article-toc", css)
         self.assertIn("add_filter( 'the_content'", php)
+
+    def test_authored_headings_are_preserved_and_briefing_post_type_is_out_of_scope(self):
+        php = (PLUGIN / "huntlab-article-toc.php").read_text(encoding="utf-8")
+
+        self.assertIn("return '<h' . $level . $attributes . '>' . $inner_html . '</h' . $level . '>';", php)
+        self.assertIn("is_singular( 'post' )", php)
+        self.assertNotIn("is_singular( 'hunt_briefing' )", php)
 
     def test_toc_has_responsive_sticky_navigation_and_active_section(self):
         css = (PLUGIN / "assets/article-toc.css").read_text(encoding="utf-8")
