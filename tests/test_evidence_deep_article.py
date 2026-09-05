@@ -70,7 +70,8 @@ class EvidenceDeepArticleTests(unittest.TestCase):
 
     def test_timer_runs_twice_daily(self):
         timer=Path("deploy/huntlab-evidence-deep-article.timer").read_text(encoding="utf-8")
-        self.assertIn("OnCalendar=*-*-* 10,22:00:00 Asia/Seoul",timer)
+        self.assertIn("OnCalendar=*-*-* 10:00:00 Asia/Seoul",timer)
+        self.assertIn("OnCalendar=*-*-* 22:00:00 Asia/Seoul",timer)
         self.assertIn("Persistent=false",timer)
 
 
