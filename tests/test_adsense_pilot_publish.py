@@ -162,6 +162,42 @@ class PilotPublishContractTests(unittest.TestCase):
 
         self.assertNotIn("status=UPDATED", output.getvalue())
 
+    def test_readback_api_failure_cannot_report_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            html_path, approval_path, identity = self._apply_fixture(directory)
+            argv = self._apply_argv(html_path, approval_path)
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
+                patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                client = client_type.return_value
+                client.get_post.side_effect = [identity, RuntimeError("read-back failed")]
+                with self.assertRaisesRegex(RuntimeError, "read-back failed"):
+                    main()
+
+        client.update_post.assert_called_once()
+        self.assertNotIn("status=UPDATED", output.getvalue())
+
+    def test_readback_non_publish_status_cannot_report_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            html_path, approval_path, identity = self._apply_fixture(directory)
+            changed = {**identity, "status": "draft"}
+            argv = self._apply_argv(html_path, approval_path)
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
+                patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                client = client_type.return_value
+                client.get_post.side_effect = [identity, changed]
+                with self.assertRaisesRegex(RuntimeError, "is not published"):
+                    main()
+
+        self.assertNotIn("status=UPDATED", output.getvalue())
+
     @staticmethod
     def _apply_argv(html_path: Path, approval_path: Path) -> list[str]:
         return [
