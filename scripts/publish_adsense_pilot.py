@@ -48,6 +48,14 @@ def identity(post: dict) -> dict:
     }
 
 
+def raw_content(post: dict) -> str:
+    content = post.get("content") or {}
+    raw = content.get("raw") if isinstance(content, dict) else None
+    if not isinstance(raw, str):
+        raise RuntimeError("WordPress read-back did not include editable raw content")
+    return raw
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--html", type=Path, required=True)
@@ -67,16 +75,18 @@ def main() -> int:
         )
         return 0
 
+    # Freeze the exact approved payload before any WordPress interaction. If
+    # the file changed after initial validation, abort with zero API calls.
+    html, preflight_digest = checked_html(args.html, approval)
+    if preflight_digest != digest:
+        raise RuntimeError("HTML changed between validation and WordPress write")
+
     client = WordPressClient(WordPressConfig.from_environment(ROOT / ".env"))
     before = client.get_post(args.post_id)
     before_identity = identity(before)
     if before_identity["slug"] != ALLOWED_POSTS[args.post_id]:
         raise RuntimeError(f"unexpected Post {args.post_id} slug")
 
-    # Re-read and re-hash immediately before the only external write.
-    html, preflight_digest = checked_html(args.html, approval)
-    if preflight_digest != digest:
-        raise RuntimeError("HTML changed between validation and WordPress write")
     client.update_post(
         args.post_id,
         {"title": approval["title"], "content": html},
@@ -87,6 +97,8 @@ def main() -> int:
         raise RuntimeError("Post ID/URL/slug/media/canonical changed")
     if after.get("status") != "publish":
         raise RuntimeError(f"Post {args.post_id} is not published after update")
+    if raw_content(after) != html:
+        raise RuntimeError("WordPress read-back content does not match approved HTML")
     print(
         f"status=UPDATED post_id={args.post_id} "
         f"sha256={digest} url={after.get('link')} featured_media={after.get('featured_media')}"

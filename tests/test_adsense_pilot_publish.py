@@ -38,6 +38,7 @@ class PilotPublishContractTests(unittest.TestCase):
                 "featured_media": 220,
                 "aioseo_meta_data": {"canonical_url": ""},
                 "status": "publish",
+                "content": {"raw": "<p>pagination</p>\n"},
             }
             argv = [
                 "publish_adsense_pilot.py",
@@ -106,7 +107,101 @@ class PilotPublishContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "changed between validation"):
                 main()
 
+        client_type.assert_not_called()
         client.update_post.assert_not_called()
+
+    def test_apply_rejects_readback_content_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            html_path, approval_path, identity = self._apply_fixture(directory)
+            changed = {**identity, "content": {"raw": "<p>changed</p>\n"}}
+            argv = self._apply_argv(html_path, approval_path)
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
+                patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+            ):
+                client = client_type.return_value
+                client.get_post.side_effect = [identity, changed]
+                with self.assertRaisesRegex(RuntimeError, "content does not match"):
+                    main()
+
+        client.update_post.assert_called_once()
+
+    def test_apply_rejects_identity_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            html_path, approval_path, identity = self._apply_fixture(directory)
+            changed = {**identity, "featured_media": 999}
+            argv = self._apply_argv(html_path, approval_path)
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
+                patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+            ):
+                client = client_type.return_value
+                client.get_post.side_effect = [identity, changed]
+                with self.assertRaisesRegex(RuntimeError, "canonical changed"):
+                    main()
+
+        client.update_post.assert_called_once()
+
+    def test_apply_api_failure_cannot_report_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            html_path, approval_path, identity = self._apply_fixture(directory)
+            argv = self._apply_argv(html_path, approval_path)
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
+                patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                client = client_type.return_value
+                client.get_post.return_value = identity
+                client.update_post.side_effect = RuntimeError("api failed")
+                with self.assertRaisesRegex(RuntimeError, "api failed"):
+                    main()
+
+        self.assertNotIn("status=UPDATED", output.getvalue())
+
+    @staticmethod
+    def _apply_argv(html_path: Path, approval_path: Path) -> list[str]:
+        return [
+            "publish_adsense_pilot.py",
+            "--post-id",
+            "132",
+            "--html",
+            str(html_path),
+            "--approval",
+            str(approval_path),
+            "--apply",
+        ]
+
+    @staticmethod
+    def _apply_fixture(directory: str) -> tuple[Path, Path, dict]:
+        html_path = Path(directory) / "final.html"
+        approval_path = Path(directory) / "approval.json"
+        html_path.write_bytes(b"<p>pagination</p>\n")
+        digest = hashlib.sha256(html_path.read_bytes()).hexdigest()
+        approval_path.write_text(
+            json.dumps(
+                {
+                    "decision": "APPROVED",
+                    "post_id": 132,
+                    "sha256": digest,
+                    "title": "pagination",
+                }
+            ),
+            encoding="utf-8",
+        )
+        identity = {
+            "id": 132,
+            "slug": "wordpress-rest-api-pagination",
+            "link": "https://huntlab.app/wordpress-rest-api-pagination/",
+            "featured_media": 220,
+            "aioseo_meta_data": {"canonical_url": ""},
+            "status": "publish",
+            "content": {"raw": "<p>pagination</p>\n"},
+        }
+        return html_path, approval_path, identity
 
     def test_dry_run_never_initializes_wordpress_or_sends_a_request(self):
         with tempfile.TemporaryDirectory() as directory:
