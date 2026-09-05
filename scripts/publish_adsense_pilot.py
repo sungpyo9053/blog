@@ -24,7 +24,7 @@ ALLOWED_POSTS = {
 
 def checked_html(path: Path, approval: dict) -> tuple[str, str]:
     raw = path.read_bytes()
-    if b"\r" in raw or not raw.endswith(b"\n"):
+    if b"\r" in raw or not raw.endswith(b"\n") or raw.endswith(b"\n\n"):
         raise ValueError("HTML must use LF and end with exactly one newline")
     text = raw.decode("utf-8")
     digest = hashlib.sha256(raw).hexdigest()

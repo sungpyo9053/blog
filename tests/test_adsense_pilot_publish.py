@@ -8,12 +8,106 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from scripts.publish_adsense_pilot import checked_html, main
 
 
 class PilotPublishContractTests(unittest.TestCase):
+    def test_apply_rehashes_and_updates_only_the_selected_post_then_reads_it_back(self):
+        with tempfile.TemporaryDirectory() as directory:
+            html_path = Path(directory) / "final.html"
+            approval_path = Path(directory) / "approval.json"
+            html_path.write_bytes(b"<p>pagination</p>\n")
+            digest = hashlib.sha256(html_path.read_bytes()).hexdigest()
+            approval_path.write_text(
+                json.dumps(
+                    {
+                        "decision": "APPROVED",
+                        "post_id": 132,
+                        "sha256": digest,
+                        "title": "pagination",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            identity = {
+                "id": 132,
+                "slug": "wordpress-rest-api-pagination",
+                "link": "https://huntlab.app/wordpress-rest-api-pagination/",
+                "featured_media": 220,
+                "aioseo_meta_data": {"canonical_url": ""},
+                "status": "publish",
+            }
+            argv = [
+                "publish_adsense_pilot.py",
+                "--post-id",
+                "132",
+                "--html",
+                str(html_path),
+                "--approval",
+                str(approval_path),
+                "--apply",
+            ]
+            with (
+                patch.object(sys, "argv", argv),
+                patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
+                patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+                redirect_stdout(io.StringIO()),
+            ):
+                client = client_type.return_value
+                client.get_post.side_effect = [identity, identity]
+                self.assertEqual(main(), 0)
+
+        self.assertEqual(client.get_post.call_args_list, [call(132), call(132)])
+        client.update_post.assert_called_once_with(
+            132,
+            {"title": "pagination", "content": "<p>pagination</p>\n"},
+            status="publish",
+        )
+
+    def test_apply_aborts_before_update_if_second_hash_differs(self):
+        argv = [
+            "publish_adsense_pilot.py",
+            "--post-id",
+            "132",
+            "--html",
+            "unused.html",
+            "--approval",
+            "unused.json",
+            "--apply",
+        ]
+        approval = {
+            "decision": "APPROVED",
+            "post_id": 132,
+            "sha256": "a" * 64,
+            "title": "pagination",
+        }
+        identity = {
+            "id": 132,
+            "slug": "wordpress-rest-api-pagination",
+            "link": "https://huntlab.app/wordpress-rest-api-pagination/",
+            "featured_media": 220,
+            "aioseo_meta_data": {"canonical_url": ""},
+            "status": "publish",
+        }
+        with (
+            patch.object(sys, "argv", argv),
+            patch("pathlib.Path.read_text", return_value=json.dumps(approval)),
+            patch(
+                "scripts.publish_adsense_pilot.checked_html",
+                side_effect=[("approved", "a" * 64), ("changed", "b" * 64)],
+            ),
+            patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
+            patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+        ):
+            client = client_type.return_value
+            client.get_post.return_value = identity
+            with self.assertRaisesRegex(RuntimeError, "changed between validation"):
+                main()
+
+        client.update_post.assert_not_called()
+
     def test_dry_run_never_initializes_wordpress_or_sends_a_request(self):
         with tempfile.TemporaryDirectory() as directory:
             html_path = Path(directory) / "final.html"
@@ -111,4 +205,34 @@ class PilotPublishContractTests(unittest.TestCase):
                 checked_html(
                     path,
                     {"decision": "APPROVED", "post_id": 50, "sha256": "0" * 64},
+                )
+
+    def test_missing_final_newline_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "final.html"
+            path.write_bytes(b"<p>fixed</p>")
+            with self.assertRaisesRegex(ValueError, "exactly one newline"):
+                checked_html(
+                    path,
+                    {"decision": "APPROVED", "post_id": 132, "sha256": "0" * 64},
+                )
+
+    def test_multiple_trailing_newlines_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "final.html"
+            path.write_bytes(b"<p>fixed</p>\n\n")
+            with self.assertRaisesRegex(ValueError, "exactly one newline"):
+                checked_html(
+                    path,
+                    {"decision": "APPROVED", "post_id": 132, "sha256": "0" * 64},
+                )
+
+    def test_invalid_utf8_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "final.html"
+            path.write_bytes(b"<p>\xff</p>\n")
+            with self.assertRaises(UnicodeDecodeError):
+                checked_html(
+                    path,
+                    {"decision": "APPROVED", "post_id": 132, "sha256": "0" * 64},
                 )
