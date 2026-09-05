@@ -2,12 +2,34 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.audit_adsense_content import KEEP_EVIDENCE, inspect_post
+from scripts.audit_adsense_content import KEEP_EVIDENCE, fetch_all, inspect_post
 
 
 class AdSenseContentAuditTests(unittest.TestCase):
     def test_keep_set_requires_durable_evidence_paths(self):
         self.assertEqual(set(KEEP_EVIDENCE), {96, 269, 274, 290, 301, 373})
+
+    def test_fetch_all_reads_full_second_page(self):
+        class Client:
+            def __init__(self):
+                self.paths = []
+
+            def request(self, method, path, expected):
+                self.paths.append(path)
+                if "&page=1&" in path:
+                    return [{"id": value} for value in range(651, 551, -1)]
+                if "&page=2&" in path:
+                    return [{"id": value} for value in range(128, 109, -1)]
+                raise AssertionError(path)
+
+        client = Client()
+        rows = fetch_all(client, "posts", status="publish")
+
+        self.assertEqual(len(rows), 119)
+        self.assertEqual(len({row["id"] for row in rows}), 119)
+        self.assertEqual(len(client.paths), 2)
+        self.assertIn("per_page=100", client.paths[0])
+        self.assertIn("page=2", client.paths[1])
 
     def setUp(self):
         self.categories = {
