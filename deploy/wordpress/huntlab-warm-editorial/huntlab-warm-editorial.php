@@ -2054,6 +2054,20 @@ function hunt_news_verified_case_category_label( $thelist ) {
 add_filter( 'the_category', 'hunt_news_verified_case_category_label', 20 );
 
 /**
+ * Kadence can build taxonomy markup through get_the_term_list(), which applies
+ * term_links-category instead of the_category. Keep both render paths on the
+ * same verified-case label without changing the post's stored categories.
+ */
+function hunt_news_verified_case_category_term_links( $links ) {
+	if ( ! is_admin() && is_singular( 'post' ) && hunt_news_is_verified_case() ) {
+		$meta = hunt_news_case_meta( get_post() );
+		return array( '<span class="hunt-news-case-taxonomy">' . esc_html( $meta['problem_group'] ) . ' / VERIFIED CASE</span>' );
+	}
+	return $links;
+}
+add_filter( 'term_links-category', 'hunt_news_verified_case_category_term_links', 20 );
+
+/**
  * Add one explicit, measurable share action after article content.
  * The event is recorded only after the native share sheet or link copy succeeds.
  *

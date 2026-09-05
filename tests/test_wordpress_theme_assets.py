@@ -468,6 +468,8 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("data-hunt-news-group", php)
         self.assertIn("data-hunt-news-case-group", php)
         self.assertIn("hunt_news_verified_case_category_label", php)
+        self.assertIn("hunt_news_verified_case_category_term_links", php)
+        self.assertIn("add_filter( 'term_links-category'", php)
         self.assertIn("body.home .huntlab-category-tabs{display:none}", css)
         self.assertIn("preg_match_all( '/[\\p{L}\\p{N}]/u'", php)
         self.assertIn("$explainer_feed   = $explainers ? array_slice( $explainers, 1 )", php)
