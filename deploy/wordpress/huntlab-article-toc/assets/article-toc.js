@@ -3,6 +3,16 @@
 
 	var toc = document.querySelector('.huntlab-article-toc');
 	if (!toc) return;
+	var disclosure = toc.querySelector('details');
+	var compact = window.matchMedia('(max-width: 767px)');
+	function syncDisclosure() {
+		if (!disclosure) return;
+		if (compact.matches) disclosure.removeAttribute('open');
+		else disclosure.setAttribute('open', '');
+	}
+	syncDisclosure();
+	if (compact.addEventListener) compact.addEventListener('change', syncDisclosure);
+	else compact.addListener(syncDisclosure);
 
 	// Kadence clips fixed descendants inside the article. Keep the mobile TOC in
 	// the reading flow, but move the desktop navigation to the viewport layer.

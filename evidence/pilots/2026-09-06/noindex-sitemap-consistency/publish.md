@@ -8,6 +8,7 @@ tags:
   - sitemap
   - 배포 검증
 publish_mode: publish
+existing_post_id: 699
 run_id: evidence-lab-20260906-indexability
 topic_id: noindex-sitemap-consistency
 source_id: demand-evidence-lab-v1
@@ -29,9 +30,9 @@ recommended_cta: GitHub에서 진단 명령 확인하기
 affiliate_disclosure: 없음
 ---
 
-페이지 HTML에 `noindex, follow`가 보인다고 인덱싱 정리가 끝난 것은 아니다. sitemap 생성기가 그 URL을 계속 내보내면 검색엔진에는 서로 다른 신호를 보낸다. HuntLab은 이 상태를 사람 눈으로 두 번 확인하는 대신, 페이지 판정과 sitemap URL을 같은 검사에서 대조하는 fixture를 만들었다.
+`noindex, follow`를 확인한 뒤 작업이 끝났다고 표시하려다 sitemap fixture를 다시 열었다. 같은 URL이 여전히 검색용 목록에 남아 있었다. 두 파일을 따로 검사하면 둘 다 정상처럼 보였지만, URL 집합을 합치자 `noindex_url_in_sitemap` 1건이 나왔다. sitemap에서 그 URL만 제외하자 같은 명령이 충돌 0건으로 통과했다. 이 비교를 배포 전에 다시 쓸 수 있도록 진단 스크립트와 fixture로 고정했다.
 
-이번 기록은 운영 장애를 재현한 것이 아니다. 공개 서비스에 영향을 주지 않는 두 개의 sitemap fixture로 배포 전후 계약을 통제 비교했다.
+처음에는 HTML의 robots 메타 검사만 배포 게이트로 두려 했다. 그 방식은 페이지 자체의 지시만 확인하고 sitemap 생성 결과를 놓친다. 반대로 sitemap 문법만 검사해도 URL의 indexability를 알 수 없다. 그래서 두 개의 개별 성공 조건을 버리고 URL 단위 교차 검사 하나로 바꿨다. 이번 기록은 운영 장애를 재현한 것이 아니라 공개 서비스에 영향을 주지 않는 통제 비교다.
 
 ## 비교 대상
 
@@ -111,5 +112,16 @@ sitemap index가 여러 child sitemap을 가리키는 사이트라면 모든 chi
 3. noindex URL과 sitemap URL의 교집합이 0인지 확인한다.
 4. indexable URL의 canonical이 자기 자신인지 확인한다.
 5. 배포 후 공개 HTML과 sitemap을 다시 받아 같은 검사를 반복한다.
+
+## 복사해서 실행하기
+
+아래 명령은 변경 전 충돌과 변경 후 통과, 회귀 테스트를 한 번에 기록한다.
+
+```bash
+.venv/bin/python scripts/run_evidence_lab.py noindex-sitemap-consistency \
+  --output /tmp/noindex-sitemap-consistency.json
+```
+
+결과 파일에서 `before.exit_code=1`, `after.exit_code=0`, `status=READY`, `wordpress_writes=0`을 확인한다. 실제 사이트에 적용할 때는 fixture 대신 공개 HTML과 모든 child sitemap에서 만든 snapshot을 입력해야 한다.
 
 [진단 스크립트와 fixture로 직접 재현하기](https://github.com/sungpyo9053/blog/blob/601ac6386f7ad20168ef450e47ca6c1a71daea9e/scripts/huntlab_wp_diagnostics.py)

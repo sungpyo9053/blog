@@ -13,13 +13,13 @@ class HuntLabArticleTocTests(unittest.TestCase):
         self.assertIn("is_singular( 'post' )", php)
         self.assertIn("<h([23])", php)
         self.assertIn("huntlab-section-", php)
-        self.assertIn("한눈에 보기", php)
+        self.assertIn("목차 ' . count( $sections ) . '개 보기", php)
 
     def test_plugin_never_generates_an_unauthored_quick_summary(self):
         php = (PLUGIN / "huntlab-article-toc.php").read_text(encoding="utf-8")
         css = (PLUGIN / "assets/article-toc.css").read_text(encoding="utf-8")
 
-        self.assertIn("Version: 1.2.0", php)
+        self.assertIn("Version: 1.3.0", php)
         self.assertNotIn("huntlab_article_quick_summary", php)
         self.assertNotIn("20초 핵심 요약", php)
         self.assertNotIn("huntlab-article-quick-summary", php)
@@ -44,6 +44,8 @@ class HuntLabArticleTocTests(unittest.TestCase):
         self.assertIn("aria-current", js)
         self.assertIn("document.body.appendChild(toc)", js)
         self.assertIn("placeholder.parentNode.insertBefore", js)
+        self.assertIn("disclosure.removeAttribute('open')", js)
+        self.assertIn("max-width: 767px", js)
 
 
 if __name__ == "__main__":

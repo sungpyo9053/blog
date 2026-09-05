@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HuntLab Article Table of Contents
  * Description: Adds a warm, accessible H2/H3 table of contents to HuntLab posts.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: HuntLab
  */
 
@@ -90,7 +90,7 @@ function huntlab_article_toc_content( $content ) {
 	}
 
 	$toc = '<aside class="huntlab-article-toc" aria-label="이 글의 목차">'
-		. '<details open><summary>한눈에 보기</summary>'
+		. '<details open><summary>목차 ' . count( $sections ) . '개 보기</summary>'
 		. '<nav aria-label="글 섹션"><ol>' . $items . '</ol></nav>'
 		. '</details></aside>';
 	if ( ! preg_match( '/<h2\b/i', $content, $first_match, PREG_OFFSET_CAPTURE ) ) {

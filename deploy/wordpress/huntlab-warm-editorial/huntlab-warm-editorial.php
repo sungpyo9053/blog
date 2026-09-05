@@ -407,9 +407,14 @@ function hunt_news_special_posts( $slug, $limit = 6 ) {
  * @return int
  */
 function hunt_news_reading_minutes( $post ) {
-	$text  = wp_strip_all_tags( strip_shortcodes( $post->post_content ) );
-	$count = preg_match_all( '/[\p{L}\p{N}]+/u', $text, $matches );
-	return max( 1, (int) ceil( max( 0, (int) $count ) / 250 ) );
+	$content     = (string) $post->post_content;
+	$text        = wp_strip_all_tags( strip_shortcodes( $content ) );
+	$characters  = preg_match_all( '/[\p{L}\p{N}]/u', $text, $matches );
+	$code_lines  = preg_match_all( '/<pre\b[^>]*>.*?<\/pre>/is', $content, $blocks )
+		? array_sum( array_map( static function ( $block ) { return max( 1, substr_count( wp_strip_all_tags( $block ), "\n" ) + 1 ); }, $blocks[0] ) )
+		: 0;
+	$minutes = ( max( 0, (int) $characters ) / 500 ) + ( $code_lines / 12 );
+	return max( 1, (int) ceil( $minutes ) );
 }
 
 /** Resolve verified metadata without rewriting the two approved pilot bodies. */
@@ -548,11 +553,11 @@ function hunt_news_render_evidence_library_home() {
 			<?php endforeach; ?>
 			</div>
 		</section>
-		<?php if ( $groups ) : ?><section id="hunt-news-problem-groups" class="hunt-news-problem-groups"><header><p>FIND BY PROBLEM</p><h2>문제별 찾아보기</h2></header><div><?php foreach ( $groups as $group => $count ) : ?><a href="#hunt-news-latest-verified"><strong><?php echo esc_html( $group ); ?></strong><span><?php echo esc_html( (string) $count ); ?>개 검증 사례</span></a><?php endforeach; ?></div></section><?php endif; ?>
-		<section id="hunt-news-latest-verified" class="hunt-news-latest-verified"><header><p>VERIFICATION LIBRARY</p><h2>최신 검증 글</h2></header><div><?php foreach ( $latest_verified as $post ) : $meta = hunt_news_case_meta( $post ); ?><article><span><?php echo esc_html( $meta['problem_group'] ); ?></span><h3><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h3><p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p><small>검증일 <?php echo esc_html( str_replace( '-', '.', $meta['date'] ) ); ?> · <?php echo esc_html( (string) hunt_news_reading_minutes( $post ) ); ?>분</small></article><?php endforeach; ?></div></section>
+		<?php if ( $groups ) : ?><section id="hunt-news-problem-groups" class="hunt-news-problem-groups"><header><p>FIND BY PROBLEM</p><h2>문제별 찾아보기</h2></header><div><a href="#hunt-news-latest-verified" data-hunt-news-group="all" aria-pressed="true"><strong>전체</strong><span><?php echo esc_html( (string) count( $verified ) ); ?>개 검증 사례</span></a><?php foreach ( $groups as $group => $count ) : ?><a href="#hunt-news-latest-verified" data-hunt-news-group="<?php echo esc_attr( $group ); ?>" aria-pressed="false"><strong><?php echo esc_html( $group ); ?></strong><span><?php echo esc_html( (string) $count ); ?>개 검증 사례</span></a><?php endforeach; ?></div></section><?php endif; ?>
+		<section id="hunt-news-latest-verified" class="hunt-news-latest-verified"><header><p>VERIFICATION LIBRARY</p><h2 data-hunt-news-library-title>전체 검증 글</h2></header><div><?php foreach ( $verified as $post ) : $meta = hunt_news_case_meta( $post ); ?><article data-hunt-news-case-group="<?php echo esc_attr( $meta['problem_group'] ); ?>"><span><?php echo esc_html( $meta['problem_group'] ); ?></span><h3><a href="<?php echo esc_url( get_permalink( $post ) ); ?>"><?php echo esc_html( get_the_title( $post ) ); ?></a></h3><p><?php echo esc_html( hunt_news_briefing_summary( $post ) ); ?></p><small>검증일 <?php echo esc_html( str_replace( '-', '.', $meta['date'] ) ); ?> · <?php echo esc_html( (string) hunt_news_reading_minutes( $post ) ); ?>분</small></article><?php endforeach; ?></div></section>
 		<aside class="hunt-news-library-briefing"><div><p>DAILY BRIEF · <?php echo esc_html( hunt_news_briefing_display_date( $manifest, 'Y.m.d' ) ); ?></p><h2><?php echo esc_html( (string) ( $analysis['headline'] ?? '오늘 수집한 WordPress·개발 변경을 한 페이지에 기록합니다.' ) ); ?></h2></div><a href="<?php echo esc_url( $briefing_url ); ?>">브리핑 보기 →</a></aside>
 	</div>
-	<script id="hunt-news-editorial-home-position">document.addEventListener('DOMContentLoaded',function(){var home=document.getElementById('hunt-news-originals');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(home&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',home);}if(main){main.hidden=true;}});</script>
+	<script id="hunt-news-editorial-home-position">document.addEventListener('DOMContentLoaded',function(){var home=document.getElementById('hunt-news-originals');var intro=document.getElementById('huntlab-home-intro');var main=document.querySelector('#main,main.site-main');if(home&&intro&&intro.parentNode){intro.insertAdjacentElement('afterend',home);}if(main){main.hidden=true;}document.querySelectorAll('[data-hunt-news-group]').forEach(function(button){button.addEventListener('click',function(){var group=button.getAttribute('data-hunt-news-group');document.querySelectorAll('[data-hunt-news-group]').forEach(function(item){item.setAttribute('aria-pressed',item===button?'true':'false');});document.querySelectorAll('[data-hunt-news-case-group]').forEach(function(card){card.hidden=group!=='all'&&card.getAttribute('data-hunt-news-case-group')!==group;});var title=document.querySelector('[data-hunt-news-library-title]');if(title){title.textContent=group==='all'?'전체 검증 글':group+' 검증 글';}});});});</script>
 	<?php
 }
 
@@ -2037,6 +2042,16 @@ function hunt_news_verified_case_related_option( $enabled ) {
 	return hunt_news_is_verified_case() ? false : $enabled;
 }
 add_filter( 'theme_mod_post_related', 'hunt_news_verified_case_related_option', 20 );
+
+/** Replace the legacy IT label above a verified title with its problem contract. */
+function hunt_news_verified_case_category_label( $thelist ) {
+	if ( ! is_admin() && is_singular( 'post' ) && hunt_news_is_verified_case() ) {
+		$meta = hunt_news_case_meta( get_post() );
+		return '<span class="hunt-news-case-taxonomy">' . esc_html( $meta['problem_group'] ) . ' / VERIFIED CASE</span>';
+	}
+	return $thelist;
+}
+add_filter( 'the_category', 'hunt_news_verified_case_category_label', 20 );
 
 /**
  * Add one explicit, measurable share action after article content.

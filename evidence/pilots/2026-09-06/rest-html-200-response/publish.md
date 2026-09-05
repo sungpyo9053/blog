@@ -8,6 +8,7 @@ tags:
   - 자동발행
   - 회귀 테스트
 publish_mode: publish
+existing_post_id: 698
 run_id: evidence-lab-20260906-rest-html-200
 topic_id: rest-html-200-response
 source_id: demand-evidence-lab-v1
@@ -29,7 +30,7 @@ recommended_cta: GitHub에서 진단 스크립트 실행하기
 affiliate_disclosure: 없음
 ---
 
-WordPress 자동발행에서 `HTTP 200`은 요청이 원하는 결과를 만들었다는 증거가 아니다. 프록시나 인증 계층이 로그인 HTML을 200으로 반환해도 상태 코드만 보는 Publisher는 성공으로 기록할 수 있다. 이 글은 실제 운영 장애 회고가 아니라, 그 오판 조건을 격리된 fixture에서 만든 통제 실험이다.
+자동발행 검사를 만들다가 `HTTP 200`인데 본문이 로그인 HTML인 응답을 넣어봤다. 상태 코드만 보는 검사는 성공이라고 답했다. `Content-Type`과 생성된 글 ID까지 확인하도록 바꾸자 같은 입력이 `unexpected_content_type`으로 막혔다. 정상 JSON fixture는 같은 검사에서 종료 코드 0으로 통과했다. 이 글은 실제 운영 장애 회고가 아니라, 그 오판 조건을 격리된 fixture에서 만든 통제 실험이다.
 
 ## 실패 조건을 먼저 고정했다
 
@@ -53,6 +54,8 @@ body_bytes=99
 ```
 
 핵심은 “200이 아니면 실패”가 아니라 “이 API 호출에서 기대한 응답 계약인가”다.
+
+처음에는 허용 상태 코드 목록만 더 촘촘하게 만들 생각이었다. 하지만 HTML 로그인 페이지도 200을 쓸 수 있으므로 그 방법은 문제를 해결하지 못한다. 그래서 상태 코드 규칙은 유지하되, 응답 형식과 생성된 대상의 ID를 별도 조건으로 추가했다.
 
 ## 생성 요청의 성공 계약
 
@@ -123,5 +126,16 @@ post_id=742
 - 생성·수정 대상의 ID와 slug를 read-back으로 대조한다.
 - JSON 파싱 실패를 성공으로 기록하지 않는다.
 - 실패 시 재시도 가능 여부와 중복 생성 위험을 별도로 판단한다.
+
+## 복사해서 실행하기
+
+저장소를 받은 뒤 아래 한 줄로 실패 fixture와 정상 fixture, 회귀 테스트를 함께 확인할 수 있다.
+
+```bash
+.venv/bin/python scripts/run_evidence_lab.py rest-html-200-response \
+  --output /tmp/rest-html-200-response.json
+```
+
+예상 결과는 `before.exit_code=1`, `after.exit_code=0`, `status=READY`, `wordpress_writes=0`이다. 값이 다르면 글의 결론을 그대로 적용하지 않는다.
 
 [진단 스크립트와 재현 fixture 보기](https://github.com/sungpyo9053/blog/tree/601ac6386f7ad20168ef450e47ca6c1a71daea9e/evidence/lab-fixtures)
