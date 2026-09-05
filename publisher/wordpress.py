@@ -9,6 +9,8 @@ import socket
 import tempfile
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -41,6 +43,24 @@ class WordPressClient:
         self.config = config
         self.max_retries = max_retries
         self._sleep = sleep
+
+    @staticmethod
+    def _retry_after_seconds(value: str | None, *, now: datetime | None = None) -> float | None:
+        """Parse Retry-After delay-seconds or HTTP-date without leaking parser errors."""
+        if not value:
+            return None
+        try:
+            delay = float(value)
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(value)
+            except (TypeError, ValueError, OverflowError):
+                return None
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=UTC)
+            current = now or datetime.now(UTC)
+            delay = (retry_at - current).total_seconds()
+        return max(0.0, delay)
 
     def _authorization(self) -> str:
         raw = f"{self.config.username}:{self.config.app_password}".encode("utf-8")
@@ -111,8 +131,8 @@ class WordPressClient:
 
                 retryable = exc.code == 429 or 500 <= exc.code < 600
                 if retryable and attempt < self.max_retries:
-                    retry_after = exc.headers.get("Retry-After")
-                    delay = float(retry_after) if retry_after else float(2**attempt)
+                    retry_after = self._retry_after_seconds(exc.headers.get("Retry-After"))
+                    delay = retry_after if retry_after is not None else float(2**attempt)
                     self._sleep(min(delay, 30.0))
                     continue
                 category = "authentication" if exc.code in {401, 403} else "api"
