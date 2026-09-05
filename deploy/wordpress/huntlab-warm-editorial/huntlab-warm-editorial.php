@@ -2023,6 +2023,21 @@ function hunt_news_verified_case_comments( $open, $post_id ) {
 }
 add_filter( 'comments_open', 'hunt_news_verified_case_comments', 20, 2 );
 
+/** Do not render Kadence's unrelated chronological discovery surfaces. */
+function hunt_news_verified_case_kadence_layout( $layout ) {
+	if ( hunt_news_is_verified_case() && is_array( $layout ) ) {
+		$layout['navigation'] = 'hide';
+		$layout['comments']   = 'hide';
+	}
+	return $layout;
+}
+add_filter( 'kadence_post_layout', 'hunt_news_verified_case_kadence_layout', 20 );
+
+function hunt_news_verified_case_related_option( $enabled ) {
+	return hunt_news_is_verified_case() ? false : $enabled;
+}
+add_filter( 'theme_mod_post_related', 'hunt_news_verified_case_related_option', 20 );
+
 /**
  * Add one explicit, measurable share action after article content.
  * The event is recorded only after the native share sheet or link copy succeeds.
