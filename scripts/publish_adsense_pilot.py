@@ -37,6 +37,14 @@ def checked_html(path: Path, approval: dict) -> tuple[str, str]:
     return text, digest
 
 
+def checked_artifact(html_path: Path, approval_path: Path) -> tuple[dict, str, str, str]:
+    approval_raw = approval_path.read_bytes()
+    approval = json.loads(approval_raw.decode("utf-8"))
+    html, html_digest = checked_html(html_path, approval)
+    approval_digest = hashlib.sha256(approval_raw).hexdigest()
+    return approval, html, html_digest, approval_digest
+
+
 def identity(post: dict) -> dict:
     aioseo = post.get("aioseo_meta_data") or {}
     return {
@@ -64,8 +72,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
 
-    approval = json.loads(args.approval.read_text(encoding="utf-8"))
-    html, digest = checked_html(args.html, approval)
+    approval, html, digest, approval_digest = checked_artifact(args.html, args.approval)
     if approval.get("post_id") != args.post_id:
         raise ValueError("CLI post_id does not match Reviewer approval")
     if not args.apply:
@@ -77,9 +84,14 @@ def main() -> int:
 
     # Freeze the exact approved payload before any WordPress interaction. If
     # the file changed after initial validation, abort with zero API calls.
-    html, preflight_digest = checked_html(args.html, approval)
+    preflight_approval, html, preflight_digest, preflight_approval_digest = checked_artifact(
+        args.html, args.approval
+    )
     if preflight_digest != digest:
         raise RuntimeError("HTML changed between validation and WordPress write")
+    if preflight_approval_digest != approval_digest or preflight_approval != approval:
+        raise RuntimeError("Reviewer approval changed between validation and WordPress write")
+    approval = preflight_approval
 
     client = WordPressClient(WordPressConfig.from_environment(ROOT / ".env"))
     before = client.get_post(args.post_id)

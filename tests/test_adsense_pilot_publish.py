@@ -10,7 +10,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import call, patch
 
-from scripts.publish_adsense_pilot import checked_html, main
+from scripts.publish_adsense_pilot import checked_artifact, checked_html, main
 
 
 class PilotPublishContractTests(unittest.TestCase):
@@ -52,6 +52,10 @@ class PilotPublishContractTests(unittest.TestCase):
             ]
             with (
                 patch.object(sys, "argv", argv),
+                patch(
+                    "scripts.publish_adsense_pilot.checked_artifact",
+                    wraps=checked_artifact,
+                ) as artifact_check,
                 patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
                 patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
                 redirect_stdout(io.StringIO()),
@@ -60,6 +64,7 @@ class PilotPublishContractTests(unittest.TestCase):
                 client.get_post.side_effect = [identity, identity]
                 self.assertEqual(main(), 0)
 
+        self.assertEqual(artifact_check.call_count, 2)
         self.assertEqual(client.get_post.call_args_list, [call(132), call(132)])
         client.update_post.assert_called_once_with(
             132,
@@ -94,10 +99,12 @@ class PilotPublishContractTests(unittest.TestCase):
         }
         with (
             patch.object(sys, "argv", argv),
-            patch("pathlib.Path.read_text", return_value=json.dumps(approval)),
             patch(
-                "scripts.publish_adsense_pilot.checked_html",
-                side_effect=[("approved", "a" * 64), ("changed", "b" * 64)],
+                "scripts.publish_adsense_pilot.checked_artifact",
+                side_effect=[
+                    (approval, "approved", "a" * 64, "c" * 64),
+                    (approval, "changed", "b" * 64, "c" * 64),
+                ],
             ),
             patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment"),
             patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
@@ -109,6 +116,42 @@ class PilotPublishContractTests(unittest.TestCase):
 
         client_type.assert_not_called()
         client.update_post.assert_not_called()
+
+    def test_apply_aborts_with_zero_wordpress_calls_if_approval_changes(self):
+        argv = [
+            "publish_adsense_pilot.py",
+            "--post-id",
+            "132",
+            "--html",
+            "unused.html",
+            "--approval",
+            "unused.json",
+            "--apply",
+        ]
+        first = {
+            "decision": "APPROVED",
+            "post_id": 132,
+            "sha256": "a" * 64,
+            "title": "pagination",
+        }
+        changed = {**first, "title": "changed"}
+        with (
+            patch.object(sys, "argv", argv),
+            patch(
+                "scripts.publish_adsense_pilot.checked_artifact",
+                side_effect=[
+                    (first, "approved", "a" * 64, "c" * 64),
+                    (changed, "approved", "a" * 64, "d" * 64),
+                ],
+            ),
+            patch("scripts.publish_adsense_pilot.WordPressConfig.from_environment") as config,
+            patch("scripts.publish_adsense_pilot.WordPressClient") as client_type,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "approval changed"):
+                main()
+
+        config.assert_not_called()
+        client_type.assert_not_called()
 
     def test_apply_rejects_readback_content_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
