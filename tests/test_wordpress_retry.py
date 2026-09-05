@@ -33,6 +33,10 @@ class WordPressRetryTest(TestCase):
             BytesIO(b'{"code":"rest_rate_limited","message":"slow down"}'),
         )
 
+    def test_legacy_numeric_only_parse_rejects_http_date(self):
+        with self.assertRaises(ValueError):
+            float("Sat, 05 Sep 2026 00:00:07 GMT")
+
     def test_retry_after_http_date_is_converted_to_seconds(self):
         now = datetime(2026, 9, 5, 0, 0, tzinfo=UTC)
         self.assertEqual(
@@ -56,4 +60,3 @@ class WordPressRetryTest(TestCase):
             result = client.request("GET", "posts/50")
         self.assertEqual(result, {"id": 50})
         self.assertEqual(sleeps, [1.0])
-
