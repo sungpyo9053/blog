@@ -68,10 +68,10 @@ class EvidenceDeepArticleTests(unittest.TestCase):
                 path=root/f"run-{index}"; path.mkdir(); (path/"result.json").write_text(json.dumps({"kst_date":"2026-09-05","deep_article":"published","failed":False}))
             self.assertEqual(published_today(root,"2026-09-05"),2)
 
-    def test_timer_runs_twice_daily(self):
+    def test_timer_runs_daily_at_ten(self):
         timer=Path("deploy/huntlab-evidence-deep-article.timer").read_text(encoding="utf-8")
         self.assertIn("OnCalendar=*-*-* 10:00:00 Asia/Seoul",timer)
-        self.assertIn("OnCalendar=*-*-* 22:00:00 Asia/Seoul",timer)
+        self.assertNotIn("OnCalendar=*-*-* 22:00:00 Asia/Seoul",timer)
         self.assertIn("Persistent=false",timer)
 
 
