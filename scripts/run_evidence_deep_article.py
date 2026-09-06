@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Hunt News Lane B: at most one evidence-first deep article per slot."""
+"""Run Hunt News Lane B: at most one evidence-first deep article per KST day."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ KST = timezone(timedelta(hours=9))
 OUTPUT = ROOT / "output/evidence-deep-article-runs"
 MINER_ROOT = ROOT / "output/topic-miner"
 LOCK = ROOT / "logs/evidence-deep-article.lock"
-DAILY_LIMIT = 2
+DAILY_LIMIT = 1
 
 
 def write_json_new(path: Path, payload: Mapping[str, Any]) -> None:

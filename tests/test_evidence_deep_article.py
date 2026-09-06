@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json, logging, tempfile, unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -61,12 +62,24 @@ class EvidenceDeepArticleTests(unittest.TestCase):
                     execute(run_id="20260905T010000Z-eeeeeeeeee",inventory_path=self.inventory(root),apply=True,topic_runner=Mock(side_effect=RuntimeError("publish failed")),output_root=root/"runs",miner_root=root/"miner",repo=root,logger=self.logger)
             self.assertFalse((root/"miner/checkpoint.json").exists())
 
-    def test_daily_limit_is_two_successful_publications(self):
+    def test_daily_limit_is_one_successful_publication(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
             for index in range(DAILY_LIMIT):
                 path=root/f"run-{index}"; path.mkdir(); (path/"result.json").write_text(json.dumps({"kst_date":"2026-09-05","deep_article":"published","failed":False}))
-            self.assertEqual(published_today(root,"2026-09-05"),2)
+            self.assertEqual(published_today(root,"2026-09-05"),1)
+
+    def test_second_ready_candidate_on_same_day_is_not_published(self):
+        candidate={"candidate_id":"two"}; runner=Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); previous=root/"previous"; previous.mkdir(parents=True)
+            (previous/"result.json").write_text(json.dumps({"kst_date":"2026-09-05","deep_article":"published","failed":False}))
+            with patch("scripts.run_evidence_deep_article.datetime") as clock, patch("scripts.run_evidence_deep_article.build_payload",return_value=self.payload([candidate])), patch("scripts.run_evidence_deep_article.persist_miner_run"):
+                clock.now.return_value=datetime(2026,9,5,10,0,tzinfo=timezone(timedelta(hours=9)))
+                result=execute(run_id="20260905T020000Z-fffffffffff",inventory_path=self.inventory(root),apply=True,topic_runner=runner,output_root=root,miner_root=root/"miner",repo=root)
+        self.assertEqual(result["deep_article"],"daily_limit_reached")
+        self.assertEqual(result["wordpress_write_count"],0)
+        runner.assert_not_called()
 
     def test_timer_runs_daily_at_ten(self):
         timer=Path("deploy/huntlab-evidence-deep-article.timer").read_text(encoding="utf-8")

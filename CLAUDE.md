@@ -4,8 +4,9 @@
 
 운영은 두 lane으로 분리한다. Lane A는 AI·개발 변화를 한 페이지에 정리하는 매일의
 Daily Briefing이며 항상 `noindex, follow`다. Lane B는 Git·test·log·배포·결정 기록에서
-실제 사건을 찾는 Evidence-first Deep Article이다. 하루 두 번 평가하되 READY가 있을
-때만 회당 최대 한 편을 처리하며, READY가 없으면 `no_publishable_topic`으로 정상 종료한다.
+실제 사건을 찾는 Evidence-first Deep Article이다. 매일 10:00 KST에 새 후보를 평가하고
+READY가 있을 때만 하루 최대 한 편을 처리하며, READY가 없으면
+`no_publishable_topic`으로 정상 종료한다.
 뉴스·RSS·Trends만으로 독립 글 주제를 만들지 않는다.
 
 ## 폴더 구조
@@ -29,7 +30,7 @@ Daily Briefing이며 항상 `noindex, follow`다. Lane B는 Git·test·log·배�
 현재 운영 기본 경로는 다음과 같다.
 
 1. 04:00 Daily Briefing을 `briefing_only`로 실행한다.
-2. 10:00과 22:00 Evidence-first Topic Miner를 실행한다.
+2. 10:00 Evidence-first Topic Miner를 실행한다.
 3. 실제 사건을 묶고 현재 공개 글·Draft와 검색 의도를 대조한다.
 4. READY가 없으면 Publisher를 호출하지 않고 `failed=false`로 종료한다.
 5. READY가 있으면 최대 한 편만 Research → Writer → Image Maker → Assembler →
