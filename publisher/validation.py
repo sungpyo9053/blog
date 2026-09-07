@@ -34,7 +34,7 @@ LEGACY_EDITOR_CATEGORIES = {
 # Old approved runs can still be resumed, while every newly planned run uses
 # the active Hunt News categories above.
 EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
-CONTENT_TYPES = {"verified_case", "technical_explainer"}
+CONTENT_TYPES = {"verified_case", "technical_explainer", "evidence_deep_article"}
 FORBIDDEN_TERMS = (
     "100%",
     "무조건",
@@ -196,7 +196,12 @@ def validate_document(
 
     content_type = metadata.get("content_type")
     if content_type is not None and content_type not in CONTENT_TYPES:
-        _add_error(report, "invalid_content_type", "content_type must be verified_case or technical_explainer.", "content_type")
+        _add_error(
+            report,
+            "invalid_content_type",
+            f"content_type must be one of: {', '.join(sorted(CONTENT_TYPES))}.",
+            "content_type",
+        )
     if content_type == "verified_case":
         for field in ("problem_group", "verification_method", "evidence_date", "evidence_url"):
             if not isinstance(metadata.get(field), str) or not str(metadata.get(field)).strip():

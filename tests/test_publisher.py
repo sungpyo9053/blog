@@ -305,6 +305,16 @@ class PublisherTests(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertIn("missing_problem_group", {issue.code for issue in report.errors})
 
+    def test_evidence_deep_article_content_type_is_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text = VALID_MARKDOWN.replace(
+                "publish_mode: draft",
+                "publish_mode: draft\ncontent_type: evidence_deep_article",
+            )
+            document = load_document(self._write_document(Path(tmp), text))
+            report = validate_document(document, reviewer_approved=True)
+            self.assertTrue(report.passed)
+
     def test_validation_allows_explicit_secret_placeholder(self):
         with tempfile.TemporaryDirectory() as tmp:
             text = VALID_MARKDOWN + (
