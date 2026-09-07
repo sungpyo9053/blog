@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.run_evidence_deep_article import DAILY_LIMIT, execute, published_today
+from scripts.run_evidence_deep_article import DAILY_LIMIT, execute, published_today, run_selected_candidate
 
 
 class EvidenceDeepArticleTests(unittest.TestCase):
@@ -52,6 +52,17 @@ class EvidenceDeepArticleTests(unittest.TestCase):
             with patch("scripts.run_evidence_deep_article.build_payload",return_value=self.payload(candidates)), patch("scripts.run_evidence_deep_article.persist_miner_run"):
                 result=execute(run_id="20260905T010000Z-cccccccccc",inventory_path=self.inventory(root),apply=True,topic_runner=runner,public_auditor=auditor,output_root=root/"runs",miner_root=root/"miner",repo=root,logger=self.logger)
         self.assertEqual(result["deep_article"],"published"); self.assertEqual(result["wordpress_write_count"],1); runner.assert_called_once(); self.assertEqual(runner.call_args.args[0]["candidate_id"],"one")
+
+    def test_selected_candidate_creates_daily_pipeline_run_directory(self):
+        candidate=self.payload([{"candidate_id":"one"}])[0]["candidates"][0]
+        with tempfile.TemporaryDirectory() as directory:
+            runs=Path(directory)/"runs"
+            runner=Mock(return_value={"post_id":999,"url":"https://example.test/post"})
+            with patch("scripts.run_daily_pipeline.RUNS_DIR",runs), patch("scripts.run_evidence_deep_article.resolve_codex",return_value="codex"), patch("scripts.run_evidence_deep_article.run_topic_pipeline",runner):
+                result=run_selected_candidate(candidate,"20260907T010017Z-2619e2d463",self.logger)
+            self.assertEqual(result["post_id"],999)
+            context=runner.call_args.args[1]
+            self.assertTrue(context.directory.parent.is_dir())
 
     def test_publisher_failure_does_not_consume_candidate_checkpoint(self):
         candidate={"candidate_id":"one"}

@@ -90,6 +90,7 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
 def run_selected_candidate(candidate: Mapping[str, Any], run_id: str, logger: logging.Logger) -> dict[str, Any]:
     plan = candidate_plan(candidate)
     context = make_topic_context(run_id, plan["title"], category=plan["category"], tags=tuple(plan["tags"]), reason=plan["reason"], research_focus=plan["research_focus"], content_type=plan["content_type"])
+    context.directory.parent.mkdir(parents=True, exist_ok=False)
     result = run_topic_pipeline(resolve_codex(), context, plan, logger, timeout_seconds=3600, resume=False, publish_lock=threading.Lock(), humanize_lock=threading.Lock())
     if result.get("post_id") is None: raise PipelineError("Publisher did not return post_id")
     return result
