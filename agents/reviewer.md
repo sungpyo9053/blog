@@ -65,8 +65,11 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
   일치 여부까지 명시해야 한다. 하나라도 없거나 추정으로 채웠으면 REJECT한다.
 - `verification_mode: direct`이면 Research에 `capture_evidence`가 있고, 본문에는
   실제 명령·출력 코드 블록과 이를 그대로 보여주는 검증 캡처가 1~2장 있어야
-  한다. 캡처의 명령, 수치, 오류, 종료 상태를 Research·본문과 대조한다. 누락,
-  불일치, 민감정보 노출, 여러 실행의 합성 또는 인포그래픽을 실제 캡처로 가장한
+  한다. `guides/image-guide.md` 계약에 따라 바로 앞 코드 블록을 문자 단위로
+  보존해 HTML 터미널 뷰로 렌더링한 PNG는 재현 가능한 검증 캡처로 인정하며,
+  렌더링 방식만으로 거절하지 않는다. 캡처의 명령, 수치, 오류, 종료 상태를
+  Research·본문·바로 앞 코드 블록과 대조한다. 누락, 불일치, 민감정보 노출,
+  코드 블록에 없던 토큰을 추가한 합성 또는 인포그래픽을 실제 캡처로 가장한
   경우 REJECT한다.
 - `verification_mode`는 `direct`, `controlled_comparison`, `not_directly_tested`만
   허용한다. `direct_read_only`처럼 정의되지 않은 변형값은 REJECT한다.

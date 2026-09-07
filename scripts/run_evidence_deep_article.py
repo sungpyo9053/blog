@@ -63,7 +63,10 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
         "tags": ["개발 기록", "자동화", str(candidate["recommended_format"])],
         "reason": str(candidate["real_trigger"]),
         "research_focus": "evidence_candidate의 주장과 근거만 사용하고 공개 commit, test, log를 직접 대조한다.",
-        "primary_keyword": Path(str(candidate["source_anchor"])).stem.replace("_", " "),
+        # The daily pipeline and Reviewer require the primary keyword to appear
+        # in the fixed Editor title. Evidence source filenames are identifiers,
+        # not necessarily useful search phrases.
+        "primary_keyword": title,
         "secondary_keywords": "",
         "target_reader": str(candidate["target_reader"]),
         "demand_signal_source": "evidence_first_then_optional_demand_check",

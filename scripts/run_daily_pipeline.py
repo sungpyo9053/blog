@@ -764,6 +764,21 @@ def write_recent_style_context(context: TopicContext) -> Path:
         for publish_path in RUNS_DIR.glob("*/*/publish.md"):
             if publish_path.parent.resolve() == context.directory.resolve():
                 continue
+            audit_path = publish_path.parent / "publisher-audit.jsonl"
+            try:
+                audit_events = [
+                    json.loads(line)
+                    for line in audit_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not any(
+                event.get("event") in {"post_published", "post_updated"}
+                and event.get("status") == "Success"
+                for event in audit_events
+            ):
+                continue
             try:
                 candidates.append((publish_path.stat().st_mtime, publish_path))
             except OSError:

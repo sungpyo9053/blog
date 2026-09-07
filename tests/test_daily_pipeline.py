@@ -1237,6 +1237,10 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 json.dumps({"structure_mode": "problem_first"}),
                 encoding="utf-8",
             )
+            (old_topic / "publisher-audit.jsonl").write_text(
+                json.dumps({"event": "post_published", "status": "Success"}) + "\n",
+                encoding="utf-8",
+            )
             current_dir = runs / "new-run" / "new-topic"
             current_dir.mkdir(parents=True)
             context = TopicContext(
@@ -1259,6 +1263,30 @@ class DailyPipelineIsolationTests(unittest.TestCase):
                 payload["articles"][0]["h2_headings"],
                 ["원인을 찾았다", "남은 문제"],
             )
+
+    def test_recent_style_context_excludes_failed_unpublished_runs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runs = Path(temporary) / "runs"
+            failed_topic = runs / "failed-run" / "failed-topic"
+            failed_topic.mkdir(parents=True)
+            (failed_topic / "publish.md").write_text(
+                "---\ntitle: 실패한 미발행 글\n---\n\n미발행 원고다.\n",
+                encoding="utf-8",
+            )
+            (failed_topic / "publisher-audit.jsonl").write_text(
+                json.dumps({"event": "validation_failed", "status": "Failed"}) + "\n",
+                encoding="utf-8",
+            )
+            current_dir = runs / "new-run" / "new-topic"
+            current_dir.mkdir(parents=True)
+            context = TopicContext(
+                title="새 글", run_id="new-run", topic_id="new-topic", directory=current_dir
+            )
+            with patch("scripts.run_daily_pipeline.RUNS_DIR", runs):
+                path = write_recent_style_context(context)
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["recent_count"], 0)
 
     def test_writer_and_reviewer_receive_recent_style_context(self):
         context = make_topic_context("run-style", "사람다운 자동 발행")

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.run_evidence_deep_article import DAILY_LIMIT, execute, published_today, run_selected_candidate
+from scripts.run_evidence_deep_article import DAILY_LIMIT, candidate_plan, execute, published_today, run_selected_candidate
 
 
 class EvidenceDeepArticleTests(unittest.TestCase):
@@ -35,6 +35,11 @@ class EvidenceDeepArticleTests(unittest.TestCase):
             with patch("scripts.run_evidence_deep_article.build_payload",return_value=self.payload([candidate])), patch("scripts.run_evidence_deep_article.persist_miner_run"):
                 result=execute(run_id="20260905T010000Z-bbbbbbbbbb",inventory_path=self.inventory(root),apply=False,topic_runner=runner,output_root=root/"runs",miner_root=root/"miner",repo=root)
         self.assertEqual(result["deep_article"],"ready_not_published"); self.assertEqual(result["wordpress_write_count"],0); runner.assert_not_called()
+
+    def test_candidate_primary_keyword_is_present_in_fixed_title(self):
+        candidate = self.payload([{"candidate_id": "one"}])[0]["candidates"][0]
+        plan = candidate_plan(candidate)
+        self.assertIn(plan["primary_keyword"].casefold(), plan["title"].casefold())
 
     def test_ready_dry_run_does_not_advance_global_checkpoint(self):
         candidate={"candidate_id":"one"}
