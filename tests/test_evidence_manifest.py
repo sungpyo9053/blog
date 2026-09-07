@@ -32,6 +32,15 @@ class EvidenceManifestTests(unittest.TestCase):
         log_path = Path(manifest["logs"][0])
         digest = hashlib.sha256(log_path.read_bytes()).hexdigest()
         self.assertEqual(manifest["test_runs"][0]["output_sha256"], digest)
+        source_revision = manifest["test_runs"][0]["source_revision"]
+        self.assertEqual(source_revision, manifest["fix_commit"])
+        self.assertTrue(
+            any(
+                "/evidence/test-results/evidence-lane-tests.log" in url
+                and "/blob/" in url
+                for url in manifest["public_urls"]
+            )
+        )
 
 
 if __name__ == "__main__":
