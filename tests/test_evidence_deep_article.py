@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.run_evidence_deep_article import DAILY_LIMIT, candidate_plan, execute, published_today, run_selected_candidate
+from scripts.run_evidence_deep_article import DAILY_LIMIT, audit_evidence_links, candidate_plan, execute, published_today, run_selected_candidate
 
 
 class EvidenceDeepArticleTests(unittest.TestCase):
@@ -77,6 +77,40 @@ class EvidenceDeepArticleTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     execute(run_id="20260905T010000Z-eeeeeeeeee",inventory_path=self.inventory(root),apply=True,topic_runner=Mock(side_effect=RuntimeError("publish failed")),output_root=root/"runs",miner_root=root/"miner",repo=root,logger=self.logger)
             self.assertFalse((root/"miner/checkpoint.json").exists())
+
+    def test_public_audit_failure_after_publish_consumes_candidate_checkpoint(self):
+        candidate={"candidate_id":"one"}
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            with patch("scripts.run_evidence_deep_article.build_payload",return_value=self.payload([candidate])):
+                with self.assertRaises(RuntimeError):
+                    execute(run_id="20260905T010000Z-auditfailed",inventory_path=self.inventory(root),apply=True,topic_runner=Mock(return_value={"post_id":999,"url":"https://example.test/post"}),public_auditor=Mock(side_effect=RuntimeError("audit failed")),output_root=root/"runs",miner_root=root/"miner",repo=root,logger=self.logger)
+            self.assertTrue((root/"miner/checkpoint.json").is_file())
+
+    def test_public_evidence_audit_requires_representative_link_per_kind(self):
+        evidence={
+            "commits":["abc"],
+            "files":["scripts/run.py"],
+            "tests":["tests.test_run.RunTests.test_ok"],
+            "logs":["evidence/test-results/run.log"],
+            "public_urls":[
+                "https://github.com/example/repo/commit/abc",
+                "https://github.com/example/repo/blob/abc/scripts/run.py",
+                "https://github.com/example/repo/blob/def/tests/test_run.py",
+                "https://github.com/example/repo/blob/def/evidence/test-results/run.log",
+                "https://github.com/example/repo/commit/not-cited",
+            ],
+        }
+        body=" ".join(evidence["public_urls"][:4])
+        result=audit_evidence_links(body,evidence)
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["matched_count"],4)
+
+    def test_failed_run_with_confirmed_wordpress_write_counts_toward_daily_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); run=root/"partial"; run.mkdir()
+            (run/"result.json").write_text(json.dumps({"kst_date":"2026-09-05","deep_article":"failed","failed":True,"wordpress_write_count":1}))
+            self.assertEqual(published_today(root,"2026-09-05"),1)
 
     def test_daily_limit_is_one_successful_publication(self):
         with tempfile.TemporaryDirectory() as directory:

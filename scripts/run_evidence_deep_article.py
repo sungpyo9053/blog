@@ -48,7 +48,10 @@ def published_today(root: Path, day: str) -> int:
     for path in root.glob("*/result.json"):
         try: payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError): continue
-        if payload.get("kst_date") == day and payload.get("deep_article") == "published" and payload.get("failed") is False:
+        if payload.get("kst_date") == day and (
+            (payload.get("deep_article") == "published" and payload.get("failed") is False)
+            or payload.get("wordpress_write_count") == 1
+        ):
             count += 1
     return count
 
@@ -99,6 +102,31 @@ def run_selected_candidate(candidate: Mapping[str, Any], run_id: str, logger: lo
     return result
 
 
+def audit_evidence_links(body: str, evidence: Mapping[str, Any]) -> dict[str, Any]:
+    public_urls = [str(link).split("#", 1)[0] for link in evidence.get("public_urls", [])]
+    matched = [link for link in public_urls if link in body]
+    commits = [str(value) for value in evidence.get("commits", [])]
+    files = [str(value) for value in evidence.get("files", [])]
+    tests = [str(value) for value in evidence.get("tests", [])]
+    logs = [str(value) for value in evidence.get("logs", [])]
+    checks = {
+        "commit": not commits or any(
+            any(f"/commit/{sha}" in link for sha in commits) for link in matched
+        ),
+        "implementation_file": not files or any(
+            any(path in link for path in files) for link in matched
+        ),
+        "test": not tests or any(
+            "/tests/" in link or any(path in link for path in logs)
+            for link in matched
+        ),
+        "log": not logs or any(
+            any(path in link for path in logs) for link in matched
+        ),
+    }
+    return {"passed": all(checks.values()), "matched_count": len(matched), "checks": checks}
+
+
 def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
     url = str(result.get("url", ""))
     if not url.startswith("https://"): raise PipelineError("published URL is not HTTPS")
@@ -107,9 +135,10 @@ def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dic
         body = response.read().decode("utf-8", errors="replace")
         status = response.status
     title_ok = str(candidate["title_seed"]) in body
-    evidence_ok = all(str(link).split("#",1)[0] in body for link in candidate["evidence"].get("public_urls", []))
+    evidence_audit = audit_evidence_links(body, candidate["evidence"])
+    evidence_ok = bool(evidence_audit["passed"])
     if status != 200 or not title_ok or not evidence_ok: raise PipelineError("public HTML evidence audit failed")
-    return {"url":url,"http_status":status,"title_present":title_ok,"evidence_links_present":evidence_ok,"checked_at":datetime.now(UTC).isoformat()}
+    return {"url":url,"http_status":status,"title_present":title_ok,"evidence_links_present":evidence_ok,"evidence_link_audit":evidence_audit,"checked_at":datetime.now(UTC).isoformat()}
 
 
 def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Callable[[Mapping[str, Any], str, logging.Logger], dict[str, Any]] = run_selected_candidate, public_auditor: Callable[[Mapping[str, Any], Mapping[str, Any]], dict[str, Any]] = audit_public, output_root: Path = OUTPUT, miner_root: Path = MINER_ROOT, repo: Path = ROOT, logger: logging.Logger | None = None) -> dict[str, Any]:
@@ -136,8 +165,11 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     write_progress(progress_path, stage="publisher_started", wordpress_write_count="unknown")
     published = topic_runner(candidate, run_id, logger or configure_logger(now.date()))
     write_progress(progress_path, stage="publisher_completed", wordpress_write_count=1)
-    audit = public_auditor(published,candidate)
+    # A confirmed WordPress publish must consume the candidate before the
+    # independent public-HTML audit. Retrying a published candidate after an
+    # audit-only failure would risk a duplicate post.
     advance_checkpoint()
+    audit = public_auditor(published,candidate)
     return {**base,"publication_mode":"dual_lane","deep_article":"published","wordpress_write_count":1,"candidate_id":candidate["candidate_id"],"publication":published,"public_audit":audit}
 
 
