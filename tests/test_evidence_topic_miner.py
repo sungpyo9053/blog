@@ -106,6 +106,28 @@ class EvidenceTopicMinerTests(unittest.TestCase):
         self.assertEqual(result["rejection_reason"], "existing_post_overlap")
         self.assertEqual(result["existing_post_overlap"]["post_id"], 50)
 
+    def test_identical_title_rejected_despite_diluted_search_intent(self):
+        event = Event(anchor="scripts/run.py", title="READY & Evidence 파이프라인",
+                      subjects=[" ".join(f"implementation{i}" for i in range(100))])
+        for status in ("publish", "draft"):
+            with self.subTest(status=status):
+                inventory = [{"post_id":706, "title":"<b>ready &amp; Evidence</b>  파이프라인",
+                              "status":status, "excerpt":" ".join(f"excerpt{i}" for i in range(100))}]
+                result = evaluate_event(event, inventory, "repo")
+                self.assertEqual(result["publishability"], "REJECT")
+                self.assertEqual(result["existing_post_overlap"]["reason"], "same_title")
+                self.assertEqual(choose_candidates([result]), [])
+
+    def test_same_slug_rejected_even_after_title_change(self):
+        event = Event(anchor="scripts/run.py", title="새 제목", slug="existing-post")
+        result = evaluate_event(event, [{"post_id":706,"title":"예전 제목","slug":"existing-post"}], "repo")
+        self.assertEqual(result["existing_post_overlap"]["reason"], "same_slug")
+
+    def test_empty_identity_is_not_an_exact_match(self):
+        event = Event(anchor="scripts/run.py")
+        result = evaluate_event(event, [{"post_id":706,"title":"","slug":""}], "repo")
+        self.assertEqual(result["existing_post_overlap"]["result"], "none")
+
     def test_pilot_approval_links_narrow_a_shared_source_to_exact_incident_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)

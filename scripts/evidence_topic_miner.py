@@ -321,10 +321,20 @@ def collect_artifact_metadata(repo: Path, events: Mapping[str, Event]) -> list[d
 
 def normalized_tokens(value: str) -> set[str]: return {x for x in re.findall(r"[0-9a-z가-힣]+", value.casefold()) if len(x) > 1}
 
+def normalized_identity(value: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", value))).strip().casefold()
+
 def existing_overlap(event: Event, inventory: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     if event.post_id:
         row = next((x for x in inventory if int(x.get("post_id", 0)) == event.post_id), None)
         if row: return {"result": "exact", "post_id": event.post_id, "url": row.get("url", ""), "status": row.get("status", ""), "reason": "same_post_id_and_search_intent"}
+    # Identity matches must precede fuzzy similarity: unrelated implementation
+    # notes and long excerpts can dilute even an identical title below threshold.
+    for row in inventory:
+        for field in ("title", "slug"):
+            identity = normalized_identity(getattr(event, field))
+            if identity and identity == normalized_identity(str(row.get(field, ""))):
+                return {"result": "exact", "post_id": row.get("post_id"), "url": row.get("url", ""), "status": row.get("status", ""), "reason": f"same_{field}"}
     tokens = normalized_tokens(" ".join([event.title, event.slug, *event.subjects, event.unique_takeaway, event.reader_action])); best = (0.0, None)
     for row in inventory:
         other = normalized_tokens(f"{row.get('title','')} {row.get('slug','')} {row.get('excerpt','')}"); score = len(tokens & other) / len(tokens | other) if tokens and other else 0

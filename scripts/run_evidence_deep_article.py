@@ -187,7 +187,7 @@ def main() -> int:
         progress_path=OUTPUT/run_id/"progress.json"
         try: write_count=json.loads(progress_path.read_text(encoding="utf-8")).get("wordpress_write_count", "unknown")
         except Exception: write_count="unknown" if args.apply else 0
-        failure={"run_id":run_id,"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
+        failure={"run_id":run_id,"kst_date":datetime.now(KST).date().isoformat(),"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
         try: write_json_new(OUTPUT/run_id/"result.json",failure)
         except Exception: pass
         print(json.dumps(failure,ensure_ascii=False)); return 1
