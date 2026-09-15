@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import fcntl
 import hashlib
 import json
 import logging
@@ -196,6 +197,7 @@ class PipelineLock:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.acquired = False
+        self._guard_descriptor: int | None = None
 
     @staticmethod
     def _pid_is_alive(pid: int) -> bool:
@@ -211,6 +213,28 @@ class PipelineLock:
 
     def acquire(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Keep a stable advisory-lock inode: never unlink this sidecar. It
+        # protects both the half-written PID record and stale-record recovery.
+        # The PID record also keeps a running pre-upgrade executor blocking.
+        if self._guard_descriptor is not None:
+            raise PipelineError("Pipeline lock is already held by this instance")
+        descriptor = os.open(str(self.path) + ".guard", os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(descriptor)
+            raise PipelineError("Daily Pipeline lock is already held") from exc
+        except BaseException:
+            os.close(descriptor)
+            raise
+        self._guard_descriptor = descriptor
+        try:
+            self._acquire_pid_record()
+        except BaseException:
+            self._release_guard()
+            raise
+
+    def _acquire_pid_record(self) -> None:
         payload = {
             "pid": os.getpid(),
             "started_at": datetime.now(UTC).isoformat(),
@@ -224,10 +248,11 @@ class PipelineLock:
                 )
             except FileExistsError:
                 try:
-                    current = json.loads(self.path.read_text(encoding="utf-8"))
-                    current_pid = int(current.get("pid", 0))
-                except (OSError, ValueError, TypeError, json.JSONDecodeError):
-                    current_pid = 0
+                    current_pid = self._read_pid()
+                except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                    # An old executor may still be writing this record. Missing
+                    # or malformed ownership is uncertainty, not a stale PID.
+                    raise PipelineError("Unverifiable Pipeline lock ownership") from exc
                 if self._pid_is_alive(current_pid):
                     raise PipelineError(
                         f"Daily Pipeline이 이미 실행 중입니다(pid={current_pid})."
@@ -240,16 +265,30 @@ class PipelineLock:
             return
         raise PipelineError("오래된 Pipeline lock을 정리하지 못했습니다.")
 
+    def _read_pid(self) -> int:
+        current = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(current, dict) or type(current.get("pid")) is not int or current["pid"] <= 0:
+            raise ValueError("Invalid Pipeline lock PID record")
+        return current["pid"]
+
     def release(self) -> None:
-        if not self.acquired:
-            return
         try:
-            current = json.loads(self.path.read_text(encoding="utf-8"))
-            if int(current.get("pid", 0)) == os.getpid():
+            if self.acquired and self._read_pid() == os.getpid():
                 self.path.unlink(missing_ok=True)
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             pass
-        self.acquired = False
+        finally:
+            self.acquired = False
+            self._release_guard()
+
+    def _release_guard(self) -> None:
+        if self._guard_descriptor is not None:
+            descriptor = self._guard_descriptor
+            self._guard_descriptor = None
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(descriptor)
 
 
 def configure_logger(run_date: date) -> logging.Logger:

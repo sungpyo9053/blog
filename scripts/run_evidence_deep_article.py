@@ -335,22 +335,28 @@ def main() -> int:
     if args.resume_public_audit and (not args.run_id or args.apply or args.dry_run):
         parser.error("--resume-public-audit requires --run-id and cannot publish")
     run_id=args.run_id or make_run_id(); lock=PipelineLock(LOCK)
+    owns_run = False
     try:
         lock.acquire()
         if args.resume_public_audit:
             result = resume_public_audit(run_id)
             print(json.dumps(result, ensure_ascii=False)); return 0
         inventory=args.inventory or (refresh_inventory() if args.apply else MINER_ROOT/"inventory-latest.json")
+        # Only a fresh execution owned under our lock may persist a failure.
+        # A rejected contender/resume must not fabricate unknown write state or
+        # append a failure to another execution's immutable history.
+        owns_run = not (OUTPUT / run_id).exists()
         result=execute(run_id=run_id,inventory_path=inventory,apply=args.apply)
         write_json_new(OUTPUT/run_id/"result.json",result)
         print(json.dumps(result,ensure_ascii=False)); return 0
     except Exception as exc:
         progress_path=OUTPUT/run_id/"progress.json"
         try: write_count=json.loads(progress_path.read_text(encoding="utf-8")).get("wordpress_write_count", "unknown")
-        except Exception: write_count="unknown" if args.apply else 0
+        except Exception: write_count="unknown" if args.apply and owns_run else 0
         failure={"run_id":run_id,"kst_date":datetime.now(KST).date().isoformat(),"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
-        try: write_json_new(OUTPUT/run_id/"result.json",failure)
-        except Exception: pass
+        if owns_run:
+            try: write_json_new(OUTPUT/run_id/"result.json",failure)
+            except Exception: pass
         print(json.dumps(failure,ensure_ascii=False)); return 1
     finally: lock.release()
 

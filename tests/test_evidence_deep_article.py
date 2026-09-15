@@ -1,15 +1,77 @@
 from __future__ import annotations
 
 import hashlib, json, logging, tempfile, unittest
+import contextlib, io
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.run_evidence_deep_article import DAILY_LIMIT, PipelineError, audit_evidence_links, candidate_plan, execute, published_today, resume_public_audit, run_selected_candidate
+from scripts.run_evidence_deep_article import main
+from scripts.run_daily_pipeline import PipelineLock
 
 
 class EvidenceDeepArticleTests(unittest.TestCase):
     logger = logging.getLogger("evidence-deep-test")
+
+    def test_response_loss_after_simulated_post_never_retries_automatically(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); writes=[]
+            def lost_response(*args):
+                writes.append(999)
+                raise TimeoutError('simulated server committed then response lost')
+            runner=Mock(side_effect=lost_response)
+            with patch('scripts.run_evidence_deep_article.build_payload',return_value=self.payload([{}])):
+                with self.assertRaises(TimeoutError):
+                    execute(run_id='lost',inventory_path=self.inventory(root),apply=True,topic_runner=runner,output_root=root/'runs',miner_root=root/'miner',repo=root,logger=self.logger)
+                with self.assertRaisesRegex(PipelineError,'reconciliation required'):
+                    execute(run_id='retry',inventory_path=self.inventory(root),apply=True,topic_runner=runner,output_root=root/'runs',miner_root=root/'miner',repo=root,logger=self.logger)
+            self.assertEqual(writes,[999]);runner.assert_called_once()
+            self.assertEqual(json.loads((root/'runs/lost/progress.json').read_text())['wordpress_write_count'],'unknown')
+
+    def test_post_success_receipt_storage_failures_keep_duplicate_guard(self):
+        from scripts.run_evidence_deep_article import write_progress, write_json_new
+        for failure in ('confirmed_progress','publication_receipt'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);runner=Mock(return_value={'post_id':999,'url':'https://example.test/post'})
+                def progress(path,**fields):
+                    if failure=='confirmed_progress' and fields['stage']=='publisher_completed':raise OSError('simulated disk error')
+                    write_progress(path,**fields)
+                def receipt(path,payload):
+                    if failure=='publication_receipt' and path.name=='publication.json':raise OSError('simulated disk error')
+                    write_json_new(path,payload)
+                with patch('scripts.run_evidence_deep_article.build_payload',return_value=self.payload([{}])), patch('scripts.run_evidence_deep_article.write_progress',side_effect=progress), patch('scripts.run_evidence_deep_article.write_json_new',side_effect=receipt):
+                    with self.assertRaises(OSError):
+                        execute(run_id='disk',inventory_path=self.inventory(root),apply=True,topic_runner=runner,output_root=root/'runs',miner_root=root/'miner',repo=root,logger=self.logger)
+                    if failure=='confirmed_progress':
+                        with self.assertRaisesRegex(PipelineError,'reconciliation required'):
+                            execute(run_id='next',inventory_path=self.inventory(root),apply=True,topic_runner=runner,output_root=root/'runs',miner_root=root/'miner',repo=root,logger=self.logger)
+                    else:
+                        result=execute(run_id='next',inventory_path=self.inventory(root),apply=True,topic_runner=runner,output_root=root/'runs',miner_root=root/'miner',repo=root,logger=self.logger)
+                        self.assertEqual(result['deep_article'],'daily_limit_reached')
+                runner.assert_called_once()
+
+    def test_failed_readonly_cli_resume_does_not_append_execution_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);run=root/'runs'/'audit';run.mkdir(parents=True)
+            progress=run/'progress.json';progress.write_text('{"wordpress_write_count":1}')
+            original=progress.read_bytes()
+            with patch('scripts.run_evidence_deep_article.LOCK',root/'lock'), patch('scripts.run_evidence_deep_article.OUTPUT',root/'runs'), patch('scripts.run_evidence_deep_article.resume_public_audit',side_effect=RuntimeError('read-only GET failed')), patch('scripts.run_evidence_deep_article.execute') as runner, patch('sys.argv',['deep','--resume-public-audit','--run-id','audit']), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(),1)
+            runner.assert_not_called();self.assertEqual(progress.read_bytes(),original)
+            self.assertFalse((run/'result.json').exists())
+
+    def test_concurrent_cli_rejection_does_not_create_unknown_or_touch_owner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); lock_path=root/'lock'; owner=PipelineLock(lock_path)
+            owner.acquire(); original=lock_path.read_bytes()
+            try:
+                with patch('scripts.run_evidence_deep_article.LOCK',lock_path), patch('scripts.run_evidence_deep_article.OUTPUT',root/'runs'), patch('scripts.run_evidence_deep_article.execute') as runner, patch('scripts.run_evidence_deep_article.refresh_inventory') as inventory, patch('sys.argv',['deep','--apply','--run-id','contender']), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(main(),1)
+                runner.assert_not_called(); inventory.assert_not_called()
+                self.assertEqual(lock_path.read_bytes(),original)
+                self.assertFalse((root/'runs/contender').exists())
+            finally:owner.release()
     def inventory(self, root: Path) -> Path:
         path=root/"inventory.json"; path.write_text(json.dumps({"metadata":{"complete":True},"posts":[]}),encoding="utf-8"); return path
 

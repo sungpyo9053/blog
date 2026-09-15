@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import inspect
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -15,6 +17,7 @@ from unittest.mock import MagicMock, patch
 from scripts.run_daily_pipeline import (
     ContentQualityRejection,
     PipelineError,
+    PipelineLock,
     Stage,
     TopicContext,
     build_parser,
@@ -51,6 +54,95 @@ from scripts.set_humanize_mode import update_state
 
 
 class DailyPipelineIsolationTests(unittest.TestCase):
+    def test_process_lock_contention_and_crash_recovery(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'pipeline.lock'
+            child=subprocess.Popen([sys.executable,'-c',
+                'from pathlib import Path; import sys; from scripts.run_daily_pipeline import PipelineLock; '
+                'lock=PipelineLock(Path(sys.argv[1])); lock.acquire(); print("ready",flush=True); sys.stdin.read()',str(path)],
+                stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            try:
+                self.assertEqual(child.stdout.readline().strip(),'ready')
+                contender=PipelineLock(path)
+                with self.assertRaises(PipelineError):contender.acquire()
+                child.kill();child.wait(timeout=5)
+                contender.acquire();self.assertTrue(contender.acquired)
+                contender.release()
+                self.assertTrue(Path(str(path)+'.guard').exists())
+            finally:
+                if child.poll() is None:child.kill();child.wait(timeout=5)
+                for stream in (child.stdin,child.stdout,child.stderr):stream.close()
+
+    def test_unverifiable_old_lock_is_not_deleted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'pipeline.lock'
+            for raw in ('', '{', '[]', 'null', '{"pid": 0}', '{"pid": true}', '{"pid": "123"}', '{"pid": 1.5}'):
+                path.write_text(raw)
+                lock=PipelineLock(path)
+                with self.assertRaisesRegex(PipelineError,'Unverifiable'):lock.acquire()
+                self.assertEqual(path.read_text(),raw)
+                self.assertIsNone(lock._guard_descriptor)
+
+    def test_release_of_corrupt_pid_always_closes_guard_and_is_repeatable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'pipeline.lock';lock=PipelineLock(path)
+            lock.acquire();descriptor=lock._guard_descriptor
+            path.write_text('[]')
+            lock.release();lock.release()
+            self.assertFalse(lock.acquired);self.assertIsNone(lock._guard_descriptor)
+            self.assertEqual(path.read_text(),'[]')
+            with self.assertRaises(OSError):os.fstat(descriptor)
+            # The persistent corrupted PID still fails closed after release.
+            with self.assertRaisesRegex(PipelineError,'Unverifiable'):PipelineLock(path).acquire()
+
+    def test_pre_guard_legacy_alive_and_dead_pid_records(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'pipeline.lock';raw=json.dumps({'pid':os.getpid()})
+            path.write_text(raw);lock=PipelineLock(path)
+            with self.assertRaises(PipelineError):lock.acquire()
+            self.assertEqual(path.read_text(),raw);self.assertIsNone(lock._guard_descriptor)
+            with patch.object(PipelineLock,'_pid_is_alive',return_value=False):lock.acquire()
+            self.assertTrue(lock.acquired);lock.release();lock.release()
+            self.assertFalse(path.exists());self.assertIsNone(lock._guard_descriptor)
+
+    def test_pid_record_write_failure_closes_both_descriptors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'pipeline.lock';lock=PipelineLock(path);opened=[]
+            real_open=os.open
+            def tracked_open(*args,**kwargs):
+                descriptor=real_open(*args,**kwargs);opened.append(descriptor);return descriptor
+            with patch('scripts.run_daily_pipeline.os.open',side_effect=tracked_open), patch('scripts.run_daily_pipeline.json.dump',side_effect=OSError('simulated write failure')):
+                with self.assertRaises(OSError):lock.acquire()
+            self.assertEqual(len(opened),2)
+            for descriptor in opened:
+                with self.assertRaises(OSError):os.fstat(descriptor)
+            self.assertFalse(lock.acquired);self.assertIsNone(lock._guard_descriptor)
+            lock.release()
+            self.assertTrue(path.exists())  # uncertain record is preserved
+
+    def test_lock_contender_cannot_delete_half_written_live_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'pipeline.lock'
+            owner, contender=PipelineLock(path), PipelineLock(path)
+            writing=threading.Event(); finish=threading.Event(); errors=[]
+            original_dump=json.dump
+            def delayed_dump(payload, stream, *args, **kwargs):
+                if threading.current_thread().name=='lock-owner':
+                    writing.set()
+                    if not finish.wait(5): raise RuntimeError('test barrier timeout')
+                return original_dump(payload,stream,*args,**kwargs)
+            def acquire_owner():
+                try: owner.acquire()
+                except Exception as error: errors.append(error)
+            with patch('scripts.run_daily_pipeline.json.dump',side_effect=delayed_dump):
+                worker=threading.Thread(target=acquire_owner,name='lock-owner');worker.start()
+                try:
+                    self.assertTrue(writing.wait(5))
+                    with self.assertRaises(PipelineError):contender.acquire()
+                finally:
+                    finish.set();worker.join(5);contender.release();owner.release()
+            self.assertFalse(worker.is_alive());self.assertEqual(errors,[])
+
     def test_research_insufficient_is_a_fallback_eligible_quality_rejection(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "run" / "topic"
