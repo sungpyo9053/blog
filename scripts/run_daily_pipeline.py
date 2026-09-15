@@ -2204,6 +2204,8 @@ def run_topic_pipeline(
     humanize_lock: threading.Lock,
 ) -> dict[str, Any]:
     """Prepare one isolated topic; serialize shared state and WordPress writes."""
+    from scripts.editorial_epoch import reject_legacy_run
+    reject_legacy_run(context.run_id, PROJECT_ROOT / "output/evidence-deep-article-runs", PROJECT_ROOT)
     if resume:
         if context.directory.exists():
             assert_owned_path(context, context.directory)
@@ -2295,6 +2297,9 @@ def run_topic_pipeline(
                     timeout_seconds=timeout_seconds,
                 )
                 digest = validate_publish_contract(context)
+                from scripts.editorial_epoch import reject_retired_publication
+                reject_retired_publication(load_document(context.directory / "publish.md").metadata,
+                                           PROJECT_ROOT / "output/evidence-deep-article-runs", PROJECT_ROOT)
                 if context.content_type == "evidence_deep_article":
                     from scripts.editorial_gate import enforce_prepublication
                     enforce_prepublication(

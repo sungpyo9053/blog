@@ -37,6 +37,19 @@ class KakaoReportTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 send('test','mcporter')
 
+    def test_no_topic_does_not_hide_unresolved_publication(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            run=root/'output/evidence-deep-article-runs/20260916T010000Z-test'
+            run.mkdir(parents=True)
+            (run/'result.json').write_text(json.dumps({
+                'failed':False,'deep_article':'no_publishable_topic',
+                'reconciliation_required':True}))
+            status=deep_status(root,'2026-09-16')[0]
+            self.assertIn('READY 0건',status)
+            self.assertIn('과거 발행 결과 대조 필요',status)
+            self.assertNotIn('정상 종료',status)
+
     def test_links_omitted_without_corrupting_status_or_limit(self):
         message=message_for('2026-09-13','11',('조회 실패(발행 여부 미확인)','https://huntlab.app/'+'x'*200),('실행 결과 없음(누락/중단 확인 필요)',''))
         self.assertLessEqual(len(message),200)

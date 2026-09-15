@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json, logging, tempfile, unittest
+import hashlib, json, logging, tempfile, unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.run_evidence_deep_article import DAILY_LIMIT, audit_evidence_links, candidate_plan, execute, published_today, run_selected_candidate
+from scripts.run_evidence_deep_article import DAILY_LIMIT, PipelineError, audit_evidence_links, candidate_plan, execute, published_today, resume_public_audit, run_selected_candidate
 
 
 class EvidenceDeepArticleTests(unittest.TestCase):
@@ -140,6 +140,138 @@ class EvidenceDeepArticleTests(unittest.TestCase):
             for index in range(DAILY_LIMIT):
                 path=root/f"run-{index}"; path.mkdir(); (path/"result.json").write_text(json.dumps({"kst_date":"2026-09-05","deep_article":"published","failed":False}))
             self.assertEqual(published_today(root,"2026-09-05"),1)
+
+    def test_unknown_write_requires_reconciliation_even_on_later_day(self):
+        for filename in ("result.json", "progress.json"):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); run = root / "timeout"; run.mkdir()
+                (run / filename).write_text(json.dumps({"kst_date": "2026-09-05", "wordpress_write_count": "unknown"}))
+                for day in ("2026-09-05", "2026-09-06"):
+                    with self.assertRaisesRegex(PipelineError, "reconciliation required"):
+                        published_today(root, day)
+
+    def reconciliation(self, run, count=0):
+        evidence = []
+        for kind in ("pipeline_trace", "wordpress_inventory"):
+            p = run / (kind + ".json")
+            p.write_text(json.dumps({"kind": kind, "reviewed_write_count": count}))
+            evidence.append({"kind": kind, "path": p.name, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()})
+        return {"schema_version": 1, "run_id": run.name, "wordpress_write_count": count,
+                "kst_date": "2026-09-05", "checked_at": "2026-09-16T00:00:00+09:00", "reviewed_by": "operator",
+                "original_state_sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                         for p in (run / "result.json", run / "progress.json") if p.exists()},
+                "evidence": evidence}
+
+    def test_reconciliation_preserves_original_and_resolves_unknown(self):
+        for count in (0, 1):
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); run = root / "unknown"; run.mkdir()
+                p = run / "progress.json"; p.write_text(json.dumps({"wordpress_write_count": "unknown"}))
+                original = p.read_bytes()
+                (run / "reconciliation.json").write_text(json.dumps(self.reconciliation(run, count)))
+                self.assertEqual(published_today(root, "2026-09-05"), count)
+                self.assertEqual(published_today(root, "2026-09-06"), 0)
+                self.assertEqual(p.read_bytes(), original)
+
+    def test_reconciliation_rejects_stale_state_evidence_and_unknown_count(self):
+        for mutation in ("state", "evidence", "unknown", "bool", "missing_inventory", "wrong_run", "traversal"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); run = root / "unknown"; run.mkdir()
+                p = run / "progress.json"; p.write_text(json.dumps({"wordpress_write_count": "unknown"}))
+                receipt = self.reconciliation(run)
+                if mutation == "state": p.write_text(json.dumps({"wordpress_write_count": "unknown", "stage": "changed"}))
+                elif mutation == "evidence": (run / "pipeline_trace.json").write_text("changed")
+                elif mutation == "unknown": receipt["wordpress_write_count"] = "unknown"
+                elif mutation == "bool": receipt["wordpress_write_count"] = False
+                elif mutation == "missing_inventory": receipt["evidence"].pop()
+                elif mutation == "wrong_run": receipt["run_id"] = "another"
+                elif mutation == "traversal": receipt["evidence"][0]["path"] = "../outside.json"
+                (run / "reconciliation.json").write_text(json.dumps(receipt))
+                with self.assertRaisesRegex(PipelineError, "Invalid publication reconciliation"):
+                    published_today(root, "2026-09-06")
+
+    def test_reconciliation_cannot_erase_confirmed_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run = root / "confirmed"; run.mkdir()
+            (run / "progress.json").write_text(json.dumps({"wordpress_write_count": 1}))
+            (run / "reconciliation.json").write_text(json.dumps(self.reconciliation(run, 0)))
+            with self.assertRaisesRegex(PipelineError, "contradicts confirmed write"):
+                published_today(root, "2026-09-05")
+
+    def test_orphan_confirmed_progress_consumes_daily_slot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run = root / "killed"; run.mkdir()
+            record = {"kst_date": "2026-09-05", "wordpress_write_count": 1}
+            (run / "progress.json").write_text(json.dumps(record))
+            self.assertEqual(published_today(root, "2026-09-05"), 1)
+            (run / "result.json").write_text(json.dumps(record))
+            self.assertEqual(published_today(root, "2026-09-05"), 1)
+            self.assertEqual(published_today(root, "2026-09-06"), 0)
+
+    def test_corrupt_receipt_is_not_assumed_zero_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run = root / "corrupt"; run.mkdir()
+            (run / "result.json").write_text("{")
+            with self.assertRaisesRegex(PipelineError, "Unreadable publication state"):
+                published_today(root, "2026-09-05")
+
+    def test_reused_run_id_cannot_erase_unknown_progress(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run = root / "runs" / "same"; run.mkdir(parents=True)
+            progress = run / "progress.json"
+            original = json.dumps({"wordpress_write_count": "unknown"})
+            progress.write_text(original)
+            runner = Mock()
+            with self.assertRaises(FileExistsError):
+                execute(run_id="same", inventory_path=self.inventory(root), apply=True,
+                        topic_runner=runner, output_root=root / "runs", miner_root=root / "miner")
+            self.assertEqual(progress.read_text(), original)
+            runner.assert_not_called()
+
+    def test_unknown_prior_write_prevents_new_publisher_call(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run = root / "runs" / "previous"; run.mkdir(parents=True)
+            (run / "progress.json").write_text(json.dumps({"wordpress_write_count": "unknown"}))
+            runner = Mock()
+            with patch("scripts.run_evidence_deep_article.build_payload", return_value=self.payload([{}])):
+                with self.assertRaisesRegex(PipelineError, "reconciliation required"):
+                    execute(run_id="next", inventory_path=self.inventory(root), apply=True,
+                            topic_runner=runner, output_root=root / "runs", miner_root=root / "miner")
+            runner.assert_not_called()
+
+    def test_no_candidate_with_unknown_history_is_zero_write_without_checkpoint_advance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run = root / "runs" / "previous"; run.mkdir(parents=True)
+            (run / "progress.json").write_text(json.dumps({"wordpress_write_count": "unknown"}))
+            runner = Mock()
+            with patch("scripts.run_evidence_deep_article.build_payload", return_value=self.payload([])):
+                result = execute(run_id="empty", inventory_path=self.inventory(root), apply=True,
+                                 topic_runner=runner, output_root=root / "runs", miner_root=root / "miner")
+            self.assertFalse(result["failed"])
+            self.assertEqual(result["deep_article"], "no_publishable_topic")
+            self.assertTrue(result["reconciliation_required"])
+            self.assertFalse(result["checkpoint_advanced"])
+            self.assertFalse((root / "miner/checkpoint.json").exists())
+            runner.assert_not_called()
+
+    def test_audit_failure_can_resume_without_publisher_or_candidate_mining(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner = Mock(return_value={"post_id": 999, "url": "https://example.test/post"})
+            with patch("scripts.run_evidence_deep_article.build_payload", return_value=self.payload([{}])):
+                with self.assertRaisesRegex(RuntimeError, "audit failed"):
+                    execute(run_id="audit-retry", inventory_path=self.inventory(root), apply=True,
+                            topic_runner=runner, public_auditor=Mock(side_effect=RuntimeError("audit failed")),
+                            output_root=root / "runs", miner_root=root / "miner")
+            auditor = Mock(return_value={"http_status": 200})
+            with patch("scripts.run_evidence_deep_article.build_payload") as miner:
+                result = resume_public_audit("audit-retry", output_root=root / "runs", public_auditor=auditor)
+                miner.assert_not_called()
+            runner.assert_called_once()
+            self.assertEqual(result["publication"]["post_id"], 999)
+            self.assertEqual(result["deep_article"], "published")
+            self.assertFalse(result["failed"])
+            self.assertTrue((root / "runs/audit-retry/public-audit-recovery.json").exists())
 
     def test_second_ready_candidate_on_same_day_is_not_published(self):
         candidate={"candidate_id":"two"}; runner=Mock()

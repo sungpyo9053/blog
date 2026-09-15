@@ -89,6 +89,8 @@ def deep_status(root, day, is_active=False):
         return '실패: '+str(latest.get('error_type', '원인 미확인'))[:40], ''
     state = latest.get('deep_article')
     if state == 'no_publishable_topic':
+        if latest.get('reconciliation_required'):
+            return '미발행: READY 0건 / 과거 발행 결과 대조 필요', ''
         return '미발행: READY 0건(정상 종료)', ''
     if state == 'daily_limit_reached':
         return '미발행: 일일 한도 도달', ''
