@@ -75,5 +75,45 @@ class EditorialGateTests(unittest.TestCase):
         before = "서버에서 12건을 확인하였습니다. `status=201`\nhttps://example.com/source"
         self.assertTrue(style_preservation(before,before.replace('확인하였습니다','확인했습니다'))["passed"])
 
+    def test_shell_path_placeholders_block_markdown(self):
+        for language in ('bash', 'sh', 'shell'):
+            for path in ('<check-dir>/manifest.json', '<source_path>', '<directory>', '<path>'):
+                for fence in ('```', '~~~'):
+                    with self.subTest(language=language, path=path, fence=fence):
+                        result = inspect_article(f'본문\n{fence}{language}\npython audit.py --manifest {path}\n{fence}', self.inventory())
+                        self.assertIn('unresolved_shell_path_placeholder', result['failures'])
+
+    def test_shell_path_placeholders_block_encoded_html(self):
+        for opening in ('<pre><code class="language-bash">', '<pre class="language-shell"><code>', '<pre data-language="sh"><code>'):
+            result = inspect_article('본문' + opening + 'cat &lt;check-dir&gt;/manifest.json</code></pre>', self.inventory())
+            self.assertIn('unresolved_shell_path_placeholder', result['failures'])
+
+    def test_transcripts_non_shell_blocks_and_inline_examples_not_blocked(self):
+        for language in ('text', 'plain', 'console', 'python', 'bashful', ''):
+            self.assertTrue(inspect_article(f'본문\n```{language}\ncat <check-dir>/manifest.json\n```', self.inventory())['passed'])
+        self.assertTrue(inspect_article('본문 `<check-dir>` <pre><code class="language-text">&lt;check-dir&gt;</code></pre>', self.inventory())['passed'])
+
+    def test_shell_literals_comments_xml_heredoc_and_real_paths_not_blocked(self):
+        snippets = [
+            'printf "%s\\n" "<check-dir>/manifest.json"',
+            "printf '%s\\n' '<source-path>'",
+            'example="<check-dir>"',
+            '# cat <check-dir>/manifest.json\nprintf ok',
+            'printf "%s" "<root><path>value</path></root>"',
+            "cat <<'EOF'\n<root><path>value</path></root>\nEOF",
+            'cat <<-EOF\n\t<check-dir>/manifest.json\n\tEOF',
+            'check_dir=$(mktemp -d)\npython audit.py --manifest "$check_dir/manifest.json"',
+            'test 1 -lt 2\ncat < input.txt > output.txt',
+        ]
+        for code in snippets:
+            with self.subTest(code=code):
+                self.assertTrue(inspect_article('본문\n```bash\n' + code + '\n```', self.inventory())['passed'])
+
+    def test_lint_resumes_after_heredoc_and_html_block(self):
+        content = '본문\n```sh\ncat <<EOF\n<path>data</path>\nEOF\ncat <check-dir>/manifest.json\n```'
+        self.assertIn('unresolved_shell_path_placeholder', inspect_article(content, self.inventory())['failures'])
+        content = '본문<pre><code class="language-text">&lt;check-dir&gt;</code></pre><pre><code class="language-bash">cat &lt;path&gt;</code></pre>'
+        self.assertIn('unresolved_shell_path_placeholder', inspect_article(content, self.inventory())['failures'])
+
 
 if __name__ == '__main__': unittest.main()

@@ -8,7 +8,60 @@ import re
 from collections import Counter
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
+from html.parser import HTMLParser
 from pathlib import Path
+
+
+def unresolved_shell_path_placeholder(text: str) -> bool:
+    """Narrow lint, not a shell parser or an execution/safety certificate.
+
+    Inspect only explicitly shell-labelled blocks. Ignore quoted literals,
+    comments and heredoc data; transcripts belong in text/plain blocks.
+    """
+    blocks = []
+    for match in re.finditer(r"(?m)^ {0,3}(`{3,}|~{3,})(bash|sh|shell)(?=[ \t\n])[^\n]*\n(.*?)^ {0,3}\1\s*$", text, re.S | re.I):
+        blocks.append(match[3])
+
+    class ShellHTML(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.depth = 0
+            self.shell = False
+            self.parts = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "pre":
+                self.depth += 1
+            if self.depth and tag in ("pre", "code"):
+                values = dict(attrs)
+                classes = (values.get("class") or "").split()
+                self.shell |= any(x.lower() in {"language-bash", "language-sh", "language-shell", "lang-bash", "lang-sh", "lang-shell"} for x in classes)
+                self.shell |= (values.get("data-language") or "").lower() in {"bash", "sh", "shell"}
+
+        def handle_data(self, data):
+            if self.depth:
+                self.parts.append(data)
+
+        def handle_endtag(self, tag):
+            if tag == "pre" and self.depth:
+                self.depth -= 1
+                if not self.depth:
+                    if self.shell:
+                        blocks.append("".join(self.parts))
+                    self.shell, self.parts = False, []
+
+    parser = ShellHTML()
+    parser.feed(text)
+    placeholder = re.compile(r"(?<![\w-])<(?:[a-z][a-z0-9]*[-_])*(?:dir|directory|path)>", re.I)
+    # Preserve character positions/newlines while masking shell literal data.
+    literals = re.compile(r"\\[\s\S]|'[^']*'|\"(?:\\[\s\S]|[^\"\\])*\"|(?<!\S)#[^\n]*")
+    for block in blocks:
+        # Common single-delimiter heredocs: data, including XML, is not code.
+        block = re.sub(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n.*?^\t*\2\s*$", "", block, flags=re.M | re.S)
+        block = literals.sub(lambda m: "\n" * m[0].count("\n") + " ", block)
+        if placeholder.search(block):
+            return True
+    return False
 
 
 def prose(text: str) -> str:
@@ -71,6 +124,8 @@ def inspect_article(text: str, inventory: dict, *, now: datetime | None = None, 
         failures.append("empty_body")
     if re.search(r"물론입니다[!.]|도움이 되셨|요청하신.*정리해|제 지식.*기준", body):
         failures.append("chatbot_framing")
+    if unresolved_shell_path_placeholder(text):
+        failures.append("unresolved_shell_path_placeholder")
     # Any substantial verbatim passage in another post needs an editorial
     # decision before publication. Exclude code and metadata from comparison.
     # Fixed-width exact strings avoid SequenceMatcher's quadratic behavior on
