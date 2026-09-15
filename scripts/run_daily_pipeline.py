@@ -965,7 +965,7 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         ),
         Stage(
             "Reviewer Agent",
-            None,
+            PROJECT_ROOT / "agents/reviewer.md",
             (
                 common
                 + f"{str(topic_dir / 'final.md')!r}를 "

@@ -73,6 +73,9 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
   Research·본문·바로 앞 코드 블록과 대조한다. 누락, 불일치, 민감정보 노출,
   코드 블록에 없던 토큰을 추가한 합성 또는 인포그래픽을 실제 캡처로 가장한
   경우 REJECT한다.
+  텍스트 transcript뿐 아니라 실제 캡처 이미지와 렌더링 원문도 확인해 현재 run의
+  사설 절대경로·사용자명·인증정보가 노출되지 않았는지 검사한다. 본문에서 경로를
+  지웠어도 이미지에 남아 있으면 REJECT한다.
 - `verification_mode`는 `direct`, `controlled_comparison`, `not_directly_tested`만
   허용한다. `direct_read_only`처럼 정의되지 않은 변형값은 REJECT한다.
 - Research의 `original_contribution`, `evidence`, `limitations`가 모두
@@ -134,7 +137,15 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 - 검증 글의 첫 5문장 안에 문제 장면, 실패 신호와 해결 결과가 모두 있으며 결론을 뒤로 숨기지 않았다.
 - 독자가 그대로 실행할 최소 명령 또는 최소 코드, 기대 출력과 실제 공개 자산 링크가 있다.
   복사 실행용 블록은 최종 명령 형태와 Research의 격리 실행·종료 상태가 대응해야
-  한다. `<check-dir>` 같은 미치환 경로가 남으면 REJECT한다. 비식별된 과거 로그는
+  한다. 직접 재현 가능하다고 주장하는 복사 명령은 fresh checkout에서 본문에
+  명시한 준비 절차와 최종 복사 블록을 그대로 실행한 근거를 확인한다. 검토 기록에
+  실행한 블록의 SHA-256, checkout revision, 사용한 준비 절차와 종료 상태를 남긴다.
+  기존 운영 `.venv`에서의 성공은 독자 환경의 준비 검증을 대신하지 못한다. 준비가
+  누락됐거나 블록을 몰래 수정해야 실행된다면 REJECT한다. 이 실행 근거 요구를
+  직접 재현을 주장하지 않는 일반 해설·뉴스의 비실행 예시에 확대하지 않는다.
+  외부 시스템 변경·인증정보·유료 호출이 필요한 실행은 수행하지 않고 승인된
+  격리 환경에서 확인할 수 없으면 검증 미완료로 REJECT한다.
+  `<check-dir>` 같은 미치환 경로가 남으면 REJECT한다. 비식별된 과거 로그는
   `text` 캡처로 구분한다. 결정적 placeholder 검사는 일부 오류만 잡으므로 통과를
   실제 실행 검증으로 대신하지 않는다.
   `.venv`나 사전 생성 파일이 필요하면 새 checkout에서 문서의 준비 단계만으로 만들
@@ -146,6 +157,10 @@ Reviewer는 Research와 최종 콘텐츠를 대조하고 `style-guide.md`, `seo-
 문체가 어색하다는 이유로 Research에 없는 체험이나 사실을 보완해서는 안 된다. 문체 계약이 부족하면 수정 근거를 명시하고 `REJECTED`로 처리한다.
 
 ## 승인 계약
+
+repair 후 재검토도 이전 반려 사유만 확인하는 부분 승인이 아니다. 보정된 최종
+산출물 전체에 모든 필수 사실성·실행·개인정보·이미지·SEO·문체 계약을 다시 적용한다.
+이전 검토에서 통과한 항목이 보정 중 깨지지 않았는지도 확인한 뒤 새 해시를 승인한다.
 
 하나라도 부족하면 `REJECTED`로 처리하고 Publisher를 실행하지 않는다. 모두 통과한 경우에만 `publish.md`의 SHA-256, `APPROVED`, `run_id`, `topic_id`, `source_id`, Category를 `review.md`에 기록한다.
 

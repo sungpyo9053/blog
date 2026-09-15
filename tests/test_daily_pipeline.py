@@ -37,6 +37,7 @@ from scripts.run_daily_pipeline import (
     run_planner_with_contract_retry,
     run_stage,
     run_topic_pipeline,
+    stage_instruction,
     topic_stages,
     validate_build_log_research_contract,
     validate_publish_contract,
@@ -1138,6 +1139,16 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             "다른 주제 디렉터리를 입력 후보로 검색하거나 재사용하지 마세요",
             reviewer.prompt,
         )
+
+    def test_initial_and_repair_reviewer_require_full_agent_policy_read(self):
+        context = make_topic_context("run-review-policy", "Python 호환성 테스트")
+        for stages in (topic_stages(context), review_repair_stages(context, attempt=1)):
+            reviewer = next(stage for stage in stages if stage.name == "Reviewer Agent")
+            self.assertIsNotNone(reviewer.agent_file)
+            self.assertEqual(reviewer.agent_file.name, "reviewer.md")
+            instruction = stage_instruction(reviewer)
+            self.assertIn("먼저 agents/reviewer.md를 처음부터 끝까지 읽고 그 정책을 따르세요.", instruction)
+            self.assertLess(instruction.index("먼저 agents/reviewer.md"), instruction.index(reviewer.prompt))
 
     def test_all_posts_keep_toc_and_require_grounded_quick_summary(self):
         context = make_topic_context(
