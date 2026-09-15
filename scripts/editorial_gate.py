@@ -154,7 +154,13 @@ def inspect_article(text: str, inventory: dict, *, now: datetime | None = None, 
 
 
 def enforce_prepublication(publish_path: Path, inventory_path: Path, *, existing_post_id: int | None = None) -> dict:
-    report = inspect_article(publish_path.read_text(encoding="utf-8"), json.loads(inventory_path.read_text(encoding="utf-8")), existing_post_id=existing_post_id)
+    text = publish_path.read_text(encoding="utf-8")
+    report = inspect_article(text, json.loads(inventory_path.read_text(encoding="utf-8")), existing_post_id=existing_post_id)
+    # Match this actual run directory only, including HTML-encoded captures.
+    # Never put the private path itself in the public-facing error/report.
+    if str(publish_path.resolve().parent) in html.unescape(text):
+        report["failures"].append("private_runtime_path")
+        report["passed"] = False
     (publish_path.parent / "editorial-gate.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if not report["passed"]:
         raise ValueError("editorial gate: " + ", ".join(report["failures"]))

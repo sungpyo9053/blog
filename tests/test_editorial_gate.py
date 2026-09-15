@@ -1,12 +1,49 @@
 import unittest
 import time
+import html
+import json
+import tempfile
 from datetime import UTC, datetime, timedelta
-from scripts.editorial_gate import inspect_article, style_preservation
+from pathlib import Path
+from scripts.editorial_gate import enforce_prepublication, inspect_article, style_preservation
 
 
 class EditorialGateTests(unittest.TestCase):
     def inventory(self, text=""):
         return {"metadata":{"complete":True,"full_content":True,"statuses":{"publish":1,"draft":0},"collected_at":datetime.now(UTC).isoformat()},"posts":[{"post_id":1,"status":"publish","content":text}]}
+
+    def test_current_private_runtime_path_is_blocked_and_not_echoed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary).resolve()
+            publish = directory / 'publish.md'
+            inventory = directory / 'inventory.json'
+            inventory.write_text(json.dumps(self.inventory()))
+            publish.write_text(f'본문\n```text\n{directory}/.venv/bin/python audit.py\n```')
+            with self.assertRaisesRegex(ValueError, 'private_runtime_path') as raised:
+                enforce_prepublication(publish, inventory)
+            report = (directory / 'editorial-gate.json').read_text()
+            self.assertFalse(json.loads(report)['passed'])
+            self.assertNotIn(str(directory), report)
+            self.assertNotIn(str(directory), str(raised.exception))
+
+    def test_html_escaped_current_private_runtime_path_is_blocked(self):
+        with tempfile.TemporaryDirectory(prefix='private&topic-') as temporary:
+            directory = Path(temporary).resolve()
+            publish = directory / 'publish.md'
+            inventory = directory / 'inventory.json'
+            inventory.write_text(json.dumps(self.inventory()))
+            publish.write_text(f'본문<pre>{html.escape(str(directory))}/final.md</pre>')
+            with self.assertRaisesRegex(ValueError, 'private_runtime_path'):
+                enforce_prepublication(publish, inventory)
+
+    def test_relative_public_and_unrelated_example_paths_are_allowed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            publish = directory / 'publish.md'
+            inventory = directory / 'inventory.json'
+            inventory.write_text(json.dumps(self.inventory()))
+            publish.write_text('본문 ./images/capture.png\nhttps://huntlab.app/example/\n`/home/example/project`')
+            self.assertTrue(enforce_prepublication(publish, inventory)['passed'])
 
     def test_inventory_cannot_claim_completeness_without_bodies_or_status_counts(self):
         inv = self.inventory()
