@@ -32,3 +32,13 @@
 - 승인 raw 해시와 저장 후 해시 일치, 제목·slug·category·media 등 보호 메타 보존. 공개 GET 3개 200 및 235개 본문 블록 누락 0.
 - root 별도 공개 감사: 2026-09-16 07:33:33 KST, `passed=true`, 실패 0. 공개 글 10개, 페이지 19개, 내부 URL 65개, sitemap 5개/URL 35개, ads.txt, 전체 inventory 확인. 저장 파일 `output/quality99-corrections-20260916/root-public-audit.json`.
 - 이 공개 기술 감사는 독자 가치·AdSense 승인·실기기 검증을 대신하지 않는다.
+- 후속 실제 WordPress 집계: active plugins 16, attachments 375, 공개 글 10, 초안 113. 앞선 부분 복구의 373개 미디어/초기 준비 문서의 15개 활성 플러그인은 이전 시점 기록이다. 새 snapshot과 복구는 현재 대응 시점의 실제 목록을 다시 수집해야 하며 옛 개수로 통과시키지 않는다.
+
+## 2차 6편 정정·재검증
+
+- 최종 승인 manifest `74d14d0c5c13e2ea73475e82cb2c6db78d49c53a9af5dc6a439195669c491f5c`. Reviewer는 새 checkout 3개, 26개 실행/입력 조건 및 실제 Lab READY 1→0 결과를 확인했다.
+- 50·96·290·373·698·699 본문 업데이트 정확히 6회. 백업/attempt/verified 각각 6개, 승인 raw 해시 및 보호 메타 모두 일치. 새 글 0, 미디어 생성/삭제 0, POST 재전송 0. 첫 정정까지 합계 기존 **9편**을 수정했다.
+- 공개 본문 441개 블록 확인 중 373의 산문 두 블록은 ASCII apostrophe가 WordPress의 U+2019로 변환돼 최초 비교가 실패했다. 최초 실패 기록을 보존하고 정확히 해당 두 문장에 한정한 재GET·raw 해시·표시 동등성 검사로 원인을 확인했다. 코드 블록을 정규화하거나 다시 POST하지 않았다.
+- 최종 Publisher 영수증 `output/quality99-round2-corrections-20260916/publisher-final-result.json`: `public_passed=true`. 별도 373 typography reconciliation 영수증을 보존했다.
+- root 후속 전체 공개 감사(07:52:04 KST): PASS, 공개 10편/페이지19/내부URL64/sitemap5·35/ads.txt/전체inventory. 첫 감사보다 내부 URL 1개가 감소한 것은 읽을 수 없는 기존 캡처 링크를 본문에서 제거한 결과다. 원격 미디어 파일은 삭제하지 않았다.
+- 삭제 전 원문 HTML은 로컬 mode600과 Git 제외 규칙으로 보존한다. 승인 이후 원고 파일을 다시 변경하지 않는다.
