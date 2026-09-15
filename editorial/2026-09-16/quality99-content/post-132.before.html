@@ -1,0 +1,67 @@
+<p>Hunt News의 AdSense 콘텐츠 감사를 시작하며 공개 글 수를 다시 셌다. <code>per_page=100</code>으로 한 번만 요청한 결과는 100개였다. 실제 공개 글은 119개였고, 두 번째 페이지의 19개가 감사표에서 통째로 빠질 조건이었다. 이번 작업은 일반적인 페이지네이션 설명이 아니라 운영 WordPress 119개를 전수 분류하기 위해 누락을 찾아 고친 기록이다.</p>
+<h2>100개 응답을 전체 목록으로 착각했다</h2>
+<p>첫 확인 명령은 정상적으로 HTTP 200을 반환했다. 오류가 없어서 더 위험했다.</p>
+<pre><code class="language-bash">curl -sS -D page1.headers -o page1.json \
+  'https://huntlab.app/wp-json/wp/v2/posts?status=publish&amp;per_page=100&amp;page=1&amp;_fields=id,slug'
+</code></pre>
+<pre><code class="language-text">page=1 status=HTTP/2 200 rows=100
+x-wp-total=119 x-wp-totalpages=2
+first_id=651 last_id=132
+</code></pre>
+<p>처음 가설은 “공개 글이 100개로 줄었거나 백업의 119가 오래됐다”였다. 하지만 응답 헤더 자체가 전체 119개와 2페이지를 알려주고 있었다. 데이터가 사라진 게 아니라 클라이언트가 첫 페이지에서 멈춘 것이었다.</p>
+<h2>같은 조건에서 두 번째 페이지를 열었다</h2>
+<p>URL의 <code>page</code>만 2로 바꾸고 나머지 조건을 고정했다.</p>
+<pre><code class="language-bash">curl -sS -D page2.headers -o page2.json \
+  'https://huntlab.app/wp-json/wp/v2/posts?status=publish&amp;per_page=100&amp;page=2&amp;_fields=id,slug'
+</code></pre>
+<pre><code class="language-text">page=2 status=HTTP/2 200 rows=19
+x-wp-total=119 x-wp-totalpages=2
+first_id=128 last_id=16
+</code></pre>
+<p>누락된 19개는 별도 상태의 글이 아니었다. 같은 <code>status=publish</code>, 같은 정렬 조건의 다음 페이지였다. 페이지 1의 마지막 ID가 132이고 페이지 2의 첫 ID가 128인 것도 기본 최신순 정렬과 맞는다.</p>
+<p><strong>기록 범위:</strong> 119개는 이 글의 최초 감사 당시 수치이며 현재 게시물 수가 아닙니다. 다음 코드 조각은 당시 100+19개 응답을 처리한 구현입니다. 총수가 100의 배수일 때의 종료 조건과 동시 변경은 별도로 다뤄야 합니다.</p>
+<h2>수정: 빈 페이지가 아니라 마지막 짧은 페이지까지 읽는다</h2>
+<p>감사 코드는 페이지 번호를 늘리며 100개보다 짧은 응답을 만날 때 종료한다.</p>
+<pre><code class="language-python">def fetch_all(client, endpoint, *, context=&quot;edit&quot;, status=None):
+    rows = []
+    page = 1
+    while True:
+        query = {&quot;per_page&quot;: &quot;100&quot;, &quot;page&quot;: str(page), &quot;context&quot;: context}
+        if status:
+            query[&quot;status&quot;] = status
+        batch = client.request(&quot;GET&quot;, f&quot;{endpoint}?{urlencode(query)}&quot;, expected=(200,))
+        rows.extend(batch)
+        if len(batch) &lt; 100:
+            break
+        page += 1
+    return rows
+</code></pre>
+<p>이 방식에서 첫 페이지는 종료 조건이 아니다. 100개를 꽉 채웠으므로 다음 페이지를 요청한다. 두 번째 페이지가 19개라서 그때 119개로 종료한다. 구현은 <a href="https://github.com/sungpyo9053/blog/blob/adc57d3d8d3812a86bc3de3208d705df38247709/scripts/audit_adsense_content.py"><code>scripts/audit_adsense_content.py</code></a>에 있고, 100개와 19개 응답을 고정한 회귀 테스트는 <a href="https://github.com/sungpyo9053/blog/blob/40bd2a83fe307d3b0fd5c3305f0d0518ca771109/tests/test_adsense_content_audit.py#L12-L35"><code>tests/test_adsense_content_audit.py</code></a>에 있다.</p>
+<h2>수정 전후 결과</h2>
+<p>동일한 운영 사이트, 같은 시각대, 같은 <code>status=publish</code> 조건으로 비교했다.</p>
+<pre><code class="language-text">수정 전 단일 요청: 100개, 19개 누락
+수정 후 page 1+2: 119개, REST의 X-WP-Total과 일치
+분류 합계: 119개
+</code></pre>
+<p>이 차이는 단순 카운트 문제가 아니었다. 빠진 오래된 글에는 비기술 카테고리가 포함돼 있어 한 페이지만 감사하면 noindex 대상과 사이트맵 조치가 달라질 수 있다. 실제 P0 변경에서는 119개 전체를 백업한 뒤 승인된 37개 ID만 별도 집합으로 적용했다. 페이지네이션 결과와 변경 대상 집합을 분리해 “두 번째 페이지를 읽었다”가 “모두 수정했다”로 번지지 않게 했다.</p>
+<h2>실패를 다시 만들지 않는 테스트</h2>
+<p>로컬 단위 테스트는 첫 페이지가 정확히 100개일 때 다음 요청을 해야 하고, 짧은 두 번째 페이지에서 멈추는 계약을 검사한다. 운영 검증은 REST 헤더의 119와 수집 결과 119를 다시 대조한다.</p>
+<pre><code class="language-text">운영 REST: page1=100, page2=19, total=119
+감사 입력: 119
+ID 중복: 0
+</code></pre>
+<p>응답 순서에 의존해 누락을 판정하지 않고 ID 집합도 비교한다. 감사 중 새 글이 발행되면 offset 기반 페이지 사이에서 중복이나 누락이 생길 수 있기 때문이다. 그래서 이번 전수 감사 동안 독립 기사 자동 발행을 중지했다.</p>
+<h2>적용 범위와 남은 한계</h2>
+<p>이 구현은 현재처럼 데이터가 고정된 감사에는 충분하다. 쓰기가 계속되는 대형 사이트라면 페이지 1과 2 사이에 새 글이 들어와 기본 정렬 위치가 밀릴 수 있다. 그때는 수정 시각·ID 기준으로 스냅샷 경계를 고정하거나 데이터베이스 덤프와 대조해야 한다.</p>
+<p>또 WordPress는 범위를 벗어난 페이지에 400을 반환할 수 있다. 마지막 페이지가 정확히 100개인 경우에는 한 번 더 요청해 오류 코드가 <code>rest_post_invalid_page_number</code>인 경우만 이전 페이지를 읽은 뒤의 종료로 해석해야 한다. 더 명시적인 방법은 첫 응답의 <code>X-WP-TotalPages</code>만큼 요청한 뒤 고유 ID 수를 <code>X-WP-Total</code>과 대조하는 것이다. 인증 오류나 다른 400까지 종료로 삼으면 안 된다.</p>
+<h2>재현 체크리스트</h2>
+<ol>
+<li>첫 응답의 <code>X-WP-Total</code>과 <code>X-WP-TotalPages</code>를 저장한다.</li>
+<li>모든 페이지의 ID를 합치고 중복 수를 확인한다.</li>
+<li>수집 수가 <code>X-WP-Total</code>과 같은지 비교한다.</li>
+<li>감사 중 발행을 멈추거나 스냅샷 경계를 고정한다.</li>
+<li>변경 전 전체 raw 본문·slug·미디어·canonical 백업과 대조한다.</li>
+</ol>
+<p><a href="https://developer.wordpress.org/rest-api/using-the-rest-api/pagination/">WordPress REST API의 pagination 문서</a>는 <code>page</code>, <code>per_page</code>, <code>X-WP-Total</code>, <code>X-WP-TotalPages</code>의 의미를 설명한다. 하지만 헤더를 읽는 것만으로 전수 감사가 되지는 않는다. 이번 문제의 해결 조건은 실제 두 페이지에서 100+19개를 모으고, 그 119개가 백업과 감사표의 ID 집합에 모두 존재하는지 확인하는 것이었다.</p>
+
+<!-- huntlab-tool-link:20260915 --><p><a href="https://huntlab.app/wordpress-response-check/">모은 글 ID와 전체 건수 비교하기</a> — 입력값만 검사하는 브라우저 도구이며 실제 사이트에 요청하지 않습니다.</p>

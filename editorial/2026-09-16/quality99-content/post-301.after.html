@@ -1,0 +1,153 @@
+<p>2026년 8월 6일 공개 글을 다시 확인하다가 WordPress 20초 핵심 요약 중복 삽입 버그를 발견했다. 작성된 제목은 하나여야 했지만 공개 HTML에는 같은 H2가 2개였고, 플러그인이 만든 자동 요약 상자도 1개 남아 있었다.</p>
+<p>이번 기록은 <code>huntlab-article-toc</code> v1.1.6과 커밋 <a href="https://github.com/sungpyo9053/blog/commit/ffd304f47c038ee263b4786cd0422716e420e57e"><code>ffd304f</code></a>를 기준으로 증상을 센 방법, 제목 정규식 두 곳을 고친 이유, 배포 중 막힌 지점과 공개 DOM 채택 기준을 다룬다. Linux Cron 컨테이너에서 저장소의 Python 테스트는 다시 실행했지만 PHP CLI가 없어 PHP 런타임 재현은 하지 못했다.</p>
+<h2>20초 핵심 요약</h2>
+<ul>
+<li><strong>무엇:</strong> 작성 요약과 WordPress 플러그인 자동 요약이 중복되는 공개 렌더링 경로를 정규식 수정으로 보정한다.</li>
+<li><strong>왜:</strong> 20초 접두어를 감지하지 못하면 자동 상자와 H2가 함께 남아 독자에게 빈 요약 또는 중복 요약이 보일 수 있기 때문이다.</li>
+<li><strong>어떻게:</strong> 정규식 diff, 97개 테스트, 공개 DOM의 H2·요약 상자 개수를 순서대로 대조해 수정 결과를 확인한다.</li>
+</ul>
+<h2>작업 기록: H2 두 개에서 공개 DOM 1개까지</h2>
+<h3>자동 상자와 제목을 따로 셌다</h3>
+<p>처음 확인한 공개 HTML에는 <code>.huntlab-article-quick-summary</code>가 1개, 같은 제목의 <code>&lt;h2&gt;</code>가 2개 있었다. <code>무엇</code> 값은 비어 있었고 자동 생성용 fallback 문구 두 개도 남아 있었다. H2 개수만 보면 원문이 중복 저장됐는지 렌더링 단계에서 추가됐는지 구분할 수 없어 자동 요약 클래스, 제목, fallback 문구를 따로 셌다.</p>
+<p>이 조합은 작성 요약이 이미 있는데도 자동 생성 차단이 작동하지 않은 경로를 가리켰다. 처음에는 복잡한 필터 순서를 의심할 여지가 있었지만, 소스와 테스트를 따라가자 기존 감지 규칙이 <code>핵심 요약</code>만 찾고 제목 앞의 <code>20초</code>는 허용하지 않는다는 차이가 드러났다.</p>
+<h3>생성 차단과 후보 제외 규칙을 함께 바꿨다</h3>
+<p>커밋 <code>ffd304f</code>에서 플러그인 버전을 1.1.5에서 1.1.6으로 올리고 두 정규식에 같은 선택적 접두어를 반영했다.</p>
+<pre><code class="language-diff">- 핵심 요약
++ (?:20초\s*)?핵심 요약
+</code></pre>
+<p>첫 번째 수정 지점은 <code>huntlab_article_quick_summary()</code>의 조기 반환 조건이다. 이미 작성된 요약 제목을 찾으면 플러그인이 자동 상자를 만들지 않게 한다. 두 번째는 <code>$sections</code>를 순회하며 요약 제목을 자동 요약의 단계 후보에서 제외하는 조건이다. 한쪽만 고치면 자동 상자를 막더라도 요약 제목을 생성 재료로 취급하는 불일치가 남을 수 있어 두 규칙의 제목 문법을 함께 맞췄다.</p>
+<p><code>(?:20초\s*)?</code>의 마지막 <code>?</code>는 접두어 그룹을 선택 사항으로 만든다. 따라서 기존 <code>핵심 요약</code>과 새 표준 제목을 모두 감지한다. PHP 공식 문서에서 <a href="https://www.php.net/manual/en/function.preg-match.php"><code>preg_match()</code></a>는 일치 시 1, 불일치 시 0, 실패 시 <code>false</code>를 반환한다.</p>
+<p>Publisher 쪽에도 해당 Markdown H2가 정확히 하나인지 검사하고 fallback 문구를 거절하는 규칙을 추가했다. 작성 규칙과 렌더링 규칙이 다시 갈라지지 않도록 저장소 양쪽에 방어선을 둔 셈이다.</p>
+<h3>97개 테스트 통과가 배포 완료를 뜻하지는 않았다</h3>
+<p>2026년 8월 6일 Linux Cron 컨테이너에서 저장소 전체 Python 테스트를 다시 실행했다. 출력은 다음과 같다.</p>
+<pre><code class="language-text">$ python -m unittest discover -s tests -p 'test_*.py'
+.................................................................................................
+----------------------------------------------------------------------
+Ran 97 tests in 0.279s
+
+OK
+exit status: 0
+</code></pre>
+<p><img alt="저장소 전체 Python 회귀 테스트 97개 통과와 종료 상태 0을 보여주는 터미널 캡처" src="https://huntlab.app/wp-content/uploads/2026/08/body-1-18.webp"></p>
+<p>97개가 모두 통과했지만 이를 PHP 함수 단위 테스트라고 부를 수는 없다. 플러그인 관련 검사는 주로 소스에 수정 패턴이 있는지 확인하는 구조 테스트다. 같은 <code>&lt;h2&gt;20초 핵심 요약&lt;/h2&gt;</code> 입력을 사용한 Python 통제 비교에서는 기존 패턴이 <code>old_match=0</code>, 수정 패턴이 <code>new_match=1</code>이었다. 이 결과는 패턴 의도의 차이를 보여주지만 PHP PCRE와 WordPress 통합 실행을 대신하지 않는다.</p>
+<p>PHP 런타임 확인은 환경에서 바로 막혔다.</p>
+<pre><code class="language-text">$ php -v
+/bin/bash: line 2: php: command not found
+exit_status=127
+</code></pre>
+<p>실패 원인은 수정 코드가 아니라 조사 컨테이너에 PHP CLI가 없었던 것이다. 따라서 이번 재확인에서는 <code>huntlab_article_quick_summary()</code>를 PHP로 직접 실행하지 못했다.</p>
+<h3>ZIP과 nonce 실패 뒤 변경 파일만 적용했다</h3>
+<p>테스트 다음 단계도 매끄럽지 않았다. 플러그인 ZIP 전체 교체는 권한이 다른 <code>.bak</code> 파일 때문에 부분 실패했다. 권한을 강제로 바꾸거나 해당 파일을 삭제하지 않고 WordPress 플러그인 편집 경로로 변경된 PHP 파일 하나만 갱신하기로 했다.</p>
+<p>첫 편집 시도에서는 페이지에 있는 여러 nonce 가운데 다른 값을 골라 실패했다. 도구가 편집 전용 nonce를 선택하도록 수정한 뒤 파일 적용에 성공했다. 관리자 화면의 성공 메시지만으로 작업을 끝내지 않고 캐시를 우회한 공개 URL에서 처음과 같은 세 항목을 다시 셌다.</p>
+<table>
+<thead>
+<tr>
+<th>공개 HTML 항목</th>
+<th style="text-align: right;">수정 전</th>
+<th style="text-align: right;">수정 후</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>자동 요약 클래스</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>작성한 제목 H2</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr>
+<td>fallback 문구 두 종류</td>
+<td style="text-align: right;">남아 있음</td>
+<td style="text-align: right;">각각 0</td>
+</tr>
+</tbody>
+</table>
+<p>작성한 H2 1개가 남고 자동 상자와 fallback이 모두 사라져야 수정 완료로 채택했다. 이 기준을 만족하지 않았다면 테스트가 통과했더라도 캐시, 배포 파일, 활성 플러그인 버전을 다시 확인할 계획이었다.</p>
+<h2><code>the_content</code> 훅은 수정 위치이지 직접 원인은 아니었다</h2>
+<p>WordPress 공식 문서에서 <a href="https://developer.wordpress.org/reference/hooks/the_content/"><code>the_content</code> 훅</a>은 콘텐츠를 화면에 표시하기 전에 필터링하는 지점이며, 콜백은 수정한 <code>$content</code>를 반환한다. 당시 플러그인은 <code>add_filter( 'the_content', 'huntlab_article_toc_content', 20 )</code>으로 콜백을 등록하고 관리자 화면, 단일 글, 루프, 메인 쿼리 조건을 확인한다. <a href="https://developer.wordpress.org/reference/functions/is_main_query/"><code>is_main_query()</code></a>와 <a href="https://developer.wordpress.org/reference/functions/in_the_loop/"><code>in_the_loop()</code></a>는 보조 쿼리나 루프 밖 콘텐츠에 적용되는 범위를 줄이는 데 관련된다.</p>
+<p>priority 20은 실행 순서를 설명할 뿐 이번 중복의 직접 원인은 아니었다. 정상 단일 글 경로에서도 조기 반환 정규식이 작성된 제목을 놓치면 자동 상자를 추가할 수 있다. 이번 전후 관측이 입증한 것은 해당 제목을 감지해 자동 요약을 만들지 않는 경로이며, 훅이 두 번 호출됐거나 재귀가 발생했다고 단정할 근거는 없다.</p>
+<h2>다른 사이트에서 확인할 순서</h2>
+<ol><li>관리자 편집 화면의 원문에서 같은 요약 제목이 두 번 저장됐는지 먼저 찾는다.</li><li>원문은 한 번인데 공개 페이지에 두 번 나오면 자동 요약 플러그인이나 테마의 콘텐츠 필터를 조사한다.</li><li>스테이징에서 작성 제목 변형을 넣고 자동 상자와 제목 개수를 각각 센다.</li><li>변경 파일과 활성 버전을 확인한 뒤 캐시를 비운 공개 페이지에서 같은 개수를 다시 센다.</li></ol>
+<p>이 글의 정규식은 해당 제목 변형을 위한 수정이다. 다른 자동 요약 플러그인에 함수명이나 패턴을 그대로 붙이지 말고 생성 조건과 기존 콘텐츠 감지 조건을 함께 확인한다.</p>
+<h2>공개 페이지에서 요약 제목과 자동 상자를 직접 센다</h2>
+<p>2026년 9월 16일 독자가 현재 응답을 직접 확인할 수 있도록 다음 읽기 전용 예제를 추가했다. Python 3.11 이상이 있는 터미널에 블록 전체를 붙여 넣는다. 패키지 설치·인증·파일 저장은 없고 공개 HTTPS GET 한 번만 보낸다. 페이지의 문자 전체를 검색하면 이 글에 실린 코드 예시까지 중복으로 셀 수 있으므로 <a href="https://docs.python.org/3/library/html.parser.html">Python HTMLParser</a>로 실제 H2 태그를 읽는다.</p>
+<p>코드와 스크립트 등의 내용은 세지 않고 H2 안의 인라인 강조 태그는 합쳐서 판단한다. 자동 상자는 클래스 토큰을 정확히 비교한다. 예제는 이 페이지처럼 작성 요약 H2가 하나이고 자동 상자는 없어야 하는 경우의 기준이다. 작성 요약을 쓰지 않는 다른 글에는 같은 기대 개수를 강제하지 않는다.</p>
+<pre><code class="language-bash">python3 - &lt;&lt;&#x27;PY&#x27;
+import json
+import re
+from html.parser import HTMLParser
+from urllib.request import Request, HTTPRedirectHandler, build_opener
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError(&quot;redirect_refused&quot;)
+
+
+class SummaryCounter(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hidden, self.heading, self.parts = [], False, []
+        self.headings, self.boxes = 0, 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {&quot;pre&quot;, &quot;script&quot;, &quot;style&quot;, &quot;template&quot;}:
+            self.hidden.append(tag)
+        if self.hidden:
+            return
+        classes = (dict(attrs).get(&quot;class&quot;) or &quot;&quot;).split()
+        if &quot;huntlab-article-quick-summary&quot; in classes:
+            self.boxes += 1
+        if tag == &quot;h2&quot;:
+            self.heading, self.parts = True, []
+
+    def handle_endtag(self, tag):
+        if self.hidden:
+            if tag == self.hidden[-1]:
+                self.hidden.pop()
+            return
+        if tag == &quot;h2&quot; and self.heading:
+            title = &quot; &quot;.join(&quot;&quot;.join(self.parts).split())
+            self.headings += bool(re.fullmatch(r&quot;(?:20초\s*)?핵심\s*요약&quot;, title))
+            self.heading = False
+
+    def handle_data(self, data):
+        if self.heading and not self.hidden:
+            self.parts.append(data)
+
+
+if __name__ == &quot;__main__&quot;:
+    url = &quot;https://huntlab.app/wordpress-quick-summary-regex-fix/&quot;
+    request = Request(url, headers={&quot;User-Agent&quot;: &quot;HuntLab-Reader-Check/1.0&quot;, &quot;Cache-Control&quot;: &quot;no-cache&quot;})
+    with build_opener(NoRedirect()).open(request, timeout=20) as response:
+        if response.status != 200 or response.headers.get_content_type() != &quot;text/html&quot;:
+            raise ValueError(&quot;unexpected_response&quot;)
+        raw = response.read(2_000_001)
+        if len(raw) &gt; 2_000_000:
+            raise ValueError(&quot;response_too_large&quot;)
+    parser = SummaryCounter()
+    parser.feed(raw.decode(&quot;utf-8&quot;)); parser.close()
+    passed = parser.headings == 1 and parser.boxes == 0
+    print(json.dumps({&quot;passed&quot;: passed, &quot;summary_h2&quot;: parser.headings, &quot;automatic_boxes&quot;: parser.boxes}))
+    raise SystemExit(0 if passed else 1)
+PY
+</code></pre>
+<p>추가 확인에서 전체 종료 코드 0과 아래 응답을 얻었다.</p>
+<pre><code class="language-text">{"passed": true, "summary_h2": 1, "automatic_boxes": 0}
+</code></pre>
+<p>H2가 두 개이거나 자동 상자가 있으면 종료 코드 1이다. 먼저 원문에 요약을 두 번 썼는지 확인하고, 원문이 하나라면 활성 플러그인·테마와 캐시를 점검한다. 이 명령은 원인을 자동 확정하거나 수정하지 않는다. 받아온 HTML만 분석하므로 자바스크립트가 나중에 만든 요소·CSS로 숨긴 제목·fallback 문구 내용까지 검사하지 않으며 PHP 정규식 실행 테스트도 아니다. 응답이 로그인 페이지나 다른 내용으로 바뀌어도 기대 H2가 없어 실패한다. 리다이렉트나 HTTP 오류는 별도로 중단하니 이를 중복 검사의 정상 결과로 간주하지 않는다.</p>
+<h2>운영 결정과 아직 남은 문제</h2>
+<p>이번 작업에서 재사용할 판단은 제목 문법을 소비하는 규칙을 한꺼번에 찾는 것이다. 자동 생성 여부를 결정하는 정규식과 생성 후보에서 제외하는 정규식이 같은 변형을 받아들여야 하며, 저장소 테스트와 공개 렌더 결과도 별도로 확인해야 한다.</p>
+<p>당시 권한이 다른 기존 <code>.bak</code> 파일은 삭제하지 않았다. 동일한 필터 결과에 <code>the_content</code>가 다시 적용될 때 목차 HTML 전체가 완전히 같게 유지되는지도 아직 확인하지 못했다. 이 부분은 PHP 런타임 회귀 테스트가 마련되기 전까지 보류하며, 검색엔진 캐시와 기존 검색결과 스니펫의 반영 시점도 이번 결과로 보장하지 않는다.</p>
+<p>자동 삽입 플러그인을 수정한다면 로컬 테스트 통과 기록과 함께 캐시를 우회한 공개 DOM의 작성 요소·자동 요소·fallback 개수를 남겨야 한다. 테스트 성공과 운영 반영 성공을 같은 결과로 취급하지 않는 가장 짧은 방법이다.</p>
+<p>같은 운영 안전성 맥락의 변경 전 확인 절차는 <a href="https://huntlab.app/wordpress-internal-link-backup/">WordPress 변경 전 백업·검증 기록</a>에서 이어서 볼 수 있다.</p>
+<h2>참고 링크</h2>
+<ul>
+<li><a href="https://developer.wordpress.org/reference/hooks/the_content/">WordPress <code>the_content</code> hook</a></li>
+<li><a href="https://developer.wordpress.org/plugins/hooks/filters/">WordPress Plugin Handbook — Filters</a></li>
+<li><a href="https://developer.wordpress.org/reference/functions/add_filter/">WordPress <code>add_filter()</code></a></li>
+<li><a href="https://www.php.net/manual/en/function.preg-match.php">PHP <code>preg_match()</code></a></li>
+</ul>
