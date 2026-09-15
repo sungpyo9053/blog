@@ -1,0 +1,104 @@
+<p>WordPress REST API Fake Client 테스트의 목표는 실제 사이트에 초안 한 건을 만드는 것이 아니다. 유효한 문서는 게시용 payload로 넘어가고, 잘못된 문서는 create 경계에 닿기 전에 멈춘다는 발행 계약을 부작용 없이 확인하는 것이다.</p>
+<p>2026년 8월 6일 Ubuntu 24.04.4 LTS와 Python 3.12.3 환경에서 HuntLab의 <code>DraftPublisher</code>와 <code>FakeWordPressClient</code>를 직접 검증했다. WordPress 서버에는 접속하지 않았으며 게시물·분류·태그·미디어도 생성하지 않았다.</p>
+<aside class="huntlab-reader-setup"><p>Fake Client 대조군을 직접 돌리려면 프로젝트 루트와 Python 3.11 이상의 가상환경을 준비한다. 이미 설치했다면 복제·생성은 생략한다. 이번 재확인은 3.12.9에서 성공/실패 두 테스트를 실행했으며, 아래 과거 로그의 실행시간을 새 측정값으로 바꾸지는 않았다.</p><pre><code class="language-bash">git clone https://github.com/sungpyo9053/blog.git
+cd blog
+python3 --version
+# 3.11 미만이면 여기서 중단하고 Python 3.12 설치 후 python3.12로 생성
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-publisher.txt
+.venv/bin/python --version
+</code></pre></aside>
+<h2>20초 핵심 요약</h2>
+<ul>
+<li><strong>무엇:</strong> <code>FakeWordPressClient</code>에 남은 payload로 draft 성공과 validation 실패 시 create 차단을 검사했다.</li>
+<li><strong>왜:</strong> 운영 WordPress에 테스트 게시물을 만들지 않고 발행기의 회귀를 빠르게 찾기 위해서다.</li>
+<li><strong>어떻게:</strong> 유효한 태그 3개 입력과 태그 2개 실패 입력을 같은 fake 경계에서 비교했다.</li>
+</ul>
+<h2>테스트 대상을 HTTP보다 위에서 바꿨다</h2>
+<p><code>DraftPublisher.__init__()</code>은 client를 생성자 인자로 받는다. <code>publish_file()</code>은 문서를 읽고 validation을 실행한 뒤, 통과한 경우에만 <code>_create_post()</code>로 이동한다. 그 안에서 중복 게시물 조회, category와 tag 해석, Markdown의 HTML 변환, payload 조립을 거쳐 <code>client.create_post(payload, status=publish_mode)</code>를 호출한다.</p>
+<p>테스트에서는 실제 <code>WordPressClient</code> 대신 같은 메서드 표면을 가진 hand-written fake를 주입했다. <code>FakeWordPressClient.create_post()</code>는 HTTP 요청을 보내지 않고 전달받은 값을 <code>created_payload</code>에 저장한다. 덕분에 패킷이나 운영 관리자 화면을 보지 않아도 publisher가 외부 경계에 무엇을 넘기려 했는지 검사할 수 있다. Python 공식 문서가 설명하는 test double의 호출 인자 검증과 같은 목적이다(<a href="https://docs.python.org/3.11/library/unittest.mock-examples.html">Python <code>unittest.mock</code> 예제</a>).</p>
+<p>이 경계의 장점은 빠른 격리다. 반대로 실제 HTTP transport보다 위를 대체했기 때문에 인증과 직렬화, WordPress 서버의 schema 처리는 처음부터 시험 대상이 아니다.</p>
+<h2>먼저 실패 계약을 안전하게 재현했다</h2>
+<p>실패 입력은 유효한 문서에서 필수 태그 <code>Automation</code> 하나만 제거해 태그를 2개로 만든 것이다. <code>validate_document()</code>는 정규화와 중복 제거 뒤 태그가 3~4개가 아니면 <code>invalid_tag_count</code>를 기록한다. <code>publish_file()</code>은 이 report가 실패하면 <code>_create_post()</code> 전에 반환한다.</p>
+<p>실제 실행 결과는 다음과 같았다. 출력에는 비밀값, 사용자명, 사설 주소가 포함되지 않았다.</p>
+<pre><code class="language-text">$ .venv/bin/python -m unittest tests.test_publisher.PublisherTests.test_validation_failure_does_not_call_wordpress -v
+test_validation_failure_does_not_call_wordpress (tests.test_publisher.PublisherTests.test_validation_failure_does_not_call_wordpress) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+exit_status=0
+</code></pre>
+<p><img alt="validation 실패와 create 미호출 단언이 통과한 단일 테스트 터미널 캡처" src="https://huntlab.app/wp-content/uploads/2026/08/body-1-17.webp"></p>
+<p>여기서 <code>OK</code>는 WordPress draft가 만들어졌다는 뜻이 아니다. 애플리케이션 결과가 <code>Failed</code>이고 fake의 <code>created_payload</code>가 <code>None</code>이어야 한다는 단언이 통과했다는 뜻이다. 코드의 early return과 함께 보면 이 입력은 <code>_create_post()</code> 아래의 category·tag 처리와 media 처리에도 진입하지 않았다.</p>
+<p>처음 기대를 더 강하게 잡으면 함정이 생긴다. <code>created_payload is None</code>은 post create가 없었다는 직접 표지지만, 현재 fake는 모든 메서드의 호출 횟수를 기록하지 않는다. 따라서 이 단언 하나를 일반화해 “어떤 client 메서드도 항상 0회”라고 말할 수는 없다. 그 수준이 감사 요건이라면 find·create·upload 경계를 모두 계수하거나 엄격한 mock의 <code>assert_not_called()</code>로 보강해야 한다.</p>
+<h2>성공 대조군은 payload와 감사 이벤트를 본다</h2>
+<p>실패 경로만 고정하면 validation gate는 지킬 수 있어도 정상 payload가 깨진 회귀는 놓칠 수 있다. 같은 fake 환경에서 태그 3개와 <code>publish_mode: draft</code>를 가진 유효 문서도 별도 단일 테스트로 실행했다.</p>
+<pre><code class="language-text">$ .venv/bin/python -m unittest tests.test_publisher.PublisherTests.test_successful_draft_uses_draft_status_and_audit_log -v
+test_successful_draft_uses_draft_status_and_audit_log (tests.test_publisher.PublisherTests.test_successful_draft_uses_draft_status_and_audit_log) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.026s
+
+OK
+exit_status=0
+</code></pre>
+<p><img alt="동일 fake 환경에서 유효한 draft 대조군이 통과한 단일 테스트 터미널 캡처" src="https://huntlab.app/wp-content/uploads/2026/08/body-2-10.webp"></p>
+<p>터미널 출력 자체에는 payload의 세부값이 나오지 않는다. 해당 테스트 코드의 단언으로 확인한 값은 <code>result.status == "Success"</code>, <code>action == "Draft"</code>, <code>created_payload["status"] == "draft"</code>, category ID 1개, tag ID 3개, HTML content와 <code>draft_created</code> 감사 이벤트다. fake가 반환한 post ID 123과 URL은 고정 응답이므로 실제 WordPress의 관측값으로 해석하지 않았다.</p>
+<p>같은 조건에서 바꾼 것은 태그 한 개뿐이다.</p>
+<table>
+<thead>
+<tr>
+<th>입력</th>
+<th>Publisher 결과</th>
+<th>Fake create 경계</th>
+<th>관측한 계약</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>태그 3개의 유효 문서, <code>publish_mode: draft</code></td>
+<td><code>Success</code>, <code>Draft</code></td>
+<td><code>created_payload</code> 있음</td>
+<td>draft 상태, category ID 1개, tag ID 3개, HTML content, 감사 이벤트</td>
+</tr>
+<tr>
+<td>같은 문서에서 <code>Automation</code> 제거, 태그 2개</td>
+<td><code>Failed</code>, <code>None</code></td>
+<td><code>created_payload is None</code></td>
+<td>validation 뒤 <code>_create_post()</code> 진입 차단</td>
+</tr>
+</tbody>
+</table>
+<p>이 비교가 이번 테스트의 핵심이다. 정상 입력은 올바른 모양의 payload를 만들고, 정책 위반 입력은 payload 자체를 만들지 않아야 한다.</p>
+<h2>공식 posts create 계약과 겹치는 범위는 payload 모양까지다</h2>
+<p>WordPress 공식 문서에서 게시물 생성 endpoint는 <code>POST /wp/v2/posts</code>다. <code>status</code>에는 <code>draft</code>가 허용되며 <code>title</code>, <code>content</code>, <code>excerpt</code>, <code>categories</code>, <code>tags</code> 등이 create 인자에 포함된다(<a href="https://developer.wordpress.org/rest-api/reference/posts/">WordPress Posts REST API</a>). HuntLab production client는 publisher가 만든 payload에 status를 반영한 뒤 posts 요청을 보내고 HTTP 200 또는 201을 기대한다.</p>
+<p>직접 관측한 fake payload는 이 공식 필드 집합과 draft 상태에 맞았다. 정확한 표현은 “공식 create 인자와 같은 필드 모양을 publisher가 만들었다”다. HTTP POST, 실제 WordPress의 schema와 권한 처리, 응답은 실행하지 않았으므로 “WordPress가 payload를 받아들였다”는 결론은 낼 수 없다.</p>
+<p>실제 API에 <code>status=draft</code>를 보내는 일도 무변경 작업이 아니다. WordPress resource가 생성된다. 이번 테스트에서 부작용이 없었던 이유는 draft라는 상태 때문이 아니라, fake가 네트워크와 resource 메서드를 메모리 동작으로 대체했기 때문이다.</p>
+<h2>회귀 gate와 통합 gate의 책임을 나눈다</h2>
+<p>Fake 테스트는 빠른 publisher 회귀 gate로 채택할 수 있다. 최소 조건은 성공 payload와 감사 로그, validation 실패의 create 미호출을 한 쌍으로 유지하는 것이다. 성공 테스트만 두면 validation 차단이 약해진 회귀를 놓치고, 실패 테스트만 두면 payload schema가 깨진 변화를 잡지 못한다.</p>
+<p>다만 다음 위험은 이 gate의 범위 밖이다.</p>
+<ul>
+<li>Application Password 가용성과 HTTPS 인식</li>
+<li>사용자에게 필요한 게시물·taxonomy·media 생성 권한</li>
+<li>proxy나 보안 계층의 Authorization header 또는 POST 차단</li>
+<li>실제 WordPress 버전·플러그인에 따른 schema와 응답 차이</li>
+<li>JSON encoding, timeout, HTTP 401·403·429·5xx와 재시도 처리</li>
+</ul>
+<p>Production client와 fake의 인터페이스가 서로 달라지는 문제가 커지면 protocol, ABC 또는 shared contract test를 추가할 시점이다. Python 공식 문서도 일반 mock은 실제 API가 바뀐 뒤 오래된 메서드를 허용할 수 있으며 <code>spec</code>이나 <code>spec_set</code>이 이 위험을 줄인다고 설명한다(<a href="https://docs.python.org/3/library/unittest.mock.html">Python <code>unittest.mock</code></a>).</p>
+<p>실제 WordPress 호환성이 배포 승인 조건이라면 fake 통과만으로 승인해서는 안 된다. 격리 staging, 전용 자격증명, 생성물 정리 절차를 갖춘 별도 통합 gate가 필요하다. 운영 사이트에 테스트 draft 한 건을 만드는 방식은 이번 검증에서 제외했다.</p>
+<h2>적용 판단</h2>
+<p>이 설계는 WordPress 자동 발행기의 orchestration과 validation을 실제 게시물 없이 반복 검증하려는 팀에 맞는다. 성공 payload와 실패 시 create 차단을 함께 고정하되, 인증·네트워크·권한·서버 호환성까지 보장해야 하는 팀이라면 fake만으로는 부족하다.</p>
+<p>실제 API 경계까지 확인해야 한다면 격리 staging에서 Application Password를 검증하고, 운영 장애 경계는 <a href="https://huntlab.app/wordpress-rest-api-retry/">WordPress REST API 재시도 분류 글</a>로 이어서 확인한다.</p>
+<h2>저장소에서 같은 경계를 실행하기</h2>
+<p><a href="https://github.com/sungpyo9053/blog/blob/fa4574ce1457971384b0a74f507d1084a6ff2a99/tests/test_publisher.py">공개 테스트의 성공·실패 대조군</a>을 확인한 뒤 프로젝트 루트에서 실행한다. 아래는 외부 WordPress에 접속하는 통합 테스트가 아니다.</p>
+<pre><code class="language-bash">.venv/bin/python -m unittest tests.test_publisher.PublisherTests.test_validation_failure_does_not_call_wordpress tests.test_publisher.PublisherTests.test_successful_draft_uses_draft_status_and_audit_log -v</code></pre>
+<p>앞의 실행 시간은 2026년 8월 6일의 기록이다. 새 실행에서는 시간이 같아야 하는 것이 아니라 실패 입력의 create 차단과 성공 입력의 draft payload 단언이 모두 통과해야 한다.</p>
+<h2>참고 링크</h2>
+<ul>
+<li><a href="https://developer.wordpress.org/rest-api/reference/posts/">WordPress Posts REST API Reference</a></li>
+<li><a href="https://developer.wordpress.org/rest-api/reference/">WordPress REST API Reference</a></li>
+<li><a href="https://developer.wordpress.org/advanced-administration/security/application-passwords/">WordPress Application Passwords</a></li>
+<li><a href="https://docs.python.org/3/library/unittest.mock.html">Python <code>unittest.mock</code> 문서</a></li>
+</ul>
