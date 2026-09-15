@@ -26,6 +26,8 @@ class FakeClient:
         if self.reject:
             raise TimeoutError('Do not disclose credentials')
         self.posts[int(path.split('/')[-1])]['content']['raw'] = payload['content']
+        if 'title' in payload:
+            self.posts[int(path.split('/')[-1])]['title'] = {'raw': payload['title']}
         if self.lose_response:
             raise TimeoutError('Response lost after saving')
 
@@ -137,6 +139,42 @@ class CorrectionTests(unittest.TestCase):
             row['after_sha256'] = sha(repeated)
         self.manifest.write_text(json.dumps(manifest))
         self.approval.write_text('status: APPROVED\nmanifest_sha256: ' + sha(self.manifest.read_text()) + '\n')
+        with self.assertRaises(CorrectionError):
+            self.run_apply()
+        self.assertEqual(self.client.writes, [])
+
+    def change_titles(self, values):
+        manifest = json.loads(self.manifest.read_text())
+        for row, title in zip(manifest['posts'], values):
+            row['new_title'] = title
+        self.manifest.write_text(json.dumps(manifest))
+        self.approval.write_text('status: APPROVED\nmanifest_sha256: ' + sha(self.manifest.read_text()) + '\n')
+
+    def test_explicit_reviewed_title_update_and_response_loss_recovery(self):
+        self.change_titles(['Reader problem A', 'Reader problem B'])
+        self.client.lose_response = True
+        self.assertEqual(self.run_apply()['wordpress_writes'], 2)
+        self.assertEqual(self.client.posts[50]['title']['raw'], 'Reader problem A')
+        self.assertEqual(self.client.posts[50]['slug'], 'case-50')
+        self.assertEqual(self.run_apply()['wordpress_writes'], 0)
+
+    def test_proposed_title_collision_in_final_state_blocks_all_writes(self):
+        self.change_titles(['Same proposed title', 'Same proposed title'])
+        with self.assertRaises(CorrectionError):
+            self.run_apply()
+        self.assertEqual(self.client.writes, [])
+
+    def test_unapproved_title_cannot_be_injected(self):
+        manifest = json.loads(self.manifest.read_text())
+        manifest['posts'][0]['new_title'] = 'Changed after review'
+        self.manifest.write_text(json.dumps(manifest))
+        with self.assertRaises(CorrectionError):
+            self.run_apply()
+        self.assertEqual(self.client.writes, [])
+
+    def test_title_change_still_requires_exact_old_identity(self):
+        self.change_titles(['Reader problem A', 'Reader problem B'])
+        self.client.posts[50]['title']['raw'] = 'Concurrent edit'
         with self.assertRaises(CorrectionError):
             self.run_apply()
         self.assertEqual(self.client.writes, [])

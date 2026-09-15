@@ -46,6 +46,13 @@ def protected(post):
     return {key: post[key] for key in keys}
 
 
+def unchanged_metadata(actual, backup, row):
+    left, right = protected(actual), protected(backup)
+    if 'new_title' in row:
+        left.pop('title'); right.pop('title')
+    return left == right and plain(actual['title']['raw']) == row.get('new_title', row['title'])
+
+
 def load_approved(manifest_path, approval_path):
     raw = manifest_path.read_text(encoding='utf-8')
     approval = approval_path.read_text(encoding='utf-8')
@@ -64,6 +71,10 @@ def load_approved(manifest_path, approval_path):
             raise CorrectionError('Invalid or repeated post ID')
         seen.add(post_id)
         values = dict(row)
+        if 'new_title' in row and (not isinstance(row['new_title'], str)
+                or not row['new_title'].strip() or plain(row['new_title']) != row['new_title']
+                or row['new_title'] == row['title']):
+            raise CorrectionError('Invalid or unchanged proposed title')
         for kind in ('before', 'after'):
             path = (manifest_path.parent / row[kind + '_file']).resolve()
             if path.parent != manifest_path.parent.resolve():
@@ -72,7 +83,7 @@ def load_approved(manifest_path, approval_path):
             if not body.strip() or sha(body) != row[kind + '_sha256']:
                 raise CorrectionError('Body hash mismatch: ' + str(post_id))
             values[kind] = body
-        if row['before_sha256'] == row['after_sha256']:
+        if row['before_sha256'] == row['after_sha256'] and 'new_title' not in row:
             raise CorrectionError('Correction changes nothing')
         prepared.append(values)
     return digest, prepared
@@ -89,6 +100,7 @@ def apply_corrections(client, manifest_path, approval_path, receipt_dir, *, appl
     for post in final_inventory.get('posts', []):
         if post['post_id'] in by_id:
             post['content'] = by_id[post['post_id']]['after']
+            post['title'] = by_id[post['post_id']].get('new_title', by_id[post['post_id']]['title'])
     for row in rows:
         check = inspect_article(row['after'], final_inventory, existing_post_id=row['post_id'])
         if not check['passed']:
@@ -96,9 +108,9 @@ def apply_corrections(client, manifest_path, approval_path, receipt_dir, *, appl
         matches = [p for p in inventory['posts'] if p['post_id'] == row['post_id']]
         if len(matches) != 1:
             raise CorrectionError('Target absent from full inventory')
-        for other in inventory['posts']:
+        for other in final_inventory['posts']:
             if other['post_id'] != row['post_id'] and (
-                plain(other['title']).casefold() == plain(row['title']).casefold()
+                plain(other['title']).casefold() == plain(row.get('new_title', row['title'])).casefold()
                 or other['slug'].casefold() == row['slug'].casefold()
             ):
                 raise CorrectionError('Another post has target title or slug')
@@ -107,12 +119,13 @@ def apply_corrections(client, manifest_path, approval_path, receipt_dir, *, appl
     for row in rows:
         post_id = row['post_id']
         current = client.get_post(post_id)
-        if current['id'] != post_id or current['status'] != 'publish' or current['slug'] != row['slug'] or plain(current['title']['raw']) != row['title']:
-            raise CorrectionError('Target identity changed: ' + str(post_id))
         backup_path = receipt_dir / f'{post_id}.before.json'
         attempt_path = receipt_dir / f'{post_id}.attempt.json'
         done_path = receipt_dir / f'{post_id}.verified.json'
         attempted = attempt_path.exists()
+        expected_title = row.get('new_title', row['title']) if attempted else row['title']
+        if current['id'] != post_id or current['status'] != 'publish' or current['slug'] != row['slug'] or plain(current['title']['raw']) != expected_title:
+            raise CorrectionError('Target identity changed: ' + str(post_id))
         if done_path.exists() and not attempted:
             raise CorrectionError('Completion without durable attempt')
         if attempted:
@@ -120,7 +133,7 @@ def apply_corrections(client, manifest_path, approval_path, receipt_dir, *, appl
             if attempt.get('manifest_sha256') != digest or not backup_path.exists():
                 raise CorrectionError('Prior attempt belongs to a different plan')
             backup = json.loads(backup_path.read_text())
-            if current['content']['raw'] != row['after'] or protected(current) != protected(backup):
+            if current['content']['raw'] != row['after'] or not unchanged_metadata(current, backup, row):
                 raise CorrectionError('Unresolved prior attempt; inspect and recover manually')
         else:
             if current['content']['raw'] != row['before']:
@@ -145,7 +158,10 @@ def apply_corrections(client, manifest_path, approval_path, receipt_dir, *, appl
                                        'attempted_at': datetime.now(UTC).isoformat()})
             writes += 1
             try:
-                client.request('POST', f'posts/{post_id}', payload={'content': row['after']}, expected=(200,))
+                payload = {'content': row['after']}
+                if 'new_title' in row:
+                    payload['title'] = row['new_title']
+                client.request('POST', f'posts/{post_id}', payload=payload, expected=(200,))
             except Exception:
                 # Never emit response bodies or credentials. Read-back resolves success.
                 pass
@@ -153,11 +169,12 @@ def apply_corrections(client, manifest_path, approval_path, receipt_dir, *, appl
             actual = client.get_post(post_id)
         except Exception as error:
             raise CorrectionError('Read-back unavailable; do not retry write: ' + str(post_id)) from error
-        if actual['content']['raw'] != row['after'] or protected(actual) != protected(backup):
+        if actual['content']['raw'] != row['after'] or not unchanged_metadata(actual, backup, row):
             raise CorrectionError('Read-back mismatch; do not retry write: ' + str(post_id))
         if not done_path.exists():
             private_json(done_path, {'manifest_sha256': digest, 'post_id': post_id,
                                     'after_sha256': sha(actual['content']['raw']),
+                                    'title': plain(actual['title']['raw']),
                                     'status': 'verified', 'verified_at': datetime.now(UTC).isoformat()})
     return {'status': 'verified', 'wordpress_writes': writes, 'posts': len(rows)}
 

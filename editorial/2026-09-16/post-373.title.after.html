@@ -1,0 +1,171 @@
+<p>AI 작업이 끝났다는 로그가 있는데 다음 단계에서 필요한 파일을 찾지 못한다면, 실행 완료와 결과 파일 생성을 따로 검사해야 한다. 이 글은 파일이 없을 때 한 번만 재시도하고, 다시 없으면 다음 단계로 넘어가지 않고 중단하는 방법을 다룬다. HuntLab의 글쓰기 준비 단계인 <code>Topic Planner</code>가 넘겨야 할 <code>topics.md</code>를 사례로 삼았다. 파일이 있다는 사실만으로 내용이 올바른 것은 아니므로, 파일 존재 검사와 내용 파싱도 분리한다.</p>
+<p>2026년 8월 14일 KST에 Linux 7.0.0-1009-aws와 Python 3.12.3에서 당시 코드의 <code>Stage</code>, <code>planner_retry_stage()</code>, <code>PipelineError</code>를 격리 fake runner로 확인했다. 실제 Codex Planner subprocess와 운영 Cron은 다시 실행하지 않았으며, timeout·비정상 종료·형식 오류는 이 재시도 분기의 대상이 아니다.</p>
+<p><strong>2026년 9월 15일 보정:</strong> 이 글은 최초의 파일 누락 재시도 변경을 설명하는 기록입니다. 후속 코드는 <code>planner_retry_stage(..., validation_error=...)</code>로 내용 계약 오류도 구분해 전달합니다. 아래 예제는 누락 분기만 격리하며, 사라질 수 있는 당시 실행 디렉터리 대신 시스템 임시 디렉터리를 사용하도록 수정했습니다. 운영 Planner나 발행을 실행하지 않습니다.</p>
+<aside class="huntlab-reader-setup"><p>누락 예제의 import에는 Python 3.11 이상이 필요하다. 시스템 python3 대신 준비한 .venv/bin/python을 사용해야 한다. 새 저장소는 아래처럼 준비하고, 기존 환경에서는 버전부터 확인한다. 9월 16일 재현은 3.12.9였고 8월의 서버 환경 기록과 구분한다.</p><pre><code class="language-bash">git clone https://github.com/sungpyo9053/blog.git
+cd blog
+python3 --version
+# 3.11 미만이면 여기서 중단하고 Python 3.12 설치 후 python3.12로 생성
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-publisher.txt
+.venv/bin/python --version
+</code></pre></aside>
+<h2>20초 핵심 요약</h2>
+<ul>
+<li><strong>무엇:</strong> Planner 호출 직후 <code>topics.md</code>가 일반 파일인지 판정하는 산출물 검사다.</li>
+<li><strong>왜:</strong> 하위 agent가 실패로 보고되지 않아도 필수 파일이 없으면 파싱이 중단되고 Writer와 Publisher가 입력을 받지 못한다.</li>
+<li><strong>어떻게:</strong> <code>Path.is_file()</code>이 거짓일 때 한 번만 재호출하고, 다시 거짓이면 <code>PipelineError</code>로 종료한다.</li>
+</ul>
+<h2>당시 코드는 파일 상태에 따라 세 갈래로 움직인다</h2>
+<p>판정 지점은 첫 <code>run_stage()</code> 직후다. <code>topics_path.is_file()</code>이 참이면 곧바로 <code>parse_topic_plan()</code>으로 간다. 거짓이면 <code>planner_retry_stage()</code>가 누락 사실과 단일 쓰기 대상을 보강한 Stage를 만들고, 그 Stage를 한 번만 실행한다.</p>
+<pre><code class="language-text">첫 Planner 호출
+  ├─ topics.md 일반 파일 있음 → parse_topic_plan()
+  └─ topics.md 일반 파일 없음 → planner_retry_stage() 1회
+                                 ├─ 일반 파일 있음 → parse_topic_plan()
+                                 └─ 일반 파일 없음 → PipelineError
+</code></pre>
+<p>반복문이 없으므로 최대 호출 수는 2회다. 두 번째 호출이 반환됐다는 사실만으로 진행하지 않고 같은 경로를 다시 검사한다. Python의 <a href="https://docs.python.org/3/library/pathlib.html#pathlib.Path.is_file"><code>Path.is_file()</code> 문서</a>는 경로가 없거나 일반 파일이 아니면 거짓을 반환한다고 설명한다.</p>
+<p>이 판정은 내용 검사를 대신하지 않는다. 0바이트 파일이나 필수 필드가 빠진 Markdown도 일반 파일일 수 있다. 따라서 존재 검사를 통과한 뒤 <code>parse_topic_plan()</code>이 TOP10과 TOP2의 포함 관계와 필드 구조를 검사하는 두 번째 판정을 유지해야 한다.</p>
+<h2>실제 장애는 첫 누락 상태에서 뒤늦게 드러났다</h2>
+<p>2026년 8월 13일 로그에서 Topic Planner Agent는 118.639초 뒤 <code>failed=false</code>로 기록됐지만, 다음 줄에서 <code>topics.md</code> 부재 때문에 파이프라인이 실패했다. <code>failed=false</code>는 하위 agent 실행이 실패로 보고되지 않았다는 뜻으로 좁혀 읽어야 한다. Stage가 다음 단계에 넘겨야 할 파일까지 만들어졌다는 증거는 아니다.</p>
+<pre><code class="language-text">$ nl -ba logs/2026-08-13.log | sed -n '73834,73842p' | sed -E 's#/home/ubuntu/apps/huntlab-blog/output/runs/[0-9TZ-]+[a-f0-9]+/topics\.md#[운영 경로]/topics.md#g; s#/home/ubuntu/apps/huntlab-blog/scripts/run_daily_pipeline\.py#[프로젝트]/scripts/run_daily_pipeline.py#g'
+73834  2026-08-13T20:56:52+0900 INFO topic='-' agent=Topic Planner Agent event=end duration_seconds=118.639 failed=false
+73835  2026-08-13T20:56:52+0900 ERROR pipeline event=failed reason=Topic Planner가 [운영 경로]/topics.md를 생성하지 않았습니다.
+73836  Traceback (most recent call last):
+73837    File &quot;[프로젝트]/scripts/run_daily_pipeline.py&quot;, line 1403, in main
+73838      plans = parse_topic_plan(topics_path)
+73839              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+73840    File &quot;[프로젝트]/scripts/run_daily_pipeline.py&quot;, line 330, in parse_topic_plan
+73841      raise PipelineError(f&quot;Topic Planner가 {path}를 생성하지 않았습니다.&quot;)
+73842  PipelineError: Topic Planner가 [운영 경로]/topics.md를 생성하지 않았습니다.
+# exit status: 0 (읽기 명령)
+</code></pre>
+<p><img alt="하위 agent의 failed=false 직후 topics.md 누락으로 파이프라인이 실패한 운영 로그" src="https://huntlab.app/wp-content/uploads/2026/08/body-1-33.webp"></p>
+<p>Python의 <a href="https://docs.python.org/3/library/subprocess.html"><code>subprocess</code> 문서</a>도 <code>returncode</code>를 자식 프로세스의 종료 상태로 정의한다. 산출물 생성과 내용 유효성은 별도 조건이다. 커밋 <a href="https://github.com/sungpyo9053/blog/commit/c0143d42f8c0544d3a7512b3bc6c42eb92dcc13d"><code>c0143d4</code></a>는 이 차이를 Planner 프롬프트의 단일 쓰기 대상과 호출 직후 파일 검사로 코드에 반영했다.</p>
+<h2>전체 명령으로 회복과 최종 실패를 재현한다</h2>
+<p>공개 저장소를 내려받고 Python 가상환경에 <code>requirements-publisher.txt</code> 의존성을 설치한 뒤 프로젝트 루트에서 실행한다. 최초 검증 환경은 2026년 8월 14일의 기록이고, 아래 실행 명령과 출력은 2026년 9월 16일 로컬 재확인 기준이다. 당시 코드의 세 객체를 import하고, 시스템 임시 디렉터리에서 <code>main()</code>의 <code>run_stage → is_file → retry → is_file → PipelineError</code> 분기만 재현한다. 첫 조건은 두 번 모두 파일을 쓰지 않고, 두 번째 조건은 재호출에서만 파일을 쓴다. 임시 디렉터리는 실행 종료와 함께 제거된다.</p>
+<p><strong>2026년 9월 16일 실행 안내:</strong> 아래 명령은 시스템 Python 대신 가상환경 3.12.9에서 같은 누락 분기를 재현하도록 고쳤다. 과거 환경은 Linux 7.0.0-1009-aws·Python 3.12.3이며, 기존 캡처는 그 당시 기록이다. 아래 출력은 이번 로컬 재실행에서도 동일했고 마지막 단언의 종료 코드는 0이었다.</p>
+<pre><code class="language-bash">.venv/bin/python - &lt;&lt;&#x27;PY&#x27;
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from scripts.run_daily_pipeline import PipelineError, Stage, planner_retry_stage
+
+def enforce_topics_contract(stage, topics_path, fake_run_stage):
+    fake_run_stage(stage)
+    if not topics_path.is_file():
+        retry = planner_retry_stage(stage, topics_path)
+        fake_run_stage(retry)
+    if not topics_path.is_file():
+        raise PipelineError(&quot;missing after retry&quot;)
+
+
+def run_case(name, create_on_call):
+    with TemporaryDirectory(prefix=&quot;research-contract-&quot;) as raw_dir:
+        topics_path = Path(raw_dir) / &quot;topics.md&quot;
+        calls = []
+        stage = Stage(
+            &quot;Topic Planner Agent&quot;,
+            Path(&quot;agents/topic-planner-agent.md&quot;),
+            &quot;planner prompt&quot;,
+        )
+
+        def fake_run_stage(current_stage):
+            calls.append(current_stage.prompt)
+            if create_on_call is not None and len(calls) == create_on_call:
+                topics_path.write_text(&quot;# topics\n&quot;, encoding=&quot;utf-8&quot;)
+
+        try:
+            enforce_topics_contract(stage, topics_path, fake_run_stage)
+        except PipelineError as exc:
+            print(
+                f&quot;{name}: status=FAIL calls={len(calls)} &quot;
+                f&quot;artifact={topics_path.is_file()} error={exc}&quot;
+            )
+            return len(calls), topics_path.is_file(), type(exc).__name__
+
+        print(
+            f&quot;{name}: status=PASS calls={len(calls)} &quot;
+            f&quot;artifact={topics_path.is_file()} &quot;
+            f&quot;retry_prompt={&#x27;재시도입니다.&#x27; in calls[-1]}&quot;
+        )
+        return len(calls), topics_path.is_file(), None
+
+
+failed_calls, failed_artifact, failed_error = run_case(&quot;missing_twice&quot;, None)
+recovered_calls, recovered_artifact, recovered_error = run_case(
+    &quot;created_on_retry&quot;, 2
+)
+
+assert failed_calls == 2
+assert failed_artifact is False
+assert failed_error == &quot;PipelineError&quot;
+assert recovered_calls == 2
+assert recovered_artifact is True
+assert recovered_error is None
+print(
+    &quot;bounded_contract: status=PASS max_calls=2 &quot;
+    &quot;third_call=False exit_contract=PipelineError&quot;
+)
+PY
+</code></pre>
+<pre><code class="language-text">missing_twice: status=FAIL calls=2 artifact=False error=missing after retry
+created_on_retry: status=PASS calls=2 artifact=True retry_prompt=True
+bounded_contract: status=PASS max_calls=2 third_call=False exit_contract=PipelineError
+</code></pre>
+<p><img alt="실행 가능한 fake runner fixture로 재시도 회복과 2회 제한 실패 및 shell_exit=0을 확인한 터미널" src="https://huntlab.app/wp-content/uploads/2026/08/body-2-18.webp"></p>
+<p><code>missing_twice</code>는 두 번째 검사에서도 파일이 없어 <code>PipelineError('missing after retry')</code>를 냈다. <code>created_on_retry</code>는 호출 2회, 파일 존재, 보강 프롬프트 포함을 모두 확인했다. 마지막 assertion은 세 번째 호출이 없고 누락의 최종 예외 타입이 <code>PipelineError</code>임을 검사한다. 셸 종료 상태 0은 두 조건에 대한 assertion이 모두 통과했다는 뜻이지, 누락 조건을 성공으로 바꿨다는 뜻이 아니다.</p>
+<p>이 대조는 실제 Planner의 응답 품질이나 재시도 성공률을 측정하지 않는다. 파일 생성 시점이 호출 수와 다음 상태를 어떻게 바꾸는지만 확인한다.</p>
+<h2>오류별 첫 진단 지점을 섞지 않는다</h2>
+<p>같은 Planner 주변 오류라도 처음 볼 위치는 다르다.</p>
+<table>
+<thead>
+<tr>
+<th>관측 상태</th>
+<th>판정</th>
+<th>첫 진단 지점</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>첫 호출 뒤 일반 파일 있음</td>
+<td>재시도 없이 파싱</td>
+<td><code>parse_topic_plan()</code>의 내용 검사</td>
+</tr>
+<tr>
+<td>첫 호출 뒤 없음, 재호출 뒤 있음</td>
+<td>회복 후 파싱</td>
+<td>재시도 경고와 두 번째 파일 생성</td>
+</tr>
+<tr>
+<td>두 번 모두 없음</td>
+<td>즉시 중단</td>
+<td>단일 쓰기 경로와 재시도 프롬프트</td>
+</tr>
+<tr>
+<td>일반 파일 있음, 파서 거부</td>
+<td>내용 계약 실패</td>
+<td>TOP10·TOP2 포함 관계와 필수 필드</td>
+</tr>
+<tr>
+<td><code>run_stage()</code>가 timeout·비정상 종료</td>
+<td>이 분기 밖의 실패</td>
+<td>호출 예외 처리와 별도 재시도 예산</td>
+</tr>
+</tbody>
+</table>
+<p>누락과 형식 오류를 같은 메시지로 합치면 재호출해야 할지 파일 내용을 고쳐야 할지 판단할 수 없다. 특히 timeout이나 비정상 종료는 당시 <code>is_file()</code> 분기까지 오지 않으므로 “Planner 실패는 모두 한 번 재시도된다”고 설명하면 틀리다.</p>
+<p>재시도 한 번은 보편적인 최적값이 아니라 이 Stage의 제한된 예산이다. <a href="https://sre.google/sre-book/addressing-cascading-failures/">Google SRE의 cascading failures 장</a>과 <a href="https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_mitigate_interaction_failure_limit_retries.html">AWS의 재시도 제한 지침</a>은 요청별 재시도를 제한하고 여러 계층의 재시도가 증폭되지 않게 하라고 설명한다. 상위 Cron도 전체 실행을 재시도한다면 두 계층의 최대 호출 수를 함께 계산해야 한다.</p>
+<p>산출물 검사와 외부 쓰기 차단을 연결하려면 <a href="https://huntlab.app/wordpress-rest-api-fake-client-test/">실제 게시물 없이 발행 계약을 검사하는 Fake Client 테스트</a>를 함께 확인할 수 있다.</p>
+<h2>쓰기 부작용을 격리할 수 없으면 적용하지 않는다</h2>
+<p>Planner 재호출은 후보 생성을 다시 수행하는 쓰기 작업이다. 커밋은 변경 대상을 실행별 <code>topics.md</code> 하나로 제한하고 다른 output 실행 디렉터리·코드·테스트를 수정하지 말라고 프롬프트에 명시했다. 이는 안전성을 높이는 장치지만 실제 Planner의 완전한 멱등성을 증명하지는 않는다.</p>
+<p><a href="https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/">AWS Builders' Library의 멱등 재시도 설명</a>처럼 재실행 전에 중복 부작용을 통제해야 한다. 외부 발행·결제·삭제를 수행하거나, 같은 파일에 writer가 둘 이상 붙거나, 첫 호출이 아직 쓰는 중일 수 있거나, 원자적 완료를 판정할 수 없다면 이 패턴을 그대로 적용하지 않는다. 예상 밖의 다른 파일 변경, 중복 비용, 지연 급증이 관측되면 자동 재호출을 끄고 첫 누락에서 실패시키는 쪽으로 되돌린다.</p>
+<p>이번 검증은 실제 subprocess, 운영 Cron, 동시 실행, 파일 권한 오류, 늦게 나타나는 파일, 부분 쓰기, 심볼릭 링크를 포함하지 않았다. 커밋 당시 timeout 상한 300초와 당시 작업 트리의 미커밋 900초 차이도 이 변경의 효과로 귀속하지 않는다. 크기, checksum, schema, completion marker가 필요한 Stage라면 <code>is_file()</code>보다 강한 완료 조건을 별도로 설계해야 한다.</p>
+<p>배포 전 판정은 세 문장으로 끝낼 수 있다. 두 번째에도 파일이 없으면 Writer와 Publisher를 호출하지 않고 중단한다. 일반 파일이 있지만 파서가 실패하면 재시도 횟수를 늘리지 말고 내용 계약을 진단한다. timeout이나 비정상 종료라면 산출물 누락 분기로 우회하지 않고 그 예외의 재시도 예산을 따로 결정한다.</p>
+<h2>참고 링크</h2>
+<ul>
+<li><a href="https://docs.python.org/3/library/pathlib.html#pathlib.Path.is_file">Python <code>pathlib.Path.is_file()</code> 공식 문서</a></li>
+<li><a href="https://docs.python.org/3/library/subprocess.html">Python <code>subprocess</code> 공식 문서</a></li>
+<li><a href="https://sre.google/sre-book/addressing-cascading-failures/">Google SRE Book: Addressing Cascading Failures</a></li>
+<li><a href="https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_mitigate_interaction_failure_limit_retries.html">AWS Well-Architected: Control and limit retry calls</a></li>
+<li><a href="https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/">AWS Builders' Library: Making retries safe with idempotent APIs</a></li>
+</ul>

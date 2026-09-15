@@ -1,0 +1,61 @@
+<p>예약 작업은 성공했다고 나오는데 WordPress에 새 글이 없다면, 먼저 실패 로그를 찾기보다 <strong>이번 실행이 발행할 글을 찾았는지</strong> 확인해야 한다. 반대로 글은 이미 올라왔는데 마지막 검사가 실패했다면 전체 작업을 다시 돌리는 것이 중복 발행을 만들 수 있다. 이 글은 두 상황을 구분해야 하는 WordPress 자동발행 운영자를 위한 기록이다. 후보가 없는 정상 종료, 점검 실행, 발행 전 실패, 발행 후 검사 실패를 다른 상태로 남기는 방법을 다룬다.</p>
+<p>HuntLab에서 <code>READY</code>는 근거와 중복 검사를 통과한 발행 후보, Publisher는 WordPress에 글을 쓰는 단계다. 따라서 <code>no_publishable_topic</code>은 “이번 평가에 적합한 글이 없음”이지 “예약 작업 고장”이 아니다. 이 경우에는 새 글을 억지로 만들지 않고 발행 단계를 호출하지 않는 것이 정상이다.</p>
+<h2>글이 없을 때와 이미 올라왔을 때의 첫 조치를 나눈다</h2>
+<p>다음 표는 실행 기록을 읽는 순서다. <code>failed=false</code>나 HTTP 성공 여부 하나만 보지 말고 발행 단계 진입 여부와 게시물 ID를 함께 확인한다. 체크포인트는 다음 실행이 어디부터 후보를 다시 볼지 정하는 기록이다. 이를 진행한다는 것은 앞선 후보를 다시 처리하지 않겠다는 뜻이다.</p>
+<table><thead><tr><th>관측한 상태</th><th>뜻</th><th>운영자의 다음 행동</th></tr></thead><tbody>
+<tr><td><code>no_publishable_topic</code>, 쓰기 0</td><td>후보 없이 정상 종료</td><td>글이 없다는 이유로 강제 발행하지 않는다. 예약 실행 자체가 남았는지만 별도 확인한다.</td></tr>
+<tr><td><code>ready_not_published</code>, 쓰기 0</td><td>후보는 있지만 dry-run 점검만 수행</td><td>후보를 소비하지 않았는지 확인한다. 점검 성공은 공개 발행 성공이 아니다.</td></tr>
+<tr><td>발행 단계 진입 전 검증 실패</td><td>아직 글을 쓸 단계에 이르지 못함</td><td>실패한 입력을 고친다. 체크포인트가 먼저 진행돼 후보가 사라지지 않았는지 확인한다.</td></tr>
+<tr><td>게시물 ID가 확인됐고 공개 HTML 검사만 실패</td><td>글 생성과 최종 검사가 다른 결과</td><td>기존 ID와 공개 URL부터 확인한다. 새 글 생성으로 재시도하지 않는다.</td></tr>
+<tr><td>발행 도중 timeout, 쓰기 수가 <code>unknown</code></td><td>실패만으로 생성 여부를 판단할 수 없음</td><td>자동 재실행을 보류하고 실제 WordPress와 감사 기록을 대조한다. 실패를 쓰기 0으로 바꾸지 않는다.</td></tr>
+</tbody></table>
+<p>특히 마지막 두 행을 나눠야 한다. “발행 요청이 실패했다”와 “글이 생성되지 않았다”는 같은 말이 아니다. 이 글에서 대조한 고정 구현은 불확실한 발행을 모두 해결한 구현이 아니므로, 아래 테스트를 통과했다는 이유로 운영 재시도를 켜서는 안 된다.</p>
+<h2>재실행 전에 공개 글부터 읽기 전용으로 찾는다</h2>
+<p>발행이 불확실한 경우에는 발행기 전체를 다시 실행하지 말고, 발행하려던 slug로 공개 글을 조회한다. 다음은 이 글 자체를 조회하는 예제다. 자신의 사이트에서는 도메인과 slug를 바꾼다. 인증 정보나 <code>--apply</code> 없이 GET만 수행하므로 글을 생성·수정하지 않지만, 실제 사이트에 읽기 요청은 보낸다.</p>
+<pre><code class="language-bash">curl -fsS --get 'https://huntlab.app/wp-json/wp/v2/posts' \
+  --data-urlencode 'slug=evidence-first-ready-publishing-pipeline' \
+  --data-urlencode '_fields=id,status,slug,link'
+</code></pre>
+<p>2026년 9월 16일 이 요청에서는 <code>id=706</code>, <code>status=publish</code>, 같은 slug와 이 글의 URL이 반환됐다. 자신의 요청도 JSON 배열에 기대한 게시물 ID가 있다면 그 ID의 공개 페이지와 본문을 확인한다. 글이 이미 있다면 마지막 오류를 고치거나 기존 글을 수정할 일이지, 같은 글을 새로 만들 이유가 아니다.</p>
+<p><code>[]</code>가 반환돼도 “글이 전혀 생성되지 않았다”는 결론은 내릴 수 없다. 이 조회는 공개 글만 보므로 초안·예약 글이거나 slug가 달라졌다면 놓칠 수 있다. 관리자 화면에서 해당 실행의 제목·시간·저장된 ID와 초안/예약 상태를 추가 대조한다. HTML 로그인 페이지, 401/403, timeout이 나오면 조회 실패로 남기고 재발행하지 않는다. ID나 slug로도 상태를 확정하지 못했다면 자동화는 보류하고 운영자가 먼저 복구해야 한다.</p>
+<h2>운영 사이트에 쓰지 않고 여섯 분기를 확인한다</h2>
+<p>공개된 <a href="https://github.com/sungpyo9053/blog/blob/deff84730558152c9290a9ef36af325adaf002dd/tests/test_evidence_deep_article.py">고정 테스트</a>는 발행 단계를 mock으로 바꾸고 임시 디렉터리에 실행 기록을 만든다. 실제 AI 작성, WordPress 요청이나 systemd 타이머를 실행하지 않는다. 아래 명령은 기존 작업 폴더를 바꾸지 않도록 새 임시 디렉터리에 2026년 9월 15일 버전을 복제한다. Python 3.11 이상이 필요하며 먼저 버전을 확인한다. 3.11 미만이라면 Python 3.12를 준비한 뒤 <code>python3.12</code>로 가상환경을 생성한다.</p>
+<pre><code class="language-bash">python3 --version
+huntlab_demo_dir=$(mktemp -d)
+git clone https://github.com/sungpyo9053/blog.git "$huntlab_demo_dir/blog"
+cd "$huntlab_demo_dir/blog"
+git switch --detach deff84730558152c9290a9ef36af325adaf002dd
+python3 -m venv .venv
+.venv/bin/python -m pip install 'Markdown>=3.6,<4' 'PyYAML>=6.0,<7'
+huntlab_case=tests.test_evidence_deep_article.EvidenceDeepArticleTests
+.venv/bin/python -m unittest \
+  "$huntlab_case.test_no_topic_is_success_and_never_calls_publisher" \
+  "$huntlab_case.test_ready_dry_run_does_not_advance_global_checkpoint" \
+  "$huntlab_case.test_publisher_failure_does_not_consume_candidate_checkpoint" \
+  "$huntlab_case.test_public_audit_failure_after_publish_consumes_candidate_checkpoint" \
+  "$huntlab_case.test_failed_run_with_confirmed_wordpress_write_counts_toward_daily_limit" \
+  "$huntlab_case.test_second_ready_candidate_on_same_day_is_not_published" -v
+</code></pre>
+<p>이 여섯 테스트에는 Markdown과 PyYAML 두 패키지만 필요하다. 운영용 전체 의존성이나 브라우저 도구는 설치하지 않는다. 2026년 9월 16일 macOS·Python 3.12.9에서 새 가상환경을 만들고 이 두 패키지만 설치한 뒤, 같은 고정 커밋을 임시 디렉터리에 풀어 재실행했다. GitHub에서 복제하는 네트워크 경로는 이 새 환경 시험에 포함하지 않았다. 관측한 핵심 출력은 다음과 같다.</p>
+<pre><code class="language-text">Ran 6 tests in 0.030s
+OK
+exit_code=0
+</code></pre>
+<p>시간이 0.030초와 같아야 하는 것은 아니다. 여섯 개가 모두 <code>ok</code>이고 종료 코드가 0이어야 한다. 여기서 의도한 실패도 테스트 성공에 포함된다. 예를 들어 발행 mock이 예외를 내는 조건은 그 예외가 나면서 체크포인트가 남지 않아야 통과한다. 이것은 실제 WordPress에서 실패한 요청이 글을 만들지 않았다는 증거가 아니다.</p>
+<h2>후보를 평가한 것과 소비한 것은 다르다</h2>
+<p>자신의 자동화에 옮길 첫 규칙은 발행 함수의 위치다. <code>choose_candidates()</code>가 근거를 갖춘 후보만 선택한 뒤에 발행 단계로 들어가게 한다. 후보가 없다는 분기에서 먼저 반환하면 “발행하지 마”라는 문장 지시가 아니라 코드 흐름으로 쓰기를 막을 수 있다. 첫 테스트의 <code>runner.assert_not_called()</code>가 이 조건을 직접 검사한다.</p>
+<p>두 번째 규칙은 점검 실행이 후보를 지우지 않게 하는 것이다. dry-run은 READY 후보를 보여 줄 수 있지만, 다음 실제 실행이 읽을 체크포인트는 움직이지 않아야 한다. 파일이 생겼다는 사실만 보는 대신 <code>test_ready_dry_run_does_not_advance_global_checkpoint</code>처럼 전역 체크포인트 부재까지 단언한다. 이 테스트를 자신의 “다음 처리 위치” 저장소에 맞춰 옮기면 된다.</p>
+<h2>발행 후 검사가 실패해도 하루 한도를 다시 열지 않는다</h2>
+<p><a href="https://github.com/sungpyo9053/blog/blob/deff84730558152c9290a9ef36af325adaf002dd/scripts/run_evidence_deep_article.py">9월 15일 고정 코드</a>는 발행 단계가 게시물 ID를 확인해 반환하면 <code>publisher_completed</code>와 쓰기 1건을 기록하고 체크포인트를 진행한 뒤 공개 HTML을 검사한다. 따라서 공개 검사가 실패해 전체 실행이 실패했더라도 이미 확인한 글 생성을 없었던 일로 만들지 않는다.</p>
+<pre><code class="language-text">게시물 ID 확인 → 발행 완료 기록 → 후보 소비 위치 저장 → 공개 HTML 검사
+공개 검사 실패 → 기존 게시물 확인·수정 (새 게시물 생성으로 보충하지 않음)
+</code></pre>
+<p>HuntLab의 하루 상한은 KST 기준 한 편이다. 전체 실행의 성공 건수만 세면 글 생성 뒤 공개 검사에서 실패한 실행이 빠질 수 있다. 그래서 쓰기 1건이 확인된 실패 기록도 한도에 포함하는 테스트와, 같은 날 두 번째 후보의 발행 함수를 호출하지 않는 테스트를 함께 둔다. <strong>확인된 발행 수</strong>와 <strong>모든 검사가 끝난 실행 수</strong>를 다른 지표로 기록해야 한다는 결론이다.</p>
+<p>반대로 발행 도중 응답을 잃어 ID를 확보하지 못한 경우에는 이 순서만으로 중복 생성을 막는다고 보장할 수 없다. 실제 대상 조회와 복구 절차가 필요한 지점이다. <a href="https://huntlab.app/wordpress-rest-api-retry/">Retry-After 파서 수정과 POST 재시도의 한계</a>에서 응답 유실을 별도 문제로 다룬 이유도 같다.</p>
+<h2>체크포인트 순서를 두 번 바꾼 배경</h2>
+<p>초기 <a href="https://github.com/sungpyo9053/blog/commit/9d5c0f22c5cc0b0a0f6c8a6350afcdd27ef4d2bb">9월 5일 구현</a>에서는 발행 전에 후보 소비 위치를 저장할 수 있었다. 발행이 실패해도 다음 실행은 그 후보를 건너뛸 수 있어 <a href="https://github.com/sungpyo9053/blog/commit/c696fa3e4b04543fd392b30b06467744bc2680ee">후속 수정</a>에서 발행과 공개 감사 뒤로 늦췄다. 그 뒤에는 공개 감사만 실패했을 때 이미 만든 글을 다시 만들지 않도록, 앞 절처럼 발행 확인과 공개 감사 사이로 옮겼다. 이는 커밋과 코드 대조로 확인한 변화이며 새로 측정한 운영 장애 횟수가 아니다.</p>
+<p>최초 글이 인용한 <a href="https://github.com/sungpyo9053/blog/blob/e0a47e5e63787add26897ea573c7b8e50110e279/evidence/test-results/evidence-lane-tests.log">2026년 9월 7일 공개 로그</a>에는 11개 테스트·0.029초·종료 코드 0이 남아 있다. 이 역사 로그와 이번 여섯 테스트 재실행은 다른 기록이다. 기존 로그의 SHA-256은 <code>703ba876ab35fe4756494c90bfc62b460af142c9615b9d6bbd940017899795a1</code>이며 새 실행 결과로 바꿔 적지 않았다.</p>
+<h2>자신의 운영에 가져갈 범위</h2>
+<p>이 방법은 매일 평가하되 적합한 입력이 있을 때만 발행하는 작업에 맞는다. 반드시 매회 산출물을 만들어야 하는 배치라면 후보 없음을 정상 성공으로 두는 정책부터 다시 정해야 한다. HuntLab의 10시 평가와 하루 한 편은 운영 선택이지 보편적인 블로그 발행 공식이 아니다.</p>
+<p>우선 자신의 테스트에서 발행 함수를 가짜 함수로 바꾸고 위 여섯 입력을 넣어 본다. 그다음 실제 운영에서는 예약 실행 기록, WordPress 게시물 ID, 공개 URL을 각각 확인한다. mock 테스트는 실제 인증·네트워크·동시 실행이나 READY 후보의 글 품질을 검증하지 않는다. 특히 쓰기 수가 불확실하면 새 글부터 만들지 않는 복구 절차를 마련하기 전에는 자동 재시도 범위를 넓히지 않는다.</p>
+<p>제휴·협찬은 없다.</p>
