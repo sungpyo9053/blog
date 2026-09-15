@@ -45,6 +45,15 @@
       output.textContent = result.message;
       output.dataset.ok = String(result.ok);
     }));
+    // A verdict belongs to the submitted values, not later edits. Leaving a
+    // green publish verdict beside a newly edited draft response is misleading.
+    container.querySelectorAll('form[data-check]').forEach(form => form.addEventListener('input', () => {
+      const output = form.querySelector('[role="status"]');
+      if (output.textContent) {
+        output.textContent = '입력이 바뀌었습니다. 다시 검사하세요.';
+        delete output.dataset.ok;
+      }
+    }));
     container.querySelectorAll('[data-example]').forEach(button => button.addEventListener('click', () => {
       const form = button.closest('form'), html = button.dataset.example === 'html';
       form.elements.status.value = html ? '200' : '201';

@@ -48,13 +48,17 @@ READY가 있을 때만 하루 최대 한 편을 처리하며, READY가 없으면
 8. Reviewer 승인 후 `agents/publisher-agent.md`에 따라 WordPress 발행 위임 → 일일 자동 파이프라인은 Publish
 9. 보고서와 상세글 2개의 완전한 매니페스트를 WordPress에 동기화하고 저장 확인
 
-매주 일요일 20:30 KST에는 해당 주의 유효한 일일 브리핑 분석이 5개 이상일 때만
+다음 주간 회고·기술 해설 설명은 **비활성 레거시 경로**다. 현재 운영에서는
+해당 타이머를 켜거나 독립 글 발행 경로로 사용하지 않는다. 편집 컨셉과
+10:00 READY 한 편 정책은 `guides/editorial-concept.md`를 따른다.
+
+과거 주간 회고는 매주 일요일 20:30 KST에 해당 주의 유효한 일일 브리핑 분석이 5개 이상일 때만
 `Weekly Review Planner Agent`가 반복된 변화, 달라진 판단, 다음 주 확인 신호를 하나의
 계획으로 합친다. 이후 Research → Writer → Image Maker → Assembler → Reviewer →
 Publisher 계약을 그대로 재사용해 `주간 기술 회고` 카테고리에 독립 글 한 건을 발행한다.
 이 경로의 실패는 다음 날 02시 일일 파이프라인을 변경하거나 보충 발행하지 않는다.
 
-매주 수요일과 토요일 20:30 KST에는 최근 7일의 유효한 일일 브리핑 3개 이상과
+과거 기술 해설은 매주 수요일과 토요일 20:30 KST에 최근 7일의 유효한 일일 브리핑 3개 이상과
 6시간 이내 Google Trends 또는 14일 이내 Search Console 관측값이 연결될 때만
 `Technical Explainer Planner Agent`가 예제 중심의 독립 기술 해설 한 건을 계획한다.
 Research → Writer → Image Maker → Assembler → Reviewer → Publisher 계약을 재사용하되,
@@ -120,7 +124,7 @@ Publisher
 
 Reviewer의 명시적인 승인 없이는 Publisher Agent를 실행하지 않는다. 작성 또는 조립 완료 상태를 Reviewer 승인으로 간주하지 않는다.
 
-Topic Planner Agent는 생활, 경제, 부동산, 사회, 정치, 문화·엔터, IT의 편집장으로서
+레거시 TOP2 경로의 Topic Planner Agent는 생활, 경제, 부동산, 사회, 정치, 문화·엔터, IT의 편집장으로서
 Whereispost 수요 신호, 공식 원문, 생활 영향과 기존 글 중복을 확인하고 후보 생성 →
 평가 → TOP10 → TOP2 → `topics.md` 순서로 결정한다.
 

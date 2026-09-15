@@ -62,7 +62,7 @@ function huntlab_render_category_tabs() {
 
 	$active_slug = huntlab_category_tabs_active_slug();
 	?>
-	<nav id="huntlab-category-tabs" class="huntlab-category-tabs" aria-label="Hunt News 콘텐츠 탐색">
+	<nav id="huntlab-category-tabs" class="huntlab-category-tabs" aria-label="HuntLab 콘텐츠 탐색">
 		<?php foreach ( huntlab_category_tabs_items() as $item ) :
 			$aria_label = $item['label'] . ', ' . $item['meta'];
 			?>

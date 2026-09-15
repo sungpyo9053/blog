@@ -418,7 +418,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertNotIn('id="hunt-news-reading-guide"', (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8"))
         self.assertIn("get_post_type_archive_link( 'hunt_briefing' )", php)
         self.assertIn('data-hunt-news-nav=', php)
-        self.assertIn('aria-label="Hunt News 콘텐츠 탐색"', php)
+        self.assertIn('aria-label="HuntLab 콘텐츠 탐색"', php)
         self.assertIn("hunt_news_redirect_legacy_categories", php)
         self.assertIn("wp_safe_redirect( $target, 301 )", php)
         self.assertIn("position:sticky;top:0;overflow-x:auto", php)

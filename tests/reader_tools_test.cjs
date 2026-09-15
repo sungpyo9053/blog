@@ -20,3 +20,20 @@ assert.strictEqual(inventory({total:0,perPage:100,ids:''}).ok,true);
 assert.strictEqual(inventory({total:'',perPage:100,ids:''}).ok,false);
 assert.strictEqual(inventory({total:1,perPage:100,ids:'NaN'}).ok,false);
 console.log('Reader tools: response, retry and inventory edge cases passed');
+
+// Exercise the actual DOM handler without a browser or third-party dependency.
+const vm = require('vm'), fs = require('fs');
+const handlers = {}, output = {textContent:'이전 성공 결과',dataset:{ok:'true'}};
+const form = {addEventListener:(event,fn)=>{handlers[event]=fn;}, querySelector:()=>output};
+const container = {
+  querySelector:selector=>selector==='[name="now"]' ? {value:''} : {addEventListener:()=>{}},
+  querySelectorAll:selector=>selector==='form[data-check]' ? [form] : []
+};
+vm.runInNewContext(fs.readFileSync(require.resolve('../deploy/wordpress/huntlab-warm-editorial/assets/reader-tools.js'),'utf8'), {
+  document:{querySelectorAll:()=>[container]}, Date, FormData:class {}
+});
+handlers.input();
+assert.strictEqual(output.dataset.ok,undefined);
+assert.strictEqual(output.textContent,'입력이 바뀌었습니다. 다시 검사하세요.');
+output.textContent=''; handlers.input(); assert.strictEqual(output.textContent,'');
+console.log('Reader tools: edited inputs invalidate stale verdicts');
