@@ -104,7 +104,7 @@ function hunt_news_home_search_metadata() {
 		return array( 'title' => '', 'description' => '' );
 	}
 	return array(
-		'title'       => 'WordPress 자동발행 문제 해결 라이브러리 - Hunt News',
+		'title'       => 'WordPress 자동발행 실전 운영 노트 - HuntLab',
 		'description' => 'WordPress REST API, 자동발행, sitemap과 운영 문제를 실제 코드·로그·회귀 테스트로 재현하고 해결한 검증 사례를 제공합니다.',
 	);
 }
@@ -2006,9 +2006,10 @@ function hunt_news_verified_case_header( $content ) {
 	}
 	$badges = '';
 	foreach ( $meta['badges'] as $badge ) {
+		if ( $badge === $meta['method'] || '공개 코드' === $badge ) { continue; }
 		$badges .= '<span>' . esc_html( $badge ) . '</span>';
 	}
-	$intro = '<aside class="hunt-news-case-header" aria-label="검증 상태"><p>' . esc_html( $meta['problem_group'] ) . ' · VERIFIED CASE</p><h2>이 글이 해결하는 문제</h2><span>' . esc_html( get_the_excerpt( $post ) ) . '</span><div class="hunt-news-evidence-status"><strong>' . esc_html( $meta['method'] ) . '</strong>' . $badges . '<time datetime="' . esc_attr( $meta['date'] ) . '">마지막 검증 ' . esc_html( str_replace( '-', '.', $meta['date'] ) ) . '</time></div><nav>' . $actions . '</nav><small>HuntLab 운영자 · <a href="https://github.com/sungpyo9053/blog" target="_blank" rel="noopener noreferrer">GitHub 프로젝트</a> · 수정 ' . esc_html( get_the_modified_date( 'Y.m.d', $post ) ) . '</small></aside>';
+	$intro = '<aside class="hunt-news-case-header" aria-label="검증 상태"><p class="huntlab-case-purpose">확인 범위와 근거</p><span>' . esc_html( get_the_excerpt( $post ) ) . '</span><div class="hunt-news-evidence-status"><strong>' . esc_html( $meta['method'] ) . '</strong>' . $badges . '<time datetime="' . esc_attr( $meta['date'] ) . '">근거 기준 ' . esc_html( str_replace( '-', '.', $meta['date'] ) ) . '</time></div><nav>' . $actions . '</nav><small>HuntLab 운영자 · <a href="https://github.com/sungpyo9053/blog" target="_blank" rel="noopener noreferrer">GitHub 프로젝트</a> · 수정 ' . esc_html( get_the_modified_date( 'Y.m.d', $post ) ) . '</small></aside>';
 	return $intro . $content;
 }
 add_filter( 'the_content', 'hunt_news_verified_case_header', 8 );

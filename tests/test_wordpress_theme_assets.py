@@ -300,7 +300,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("7 < $action_count", php)
         self.assertIn("function hunt_news_briefing_search_metadata", php)
         self.assertIn("function hunt_news_home_search_metadata", php)
-        self.assertIn("WordPress 자동발행 문제 해결 라이브러리 - Hunt News", php)
+        self.assertIn("WordPress 자동발행 실전 운영 노트 - HuntLab", php)
         self.assertIn("hunt_news_render_evidence_library_home", php)
         self.assertIn("대표 해결 사례", php)
         self.assertIn("DAILY BRIEF", php)
