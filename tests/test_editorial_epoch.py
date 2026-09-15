@@ -63,7 +63,8 @@ class EditorialEpochTests(unittest.TestCase):
         self.source.write_text("value = 2\n")
         sha = self.commit("new real fix", "2026-09-11T00:00:00+00:00")
         return {"candidate_id": "new", "title_seed": "New WordPress issue", "source_anchor": "source.py",
-                "event_key": "source.py@" + sha, "evidence": {"commits": [sha], "files": ["source.py"]}}
+                "event_key": "source.py@" + sha, "evidence": {"commits": [sha], "files": ["source.py"],
+                "public_urls": [f"https://example.test/commit/{sha}", f"https://example.test/blob/{sha}/source.py"]}}
 
     def test_no_epoch_is_noop_even_for_old_noncanonical_run(self):
         empty = self.repo / "empty"

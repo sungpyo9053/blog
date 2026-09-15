@@ -306,6 +306,11 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     if published_today(output_root, day, repo=repo) >= DAILY_LIMIT:
         return {**base,"deep_article":"daily_limit_reached"}
     candidate = payload["candidates"][0]
+    # A public audit cannot match a link absent from the approved source set.
+    # Reject that impossible contract before writing anything to WordPress.
+    sources = candidate["evidence"]
+    if not audit_evidence_links(" ".join(sources.get("public_urls", [])), sources)["passed"]:
+        raise PipelineError("Candidate public sources cannot satisfy the publication audit")
     if not apply:
         return {**base,"deep_article":"ready_not_published","candidate_id":candidate["candidate_id"]}
     write_progress(progress_path, stage="publisher_started", wordpress_write_count="unknown")

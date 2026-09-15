@@ -42,6 +42,19 @@ class EvidenceDeepArticleTests(unittest.TestCase):
         plan = candidate_plan(candidate)
         self.assertIn(plan["primary_keyword"].casefold(), plan["title"].casefold())
 
+    def test_missing_required_public_commit_link_is_rejected_before_writes(self):
+        candidate = {"evidence": {"commits": ["a" * 40], "files": [], "tests": [], "logs": [],
+                     "public_urls": ["https://github.com/example/repo/blob/" + "a" * 40 + "/source.py"]}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); runner = Mock()
+            with patch("scripts.run_evidence_deep_article.build_payload", return_value=self.payload([candidate])):
+                with self.assertRaisesRegex(PipelineError, "public sources"):
+                    execute(run_id="20260916T010000Z-sources", inventory_path=self.inventory(root),
+                            apply=True, topic_runner=runner, output_root=root/"runs", miner_root=root/"miner", repo=root)
+            runner.assert_not_called()
+            progress = json.loads((root/"runs/20260916T010000Z-sources/progress.json").read_text())
+            self.assertEqual(progress["wordpress_write_count"], 0)
+
     def test_candidate_uses_reader_problem_taxonomy_accepted_by_publisher(self):
         from publisher.validation import EDITOR_CATEGORIES
         for title, category in (("WordPress REST API 재시도", "REST API 발행"),

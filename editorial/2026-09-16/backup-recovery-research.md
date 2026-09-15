@@ -22,7 +22,7 @@
 - 기록 시각: 회귀 실행 결과 JSON `recorded_at=2026-09-15T17:37:10.798680+00:00`; `test_exit=0`, 기록된 12-test log SHA `8bb935abe2bfb3727a3ecea8dd35224b144c9b588d65fac0ce3a2d58424adc97`와 실제 파일 해시 일치.
 - 독립 재실행: 이 Research 역할에서 `.venv/bin/python -m unittest tests.test_backup_media -v` 12개 통과와 공개 fixture snapshot/audit CLI 종료 0/1/0을 직접 확인했다. 운영 SQL import 자체의 재실행은 하지 않았고 고정 보고서를 근거로 삼는다.
 
-다음 여섯 URL은 인증 없는 GET으로 HTTP 200을 확인했다. 기능 commit과 증거 commit은
+다음 여덟 URL은 인증 없는 GET으로 HTTP 200을 확인했다. 기능 commit과 증거 commit은
 서로 다른 시점이며 테스트 로그를 feature commit에 있다고 쓰지 않는다.
 
 - [구현](https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/scripts/audit_backup_media.py)
@@ -31,6 +31,14 @@
 - [결과 JSON](https://github.com/sungpyo9053/blog/blob/f4bc7b42376e62ee1ae7195d6a178c63d27263f6/evidence/test-results/2026-09-16-backup-media-final.json)
 - [실제 테스트 로그](https://github.com/sungpyo9053/blog/blob/f4bc7b42376e62ee1ae7195d6a178c63d27263f6/evidence/test-results/2026-09-16-backup-media-tests.log)
 - [격리 복원 보고서](https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/evidence/test-results/2026-09-16-backup-media-recovery.md)
+- [기능 변경 commit](https://github.com/sungpyo9053/blog/commit/1d64189123d90ee8d0f586cbda663f18f938ac36)
+- [실행 근거 고정 commit](https://github.com/sungpyo9053/blog/commit/f4bc7b42376e62ee1ae7195d6a178c63d27263f6)
+
+후속 계약 확인에서 blob URL만으로는 `audit_evidence_links`의 commit 검사를
+충족할 수 없음을 확인했다. `/commit/{sha}` 두 URL을 실제 GET 확인 후 manifest에
+추가했다. Writer는 실제 본문에서 기능 변경 설명에 commit 링크를 자연스럽게
+연결해야 한다. 아래 합성 링크 검사는 URL 유형 계약의 단위 검증일 뿐 실제
+작성·검수·발행·공개 HTML 감사 성공이 아니다.
 
 ### 글에 전달할 검증 레코드
 
