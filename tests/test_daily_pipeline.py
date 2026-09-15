@@ -182,6 +182,9 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             }
 
             with (
+                # Keep this isolated resume test away from any live epoch seal.
+                # Epoch rejection itself is covered by test_editorial_epoch.
+                patch("scripts.run_daily_pipeline.PROJECT_ROOT", Path(temporary)),
                 patch("scripts.run_daily_pipeline.has_successful_publish", return_value=True),
                 patch("scripts.run_daily_pipeline.read_publish_result", return_value=published),
                 patch("scripts.run_daily_pipeline.run_stage") as run_stage_mock,
