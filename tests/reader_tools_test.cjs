@@ -37,3 +37,7 @@ assert.strictEqual(output.dataset.ok,undefined);
 assert.strictEqual(output.textContent,'입력이 바뀌었습니다. 다시 검사하세요.');
 output.textContent=''; handlers.input(); assert.strictEqual(output.textContent,'');
 console.log('Reader tools: edited inputs invalidate stale verdicts');
+
+// Run the same navigation contract against the independent diagnostics script;
+// no article TOC script is loaded in that fixture.
+require('./article_toc_test.cjs');

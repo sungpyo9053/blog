@@ -30,8 +30,38 @@
 	else desktop.addListener(placeToc);
 
 	var links = Array.prototype.slice.call(toc.querySelectorAll('a[href^="#"]'));
+	function headingFor(link) {
+		try { return document.getElementById(decodeURIComponent(link.hash.slice(1))); }
+		catch (error) { return null; }
+	}
+	// Kadence's anchor handler uses scrollBy without CSS scroll-margin. Handle
+	// only this TOC in capture, before its per-link listener can scroll again.
+	toc.addEventListener('click', function (event) {
+		var link = event.target.closest && event.target.closest('a[href^="#"]');
+		if (!link || links.indexOf(link) === -1) return;
+		var heading = headingFor(link);
+		if (!heading) return;
+		event.stopPropagation();
+		// Leave modified/new-tab/download navigation to the browser, not Kadence.
+		if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
+			event.shiftKey || event.altKey || link.hasAttribute('download') ||
+			(link.target && link.target !== '_self')) return;
+		event.preventDefault();
+		var margin = parseFloat(window.getComputedStyle(heading).scrollMarginTop) || 0;
+		var top = Math.max(0, window.scrollY + heading.getBoundingClientRect().top - margin);
+		if (window.location.hash !== link.hash) {
+			window.history.pushState(window.history.state, '', link.hash);
+		}
+		if (!heading.hasAttribute('tabindex')) {
+			heading.setAttribute('tabindex', '-1');
+			heading.addEventListener('blur', function () { heading.removeAttribute('tabindex'); }, { once: true });
+		}
+		heading.focus({ preventScroll: true });
+		window.scrollTo({ top: top, left: window.scrollX,
+			behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+	}, true);
 	var headings = links.map(function (link) {
-		return document.getElementById(decodeURIComponent(link.hash.slice(1)));
+		return headingFor(link);
 	}).filter(Boolean);
 	if (!headings.length || !('IntersectionObserver' in window)) return;
 

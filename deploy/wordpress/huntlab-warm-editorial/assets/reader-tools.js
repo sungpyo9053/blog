@@ -36,6 +36,32 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined') return;
   document.querySelectorAll('[data-huntlab-diagnostics]').forEach(container => {
+    // Isolate these diagnostic jumps from Kadence's CSS-margin-blind handler.
+    const jumps = container.querySelector('.huntlab-tool-jumps');
+    if (jumps && jumps.addEventListener) jumps.addEventListener('click', event => {
+      const link = event.target.closest && event.target.closest('a[href^="#"]');
+      if (!link || !jumps.contains(link)) return;
+      let heading;
+      try { heading = document.getElementById(decodeURIComponent(link.hash.slice(1))); }
+      catch (_) { return; }
+      if (!heading || !container.contains(heading)) return;
+      event.stopPropagation();
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
+          event.shiftKey || event.altKey || link.hasAttribute('download') ||
+          (link.target && link.target !== '_self')) return;
+      event.preventDefault();
+      const view = document.defaultView;
+      const margin = parseFloat(view.getComputedStyle(heading).scrollMarginTop) || 0;
+      const top = Math.max(0, view.scrollY + heading.getBoundingClientRect().top - margin);
+      if (view.location.hash !== link.hash) view.history.pushState(view.history.state, '', link.hash);
+      if (!heading.hasAttribute('tabindex')) {
+        heading.setAttribute('tabindex', '-1');
+        heading.addEventListener('blur', () => heading.removeAttribute('tabindex'), {once:true});
+      }
+      heading.focus({preventScroll:true});
+      view.scrollTo({top, left:view.scrollX,
+        behavior:view.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+    }, true);
     const now = container.querySelector('[name="now"]');
     now.value = new Date().toISOString();
     container.querySelectorAll('form[data-check]').forEach(form => form.addEventListener('submit', event => {

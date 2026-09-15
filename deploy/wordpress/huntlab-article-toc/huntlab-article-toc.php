@@ -126,3 +126,23 @@ function huntlab_article_toc_assets() {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'huntlab_article_toc_assets', 100 );
+
+/** Finish article layout before Kadence measures an initial URL fragment. */
+function huntlab_article_layout_before_anchor_scroll() {
+	if ( ! is_singular( 'post' ) || ! wp_script_is( 'kadence-navigation', 'enqueued' ) ) {
+		return;
+	}
+	$scripts = wp_scripts();
+	if ( ! isset( $scripts->registered['kadence-navigation'] ) ) {
+		return;
+	}
+	// Kadence loads async. TOC collapse/relocation and code controls otherwise
+	// change heading positions after its initial scroll target was calculated.
+	foreach ( array( 'huntlab-article-toc', 'huntlab-code-tools' ) as $handle ) {
+		if ( isset( $scripts->registered[$handle] ) && wp_script_is( $handle, 'enqueued' )
+			&& ! in_array( $handle, $scripts->registered['kadence-navigation']->deps, true ) ) {
+			$scripts->registered['kadence-navigation']->deps[] = $handle;
+		}
+	}
+}
+add_action( 'wp_enqueue_scripts', 'huntlab_article_layout_before_anchor_scroll', 120 );

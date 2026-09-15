@@ -14,6 +14,23 @@ function huntlab_library_template( $template ) {
 }
 add_filter( 'template_include', 'huntlab_library_template', 99 );
 
+/** Kadence also scrolls initial URL fragments; its JS does not read CSS margins. */
+function huntlab_reader_anchor_offset( $offset ) {
+	// Initial fragments and theme-managed anchors need the same space as the
+	// scoped click handlers. Preserve other pages and existing extension offsets.
+	if ( is_front_page() ) {
+		return (float) $offset + 90;
+	}
+	if ( is_singular( 'post' ) ) {
+		return (float) $offset + 112;
+	}
+	if ( is_page( 'wordpress-response-check' ) ) {
+		return (float) $offset + 100;
+	}
+	return $offset;
+}
+add_filter( 'kadence_scroll_to_id_additional_offset', 'huntlab_reader_anchor_offset' );
+
 function huntlab_reader_tools_assets() {
 	wp_enqueue_style( 'huntlab-reader-tools', plugins_url( 'assets/reader-tools.css', __FILE__ ), array(), (string) filemtime( __DIR__ . '/assets/reader-tools.css' ) );
 	if ( is_page( 'wordpress-response-check' ) ) {
