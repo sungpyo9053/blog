@@ -876,6 +876,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         )
         quick_view_review = (
             "`20초 핵심 요약`, FAQ 또는 표의 유무를 승인 조건으로 삼지 마세요. 대신 "
+            "publish.md Frontmatter에 content_type: evidence_deep_article을 반드시 기록하세요. "
+            "verified_case로 바꾸거나 content_type을 누락하지 마세요. "
             "evidence_contract의 주장과 commit, test, log, public URL을 문장 단위로 대조하세요. "
             f"{str(topic_dir / 'editorial-inventory.json')!r}의 publish·draft 전체 본문을 "
             "검색 의도·결론·실행 방법 관점에서 비교하고 검토한 글 수와 충돌 ID를 review.md에 기록하세요. "
@@ -1308,6 +1310,8 @@ def validate_publish_contract(context: TopicContext) -> str:
         "publish_mode": "publish",
         "category": context.category,
     }
+    if context.content_type == "evidence_deep_article":
+        expected["content_type"] = "evidence_deep_article"
     for field, expected_value in expected.items():
         actual = metadata.get(field)
         if actual != expected_value:

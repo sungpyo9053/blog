@@ -440,6 +440,15 @@ function hunt_news_case_meta( $post ) {
 		$meta                 = array_merge( $fallbacks[ $post_id ], array_filter( $meta ) );
 		$meta['content_type'] = 'verified_case';
 	}
+	if ( 'evidence_deep_article' === $meta['content_type'] ) {
+		if ( ! $meta['problem_group'] ) {
+			foreach ( array( 'rest-api-publishing' => 'REST API 발행', 'automation-testing' => '자동화·테스트', 'wordpress-operations' => 'WordPress 운영' ) as $slug => $label ) {
+				if ( has_category( $slug, $post ) ) { $meta['problem_group'] = $label; break; }
+			}
+		}
+		if ( ! $meta['method'] ) { $meta['method'] = '확인 범위는 본문 참고'; }
+		if ( ! $meta['date'] ) { $meta['date'] = '본문 참고'; }
+	}
 	return $meta;
 }
 
@@ -451,7 +460,7 @@ function hunt_news_is_verified_case( $post = null ) {
 /** Post 50 and 132 remain the first proof cases; later cases follow modification time. */
 function hunt_news_verified_posts( $limit = 12 ) {
 	$fixed   = get_posts( array( 'post_type' => 'post', 'post_status' => 'publish', 'post__in' => array( 50, 132 ), 'orderby' => 'post__in', 'posts_per_page' => 2, 'no_found_rows' => true ) );
-	$dynamic = get_posts( array( 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => max( 1, absint( $limit ) ), 'meta_key' => '_hunt_news_content_type', 'meta_value' => 'verified_case', 'orderby' => array( 'modified' => 'DESC' ), 'post__not_in' => array( 50, 132 ), 'no_found_rows' => true ) );
+	$dynamic = get_posts( array( 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => max( 1, absint( $limit ) ), 'meta_key' => '_hunt_news_content_type', 'meta_value' => array( 'verified_case', 'evidence_deep_article' ), 'meta_compare' => 'IN', 'orderby' => array( 'modified' => 'DESC' ), 'post__not_in' => array( 50, 132 ), 'no_found_rows' => true ) );
 	$rows    = array();
 	foreach ( array_merge( $fixed, $dynamic ) as $post ) {
 		$rows[ $post->ID ] = $post;

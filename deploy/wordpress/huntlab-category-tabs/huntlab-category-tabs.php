@@ -16,52 +16,19 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return array<int, array{label:string,url:string,slug:string,meta:string}>
  */
 function huntlab_category_tabs_items() {
-	$latest_briefings = get_posts(
-		array(
-			'post_type'      => 'hunt_briefing',
-			'post_status'    => 'publish',
-			'posts_per_page' => 1,
-			'orderby'        => 'date',
-			'order'          => 'DESC',
-			'no_found_rows'  => true,
-		)
-	);
-	$today_url = $latest_briefings ? get_permalink( $latest_briefings[0] ) : home_url( '/#hunt-news-briefing-board' );
 	$archive_url = get_post_type_archive_link( 'hunt_briefing' );
 	if ( ! $archive_url ) {
 		$archive_url = home_url( '/briefing/' );
 	}
-	$weekly_category = get_category_by_slug( 'weekly-tech-review' );
-	$weekly_url = $weekly_category ? get_category_link( $weekly_category->term_id ) : home_url( '/category/weekly-tech-review/' );
 
 	$items = array();
 	$items[] = array( 'label' => '문제 해결 글', 'url' => home_url( '/#hunt-news-latest-verified' ), 'slug' => 'library', 'meta' => '코드와 근거' );
 	$items[] = array( 'label' => '응답 진단 도구', 'url' => home_url( '/wordpress-response-check/' ), 'slug' => 'tools', 'meta' => '직접 입력' );
-	if ( $weekly_category && 0 < (int) $weekly_category->count ) {
-		$items[] = array(
-			'label' => '주간 회고',
-			'url'   => $weekly_url,
-			'slug'  => 'weekly',
-			'meta'  => '매주',
-		);
-	}
 	$items[] = array(
-		'label' => '오늘 브리핑',
-		'url'   => $today_url,
-		'slug'  => 'today',
-		'meta'  => '최신',
-	);
-	$items[] = array(
-		'label' => '날짜 아카이브',
+		'label' => '기술 브리핑',
 		'url'   => $archive_url,
 		'slug'  => 'archive',
 		'meta'  => '날짜별',
-	);
-	$items[] = array(
-		'label' => '이용 가이드',
-		'url'   => home_url( '/about/' ),
-		'slug'  => 'about',
-		'meta'  => '편집 기준',
 	);
 	return $items;
 }
@@ -75,17 +42,14 @@ function huntlab_category_tabs_active_slug() {
 	if ( is_page( 'wordpress-response-check' ) ) { return 'tools'; }
 	if ( is_category( array( 'rest-api-publishing', 'automation-testing', 'wordpress-operations' ) ) ) { return 'library'; }
 	if ( is_home() || is_front_page() || is_singular( 'post' ) ) { return 'library'; }
-	if ( is_category( 'weekly-tech-review' ) || ( is_singular( 'post' ) && has_category( 'weekly-tech-review' ) ) ) {
-		return 'weekly';
-	}
-	if ( is_post_type_archive( 'hunt_briefing' ) ) {
+	if ( is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) {
 		return 'archive';
 	}
 	if ( is_page( 'about' ) || is_page( 'editorial-policy' ) ) {
 		return 'about';
 	}
 
-	return ( is_home() || is_front_page() || is_singular( 'hunt_briefing' ) ) ? 'today' : '';
+	return '';
 }
 
 /**

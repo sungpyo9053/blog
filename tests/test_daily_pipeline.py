@@ -571,6 +571,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
     def _write_approved_publish(self, context: TopicContext, body: str) -> None:
         publish = context.directory / "publish.md"
         tags = "\n".join(f'  - "{tag}"' for tag in context.tags)
+        content_type = 'content_type: evidence_deep_article\n' if context.content_type == "evidence_deep_article" else ""
         publish.write_text(
             "---\n"
             f'title: "{context.title}"\n'
@@ -579,6 +580,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             f'source_id: "{context.source_id}"\n'
             'publish_mode: "publish"\n'
             f'category: "{context.category}"\n'
+            f'{content_type}'
             'featured_image: "./images/thumbnail.png"\n'
             'featured_image_alt: "테스트 대표 이미지"\n'
             "tags:\n"
@@ -1173,6 +1175,26 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             self.assertIn("20초 핵심 요약`, FAQ, 표를 필수로 넣지 마세요", writer.prompt)
             self._write_approved_publish(context, "## 구현 결과\n\n실제 테스트와 구현 diff를 대조했다.\n")
             self.assertTrue(validate_publish_contract(context))
+
+    def test_evidence_deep_article_requires_exact_publisher_content_type(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "run-evidence" / "topic-evidence"
+            directory.mkdir(parents=True)
+            context = TopicContext(title="WordPress 실제 구현", run_id="run-evidence", topic_id="topic-evidence", directory=directory, category="자동화·테스트", tags=("WordPress",), content_type="evidence_deep_article")
+            self._write_approved_publish(context, "## 검증 결과\n본문\n")
+            publish = directory / "publish.md"
+            original = publish.read_text()
+            for replacement in ("", "content_type: verified_case\n"):
+                publish.write_text(original.replace("content_type: evidence_deep_article\n", replacement))
+                with self.assertRaisesRegex(PipelineError, "content_type 불일치"):
+                    validate_publish_contract(context)
+
+    def test_reviewer_requires_deep_type_without_changing_other_article_prompts(self):
+        for content_type in ("evidence_deep_article", "tutorial_troubleshooting"):
+            context = make_topic_context("run-type", "WordPress 발행", content_type=content_type)
+            reviewer = next(stage for stage in topic_stages(context) if stage.name == "Reviewer Agent")
+            self.assertEqual("content_type: evidence_deep_article을 반드시 기록" in reviewer.prompt,
+                             content_type == "evidence_deep_article")
 
     def test_selected_planner_evidence_is_copied_into_topic_boundary(self):
         with tempfile.TemporaryDirectory() as temporary:

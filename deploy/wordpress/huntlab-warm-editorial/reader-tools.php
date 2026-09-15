@@ -29,6 +29,25 @@ function huntlab_reader_footer() {
 }
 add_action( 'wp_footer', 'huntlab_reader_footer', 30 );
 
+/** Keep desktop and hamburger navigation aligned with the actual reading paths. */
+function huntlab_reader_menu( $items, $args ) {
+	if ( ! in_array( $args->theme_location ?? '', array( 'primary', 'mobile' ), true ) ) { return $items; }
+	$links = array( array( '문제 해결 글', '/' ), array( '진단 도구', '/wordpress-response-check/' ), array( '운영 소개', '/about/' ), array( '오류 제보', '/contact/' ) );
+	$updated = array();
+	foreach ( array_slice( array_values( $items ), 0, 4 ) as $index => $item ) {
+		$item = clone $item;
+		$item->title = $links[ $index ][0];
+		$item->url = home_url( $links[ $index ][1] );
+		$item->classes = array( 'menu-item' );
+		$item->current = false;
+		$item->current_item_ancestor = false;
+		$item->current_item_parent = false;
+		$updated[] = $item;
+	}
+	return $updated;
+}
+add_filter( 'wp_nav_menu_objects', 'huntlab_reader_menu', 30, 2 );
+
 function huntlab_diagnostics_shortcode() {
 	ob_start();
 	?>
