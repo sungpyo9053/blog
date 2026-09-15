@@ -1,7 +1,10 @@
 {
   "trigger_commit": "1d64189123d90ee8d0f586cbda663f18f938ac36",
   "anchor": "scripts/audit_backup_media.py",
-  "related_commits": [{"sha": "f4bc7b42376e62ee1ae7195d6a178c63d27263f6", "at": "2026-09-16T02:39:15+09:00", "reason": "Pin actual regression output and isolated media recovery summary"}],
+  "related_commits": [
+    {"sha": "f4bc7b42376e62ee1ae7195d6a178c63d27263f6", "at": "2026-09-16T02:39:15+09:00", "reason": "Pin regression rerun output after feature commit and recovery summary; not an independent author's recovery experiment"},
+    {"sha": "635186a4d3f6c9546ec0edd3f9d0e10ae670d26e", "at": "2026-09-16T03:27:01+09:00", "reason": "Make reader setup self-contained with Python version checks, fresh task environment, relative paths and verified exit codes"}
+  ],
   "recommended_format": "feature_build",
   "title_seed": "WordPress DB 복원 뒤 첨부파일 누락을 찾는 검사 만들기",
   "real_trigger": "사이트 품질 점검에서 개편 롤백용 DB·플러그인 백업과 전체 복구 검증을 구분하고 원본 첨부파일 대조 도구를 추가했다",
@@ -13,23 +16,40 @@
   "public_urls": [
     "https://github.com/sungpyo9053/blog/commit/1d64189123d90ee8d0f586cbda663f18f938ac36",
     "https://github.com/sungpyo9053/blog/commit/f4bc7b42376e62ee1ae7195d6a178c63d27263f6",
+    "https://github.com/sungpyo9053/blog/commit/635186a4d3f6c9546ec0edd3f9d0e10ae670d26e",
     "https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/scripts/audit_backup_media.py",
     "https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/tests/test_backup_media.py",
-    "https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/evidence/lab-fixtures/backup-media/README.md",
+    "https://github.com/sungpyo9053/blog/blob/635186a4d3f6c9546ec0edd3f9d0e10ae670d26e/evidence/lab-fixtures/backup-media/README.md",
+    "https://github.com/sungpyo9053/blog/blob/635186a4d3f6c9546ec0edd3f9d0e10ae670d26e/editorial/2026-09-16/backup-readme-reproduction.md",
     "https://github.com/sungpyo9053/blog/blob/f4bc7b42376e62ee1ae7195d6a178c63d27263f6/evidence/test-results/2026-09-16-backup-media-final.json",
     "https://github.com/sungpyo9053/blog/blob/f4bc7b42376e62ee1ae7195d6a178c63d27263f6/evidence/test-results/2026-09-16-backup-media-tests.log",
     "https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/evidence/test-results/2026-09-16-backup-media-recovery.md"
   ],
-  "evidence_files": ["scripts/audit_backup_media.py", "tests/test_backup_media.py", "evidence/lab-fixtures/backup-media/README.md", "evidence/lab-fixtures/backup-media/references.json"],
+  "evidence_files": ["scripts/audit_backup_media.py", "tests/test_backup_media.py", "evidence/lab-fixtures/backup-media/README.md", "evidence/lab-fixtures/backup-media/references.json", "editorial/2026-09-16/backup-readme-reproduction.md"],
   "tests": ["tests.test_backup_media.BackupMediaTests.test_database_references_without_uploads_fail", "tests.test_backup_media.BackupMediaTests.test_matching_restored_file_passes_without_claiming_whole_site_recovery", "tests.test_backup_media.BackupMediaTests.test_same_size_changed_bytes_fail", "tests.test_backup_media.BackupMediaTests.test_reader_cli_exit_codes_and_existing_evidence_preserved"],
   "logs": ["evidence/test-results/2026-09-16-backup-media-tests.log", "evidence/test-results/2026-09-16-backup-media-final.json", "evidence/test-results/2026-09-16-backup-media-recovery.md"],
   "test_runs": [{"test": ".venv/bin/python -m unittest tests.test_backup_media -v", "status": "PASS", "exit_code": 0, "recorded_at": "2026-09-15T17:37:10.798680+00:00", "source_revision": "1d64189123d90ee8d0f586cbda663f18f938ac36", "output_sha256": "8bb935abe2bfb3727a3ecea8dd35224b144c9b588d65fac0ce3a2d58424adc97"}],
-  "before_after": {"environment": "MariaDB 10.11.19 isolated Docker network none; no WordPress PHP execution", "before": {"db_import_exit": 0, "tables": 48, "missing_original_attachment_files": 373}, "after": {"checked_original_attachment_files": 373, "failures": 0}, "wordpress_writes": 0, "whole_site_restore_verified": false},
+  "before_after": {
+    "environment": "MariaDB 10.11.19 isolated Docker network none; no WordPress PHP execution",
+    "before": {"db_import_exit": 0, "tables": 48, "missing_original_attachment_files": 373},
+    "after": {"checked_original_attachment_files": 373, "failures": 0},
+    "wordpress_writes": 0,
+    "whole_site_restore_verified": false,
+    "source_interpretation": {
+      "chronology": "Checker implementation and both isolated comparison results existed before 1d641891; its recovery report already includes 373 missing and 373 matches. f4bc7b4 records tests rerun after the feature commit and is not a separate author's recovery verification.",
+      "failure_origin": "373 missing files is an intentional DB-only control before copying uploads, not an unexpected production incident, failed SQL import, or user impact.",
+      "reproduction_scope": "Public synthetic text fixture checks one file with exits 0/1/0. Private 373-file and 48-table observations are a different evidence scope; the public example does not reproduce the private database import.",
+      "reader_setup_required": "Use the README pinned at 635186a4, including installed Python 3.11+ selection and validation, fresh task-directory venv --without-pip, relative mktemp template ./backup-demo.XXXXXX, quoted paths and explicit expected 0/1/0 branches. Downloading the repository/Python may require network; fixture execution does not. Never assume an existing .venv.",
+      "capture_privacy": "Show actual relative task paths in executable examples. Do not expose private runtime, home or server paths in screenshots. Literal <check-dir> is a redaction label, not executable shell syntax. Do not invent cleaned output or merge runs into a false single capture.",
+      "source_identity_limit": "Snapshot does not authenticate source identity or DB reference completeness. With the independent references retained, a missing source file causes snapshot failure rather than silently shrinking the list. Incomplete references or changed restored bytes used as expected values can invalidate the comparison.",
+      "narrative_limit": "Do not invent a first failed method, a surprise, or a decision to start implementation at the SQL success moment. Only the documented requirement, implementation and intentional comparison are supported."
+    }
+  },
   "contract_fields": {
     "requirement": "WordPress DB의 원본 첨부 경로와 대응하는 source bytes/SHA를 고정하고 복원 uploads의 누락·변조를 별도로 확인한다",
     "completion_result": "새 validator와 12개 회귀 테스트가 통과했다. 격리 DB import의 48tables/공개9/초안113/첨부373을 확인하고 동일 manifest에서 파일 복사 전373missing, 후373hash match를 확인했다. 공개 text fixture는 인증·네트워크 없이 종료0/1/0으로 재현된다",
     "unsupported_scope": "원본 첨부파일만 검사한다. 전체 사이트 복원, 생성 이미지 크기, offloaded media, 테마·플러그인·config·PHP·HTTP·로그인·메일·cron은 검증하지 않았다. DB transaction은 파일을 동결하지 않는다"
   },
   "resolved_ambiguities": ["multi_symbol_change_requires_review"],
-  "resolution_note": "Research agent read the exact single-source feature diff, all 12 tests, matching output hash, synthetic CLI and six public pinned URLs. This resolves source/test attribution only; no human content approval is claimed."
+  "resolution_note": "Research agent checked the feature implementation, 12-test output hash and synthetic CLI. Pinned commit/blob sources and the corrected README/clean-checkout report were publicly accessible. Source/test attribution is resolved; this is not human content approval or whole-site recovery verification."
 }
