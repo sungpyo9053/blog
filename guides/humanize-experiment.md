@@ -34,5 +34,14 @@ meaning_or_evidence_changed: no
 notes: <short comparison note>
 ```
 
-The Reviewer remains the only approval gate. The Assembler and Publisher use
-the original `draft.md`; this artifact is for comparison and evidence only.
+In shadow mode the original `draft.md` remains selected. In ON mode a rewrite
+may replace the selected draft only after the deterministic preservation check
+passes: frontmatter, fenced/inline code, URLs and numbers must be unchanged,
+and the character change ratio must not exceed 30%. A failed check retains
+the original and records `style-preservation.json`. The Reviewer then reviews
+the selected draft. This check does not prove semantic equivalence or human authorship.
+
+For natural Korean, keep the concrete problem near the beginning. Remove
+translationese, repeated stock transitions and redundant emphasis. Preserve
+technical terms, uncertainty, instructions and limits. Do not invent an
+experience, conversational filler or a new metaphor to make writing sound human.

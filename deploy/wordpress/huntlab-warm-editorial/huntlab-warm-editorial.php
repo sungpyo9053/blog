@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Warm Editorial Theme
  * Description: Applies Hunt News's approachable editorial layout without replacing the active WordPress theme.
- * Version: 7.0.0
+ * Version: 7.1.0
  * Author: Hunt News
  */
 
@@ -24,6 +24,8 @@ function huntlab_warm_editorial_enqueue_styles() {
 	);
 }
 add_action( 'wp_enqueue_scripts', 'huntlab_warm_editorial_enqueue_styles', 100 );
+
+require_once __DIR__ . '/reader-tools.php';
 
 /** Register evidence fields used by the verified problem-solving library. */
 function hunt_news_register_evidence_meta() {

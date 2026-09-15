@@ -56,16 +56,37 @@ def published_today(root: Path, day: str) -> int:
     return count
 
 
+def candidate_category(candidate: Mapping[str, Any]) -> str:
+    """Classify the reader's problem, not incidental evidence filenames."""
+    subject = " ".join(str(candidate.get(key, "")) for key in
+                       ("title_seed", "problem", "unique_takeaway")).casefold()
+    if any(term in subject for term in ("rest api", "rest-api", "rest_api", "rest 응답", "wordpress api")):
+        return "REST API 발행"
+    if any(term in subject for term in ("wordpress", "워드프레스", "sitemap", "사이트맵", "noindex")):
+        return "WordPress 운영"
+    return "자동화·테스트"
+
+
+def candidate_in_editorial_scope(candidate: Mapping[str, Any]) -> bool:
+    """Require the reader-facing problem to concern WordPress publishing."""
+    subject = " ".join(str(candidate.get(key, "")) for key in
+                       ("title_seed", "problem", "why_it_matters", "unique_takeaway")).casefold()
+    return candidate.get("publishability") == "READY" and any(
+        term in subject for term in ("wordpress", "워드프레스", "블로그 발행", "게시글 발행",
+                                     "자동발행", "자동 발행", "publisher", "sitemap", "noindex")
+    )
+
+
 def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
     title = str(candidate["title_seed"])
     evidence = candidate["evidence"]
     return {
         "title": title,
-        "category": "개발 트렌드",
+        "category": candidate_category(candidate),
         "content_type": "evidence_deep_article",
         "tags": ["개발 기록", "자동화", str(candidate["recommended_format"])],
         "reason": str(candidate["real_trigger"]),
-        "research_focus": "evidence_candidate의 주장과 근거만 사용하고 공개 commit, test, log를 직접 대조한다.",
+        "research_focus": "guides/editorial-concept.md의 WordPress 자동발행 실전 운영 노트 범위를 따른다. evidence_candidate의 주장과 근거만 사용하고 공개 commit, test, log를 직접 대조한다. 실제 실패/변경 → 근거 → 해결 → 독자 실행 방법 → 한계를 설명한다. 범용 뉴스나 다른 프로젝트로 주제를 확장하지 않는다.",
         # The daily pipeline and Reviewer require the primary keyword to appear
         # in the fixed Editor title. Evidence source filenames are identifiers,
         # not necessarily useful search phrases.
@@ -80,7 +101,7 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
         "evidence_plan": json.dumps(evidence, ensure_ascii=False),
         "duplicate_check": json.dumps(candidate["existing_post_overlap"], ensure_ascii=False),
         "internal_link_candidates": "",
-        "topic_cluster": "Hunt News 운영기",
+        "topic_cluster": candidate_category(candidate),
         "pillar_candidate": "false",
         "sources": json.dumps(evidence.get("public_urls", []), ensure_ascii=False),
         "problem_origin": str(candidate["real_trigger"]),
@@ -95,6 +116,7 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
 
 def run_selected_candidate(candidate: Mapping[str, Any], run_id: str, logger: logging.Logger) -> dict[str, Any]:
     plan = candidate_plan(candidate)
+    plan["inventory_path"] = candidate.get("_inventory_path", str(MINER_ROOT / "inventory-latest.json"))
     context = make_topic_context(run_id, plan["title"], category=plan["category"], tags=tuple(plan["tags"]), reason=plan["reason"], research_focus=plan["research_focus"], content_type=plan["content_type"])
     context.directory.parent.mkdir(parents=True, exist_ok=False)
     result = run_topic_pipeline(resolve_codex(), context, plan, logger, timeout_seconds=3600, resume=False, publish_lock=threading.Lock(), humanize_lock=threading.Lock())
@@ -148,12 +170,16 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     checkpoint_path = miner_root / "checkpoint.json"
     checkpoint = json.loads(checkpoint_path.read_text()) if checkpoint_path.is_file() else None
     payload, processing, next_checkpoint = build_payload(repo=repo, inventory_path=inventory_path, run_date=now.date(), checkpoint=checkpoint)
+    payload["scope_rejections"] = [candidate["candidate_id"] for candidate in payload["candidates"] if not candidate_in_editorial_scope(candidate)]
+    payload["candidates"] = [candidate for candidate in payload["candidates"] if candidate_in_editorial_scope(candidate)]
+    if not payload["candidates"]:
+        payload["status"] = "no_publishable_topic"
     miner_dir = miner_root / day / run_id
     run_checkpoint = run_dir / "miner-checkpoint.json"
     persist_miner_run(miner_dir, run_checkpoint, payload, processing, next_checkpoint)
     def advance_checkpoint() -> None:
         atomic_replace(checkpoint_path, (json.dumps(next_checkpoint, ensure_ascii=False, indent=2) + "\n").encode())
-    base = {"run_id":run_id,"kst_date":day,"publication_mode":"briefing_only","failed":False,"wordpress_write_count":0,"candidate_count":len(payload["candidates"])}
+    base = {"run_id":run_id,"kst_date":day,"publication_mode":"briefing_only","failed":False,"wordpress_write_count":0,"candidate_count":len(payload["candidates"]),"scope_rejections":payload["scope_rejections"]}
     if published_today(output_root, day) >= DAILY_LIMIT:
         return {**base,"deep_article":"daily_limit_reached"}
     if not payload["candidates"]:
@@ -163,7 +189,7 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     if not apply:
         return {**base,"deep_article":"ready_not_published","candidate_id":candidate["candidate_id"]}
     write_progress(progress_path, stage="publisher_started", wordpress_write_count="unknown")
-    published = topic_runner(candidate, run_id, logger or configure_logger(now.date()))
+    published = topic_runner({**candidate, "_inventory_path": str(inventory_path.resolve())}, run_id, logger or configure_logger(now.date()))
     write_progress(progress_path, stage="publisher_completed", wordpress_write_count=1)
     # A confirmed WordPress publish must consume the candidate before the
     # independent public-HTML audit. Retrying a published candidate after an

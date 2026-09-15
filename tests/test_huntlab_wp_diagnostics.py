@@ -6,6 +6,11 @@ from scripts.huntlab_wp_diagnostics import audit_indexability, status_only_accep
 
 
 class HuntLabWordPressDiagnosticsTests(unittest.TestCase):
+    def test_invalid_post_identifiers_are_rejected(self):
+        for body in (b'{"id":true}', b'{"id":0}', b'{"id":-1}', b'{"id":"742"}', b'null', b'[]'):
+            with self.subTest(body=body):
+                self.assertFalse(validate_rest_response(status=201, content_type="application/json", body=body).passed)
+
     def test_html_login_page_with_200_exposes_status_only_false_positive(self):
         body = b"<html><form id='loginform'></form></html>"
         self.assertTrue(status_only_accepts(200))

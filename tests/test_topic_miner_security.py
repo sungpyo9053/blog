@@ -100,12 +100,15 @@ class TopicMinerSecurityTests(unittest.TestCase):
                 status = "draft" if "status=draft" in path else "publish"
                 page = 2 if "page=2" in path else 1
                 count = 1 if status == "draft" else (100 if page == 1 else 19)
-                return [{"id": page * 1000 + i, "link": f"https://example.test/{status}-{page}-{i}", "slug": f"{status}-{page}-{i}", "status": status, "title": {"rendered": "title"}, "excerpt": {"rendered": "excerpt"}} for i in range(count)]
+                if status == "draft": page = 3
+                return [{"id": page * 1000 + i, "link": f"https://example.test/{status}-{page}-{i}", "slug": f"{status}-{page}-{i}", "status": status, "title": {"rendered": "title"}, "excerpt": {"rendered": "excerpt"}, "content": {"raw": "Full article body"}} for i in range(count)]
         client = Client()
         snapshot = build_snapshot(client)
         self.assertEqual(snapshot["metadata"]["statuses"], {"publish": 119, "draft": 1})
         self.assertEqual(len(snapshot["posts"]), 120)
         self.assertTrue(all(method == "GET" for method, _, _ in client.calls))
+        self.assertTrue(snapshot["metadata"]["full_content"])
+        self.assertEqual(snapshot["posts"][0]["content"], "Full article body")
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ def validate_rest_response(*, status: int, content_type: str, body: bytes, expec
         payload = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return CheckResult("rest_response", False, "invalid_json_body", observed)
-    if not isinstance(payload, dict) or not isinstance(payload.get("id"), int):
+    if not isinstance(payload, dict) or type(payload.get("id")) is not int or payload["id"] <= 0:
         return CheckResult("rest_response", False, "missing_post_id", observed)
     observed["post_id"] = payload["id"]
     if expected_id is not None and payload["id"] != expected_id:

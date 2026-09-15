@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hunt News Category Tabs
  * Description: Adds fast briefing navigation for Hunt News readers.
- * Version: 4.0.0
+ * Version: 4.1.0
  * Author: Hunt News
  */
 
@@ -33,18 +33,10 @@ function huntlab_category_tabs_items() {
 	}
 	$weekly_category = get_category_by_slug( 'weekly-tech-review' );
 	$weekly_url = $weekly_category ? get_category_link( $weekly_category->term_id ) : home_url( '/category/weekly-tech-review/' );
-	$explainer_category = get_category_by_slug( 'technical-explainer' );
-	$explainer_url = $explainer_category ? get_category_link( $explainer_category->term_id ) : home_url( '/category/technical-explainer/' );
 
 	$items = array();
-	if ( $explainer_category && 0 < (int) $explainer_category->count ) {
-		$items[] = array(
-			'label' => '기술 해설',
-			'url'   => $explainer_url,
-			'slug'  => 'explainer',
-			'meta'  => '깊이 읽기',
-		);
-	}
+	$items[] = array( 'label' => '문제 해결 글', 'url' => home_url( '/#hunt-news-latest-verified' ), 'slug' => 'library', 'meta' => '코드와 근거' );
+	$items[] = array( 'label' => '응답 진단 도구', 'url' => home_url( '/wordpress-response-check/' ), 'slug' => 'tools', 'meta' => '직접 입력' );
 	if ( $weekly_category && 0 < (int) $weekly_category->count ) {
 		$items[] = array(
 			'label' => '주간 회고',
@@ -80,9 +72,9 @@ function huntlab_category_tabs_items() {
  * @return string
  */
 function huntlab_category_tabs_active_slug() {
-	if ( is_category( 'technical-explainer' ) || ( is_singular( 'post' ) && has_category( 'technical-explainer' ) ) ) {
-		return 'explainer';
-	}
+	if ( is_page( 'wordpress-response-check' ) ) { return 'tools'; }
+	if ( is_category( array( 'rest-api-publishing', 'automation-testing', 'wordpress-operations' ) ) ) { return 'library'; }
+	if ( is_home() || is_front_page() || is_singular( 'post' ) ) { return 'library'; }
 	if ( is_category( 'weekly-tech-review' ) || ( is_singular( 'post' ) && has_category( 'weekly-tech-review' ) ) ) {
 		return 'weekly';
 	}

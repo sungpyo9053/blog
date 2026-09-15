@@ -76,7 +76,7 @@ ACTIVE_EDITOR_CATEGORIES = {
     "국내 IT",
     "국내 시사",
 }
-SPECIAL_EDITOR_CATEGORIES = {"기술 해설", "주간 기술 회고"}
+SPECIAL_EDITOR_CATEGORIES = {"기술 해설", "주간 기술 회고", "REST API 발행", "자동화·테스트", "WordPress 운영"}
 ACTIVE_CATEGORY_SLUGS = {
     "ai-ml-core": "AI/ML 핵심",
     "development-trends": "개발 트렌드",
@@ -877,6 +877,11 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         quick_view_review = (
             "`20초 핵심 요약`, FAQ 또는 표의 유무를 승인 조건으로 삼지 마세요. 대신 "
             "evidence_contract의 주장과 commit, test, log, public URL을 문장 단위로 대조하세요. "
+            f"{str(topic_dir / 'editorial-inventory.json')!r}의 publish·draft 전체 본문을 "
+            "검색 의도·결론·실행 방법 관점에서 비교하고 검토한 글 수와 충돌 ID를 review.md에 기록하세요. "
+            "이 목록은 중복 검사용일 뿐 기존 문장을 새 글에 복제하거나 공개 근거로 사용할 수 없습니다. "
+            "긴 동일 문장 검사를 통과해도 검색 의도가 같고 독립적인 새 결론이 없으면 REJECT하세요. "
+            "guides/editorial-concept.md의 범위와 독자 문제를 벗어나도 REJECT하세요. "
         )
     stages = [
         Stage(
@@ -2215,6 +2220,13 @@ def run_topic_pipeline(
         )
         return publish_result
     planner_context_path = write_planner_context(context, plan)
+    if context.content_type == "evidence_deep_article" and not (resume and (context.directory / "editorial-inventory.json").is_file()):
+        # Freeze the same full inventory for Reviewer and deterministic gate.
+        # Missing inventory is a hard stop before writing any article.
+        shutil.copy2(
+            Path(plan.get("inventory_path", OUTPUT_DIR / "topic-miner" / "inventory-latest.json")),
+            context.directory / "editorial-inventory.json",
+        )
     recent_style_context_path = write_recent_style_context(context)
     logger.info(
         "topic=%r run_id=%s topic_id=%s directory=%s "
@@ -2279,6 +2291,12 @@ def run_topic_pipeline(
                     timeout_seconds=timeout_seconds,
                 )
                 digest = validate_publish_contract(context)
+                if context.content_type == "evidence_deep_article":
+                    from scripts.editorial_gate import enforce_prepublication
+                    enforce_prepublication(
+                        context.directory / "publish.md",
+                        context.directory / "editorial-inventory.json",
+                    )
                 logger.info(
                     "topic=%r run_id=%s topic_id=%s "
                     "event=publisher_contract_passed publish_sha256=%s "
@@ -2309,6 +2327,17 @@ def run_topic_pipeline(
             validate_research_readiness(context)
         if stage.name == "Humanize Experiment Agent":
             if humanize_experiment_mode() in {"manual-one-off", "on"}:
+                from scripts.editorial_gate import style_preservation
+                style_report = style_preservation(
+                    (context.directory / "draft.md").read_text(encoding="utf-8"),
+                    (context.directory / "humanized-draft.md").read_text(encoding="utf-8"),
+                )
+                (context.directory / "style-preservation.json").write_text(
+                    json.dumps(style_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                )
+                if not style_report["passed"]:
+                    logger.warning("topic=%r event=humanize_original_retained reasons=%s", context.title, style_report["failures"])
+                    continue
                 original = context.directory / "draft-original.md"
                 shutil.copy2(context.directory / "draft.md", original)
                 shutil.copy2(

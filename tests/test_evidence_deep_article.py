@@ -17,6 +17,7 @@ class EvidenceDeepArticleTests(unittest.TestCase):
         normalized=[]
         for source in candidates:
             row={"candidate_id":"one","title_seed":"title","real_trigger":"trigger","target_reader":"reader","problem":"problem","why_it_matters":"action","evidence_contract":{},"evidence":{"commits":[],"files":[],"tests":[],"logs":[],"public_urls":[]},"before_after":{},"unique_takeaway":"takeaway","existing_post_overlap":{"result":"none"},"recommended_format":"feature_build","publishability":"READY","missing_evidence":[],"rejection_reason":None,"source_anchor":"scripts/x.py"}
+            row["problem"] = "WordPress 발행 문제"
             row.update(source); normalized.append(row)
         return ({"date":"2026-09-05","source_head":"a"*40,"candidates":normalized,"status":"ready" if normalized else "no_publishable_topic"},{"processed":[]},{})
 
@@ -40,6 +41,27 @@ class EvidenceDeepArticleTests(unittest.TestCase):
         candidate = self.payload([{"candidate_id": "one"}])[0]["candidates"][0]
         plan = candidate_plan(candidate)
         self.assertIn(plan["primary_keyword"].casefold(), plan["title"].casefold())
+
+    def test_candidate_uses_reader_problem_taxonomy_accepted_by_publisher(self):
+        from publisher.validation import EDITOR_CATEGORIES
+        for title, category in (("WordPress REST API 재시도", "REST API 발행"),
+                                ("WordPress 사이트맵 검증", "WordPress 운영"),
+                                ("READY 파이프라인 테스트", "자동화·테스트")):
+            candidate = self.payload([{"title_seed": title, "problem": title}])[0]["candidates"][0]
+            plan = candidate_plan(candidate)
+            self.assertEqual(plan["category"], category)
+            self.assertIn(category, EDITOR_CATEGORIES)
+
+    def test_out_of_scope_ready_candidate_has_no_wordpress_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner = Mock()
+            payload = self.payload([{"title_seed":"AI 신제품 뉴스", "problem":"범용 뉴스"}])
+            with patch("scripts.run_evidence_deep_article.build_payload", return_value=payload), patch("scripts.run_evidence_deep_article.persist_miner_run"):
+                result = execute(run_id="scope-test", inventory_path=self.inventory(root), apply=True, topic_runner=runner, output_root=root/"runs", miner_root=root/"miner", repo=root)
+            self.assertEqual(result["deep_article"], "no_publishable_topic")
+            self.assertEqual(result["scope_rejections"], ["one"])
+            runner.assert_not_called()
 
     def test_ready_dry_run_does_not_advance_global_checkpoint(self):
         candidate={"candidate_id":"one"}

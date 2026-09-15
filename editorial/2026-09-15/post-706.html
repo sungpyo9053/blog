@@ -1,0 +1,54 @@
+<p>매일 도는 작업인데 발행할 근거가 없는 날이 있다. 이 Evidence-first 기술 글 파이프라인에서 그런 날의 정답은 빈 글을 만드는 것이 아니라 Publisher를 호출하지 않는 것이다. 초기 구현에서는 선택한 후보를 발행하기 전에 전역 체크포인트가 기록될 수 있었다. 초기 후속 변경에서는 체크포인트를 발행과 공개 감사 성공 뒤로 옮겼다. 이후에는 공개 감사만 실패했을 때 같은 글을 다시 발행하지 않도록 발행 확인 직후, 공개 감사 전으로 조정했다. <code>READY</code> 후보가 없을 때는 <code>no_publishable_topic</code>, <code>failed=false</code>, <code>wordpress_write_count=0</code>을 반환하도록 했다. 기록된 11개 회귀 테스트는 모두 통과했다.</p>
+<p>이 글은 2026년 9월 8일, 공개 저장소의 고정 커밋·코드·테스트·로그를 대조한 기능 구현기다. 테스트를 새로 실행하거나 실제 WordPress 요청을 네트워크에서 측정하지는 않았다. 따라서 여기서 확인할 수 있는 결과는 “코드상 Publisher 호출 지점에 도달하지 않는다”와 “mock 기반 단위 테스트에서 쓰기 0건을 기록했다”까지다. 이 범위 안에서 매일 평가와 매일 발행을 어떻게 분리했는지 따라간다.</p>
+<h2>READY는 글의 유무가 아니라 발행 가능 상태다</h2>
+<p>출발점은 뉴스나 검색어로 빈 발행 슬롯을 채우지 말자는 운영 요구였다. 주제 마이너는 저장소 이벤트를 훑고, 증거 계약을 통과한 후보만 <code>payload["candidates"]</code>에 넣는다. 여기서 <code>READY</code>는 임의의 문자열이 아니라 근거를 갖춰 발행 가능한 후보의 <code>publishability</code> 상태다. <code>choose_candidates()</code>는 READY가 아닌 후보를 제외하고 같은 증거를 공유하는 중복 후보도 하나로 제한한다.</p>
+<p>이 정의를 먼저 고정해야 “후보 없음”의 의미가 분명해진다. 후보가 비었다고 해서 스케줄러나 마이너가 고장 났다는 뜻은 아니다. 이번 평가 구간에 발행 계약을 만족한 독립 글이 없다는 뜻일 수 있다. 그래서 파이프라인 실행의 성공 조건을 게시물 생성 여부와 분리했다.</p>
+<p>초기 상태를 보여주는 고정된 <a href="https://github.com/sungpyo9053/blog/blob/0474d169901c769b1216d0e6416d5c9b77da2dcb/scripts/run_evidence_deep_article.py"><code>execute()</code> 코드</a>에서 상태 흐름은 다음 순서를 따랐다. 아래 순서는 역사적 구현이며 공개 감사와 체크포인트의 현행 순서는 다음 절에서 구분한다.</p>
+<ol>
+<li>KST 날짜를 기준으로 이미 성공한 발행 건수를 센다.</li>
+<li>성공 발행이 1건 이상이면 <code>daily_limit_reached</code>로 끝낸다.</li>
+<li>READY 후보가 없으면 체크포인트를 진행하고 <code>no_publishable_topic</code>을 반환한다.</li>
+<li>READY 후보가 있어도 dry-run이면 <code>ready_not_published</code>로 끝낸다.</li>
+<li>apply에서만 <code>topic_runner</code>를 호출하고, 발행과 공개 감사까지 성공해야 체크포인트를 진행한다.</li>
+</ol>
+<p>Publisher 호출 지점이 후보 없음 분기 뒤에 있다는 배치가 중요하다. “발행하지 말라”는 프롬프트 지시만으로 막는 대신, 호출 자체가 불가능한 제어 흐름을 만들기 때문이다.</p>
+<h2>첫 구현에서 체크포인트가 너무 일찍 움직였다</h2>
+<p>2026년 9월 5일 추가된 초기 lane은 저장소 작업에서 독립 글 후보를 찾는 흐름을 만들었다. 하지만 <code>persist_miner_run(..., checkpoint_path, ...)</code>가 선택 후보의 발행보다 먼저 전역 체크포인트를 기록할 수 있었다. 발행이 실패해도 후보는 이미 처리한 것처럼 보일 수 있는 순서였다. 이는 새로 재현한 운영 장애가 아니라 <a href="https://github.com/sungpyo9053/blog/commit/9d5c0f22c5cc0b0a0f6c8a6350afcdd27ef4d2bb">초기 구현</a>과 <a href="https://github.com/sungpyo9053/blog/commit/c696fa3e4b04543fd392b30b06467744bc2680ee">후속 수정 diff</a>를 대조해 확인한 설계 취약점이다.</p>
+<p>수정은 실행 기록과 소비 위치를 갈랐다. 실행별 <code>miner-checkpoint.json</code>은 먼저 남길 수 있지만, 다음 실행이 후보를 소비했다고 판단하는 전역 체크포인트는 두 경우에만 진행한다.</p>
+<ul>
+<li>발행할 후보가 없어 정상 0건으로 끝났을 때</li>
+<li>apply에서 발행과 공개 감사가 모두 성공했을 때</li>
+</ul>
+<p>dry-run이나 Publisher 실패에서는 전역 체크포인트를 진행하지 않는다. 평가해 본 후보와 성공적으로 소비한 후보를 같은 상태로 취급하지 않으므로, 실패 뒤 같은 후보를 다시 검토할 수 있다.</p>
+<p>검토했지만 버린 선택은 “파이프라인을 한 번 실행했으면 결과와 관계없이 체크포인트를 옮긴다”는 방식이다. 구현은 단순하지만 Publisher 실패도 소비로 기록해 재시도할 근거를 잃는다. 당시 수정은 체크포인트 쓰기를 성공 이후로 늦추는 쪽을 택했다. 후속 변경에서 발행 확인과 공개 감사의 순서가 다시 세분화됐으므로 다음 절까지 함께 읽어야 한다.</p>
+<h2>2026년 9월 15일 보정: 발행 확인과 공개 감사를 분리한다</h2>
+<p><a href="https://github.com/sungpyo9053/blog/blob/eb879ff99bb477f6475984ebd72b846c1a09ae0a/scripts/run_evidence_deep_article.py">후속 코드의 <code>execute()</code></a>는 <code>topic_runner</code>가 발행을 확인해 반환하면 <code>publisher_completed</code>와 쓰기 1건을 먼저 기록하고, 전역 체크포인트를 진행한 뒤 공개 HTML을 감사한다. 공개 감사 실패를 이유로 이미 생성된 게시물을 다시 생성하는 위험을 줄이기 위한 순서다.</p>
+<pre><code class="language-text">발행 확인 → publisher_completed 기록 → 체크포인트 진행 → 공개 HTML 감사
+공개 감사 실패 → 발행 여부와 공개 결과를 대조해 복구 (같은 후보 자동 재발행 금지)</code></pre>
+<p>이는 공개 감사를 생략한다는 뜻이 아니다. 전체 성공은 공개 감사까지 통과해야 한다. 다만 후보 소비 여부와 전체 실행 성공 여부가 같은 시점에 확정되지는 않는다. 발행 전 실패라면 후보를 소비하지 않고, 발행 후 감사 실패라면 기존 게시물 ID와 진행 기록부터 확인한다. 이 보정은 코드 대조 결과이며 새로운 운영 장애나 재실행 성공률을 측정한 결과는 아니다.</p>
+<h2>dry-run과 apply는 같은 후보를 보고도 상태를 다르게 남긴다</h2>
+<p>READY가 있다고 곧바로 발행하지 않는다. dry-run은 후보를 선택할 수 있지만 <code>topic_runner</code>를 호출하지 않고 WordPress 쓰기를 0건으로 유지한다. 더 중요한 차이는 전역 체크포인트도 소비하지 않는다는 점이다. 점검 실행이 다음 apply 실행의 입력을 지워서는 안 되기 때문이다.</p>
+<p>초기 구현의 apply에서는 <code>topic_runner</code> 반환값에 <code>post_id</code>가 없으면 실패로 처리한다. <code>post_id</code>가 있어도 작업이 끝난 것은 아니다. 공개 URL이 HTTPS인지, 제목과 모든 증거 URL 문자열이 포함됐는지 <code>audit_public()</code>이 확인한 뒤에야 전역 체크포인트를 진행한다. 후속 구현에서는 앞 절처럼 체크포인트가 감사보다 먼저 진행된다. 이 감사는 공개 결과에 필요한 표면 조건을 확인하지만 글의 사실성 자체를 다시 계산하지는 않는다.</p>
+<p>따라서 상태를 읽을 때는 <code>wordpress_write_count=0</code> 하나만 보면 부족하다. 후보 없음은 소비할 READY가 없어서 체크포인트를 진행하지만, dry-run은 READY를 다음 실행에 남기기 위해 진행하지 않는다. 겉으로는 모두 무발행이어도 다음 실행의 입력이 다르다.</p>
+<h2>하루 한도는 시도가 아니라 성공한 발행을 센다</h2>
+<p>초기 일일 한도는 2건이었다. 후속 운영 판단에서 KST 기준 성공 발행 1건으로 줄었고, 2026년 9월 6일에는 타이머도 하루 두 번이 아닌 10시 한 번 실행하도록 바뀌었다. 정기 실행 횟수와 허용 발행 수를 각각 코드와 타이머 설정으로 관리한 것이다.</p>
+<p>여기서 제한 대상은 시도 횟수가 아니다. 첫 후보의 발행이 실패했다면 체크포인트를 소비하지 않고, 성공한 게시물 수도 늘리지 않는다. 반대로 그날 이미 한 건이 성공했다면 두 번째 READY 후보가 있어도 Publisher에 넘기지 않는다. 이 구분이 있어야 실패를 일일 할당량으로 잘못 세지 않으면서도 성공 후 중복 발행은 막을 수 있다.</p>
+<p>타이머의 <code>Persistent=false</code>도 운영 의미가 분명하다. 지정 시각에 시스템이 꺼져 있었다면 부팅 뒤 누락 실행을 보충하는 설정이 아니다. 매일 평가한다는 설명은 타이머가 실제로 기동했다는 뜻까지 포함하지 않는다.</p>
+<h2>11개 회귀 테스트가 네 개의 무발행 경로를 묶는다</h2>
+<p>2026년 9월 7일 20:44:33 UTC에 기록된 <a href="https://github.com/sungpyo9053/blog/blob/e0a47e5e63787add26897ea573c7b8e50110e279/evidence/test-results/evidence-lane-tests.log">공개 테스트 로그</a>는 11개 지정 테스트가 0.029초에 모두 <code>ok</code>, 최종 <code>OK</code>, 출구 코드 0이었다고 남긴다. 로그의 SHA-256은 <code>703ba876ab35fe4756494c90bfc62b460af142c9615b9d6bbd940017899795a1</code>이며 Planner 레코드와 일치했다. 이 조사는 로그를 다시 생성하지 않고 공개 원문의 HTTP 200과 해시를 대조했다.</p>
+<p>판단에 직접 연결되는 테스트는 다음과 같다.</p>
+<ul>
+<li><code>test_no_topic_is_success_and_never_calls_publisher</code>: 후보 없음이 실패가 아니며 runner mock이 호출되지 않는지 확인한다.</li>
+<li><code>test_ready_dry_run_has_zero_wordpress_writes</code>: READY가 있어도 dry-run의 WordPress 쓰기가 0인지 확인한다.</li>
+<li><code>test_ready_dry_run_does_not_advance_global_checkpoint</code>: 점검 실행이 후보를 소비하지 않는지 확인한다.</li>
+<li><code>test_publisher_failure_does_not_consume_candidate_checkpoint</code>: 발행 실패 뒤 후보를 재시도할 수 있는지 확인한다.</li>
+<li><code>test_apply_selects_only_one_ready_candidate</code>와 <code>test_second_ready_candidate_on_same_day_is_not_published</code>: 한 실행의 선택과 하루 성공 한도를 각각 확인한다.</li>
+</ul>
+<p>이 묶음은 정상 0건, 점검 0건, 실패 0건, 일일 제한 0건을 서로 다른 상태로 보존한다. 테스트 전체는 <a href="https://github.com/sungpyo9053/blog/blob/0474d169901c769b1216d0e6416d5c9b77da2dcb/tests/test_evidence_deep_article.py">고정 회귀 테스트 파일</a>에서 확인할 수 있다.</p>
+<h2>이 근거로 운영 WordPress의 0건까지 단정할 수는 없다</h2>
+<p>공개 로그는 mock된 <code>topic_runner</code>와 임시 파일시스템을 중심으로 한 단위 테스트 결과다. 실제 WordPress API 요청의 네트워크 트레이스, systemd 타이머의 실제 실행 기록, 동시 프로세스 경쟁, 네트워크 오류는 제공된 근거에 없다. 프로세스 중단 시 <code>wordpress_write_count="unknown"</code>을 완전히 해소하는 운영 감사도 남은 문제다.</p>
+<p>READY 판정 자체의 false positive와 false negative 비율도 측정되지 않았다. Publisher validation이 <code>evidence_deep_article</code>을 허용하는 것은 확인됐지만, Publisher가 Research·Writer·Reviewer의 증거 계약을 다시 계산하는 구조는 아니다. 그러므로 이 구현을 적용할 팀은 “READY가 정확한가”와 “READY가 없을 때 쓰기를 막는가”를 별도 문제로 시험해야 한다.</p>
+<h2>적용할 때는 네 테스트부터 자신의 경계에 맞춘다</h2>
+<p>이 설계가 맞는 곳은 스케줄 실행의 건강 상태와 콘텐츠 생성량을 별도 지표로 다루는 파이프라인이다. 반대로 실행할 때마다 반드시 산출물이 있어야 하는 배치라면 <code>no_publishable_topic</code>을 정상 성공으로 두는 판단이 맞지 않을 수 있다.</p>
+<p>도입 전에는 Publisher 호출이 READY 선택 뒤에 있는지, dry-run이 전역 체크포인트를 남기지 않는지, 발행 실패가 후보를 소비하지 않는지, 일일 제한이 성공 건수를 세는지 확인해야 한다. 다음 작업으로 <a href="https://github.com/sungpyo9053/blog/blob/0474d169901c769b1216d0e6416d5c9b77da2dcb/tests/test_evidence_deep_article.py">공개 테스트 fixture</a>를 참고해 자신의 파이프라인에 <code>후보 없음</code>, <code>dry-run</code>, <code>발행 실패</code>, <code>일일 제한</code> 회귀 테스트를 추가할 수 있다.</p>
+<p>제휴·협찬은 없다.</p>
