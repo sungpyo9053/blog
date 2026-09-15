@@ -1,12 +1,64 @@
 # WordPress 복원 시험 — 검색 의도와 근거 사전 조사
 
-- status: INSUFFICIENT
+- status: READY
 - 조사일: 2026-09-16 KST
 - 제안 주제: WordPress 복원 테스트: DB만 복원한 상태와 uploads를 포함한 상태 비교
-- 판정: 기존 글과 구분 가능한 독자 문제는 있으나, 아직 실행 근거가 없어 Writer/Publisher에 넘기지 않는다.
+- 현재 판정: 아래 추가 검증으로 feature_build 후보 근거가 충족됐다. 본문은 아직 작성하지 않았고 최종 Reviewer/Publisher 승인과는 별도다.
 - WordPress 쓰기: 이 조사에서는 0회. 앞선 698·699 업데이트와 별도 작업이다.
 
-## 기존 글·초안 전체 비교
+## 실제 근거 도착 후 갱신 — 2026-09-16
+
+이 절이 현재 판정이다. 뒤의 사전 조사/준비 기록에서 ‘아직’, ‘INSUFFICIENT’는
+근거 도착 전 상태를 보존한 것이다. 없는 실험을 먼저 성공으로 기록하지 않았다는
+시간 순서를 유지한다.
+
+- feature commit: `1d64189123d90ee8d0f586cbda663f18f938ac36` (2026-09-16T02:36:19+09:00)
+- evidence commit: `f4bc7b42376e62ee1ae7195d6a178c63d27263f6` (2026-09-16T02:39:15+09:00)
+- 검증 모드: `direct`. 운영 복구 사건이 아니라 실제 기능 구현과 격리 복원 검증이다.
+- evidence_origin: `existing_work_record`로 확인한 백업 범위 점검/validator 구현과 `purpose_built_test`인 격리 복원 대조를 구분한다. 이 글의 유형은 `feature_build`이며 과거 운영 장애 회고로 쓰지 않는다.
+- 실제 변경: `scripts/audit_backup_media.py`의 source manifest 생성, 복원 파일 bytes/SHA 대조, unsafe path/symlink/잘못된 manifest 거절 및 12개 테스트.
+- 실제 관측: 새 격리 MariaDB에 DB import 종료 0, 48 tables, 공개 9/초안 113/첨부 373 records. 복원 DB의 첨부 경로를 원본 uploads에서 수집한 bytes/SHA와 대조했으며 파일 복사 전 373 missing, 복사 후 373 checked/failures 0이었다. 원래 첨부파일만 검사했다.
+- 환경: 원본 WordPress 7.0.4 / MariaDB 10.11.18, 격리 MariaDB 10.11.19, Docker digest `sha256:07c0aaff7396b74cb7975cba78257178d188e30f531a5db2b617c48beef13c41`, network none / no ports / PHP 미실행.
+- 기록 시각: 회귀 실행 결과 JSON `recorded_at=2026-09-15T17:37:10.798680+00:00`; `test_exit=0`, 기록된 12-test log SHA `8bb935abe2bfb3727a3ecea8dd35224b144c9b588d65fac0ce3a2d58424adc97`와 실제 파일 해시 일치.
+- 독립 재실행: 이 Research 역할에서 `.venv/bin/python -m unittest tests.test_backup_media -v` 12개 통과와 공개 fixture snapshot/audit CLI 종료 0/1/0을 직접 확인했다. 운영 SQL import 자체의 재실행은 하지 않았고 고정 보고서를 근거로 삼는다.
+
+다음 여섯 URL은 인증 없는 GET으로 HTTP 200을 확인했다. 기능 commit과 증거 commit은
+서로 다른 시점이며 테스트 로그를 feature commit에 있다고 쓰지 않는다.
+
+- [구현](https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/scripts/audit_backup_media.py)
+- [12개 테스트](https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/tests/test_backup_media.py)
+- [독자 실행 fixture](https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/evidence/lab-fixtures/backup-media/README.md)
+- [결과 JSON](https://github.com/sungpyo9053/blog/blob/f4bc7b42376e62ee1ae7195d6a178c63d27263f6/evidence/test-results/2026-09-16-backup-media-final.json)
+- [실제 테스트 로그](https://github.com/sungpyo9053/blog/blob/f4bc7b42376e62ee1ae7195d6a178c63d27263f6/evidence/test-results/2026-09-16-backup-media-tests.log)
+- [격리 복원 보고서](https://github.com/sungpyo9053/blog/blob/1d64189123d90ee8d0f586cbda663f18f938ac36/evidence/test-results/2026-09-16-backup-media-recovery.md)
+
+### 글에 전달할 검증 레코드
+
+- original_contribution: DB import 성공 후에도 첨부파일 원본의 누락/변조를 따로 검출하는, 실제 새 validator와 대조 결과를 제공한다.
+- command_and_output: 공개 README의 snapshot→missing audit→restored audit 명령을 아래 출력과 함께 전달한다. Python 3.11 이상/stdlib만 필요하다.
+- failed_attempt: 격리 DB-only 상태의 373 missing은 의도된 대조 조건이다. 공개 fixture에서는 text attachment 1개 누락으로 audit 종료 1이었다. 운영 장애나 사진이 실제 404가 됐다고 표현하지 않는다.
+- before_after: 같은 manifest로 실제373 missing→373 hash match, 독자 fixture1 missing→1 match. 서로 다른 규모를 섞지 않는다.
+- operator_judgment: DB import와 원본 파일 SHA 일치를 분리 검사하는 도구를 채택. 복원 폴더로 기대 manifest를 다시 만들어 자기 자신을 비교하는 방법은 사용하지 않는다.
+- docs_vs_observed: WordPress의 DB/파일 분리와 결과가 부합한다. 공식적인 전체 복원 조건은 충족하지 않았다.
+- capture_evidence: 아래 독립 공개 fixture CLI 결과의 연속 구간(각 줄 뒤 종료 상태 표기는 subprocess의 실제 returncode), 본문 최소 예제의 전후 차이를 보여주는 캡처 후보. 운영373 비교 캡처로 바꾸지 않는다.
+
+```text
+{"operation": "snapshot", "passed": true, "files": 1, "whole_site_restore_verified": false} exit_code=0
+{"operation": "audit", "passed": false, "files": 1, "whole_site_restore_verified": false} exit_code=1
+{"operation": "audit", "passed": true, "files": 1, "whole_site_restore_verified": false} exit_code=0
+```
+
+생성 이미지 크기, 외부 저장 미디어, 테마·플러그인·config·서버 호환성·실제 HTTP는
+미검증이다. DB와 파일 수집이 하나의 원자적 snapshot이 된다는 보장도 없다.
+출력 `whole_site_restore_verified=false`를 초안과 도구 화면에서 보존해야 한다.
+12개 테스트가 race condition이나 모든 파일시스템 공격을 해결했다고 확대하지 않는다.
+
+전체 검색 의도 검토는 아래122편 검토와 이후 제목 수정만 반영된
+`output/editorial-titles-20260916/inventory-after.json`(2026-09-15T17:35:57Z, 공개9/초안113)을
+같이 사용한다. 373/706 제목 변경은 새 글을 추가하지 않았고 backup 대조 의도와 다르다.
+최종 본문 중복 검수는 아직 수행할 원고가 없으므로 후속 Reviewer 단계에 남긴다.
+
+## 기존 글·초안 전체 비교 — 사전 조사 기록
 
 인증 GET 스냅샷 `output/editorial-stdlib-20260916/inventory-after.json`은
 2026-09-15T17:26:46.872004+00:00 수집, 공개 9편·초안 113편,
