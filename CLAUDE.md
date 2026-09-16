@@ -30,6 +30,11 @@ READY가 있을 때만 하루 최대 한 편을 처리하며, READY가 없으면
 
 ## 공식 Agent 목록
 
+- Weekly Editorial Operations: `agents/weekly-editorial-agent.md`,
+  `agents/weekly-editorial-reviewer.md`, `guides/weekly-editorial-operations.md`.
+  일요일20시 점검→검수된 기존 문단 최대1개 개선→공개 확인→카톡 보고.
+  새 글 발행/구 주간 회고 타이머와 분리하며4주마다 성과를 평가한다.
+
 - Topic Planner Agent(Editor): `agents/topic-planner-agent.md`
 - Research Agent: `agents/researcher.md`
 - Writer Agent: `agents/writer.md`
