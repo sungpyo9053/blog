@@ -159,7 +159,7 @@ class EditorialEpochTests(unittest.TestCase):
 
     def test_quarantine_precedes_top_three_selection_and_keeps_new_candidate(self):
         candidate = self.candidate()
-        candidate.update(publishability="READY", problem="WordPress publishing", evidence_contract={})
+        candidate.update(publishability="READY", problem="로봇 관측 검증", evidence_contract={})
         old = [{**candidate, "candidate_id": "old-" + str(i), "title_seed": "Old WordPress issue"} for i in range(3)]
         payload = {"candidates": old, "status": "ready"}
         processing = {"processed": [*old, candidate]}
@@ -171,7 +171,7 @@ class EditorialEpochTests(unittest.TestCase):
         self.assertEqual(result["epoch_rejections"], ["old-0", "old-1", "old-2"])
 
     def test_epoch_pool_does_not_resurrect_already_processed_candidate(self):
-        candidate = self.candidate(); candidate.update(publishability="READY", problem="WordPress publishing")
+        candidate = self.candidate(); candidate.update(publishability="READY", problem="로봇 관측 검증")
         miner = self.repo / "miner"; miner.mkdir()
         (miner / "checkpoint.json").write_text(json.dumps({"processed_event_ids": [candidate["candidate_id"]]}))
         runner = Mock()

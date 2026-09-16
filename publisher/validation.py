@@ -18,6 +18,7 @@ ACTIVE_EDITOR_CATEGORIES = {
     "국내 시사",
 }
 SPECIAL_EDITOR_CATEGORIES = {"기술 해설", "주간 기술 회고", "REST API 발행", "자동화·테스트", "WordPress 운영"}
+PHYSICAL_AI_CATEGORIES = {"피지컬 AI 기초", "원리·알고리즘", "프레임워크·라이브러리", "실습·실험"}
 LEGACY_EDITOR_CATEGORIES = {
     "생활", "경제", "부동산", "사회", "정치", "문화·엔터", "IT",
     "Tech",
@@ -33,8 +34,8 @@ LEGACY_EDITOR_CATEGORIES = {
 }
 # Old approved runs can still be resumed, while every newly planned run uses
 # the active Hunt News categories above.
-EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
-CONTENT_TYPES = {"verified_case", "technical_explainer", "evidence_deep_article"}
+EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES | PHYSICAL_AI_CATEGORIES
+CONTENT_TYPES = {"verified_case", "technical_explainer", "evidence_deep_article", "foundation_concept"}
 FORBIDDEN_TERMS = (
     "100%",
     "무조건",

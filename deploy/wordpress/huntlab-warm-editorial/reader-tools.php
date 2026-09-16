@@ -3,6 +3,11 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 function huntlab_library_template( $template ) {
+	if ( is_front_page() || is_category( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ) ) ) {
+		remove_action( 'wp_body_open', 'huntlab_warm_editorial_home_intro', 25 );
+		remove_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
+		return __DIR__ . '/physical-home.php';
+	}
 	if ( ( is_front_page() && ! is_paged() ) || is_category( array( 'rest-api-publishing', 'automation-testing', 'wordpress-operations' ) ) ) {
 		remove_action( 'wp_body_open', 'huntlab_warm_editorial_home_intro', 25 );
 		remove_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
@@ -32,6 +37,7 @@ function huntlab_reader_anchor_offset( $offset ) {
 add_filter( 'kadence_scroll_to_id_additional_offset', 'huntlab_reader_anchor_offset' );
 
 function huntlab_reader_tools_assets() {
+	wp_enqueue_style( 'huntlab-physical-ai', plugins_url( 'assets/physical-ai.css', __FILE__ ), array( 'huntlab-reader-tools' ), (string) filemtime( __DIR__ . '/assets/physical-ai.css' ) );
 	wp_enqueue_style( 'huntlab-reader-tools', plugins_url( 'assets/reader-tools.css', __FILE__ ), array(), (string) filemtime( __DIR__ . '/assets/reader-tools.css' ) );
 	if ( is_page( 'wordpress-response-check' ) ) {
 		wp_enqueue_script( 'huntlab-reader-tools', plugins_url( 'assets/reader-tools.js', __FILE__ ), array(), (string) filemtime( __DIR__ . '/assets/reader-tools.js' ), true );
@@ -41,7 +47,7 @@ add_action( 'wp_enqueue_scripts', 'huntlab_reader_tools_assets', 110 );
 
 function huntlab_reader_footer() {
 	?>
-	<footer class="huntlab-reader-footer" aria-label="사이트 운영 안내"><strong>HuntLab · WordPress 운영 노트</strong><p>코드로 재현한 문제, 실제 운영에서 확인한 결과와 아직 확인하지 못한 한계를 함께 기록합니다.</p><nav aria-label="운영 정보"><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">운영자와 작성 방식</a><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">검증·정정 원칙</a><a href="<?php echo esc_url( home_url( '/contact/' ) ); ?>">오류 제보</a><a href="<?php echo esc_url( home_url( '/privacy-policy/' ) ); ?>">개인정보처리방침</a></nav></footer>
+	<footer class="huntlab-reader-footer" aria-label="사이트 운영 안내"><strong>HuntLab · 피지컬 AI, 기초에서 실습까지</strong><p>용어와 원리를 쉽게 설명하고, 공식 자료·시뮬레이션·실제 실행의 확인 범위를 구분합니다.</p><nav aria-label="운영 정보"><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">운영자와 작성 방식</a><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">검증·정정 원칙</a><a href="<?php echo esc_url( home_url( '/contact/' ) ); ?>">오류 제보</a><a href="<?php echo esc_url( home_url( '/privacy-policy/' ) ); ?>">개인정보처리방침</a></nav></footer>
 	<?php
 }
 add_action( 'wp_footer', 'huntlab_reader_footer', 30 );
@@ -49,7 +55,7 @@ add_action( 'wp_footer', 'huntlab_reader_footer', 30 );
 /** Keep desktop and hamburger navigation aligned with the actual reading paths. */
 function huntlab_reader_menu( $items, $args ) {
 	if ( ! in_array( $args->theme_location ?? '', array( 'primary', 'mobile' ), true ) ) { return $items; }
-	$links = array( array( '문제 해결 글', '/' ), array( '진단 도구', '/wordpress-response-check/' ), array( '운영 소개', '/about/' ), array( '오류 제보', '/contact/' ) );
+	$links = array( array( '처음 시작하기', '/#learning-path' ), array( '피지컬 AI 글', '/#physical-articles' ), array( '운영 아카이브', '/#operations-archive' ), array( '소개·문의', '/about/' ) );
 	$updated = array();
 	foreach ( array_slice( array_values( $items ), 0, 4 ) as $index => $item ) {
 		$item = clone $item;

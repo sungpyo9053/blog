@@ -5,7 +5,6 @@ import hashlib
 import html
 import json
 import re
-from collections import Counter
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
@@ -70,22 +69,96 @@ def prose(text: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", text))).strip()
 
 
-def style_preservation(before: str, after: str) -> dict:
-    """Keep code, URLs, identifiers, quantities and metadata during copy-editing."""
+DEFAULT_PROTECTED_TERMS = (
+    "피지컬 AI", "관측", "상태", "행동", "정책", "피드백", "제어기", "센서",
+    "액추에이터", "강화학습", "모방학습", "시뮬레이션", "실물", "하드웨어",
+    "observation", "state", "action", "policy", "feedback", "controller",
+    "sensor", "actuator", "ROS 2", "Gymnasium", "MuJoCo", "NVIDIA", "WordPress",
+)
+
+
+def _markdown_tables(text: str) -> list[str]:
+    """Freeze complete pipe tables, not incidental pipes in ordinary prose."""
+    lines = text.splitlines(keepends=True)
+    tables, index = [], 0
+    while index + 1 < len(lines):
+        delimiter = lines[index + 1].strip().strip("|").strip()
+        cells = [cell.strip() for cell in delimiter.split("|")]
+        if ("|" in lines[index] and "|" in lines[index + 1]
+                and len(cells) >= 2
+                and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)):
+            end = index + 2
+            while end < len(lines) and lines[end].strip() and "|" in lines[end]:
+                end += 1
+            tables.append("".join(lines[index:end]))
+            index = end
+        else:
+            index += 1
+    return tables
+
+
+def _negative_claims(text: str) -> list[str]:
+    """Conservatively freeze clauses with uncertainty/negation markers.
+
+    This is intentionally not a linguistic entailment detector. A harmless
+    rewrite of a protected clause is held for review rather than silently
+    approving a reversal. Ordinary unmarked semantic changes remain possible.
+    """
+    negative = re.compile(
+        r"아니|않|못하|못했|못한|못한다|없[다는는음어었이]|미검증|미확인|미실행|"
+        r"보장하지|검증하지|실행하지|(?:^|\s)안\s|"
+        r"\b(?:not|never|no|without|unverified|untested|unknown|cannot)\b|n['’]t\b",
+        re.I,
+    )
+    return [match[0] for match in re.finditer(r"[^.!?\n]+(?:[.!?]|$)", text)
+            if negative.search(match[0])]
+
+
+def style_preservation(before: str, after: str, *, protected_terms=()) -> dict:
+    """Conservative copy-edit retention, NOT a semantic-equivalence proof.
+
+    Protect exact structured spans and negated/qualified claims, plus known
+    technical terms and caller-supplied case-sensitive literal terms. Reviewers
+    must still check evidence attribution, reasoning and changed positive prose.
+    No protected content is echoed in the report (it may include private data).
+    """
     patterns = {
         "frontmatter": r"\A---\s*\n.*?\n---",
-        "code": r"```.*?```|<pre\b.*?</pre>|`[^`\n]+`",
+        "code": r"(?m)^ {0,3}(?P<fence>`{3,}|~{3,})[^\n]*\n.*?^ {0,3}(?P=fence)[ \t]*(?:\n|$)|<pre\b.*?</pre>|<code\b.*?</code>|(?P<inline>`+)[^`\n]+(?P=inline)",
         "urls": r"https?://[^\s<>\)\]\"]+",
         "numbers": r"\d+(?:[.,:/-]\d+)*(?:%|ms|GB|MB)?",
+        "html_tables": r"<table\b.*?</table>",
+        "math": r"\$\$.*?\$\$|(?<![\\$])\$(?!\$)[^$\n]+(?<!\\)\$|\\\(.*?\\\)|\\\[.*?\\\]|<math\b.*?</math>",
+        "equation_lines": r"(?m)^[ \t]*[A-Za-zα-ωΑ-Ω][A-Za-z0-9α-ωΑ-Ω_{}()\[\] \t+*/.,-]*(?:=|≤|≥|≠|≈)[^\n]*$",
+        "quotes": r"(?m)^(?: {0,3}>[^\n]*(?:\n|$))+|<blockquote\b.*?</blockquote>|<q\b.*?</q>|“[^”]*”|‘[^’]*’|「[^」]*」|『[^』]*』|(?<!\w)\"[^\"\n]+\"|(?<!\w)'[^'\n]+'(?!\w)",
+        "identifiers": r"\b(?:[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+|[a-z]+(?:[A-Z][a-z0-9]+)+|[A-Z][A-Z0-9]{1,})\b",
     }
-    failures = [key for key, pattern in patterns.items()
-                if Counter(re.findall(pattern, before, re.S | re.I)) != Counter(re.findall(pattern, after, re.S | re.I))]
+    # Preserve order as well as counts: swapping two numbers/URLs/claims must
+    # not pass merely because the same multiset remains somewhere in the text.
+    failures = []
+    for key, pattern in patterns.items():
+        flags = re.S if key == "identifiers" else re.S | re.I
+        if ([m[0] for m in re.finditer(pattern, before, flags)]
+                != [m[0] for m in re.finditer(pattern, after, flags)]):
+            failures.append(key)
+    if _markdown_tables(before) != _markdown_tables(after):
+        failures.append("markdown_tables")
+    if _negative_claims(before) != _negative_claims(after):
+        failures.append("qualified_claims")
+    if (not isinstance(protected_terms, (tuple, list))
+            or any(not isinstance(term, str) or not term.strip() for term in protected_terms)):
+        failures.append("invalid_protected_terms")
+    else:
+        terms = tuple(dict.fromkeys((*DEFAULT_PROTECTED_TERMS, *protected_terms)))
+        if any(before.count(term) != after.count(term) for term in terms):
+            failures.append("technical_terms")
     change = 1 - SequenceMatcher(None, before, after, autojunk=False).ratio()
     if change > .3:
         failures.append("excessive_rewrite")
     if not after.strip():
         failures.append("empty")
-    return {"passed": not failures, "failures": failures, "change_ratio": round(change, 4)}
+    return {"passed": not failures, "failures": failures, "change_ratio": round(change, 4),
+            "semantic_equivalence_verified": False, "independent_review_required": True}
 
 
 def inspect_article(text: str, inventory: dict, *, now: datetime | None = None, existing_post_id: int | None = None) -> dict:

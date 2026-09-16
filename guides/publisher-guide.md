@@ -11,17 +11,31 @@
 
 # 목적
 
-## 독립 글 발행 전 추가 검증 (2026-09-15)
+## 독립 글 발행 전 추가 검증 (2026-09-16 사용자 승인 전환)
 
-새 심층 글은 `guides/editorial-concept.md`의 **WordPress 자동발행 실전 운영 노트**
-범위로 제한한다. 대표 카테고리는 `REST API 발행` (`rest-api-publishing`),
-`자동화·테스트` (`automation-testing`), `WordPress 운영` (`wordpress-operations`) 중
-독자가 해결할 문제에 맞는 하나를 선택한다. 과거 글의 레거시 분류 허용은
-새로운 범용 뉴스·다른 프로젝트 글을 발행해도 된다는 뜻이 아니다.
+새 독립 글은 `guides/editorial-concept.md`의 피지컬 AI 기초·원리·도구·실습 및
+관련 에이전트 기초 범위를 따른다. 대표 카테고리는 `피지컬 AI 기초`
+(`physical-ai-basics`), `원리·알고리즘` (`physical-ai-principles`),
+`프레임워크·라이브러리` (`physical-ai-frameworks`), `실습·실험`
+(`physical-ai-experiments`)이다. 기존 WordPress 운영 글은 아카이브로 보존한다.
+새 분류 생성은 운영자가 승인한 사이트 개편 단계에서만 처리하며 Publisher가
+없는 분류를 즉석 생성하는 규칙으로 확대하지 않는다.
 매일 10:00 KST 후보 평가, READY만 발행, 하루 최대 1건, 적합 후보가 없으면
 `no_publishable_topic` 정상 종료 원칙을 유지한다.
 
-`evidence_deep_article`은 24시간 이내에 공개 글과 초안의 전체 본문을 수집한
+`foundation_concept`는 공식 원자료·직접 구성한 예제·검산/검토 근거를 사용하는
+기초 해설 유형이다. 가짜 운영 장애나 Git 변경 사건으로 포장하지 않는다.
+실제 실행/성능 주장은 별도로 추적 가능한 실행 증거가 필요하다.
+신규 유형의 첫 결과는 기존 Draft 우선 규칙에 따라 Draft로 검증한다.
+초안 생성 성공이 공개 발행 승인이나 일일 한도 예외를 의미하지 않는다.
+
+피지컬 AI 신규 글에는 `guides/physical-ai-quality.md`의 독립 검수가 필요하다.
+20항목의 위치·근거·감점 이유와 8개 필수 조건, 최종 `publish.md` 해시가 맞는
+`physical-ai-quality-review.json`이 있어야 한다. 모든 항목 평가 완료·합계 99 이상과
+기존 Reviewer 승인 계약을 동시에 충족해야 한다. 수치 합계만으로 내용의 정확성이나
+AdSense 승인 가능성이 증명되는 것은 아니다. 미확인 항목은 통과로 채우지 않는다.
+
+`evidence_deep_article`과 `foundation_concept`는 24시간 이내에 공개 글과 초안의 전체 본문을 수집한
 목록과 비교한다. 제목·요약 비교만으로 전체 중복 검사를 완료했다고 하지 않는다.
 챗봇 응답 잔재와 다른 글의 긴 동일 문단이 발견되면 발행을 멈추고 편집 검토로 돌린다.
 기계 검사는 최소 차단 조건이며 통과해도 고유 결론·실행 가능성·근거 적합성은

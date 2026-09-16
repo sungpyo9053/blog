@@ -112,6 +112,88 @@ class EditorialGateTests(unittest.TestCase):
         before = "서버에서 12건을 확인하였습니다. `status=201`\nhttps://example.com/source"
         self.assertTrue(style_preservation(before,before.replace('확인하였습니다','확인했습니다'))["passed"])
 
+    def test_copyedit_preserves_markdown_table_text_and_row_order(self):
+        for table in (
+            "| 단계 | 결과 |\n| --- | --- |\n| 이전 | 성공 |\n| 이후 | 실패 |\n",
+            "단계 | 결과\n:--- | ---:\n이전 | 성공\n이후 | 실패\n",
+        ):
+            before = "작은 표를 확인하였습니다.\n" + table
+            self.assertTrue(style_preservation(before, before.replace("확인하였습니다", "확인했습니다"))["passed"])
+            for after in (before.replace("성공", "통과"), before.replace("이전", "이후", 1)):
+                self.assertIn("markdown_tables", style_preservation(before, after)["failures"])
+
+    def test_copyedit_preserves_html_table_and_math_without_number_changes(self):
+        examples = [
+            ("<table><tr><td>관측</td><td>성공</td></tr></table>", "성공", "실패", "html_tables"),
+            (r"$x + y$", "+", "-", "math"),
+            (r"$$x + y$$", "+", "-", "math"),
+            (r"\(x + y\)", "+", "-", "math"),
+            (r"\[x + y\]", "+", "-", "math"),
+            ("<math><mi>x</mi><mo>+</mo><mi>y</mi></math>", "+", "-", "math"),
+            ("x_next = x + a", "+", "-", "equation_lines"),
+        ]
+        for span, old, new, failure in examples:
+            before = "계산 과정의 설명은 이와 같이 그대로 유지한다.\n" + span
+            self.assertIn(failure, style_preservation(before, before.replace(old, new))["failures"])
+
+    def test_copyedit_preserves_quotes_blockquotes_and_html_quotes(self):
+        for quote in ('“명령과 결과는 다르다”', "‘명령과 결과는 다르다’", '"명령과 결과는 다르다"',
+                      "'명령과 결과는 다르다'", '「명령과 결과는 다르다」',
+                      '> 명령과 결과는 다르다\n> 다음 설명\n',
+                      '<blockquote>명령과 결과는 다르다</blockquote>', '<q>명령과 결과는 다르다</q>'):
+            before = "인용은 그대로 두고 주변 문장만 다듬는다.\n" + quote
+            self.assertIn("quotes", style_preservation(before, before.replace("다르다", "같다"))["failures"])
+
+    def test_copyedit_preserves_negation_and_unverified_scope(self):
+        for claim, changed in (
+            ("실물에서 검증하지 않았다.", "실물에서 검증했다."),
+            ("피드백은 학습이 아니다.", "피드백은 학습이다."),
+            ("해당 실행은 미확인이다.", "해당 실행은 확인됐다."),
+            ("성공을 보장하지 않는다.", "성공을 보장한다."),
+            ("We did not test the robot.", "We did test the robot."),
+            ("This was never tested.", "This was tested."),
+            ("This doesn't prove safety.", "This does prove safety."),
+        ):
+            before = "확인 범위를 정확히 기록하는 설명이다.\n" + claim
+            after = before.replace(claim, changed)
+            self.assertIn("qualified_claims", style_preservation(before, after)["failures"])
+
+    def test_copyedit_preserves_named_terms_and_configured_literal_terms(self):
+        before = "Gymnasium의 관측 자료와 정책 설명을 연결한다. 전용도구는 Falcon-X다."
+        self.assertIn("technical_terms", style_preservation(before, before.replace("Gymnasium", "MuJoCo"))["failures"])
+        self.assertIn("technical_terms", style_preservation(before, before.replace("관측", "입력"))["failures"])
+        result = style_preservation(before, before.replace("Falcon-X", "다른도구"), protected_terms=("Falcon-X",))
+        self.assertIn("technical_terms", result["failures"])
+        for invalid in ("Falcon-X", [""], [None]):
+            self.assertIn("invalid_protected_terms", style_preservation(before, before, protected_terms=invalid)["failures"])
+
+    def test_copyedit_preserves_tilde_fences_and_long_backticks(self):
+        for fence in ("~~~", "````"):
+            before = "이 설명의 실행 코드만 그대로 보존한다.\n" + fence + "python\nprint('yes')\n" + fence
+            self.assertIn("code", style_preservation(before, before.replace("yes", "no"))["failures"])
+        before = "이 설명의 인라인 구현을 그대로 보존한다. <code>foo()</code>"
+        self.assertIn("code", style_preservation(before, before.replace("foo", "bar"))["failures"])
+
+    def test_copyedit_cannot_swap_quantities_without_changing_multiset(self):
+        before = "처음에는 12건, 다음에는 13건을 확인했다. 수치의 대응은 중요하다."
+        after = "처음에는 13건, 다음에는 12건을 확인했다. 수치의 대응은 중요하다."
+        self.assertIn("numbers", style_preservation(before, after)["failures"])
+
+    def test_copyedit_preserves_identifiers_but_allows_normal_english_prose(self):
+        before = "We carefully checked the useful result. readValue and result_count use API."
+        self.assertTrue(style_preservation(before, before.replace("carefully checked", "checked"))["passed"])
+        self.assertIn("identifiers", style_preservation(before, before.replace("readValue", "readOther"))["failures"])
+
+    def test_retention_does_not_claim_semantic_equivalence_or_echo_protected_text(self):
+        before = "An ordinary explanation describes the result clearly."
+        result = style_preservation(before, before.replace("clearly", "briefly"))
+        self.assertTrue(result["passed"])
+        self.assertFalse(result["semantic_equivalence_verified"])
+        self.assertTrue(result["independent_review_required"])
+        secret = "private-example-credential"
+        result = style_preservation('"' + secret + '"', '"changed"')
+        self.assertNotIn(secret, json.dumps(result))
+
     def test_shell_path_placeholders_block_markdown(self):
         for language in ('bash', 'sh', 'shell'):
             for path in ('<check-dir>/manifest.json', '<source_path>', '<directory>', '<path>'):

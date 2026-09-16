@@ -18,6 +18,8 @@ from scripts.evidence_topic_miner import atomic_replace, atomic_write_new, build
 from scripts.run_daily_pipeline import PipelineError, PipelineLock, configure_logger, make_run_id, make_topic_context, read_publish_result, resolve_codex, run_topic_pipeline
 from scripts.snapshot_topic_inventory import build_snapshot
 from scripts.editorial_epoch import EpochError, load_epoch, reject_legacy_run, validate_candidate
+from scripts.publication_notification import notify_publication
+from scripts.foundation_candidates import load_foundation_candidates, consumed_foundation_ids, foundation_activation_ready
 
 KST = timezone(timedelta(hours=9))
 OUTPUT = ROOT / "output/evidence-deep-article-runs"
@@ -142,25 +144,46 @@ def resume_public_audit(run_id: str, *, output_root: Path = OUTPUT,
     return result
 
 
+PHYSICAL_AI_TOOLS = re.compile(
+    r"\b(?:mujoco|pybullet|gazebo|lerobot|ros[ -]?2|isaac(?:\s+(?:sim|lab))?|"
+    r"openvla|robosuite|robot\s+operating\s+system)\b", re.I)
+PHYSICAL_AI_SUBJECTS = re.compile(
+    r"피지컬\s*AI|로봇|물리\s*시뮬레이션|체화\s*(?:AI|인공지능)|"
+    r"\b(?:physical\s+ai|embodied\s+(?:ai|intelligence)|robot(?:s|ics)?|"
+    r"sim[- ]to[- ]real|vision[- ]language[- ]action)\b", re.I)
+AGENT_FOUNDATIONS = re.compile(
+    r"에이전트\s*(?:루프|계획|메모리|기억|안전|도구\s*(?:사용|호출))|"
+    r"\bagent\s+(?:loop|planning|memory|safety|tool\s+(?:use|calling))\b|"
+    r"\btool[- ]calling\b|도구\s*호출", re.I)
+
+
+def editorial_subject(candidate: Mapping[str, Any]) -> str:
+    # Evidence paths and incidental takeaways must not turn a WordPress or
+    # general-AI story into a physical-AI story merely by mentioning a keyword.
+    return " ".join(str(candidate.get(key, "")) for key in
+                    ("title_seed", "problem")).casefold()
+
+
 def candidate_category(candidate: Mapping[str, Any]) -> str:
-    """Classify the reader's problem, not incidental evidence filenames."""
-    subject = " ".join(str(candidate.get(key, "")) for key in
-                       ("title_seed", "problem", "unique_takeaway")).casefold()
-    if any(term in subject for term in ("rest api", "rest-api", "rest_api", "rest 응답", "wordpress api")):
-        return "REST API 발행"
-    if any(term in subject for term in ("wordpress", "워드프레스", "sitemap", "사이트맵", "noindex")):
-        return "WordPress 운영"
-    return "자동화·테스트"
+    """Classify the reader's physical-AI question, not evidence filenames."""
+    subject = editorial_subject(candidate)
+    if any(term in subject for term in ("실험", "벤치마크", "재현", "benchmark", "experiment")):
+        return "실습·실험"
+    if PHYSICAL_AI_TOOLS.search(subject) or any(
+            term in subject for term in ("프레임워크", "라이브러리", "framework", "library")):
+        return "프레임워크·라이브러리"
+    if any(term in subject for term in ("원리", "알고리즘", "제어", "강화학습", "모방학습",
+                                        "좌표 변환", "역기구학", "algorithm", "control")):
+        return "원리·알고리즘"
+    return "피지컬 AI 기초"
 
 
 def candidate_in_editorial_scope(candidate: Mapping[str, Any]) -> bool:
-    """Require the reader-facing problem to concern WordPress publishing."""
-    subject = " ".join(str(candidate.get(key, "")) for key in
-                       ("title_seed", "problem", "why_it_matters", "unique_takeaway")).casefold()
-    return candidate.get("publishability") == "READY" and any(
-        term in subject for term in ("wordpress", "워드프레스", "블로그 발행", "게시글 발행",
-                                     "자동발행", "자동 발행", "publisher", "sitemap", "noindex")
-    )
+    """Filter genuine READY evidence; topic relevance does not establish quality."""
+    subject = editorial_subject(candidate)
+    return candidate.get("publishability") == "READY" and bool(
+        PHYSICAL_AI_SUBJECTS.search(subject) or PHYSICAL_AI_TOOLS.search(subject)
+        or AGENT_FOUNDATIONS.search(subject))
 
 
 def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
@@ -169,10 +192,21 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "title": title,
         "category": candidate_category(candidate),
-        "content_type": "evidence_deep_article",
-        "tags": ["개발 기록", "자동화", str(candidate["recommended_format"])],
+        "content_type": "foundation_concept" if candidate.get("candidate_origin") == "foundation_concept" else "evidence_deep_article",
+        "tags": ["피지컬 AI", "실전 개발", str(candidate["recommended_format"])],
         "reason": str(candidate["real_trigger"]),
-        "research_focus": "guides/editorial-concept.md의 WordPress 자동발행 실전 운영 노트 범위를 따른다. evidence_candidate의 주장과 근거만 사용하고 공개 commit, test, log를 직접 대조한다. 실제 실패/변경 → 근거 → 해결 → 독자 실행 방법 → 한계를 설명한다. 범용 뉴스나 다른 프로젝트로 주제를 확장하지 않는다.",
+        "research_focus": (
+            "guides/editorial-concept.md의 피지컬 AI 입문·실전 범위를 따른다. "
+            "독자의 질문에서 시작해 선수 지식, 첫 등장 용어의 한국어 뜻과 영문, 쉬운 예시와 정확한 원리를 설명한다. "
+            "프로젝트 사건은 evidence_candidate의 실제 commit, test, log를 대조한다. foundation_concept은 "
+            "foundation_contract의 1차 자료·자체 예제·검산 근거를 대조하며 Git 사건을 요구하거나 꾸미지 않는다. "
+            "실행하지 않은 실험이나 수치를 만들지 않는다. "
+            "개념과 최신 프레임워크·라이브러리 정보는 공식 문서·논문·저장소를 확인하고 출처와 확인일을 남긴다. "
+            "실습에는 검증한 버전·환경·최소 예제·기대 결과·실제 결과·실패 판정·한계를 명시한다. "
+            "시뮬레이션과 실제 하드웨어 검증을 구분하고, 하드웨어의 안전 조건과 중지 방법을 설명한다. "
+            "내부 작업 보고나 문서 재요약 대신 독자가 재현하고 판단할 수 있는 고유한 결론을 제공한다. "
+            "원리 설명을 위해 사건이나 검증 근거를 꾸미지 않으며, 근거 부족은 보류한다."
+        ),
         # The daily pipeline and Reviewer require the primary keyword to appear
         # in the fixed Editor title. Evidence source filenames are identifiers,
         # not necessarily useful search phrases.
@@ -182,7 +216,7 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
         "demand_signal_source": "evidence_first_then_optional_demand_check",
         "observed_problem_phrase": str(candidate["problem"]),
         "user_action": str(candidate["why_it_matters"]),
-        "search_intent": "실제 구현·실험·운영 기록을 재현하고 같은 문제를 회피한다.",
+        "search_intent": "피지컬 AI의 용어와 원리를 이해하고 검증된 구현·실험을 재현해 도구와 적용 조건을 판단한다.",
         "original_value_plan": str(candidate["unique_takeaway"]),
         "evidence_plan": json.dumps(evidence, ensure_ascii=False),
         "duplicate_check": json.dumps(candidate["existing_post_overlap"], ensure_ascii=False),
@@ -197,6 +231,7 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
         "structure_mode": str(candidate["recommended_format"]),
         "evidence_candidate": dict(candidate),
         "evidence_contract": dict(candidate["evidence_contract"]),
+        "foundation_contract": dict(candidate.get("foundation_contract", {})),
     }
 
 
@@ -283,6 +318,16 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
         payload["candidates"] = choose_candidates(accepted)
         payload["ready_count"] = len(payload["candidates"])
     payload["epoch_rejections"] = epoch_rejections
+    foundations, foundation_rejections = load_foundation_candidates(
+        repo=repo, inventory_path=inventory_path, seal=epoch,
+        consumed_ids=consumed_foundation_ids(output_root), now=now)
+    accepted_foundations = [row for row in foundations if candidate_in_editorial_scope(row)]
+    payload["scope_rejections"].extend(row["candidate_id"] for row in foundations if not candidate_in_editorial_scope(row))
+    payload["foundation_rejections"] = foundation_rejections
+    payload["candidates"] = choose_candidates([*payload["candidates"], *accepted_foundations])
+    payload["ready_count"] = len(payload["candidates"])
+    payload["status"] = "ready" if payload["candidates"] else "no_publishable_topic"
+    processing["foundation_candidates"] = foundations
     if not payload["candidates"]:
         payload["status"] = "no_publishable_topic"
     miner_dir = miner_root / day / run_id
@@ -290,7 +335,7 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     persist_miner_run(miner_dir, run_checkpoint, payload, processing, next_checkpoint)
     def advance_checkpoint() -> None:
         atomic_replace(checkpoint_path, (json.dumps(next_checkpoint, ensure_ascii=False, indent=2) + "\n").encode())
-    base = {"run_id":run_id,"kst_date":day,"publication_mode":"briefing_only","failed":False,"wordpress_write_count":0,"candidate_count":len(payload["candidates"]),"scope_rejections":payload["scope_rejections"]}
+    base = {"run_id":run_id,"kst_date":day,"publication_mode":"briefing_only","failed":False,"wordpress_write_count":0,"candidate_count":len(payload["candidates"]),"scope_rejections":payload["scope_rejections"],"foundation_rejection_count":len(foundation_rejections)}
     if epoch:
         base.update(retired_unknown_run_ids=[row["run_id"] for row in epoch["retired_runs"]], epoch_rejections=epoch_rejections)
     if not payload["candidates"]:
@@ -313,6 +358,10 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
         raise PipelineError("Candidate public sources cannot satisfy the publication audit")
     if not apply:
         return {**base,"deep_article":"ready_not_published","candidate_id":candidate["candidate_id"]}
+    if candidate.get("candidate_origin") == "foundation_concept" and not foundation_activation_ready(repo):
+        return {**base,"deep_article":"foundation_activation_required","candidate_id":candidate["candidate_id"]}
+    write_json_new(run_dir / "selected-candidate.json", {
+        "candidate_id": candidate["candidate_id"], "candidate_origin": candidate.get("candidate_origin", "project_event")})
     write_progress(progress_path, stage="publisher_started", wordpress_write_count="unknown")
     published = topic_runner({**candidate, "_inventory_path": str(inventory_path.resolve())}, run_id, logger or configure_logger(now.date()))
     write_progress(progress_path, stage="publisher_completed", wordpress_write_count=1)
@@ -340,6 +389,7 @@ def main() -> int:
         lock.acquire()
         if args.resume_public_audit:
             result = resume_public_audit(run_id)
+            notify_publication(result)
             print(json.dumps(result, ensure_ascii=False)); return 0
         inventory=args.inventory or (refresh_inventory() if args.apply else MINER_ROOT/"inventory-latest.json")
         # Only a fresh execution owned under our lock may persist a failure.
@@ -348,6 +398,7 @@ def main() -> int:
         owns_run = not (OUTPUT / run_id).exists()
         result=execute(run_id=run_id,inventory_path=inventory,apply=args.apply)
         write_json_new(OUTPUT/run_id/"result.json",result)
+        notify_publication(result)
         print(json.dumps(result,ensure_ascii=False)); return 0
     except Exception as exc:
         progress_path=OUTPUT/run_id/"progress.json"

@@ -7,12 +7,36 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from scripts.run_evidence_deep_article import DAILY_LIMIT, PipelineError, audit_evidence_links, candidate_plan, execute, published_today, resume_public_audit, run_selected_candidate
-from scripts.run_evidence_deep_article import main
+from scripts.run_evidence_deep_article import main, candidate_in_editorial_scope
 from scripts.run_daily_pipeline import PipelineLock
 
 
 class EvidenceDeepArticleTests(unittest.TestCase):
     logger = logging.getLogger("evidence-deep-test")
+
+    def test_cli_notifies_only_after_execution_result_is_persisted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); runs = root / "runs"
+            result = {"failed": False, "deep_article": "published", "wordpress_write_count": 1}
+            def execution(**kwargs):
+                (runs / "fresh").mkdir(parents=True)
+                return result
+            def notification(value):
+                self.assertEqual(json.loads((runs / "fresh/result.json").read_text()), value)
+                return {"status": "notification_error"}
+            with patch("scripts.run_evidence_deep_article.LOCK", root / "lock"), patch("scripts.run_evidence_deep_article.OUTPUT", runs), patch("scripts.run_evidence_deep_article.execute", side_effect=execution), patch("scripts.run_evidence_deep_article.notify_publication", side_effect=notification) as notify, patch("sys.argv", ["deep", "--apply", "--run-id", "fresh", "--inventory", str(root / "inventory")]), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(), 0)
+            notify.assert_called_once_with(result)
+            self.assertFalse(json.loads((runs / "fresh/result.json").read_text())["failed"])
+
+    def test_cli_audit_recovery_notifies_without_running_publisher(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = {"failed": False, "deep_article": "published", "wordpress_write_count": 1}
+            with patch("scripts.run_evidence_deep_article.LOCK", root / "lock"), patch("scripts.run_evidence_deep_article.OUTPUT", root / "runs"), patch("scripts.run_evidence_deep_article.resume_public_audit", return_value=result), patch("scripts.run_evidence_deep_article.execute") as execute_mock, patch("scripts.run_evidence_deep_article.notify_publication", return_value={"status": "sent"}) as notify, patch("sys.argv", ["deep", "--resume-public-audit", "--run-id", "existing"]), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(), 0)
+            notify.assert_called_once_with(result)
+            execute_mock.assert_not_called()
 
     def test_response_loss_after_simulated_post_never_retries_automatically(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -79,7 +103,7 @@ class EvidenceDeepArticleTests(unittest.TestCase):
         normalized=[]
         for source in candidates:
             row={"candidate_id":"one","title_seed":"title","real_trigger":"trigger","target_reader":"reader","problem":"problem","why_it_matters":"action","evidence_contract":{},"evidence":{"commits":[],"files":[],"tests":[],"logs":[],"public_urls":[]},"before_after":{},"unique_takeaway":"takeaway","existing_post_overlap":{"result":"none"},"recommended_format":"feature_build","publishability":"READY","missing_evidence":[],"rejection_reason":None,"source_anchor":"scripts/x.py"}
-            row["problem"] = "WordPress 발행 문제"
+            row["problem"] = "로봇 관측 입력 문제"
             row.update(source); normalized.append(row)
         return ({"date":"2026-09-05","source_head":"a"*40,"candidates":normalized,"status":"ready" if normalized else "no_publishable_topic"},{"processed":[]},{})
 
@@ -104,6 +128,22 @@ class EvidenceDeepArticleTests(unittest.TestCase):
         plan = candidate_plan(candidate)
         self.assertIn(plan["primary_keyword"].casefold(), plan["title"].casefold())
 
+    def test_foundation_route_uses_shared_limit_and_requires_draft_activation(self):
+        candidate = self.payload([{"candidate_origin": "foundation_concept", "candidate_id": "foundation-one"}])[0]["candidates"][0]
+        self.assertEqual(candidate_plan(candidate)["content_type"], "foundation_concept")
+        for mode, active, count, expected in ((False, False, 0, "ready_not_published"),
+                                              (True, False, 0, "foundation_activation_required"),
+                                              (True, True, 1, "daily_limit_reached"),
+                                              (True, True, 0, "published")):
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary); runner = Mock(return_value={"post_id": 999, "url": "https://example.test/post"})
+                with patch('scripts.run_evidence_deep_article.build_payload', return_value=self.payload([])), patch('scripts.run_evidence_deep_article.load_foundation_candidates', return_value=([candidate], [])), patch('scripts.run_evidence_deep_article.foundation_activation_ready', return_value=active), patch('scripts.run_evidence_deep_article.published_today', return_value=count):
+                    result = execute(run_id='foundation-run', inventory_path=self.inventory(root), apply=mode,
+                                     topic_runner=runner, public_auditor=Mock(return_value={"http_status": 200}),
+                                     output_root=root/'runs', miner_root=root/'miner', repo=root, logger=self.logger)
+                self.assertEqual(result['deep_article'], expected)
+                self.assertEqual(runner.call_count, int(expected == 'published'))
+
     def test_missing_required_public_commit_link_is_rejected_before_writes(self):
         candidate = {"evidence": {"commits": ["a" * 40], "files": [], "tests": [], "logs": [],
                      "public_urls": ["https://github.com/example/repo/blob/" + "a" * 40 + "/source.py"]}}
@@ -119,13 +159,31 @@ class EvidenceDeepArticleTests(unittest.TestCase):
 
     def test_candidate_uses_reader_problem_taxonomy_accepted_by_publisher(self):
         from publisher.validation import EDITOR_CATEGORIES
-        for title, category in (("WordPress REST API 재시도", "REST API 발행"),
-                                ("WordPress 사이트맵 검증", "WordPress 운영"),
-                                ("READY 파이프라인 테스트", "자동화·테스트")):
+        from scripts.run_daily_pipeline import EDITOR_CATEGORIES as PIPELINE_CATEGORIES
+        for title, category in (("피지컬 AI 용어 입문", "피지컬 AI 기초"),
+                                ("로봇 제어 원리", "원리·알고리즘"),
+                                ("MuJoCo 첫 실행", "프레임워크·라이브러리"),
+                                ("MuJoCo 지연시간 실험", "실습·실험")):
             candidate = self.payload([{"title_seed": title, "problem": title}])[0]["candidates"][0]
             plan = candidate_plan(candidate)
             self.assertEqual(plan["category"], category)
             self.assertIn(category, EDITOR_CATEGORIES)
+            self.assertIn(category, PIPELINE_CATEGORIES)
+
+    def test_physical_scope_requires_ready_and_reader_problem_not_incidental_evidence(self):
+        for subject in ("피지컬AI 입문", "로봇 관측", "MuJoCo 예제", "ROS 2 시작", "embodied AI", "에이전트 루프 원리", "agent memory", "tool calling"):
+            self.assertTrue(candidate_in_editorial_scope({"publishability": "READY", "title_seed": subject}))
+            self.assertFalse(candidate_in_editorial_scope({"publishability": "NEEDS_EVIDENCE", "title_seed": subject}))
+        for subject in ("WordPress REST 발행", "강화학습 뉴스", "AI 신제품", "rosary", "policy update", "에이전트 신제품 뉴스"):
+            self.assertFalse(candidate_in_editorial_scope({
+                "publishability": "READY", "title_seed": subject,
+                "unique_takeaway": "나중에 로봇에 적용", "evidence": {"files": ["mujoco.py"]}}))
+
+    def test_physical_plan_requires_beginner_context_and_real_execution_evidence(self):
+        plan = candidate_plan(self.payload([{}])[0]["candidates"][0])
+        for requirement in ("선수 지식", "한국어 뜻과 영문", "공식 문서", "확인일", "검증한 버전", "실제 결과", "시뮬레이션", "하드웨어", "근거 부족은 보류"):
+            self.assertIn(requirement, plan["research_focus"])
+        self.assertIn("피지컬 AI", plan["tags"])
 
     def test_out_of_scope_ready_candidate_has_no_wordpress_writes(self):
         with tempfile.TemporaryDirectory() as directory:

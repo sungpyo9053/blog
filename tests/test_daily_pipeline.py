@@ -1302,6 +1302,96 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             self.assertEqual("content_type: evidence_deep_article을 반드시 기록" in reviewer.prompt,
                              content_type == "evidence_deep_article")
 
+    def test_physical_ai_quality_guide_is_scoped_to_physical_categories(self):
+        for category in ("피지컬 AI 기초", "원리·알고리즘", "프레임워크·라이브러리", "실습·실험", "WordPress 운영"):
+            context = make_topic_context("run-physical", "로봇 관측 입문", category=category,
+                                         content_type="evidence_deep_article")
+            stages = {stage.name: stage for stage in topic_stages(context)}
+            for name in ("Research Agent", "Writer Agent", "Reviewer Agent"):
+                self.assertEqual("guides/physical-ai-quality.md" in stages[name].prompt,
+                                 category != "WordPress 운영", (category, name))
+            self.assertEqual("physical-ai-quality-review.json" in stages["Reviewer Agent"].prompt,
+                             category != "WordPress 운영")
+
+    def test_physical_style_pass_explicit_opt_in_independent_of_expired_experiment(self):
+        from scripts.run_daily_pipeline import physical_style_pass_enabled
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'config.json'
+            rules = Path(temporary) / 'quick-rules.md'; rules.write_text('Use restrained prose.')
+            context = make_topic_context('run-style', '로봇 관측', category='피지컬 AI 기초', content_type='foundation_concept')
+            with patch('scripts.run_daily_pipeline.PROJECT_ROOT', Path(temporary)), patch('scripts.run_daily_pipeline.PHYSICAL_AI_PIPELINE_CONFIG', path), patch('scripts.run_daily_pipeline.humanize_experiment_enabled', return_value=False):
+                self.assertFalse(physical_style_pass_enabled(context))
+                for value, expected in ((True, True), (False, False), ('true', False)):
+                    path.write_text(json.dumps({'style_pass_enabled': value, 'style_rules': rules.name,
+                                                'style_rules_sha256': hashlib.sha256(rules.read_bytes()).hexdigest()}))
+                    self.assertEqual(physical_style_pass_enabled(context), expected)
+                    self.assertEqual(any(stage.name == 'Humanize Experiment Agent' for stage in topic_stages(context)), expected)
+            writer = next(stage for stage in topic_stages(context) if stage.name == 'Writer Agent')
+            self.assertIn('프로젝트 장애나 Git 수정 사건을 꾸미지', writer.prompt)
+
+    def test_physical_style_missing_or_tampered_rules_block_without_legacy_fallback(self):
+        from scripts.run_daily_pipeline import physical_style_pass_enabled
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); config = root / 'config.json'; rules = root / 'rules.md'
+            rules.write_text('Reviewed rules')
+            payload = {'style_pass_enabled': True, 'style_rules': 'rules.md',
+                       'style_rules_sha256': hashlib.sha256(rules.read_bytes()).hexdigest()}
+            config.write_text(json.dumps(payload))
+            context = make_topic_context('pin-run', '로봇 관측', category='피지컬 AI 기초', content_type='foundation_concept')
+            with patch('scripts.run_daily_pipeline.PROJECT_ROOT', root), patch('scripts.run_daily_pipeline.PHYSICAL_AI_PIPELINE_CONFIG', config), patch('scripts.run_daily_pipeline.humanize_experiment_enabled', return_value=True) as legacy:
+                stages = topic_stages(context)
+                humanizer = next(stage for stage in stages if stage.name == 'Humanize Experiment Agent')
+                self.assertIn(str(rules), humanizer.prompt)
+                self.assertTrue(physical_style_pass_enabled(context))
+                rules.write_text('Unreviewed replacement')
+                with self.assertRaisesRegex(PipelineError, 'pinned SHA256'):
+                    physical_style_pass_enabled(context)  # Same check runs immediately before adoption.
+                with self.assertRaisesRegex(PipelineError, 'pinned SHA256'):
+                    topic_stages(context)
+                legacy.assert_not_called()
+                rules.unlink()
+                with self.assertRaisesRegex(PipelineError, 'pinned SHA256'):
+                    topic_stages(context)
+
+    def test_physical_style_rules_reject_path_escape_and_invalid_pin(self):
+        from scripts.run_daily_pipeline import physical_style_pass_enabled
+        context = make_topic_context('pin-run', '로봇 관측', category='피지컬 AI 기초')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); config = root / 'config.json'
+            with patch('scripts.run_daily_pipeline.PROJECT_ROOT', root), patch('scripts.run_daily_pipeline.PHYSICAL_AI_PIPELINE_CONFIG', config):
+                for relative, digest in (('../outside.md', 'a' * 64), ('/absolute.md', 'a' * 64), ('rules.md', 'bad')):
+                    config.write_text(json.dumps({'style_pass_enabled': True, 'style_rules': relative, 'style_rules_sha256': digest}))
+                    with self.assertRaises(PipelineError): physical_style_pass_enabled(context)
+
+    def test_physical_publish_contract_requires_complete_99_review_and_current_hash(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            context = TopicContext(title="로봇 관측 원리", run_id="physical-run", topic_id="physical-topic",
+                                   directory=directory, category="피지컬 AI 기초", tags=("로봇",),
+                                   content_type="evidence_deep_article")
+            self._write_approved_publish(context, "## 관측\n입력과 결과를 검토했다.\n")
+            with self.assertRaisesRegex(PipelineError, "Physical AI quality gate rejected"):
+                validate_publish_contract(context)
+            receipt = {
+                "schema_version": 1, "publish_sha256": hashlib.sha256((directory / "publish.md").read_bytes()).hexdigest(),
+                "writer_id": "writer-test", "reviewer_id": "independent-review-test", "reviewed_at": "2026-09-16T09:00:00+09:00",
+                "gates": {f"gate_{number}": True for number in range(1, 9)},
+                "items": [{"id": number, "score": 5, "reason": "test evidence", "body_location": "## 관측", "evidence_ref": "test fixture"} for number in range(1, 21)],
+                "total": 100, "verdict": "APPROVED",
+            }
+            quality = directory / "physical-ai-quality-review.json"
+            quality.write_text(json.dumps(receipt))
+            self.assertEqual(validate_publish_contract(context), receipt["publish_sha256"])
+            receipt["items"][0]["score"] = 3; receipt["total"] = 98
+            quality.write_text(json.dumps(receipt))
+            with self.assertRaisesRegex(PipelineError, "Physical AI quality gate rejected"):
+                validate_publish_contract(context)
+            receipt["items"][0]["score"] = 5; receipt["total"] = 100
+            quality.write_text(json.dumps(receipt))
+            self._write_approved_publish(context, "## 관측\n변경한 본문은 재검토해야 한다.\n")
+            with self.assertRaisesRegex(PipelineError, "Physical AI quality gate rejected"):
+                validate_publish_contract(context)
+
     def test_selected_planner_evidence_is_copied_into_topic_boundary(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "run-planner" / "topic-test"

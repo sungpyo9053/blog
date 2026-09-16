@@ -67,6 +67,7 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 RUNS_DIR = OUTPUT_DIR / "runs"
 ANALYTICS_REPORT = OUTPUT_DIR / "analytics" / "latest.md"
 HUMANIZE_EXPERIMENT_STATE = OUTPUT_DIR / "humanize-experiment-state.json"
+PHYSICAL_AI_PIPELINE_CONFIG = PROJECT_ROOT / "config/physical-ai-pipeline.json"
 LOG_DIR = PROJECT_ROOT / "logs"
 LOCK_FILE = LOG_DIR / "daily-pipeline.lock"
 TOP2_PATTERN = re.compile(r"(?m)^\s*[12]\.\s+(.+?)\s*$")
@@ -78,6 +79,7 @@ ACTIVE_EDITOR_CATEGORIES = {
     "국내 시사",
 }
 SPECIAL_EDITOR_CATEGORIES = {"기술 해설", "주간 기술 회고", "REST API 발행", "자동화·테스트", "WordPress 운영"}
+PHYSICAL_AI_CATEGORIES = {"피지컬 AI 기초", "원리·알고리즘", "프레임워크·라이브러리", "실습·실험"}
 ACTIVE_CATEGORY_SLUGS = {
     "ai-ml-core": "AI/ML 핵심",
     "development-trends": "개발 트렌드",
@@ -98,7 +100,7 @@ LEGACY_EDITOR_CATEGORIES = {
     "Harness Engineering",
     "System Architecture",
 }
-EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES
+EDITOR_CATEGORIES = ACTIVE_EDITOR_CATEGORIES | SPECIAL_EDITOR_CATEGORIES | LEGACY_EDITOR_CATEGORIES | PHYSICAL_AI_CATEGORIES
 CONTENT_TYPE_GUIDES = {
     "tutorial_troubleshooting": PROJECT_ROOT / "guides/content-types/tutorial-troubleshooting.md",
     "concept_architecture": PROJECT_ROOT / "guides/content-types/concept-architecture.md",
@@ -108,6 +110,7 @@ CONTENT_TYPE_GUIDES = {
     "current_affairs_policy": PROJECT_ROOT / "guides/content-types/current-affairs-policy.md",
     "life_impact_explainer": PROJECT_ROOT / "guides/content-types/life-impact-explainer.md",
     "evidence_deep_article": PROJECT_ROOT / "guides/content-types/evidence-deep-article.md",
+    "foundation_concept": PROJECT_ROOT / "guides/content-types/foundation-concept.md",
 }
 LEGACY_CONTENT_TYPE_BY_CATEGORY = {
     "AI/ML 핵심": "concept_architecture",
@@ -765,6 +768,7 @@ def write_planner_context(context: TopicContext, plan: dict[str, Any]) -> Path:
         "sources": plan.get("sources", ""),
         "evidence_candidate": plan.get("evidence_candidate", {}),
         "evidence_contract": plan.get("evidence_contract", {}),
+        "foundation_contract": plan.get("foundation_contract", {}),
         "existing_post_id": plan.get("existing_post_id", ""),
         "existing_slug": plan.get("existing_slug", ""),
         **editorial_fields,
@@ -890,6 +894,26 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         f"적용할 유형별 규칙은 {str(content_type_guide)!r}에서 읽으세요. 다른 "
         "유형 가이드를 함께 섞지 마세요. "
     )
+    physical_guidance = ""
+    physical_review_contract = ""
+    if context.category in PHYSICAL_AI_CATEGORIES:
+        physical_guidance = (
+            f"피지컬 AI 공통 편집 기준은 {str(PROJECT_ROOT / 'guides/editorial-concept.md')!r}와 "
+            f"{str(PROJECT_ROOT / 'guides/physical-ai-quality.md')!r}에서 읽으세요. "
+            "기초 용어·선수 지식·원리·실습의 연결, 공식 출처와 확인일, 검증 환경과 버전, "
+            "시뮬레이션과 실물 검증의 구분 및 한계를 확인하세요. 다른 분야 글에 이 기준을 억지로 적용하지 마세요. "
+        )
+        content_guidance += physical_guidance
+        physical_review_contract = (
+            f"Reviewer는 {str(topic_dir / 'physical-ai-quality-review.json')!r}도 작성하세요. "
+            "추가 필드 없이 JSON schema_version:1, publish_sha256:최종 publish.md 바이트의 소문자 SHA256, "
+            "writer_id와 reviewer_id:실제 서로 다른 작성·검토 역할 식별자, reviewed_at:타임존 포함 ISO8601, "
+            "gates:{gate_1:true,...,gate_8:true}, items:[{id:1,score:0~5 정수,reason:구체적 근거,"
+            "body_location:본문 위치,evidence_ref:검증 근거},...id:20], total:점수 합계, verdict:APPROVED를 기록하세요. "
+            "각 gate와 20개 항목의 의미는 physical-ai-quality.md를 따릅니다. 모든 gate가 참이고 "
+            "합계 99 이상인 경우에만 승인 가능합니다. 목표를 맞추려고 점수를 부풀리거나 검토자를 꾸미지 마세요. "
+            "기준 미달은 review.md에 REJECTED로 기록하고 보정 사유를 남기세요. "
+        )
     common += editorial
     quick_view_writer = (
         "도입 직후에 정확히 `## 20초 핵심 요약`을 두고 `무엇`, `왜`, `어떻게`를 각각 한 개의 "
@@ -923,6 +947,20 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             "이 목록은 중복 검사용일 뿐 기존 문장을 새 글에 복제하거나 공개 근거로 사용할 수 없습니다. "
             "긴 동일 문장 검사를 통과해도 검색 의도가 같고 독립적인 새 결론이 없으면 REJECT하세요. "
             "guides/editorial-concept.md의 범위와 독자 문제를 벗어나도 REJECT하세요. "
+        )
+    elif context.content_type == "foundation_concept":
+        quick_view_writer = (
+            "이 글은 기초·원리 해설입니다. 20초 핵심 요약·FAQ·표를 강제하지 말고 "
+            "쉬운 정의→자체 예제→정확한 원리→확인 문제→적용 한계로 구성하세요. "
+            "프로젝트 장애나 Git 수정 사건을 꾸미지 마세요. 자체 검산과 로봇 실험을 구분하세요. "
+        )
+        quick_view_review = (
+            "publish.md Frontmatter에 content_type: foundation_concept을 반드시 기록하세요. "
+            "20초 핵심 요약·FAQ·표의 유무를 승인 조건으로 삼지 마세요. "
+            "foundation_contract의 1차 자료와 자체 예제·검산 기록을 문장 단위로 대조하세요. "
+            f"{str(topic_dir / 'editorial-inventory.json')!r}의 publish·draft 전체 본문을 "
+            "검색 의도·결론·실행 방법 관점에서 비교하고 검토한 글 수와 충돌 ID를 review.md에 기록하세요. "
+            "후보 승인과 최종 글 승인은 다르며, 새로운 구현 사고를 만들어 근거를 채우지 마세요. "
         )
     stages = [
         Stage(
@@ -963,13 +1001,15 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             ),
         ),
     ]
-    if humanize_experiment_enabled():
+    physical_rules = physical_style_rules(context)
+    if physical_rules is not None or humanize_experiment_enabled():
         stages.append(
             Stage(
                 "Humanize Experiment Agent",
                 PROJECT_ROOT / "guides/humanize-experiment.md",
                 (
                     common
+                    + (f"해시를 검증한 자연화 규칙 {str(physical_rules)!r}을 읽고 적용하세요. " if physical_rules else "")
                     + f"원문은 {str(topic_dir / 'draft.md')!r}입니다. 원문을 덮어쓰지 말고, "
                     f"자연화 실험본만 {str(topic_dir / 'humanized-draft.md')!r}에 저장하세요. "
                     "의미·사실·수치·버전·코드·로그·링크·인용·frontmatter를 변경하지 말고, "
@@ -1007,6 +1047,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             PROJECT_ROOT / "agents/reviewer.md",
             (
                 common
+                + physical_guidance
+                + physical_review_contract
                 + f"{str(topic_dir / 'final.md')!r}를 "
                 f"{str(topic_dir / 'research.md')!r}, "
                 f"{str(topic_dir / 'planner-context.json')!r}, "
@@ -1080,6 +1122,46 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         ),
     ])
     return stages
+
+
+def physical_style_pass_enabled(context: TopicContext) -> bool:
+    """Opt-in permanent physical style pass, independent of legacy experiment slots."""
+    return physical_style_rules(context) is not None
+
+
+def physical_style_rules(context: TopicContext) -> Path | None:
+    """Validate the pinned local rules before both stage creation and adoption.
+
+    An enabled but broken pin raises: it must not silently fall back to the
+    legacy experiment or apply an unreviewed replacement rule file.
+    """
+    if context.category not in PHYSICAL_AI_CATEGORIES:
+        return None
+    try:
+        config = json.loads(PHYSICAL_AI_PIPELINE_CONFIG.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None  # No opt-in configuration exists.
+    except (OSError, ValueError) as exc:
+        raise PipelineError("Physical AI style configuration is unreadable") from exc
+    if not isinstance(config, dict):
+        raise PipelineError("Physical AI style configuration must be an object")
+    if config.get("style_pass_enabled") is not True:
+        return None
+    try:
+        relative = Path(config["style_rules"])
+        expected = config["style_rules_sha256"]
+        if (relative.is_absolute() or ".." in relative.parts
+                or not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected)):
+            raise ValueError("invalid rules pin")
+        rules = PROJECT_ROOT / relative
+        if (rules.is_symlink() or not rules.is_file()
+                or PROJECT_ROOT.resolve() not in rules.resolve().parents
+                or rules.stat().st_size > 2_000_000
+                or hashlib.sha256(rules.read_bytes()).hexdigest() != expected):
+            raise ValueError("rules pin mismatch")
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise PipelineError("Physical AI style rules are missing, unsafe, or differ from pinned SHA256") from exc
+    return rules
 
 
 def read_humanize_experiment_state() -> dict[str, Any]:
@@ -1349,8 +1431,8 @@ def validate_publish_contract(context: TopicContext) -> str:
         "publish_mode": "publish",
         "category": context.category,
     }
-    if context.content_type == "evidence_deep_article":
-        expected["content_type"] = "evidence_deep_article"
+    if context.content_type in {"evidence_deep_article", "foundation_concept"}:
+        expected["content_type"] = context.content_type
     for field, expected_value in expected.items():
         actual = metadata.get(field)
         if actual != expected_value:
@@ -1396,7 +1478,7 @@ def validate_publish_contract(context: TopicContext) -> str:
         r"(?ms)^## 20초 핵심 요약\s*$\n(.*?)(?=^##\s|\Z)",
         document.markdown,
     ))
-    if context.content_type != "evidence_deep_article" and len(summaries) != 1:
+    if context.content_type not in {"evidence_deep_article", "foundation_concept"} and len(summaries) != 1:
         raise PipelineError(
             f"{context.topic_id}: `## 20초 핵심 요약`은 정확히 한 번이어야 합니다. "
             f"(actual={len(summaries)})"
@@ -1432,6 +1514,14 @@ def validate_publish_contract(context: TopicContext) -> str:
         raise PipelineError(
             f"{context.topic_id}: Reviewer 승인·해시·run_id·topic_id 계약 불일치"
         )
+    if context.category in PHYSICAL_AI_CATEGORIES:
+        from scripts.physical_ai_quality_gate import enforce_quality, PhysicalAIQualityError
+        quality_path = context.directory / "physical-ai-quality-review.json"
+        assert_owned_path(context, quality_path)
+        try:
+            enforce_quality(publish_path, quality_path)
+        except PhysicalAIQualityError as exc:
+            raise PipelineError(f"{context.topic_id}: Physical AI quality gate rejected: {exc}") from exc
     return digest
 
 
@@ -2265,7 +2355,7 @@ def run_topic_pipeline(
         )
         return publish_result
     planner_context_path = write_planner_context(context, plan)
-    if context.content_type == "evidence_deep_article" and not (resume and (context.directory / "editorial-inventory.json").is_file()):
+    if (context.content_type in {"evidence_deep_article", "foundation_concept"} or context.category in PHYSICAL_AI_CATEGORIES) and not (resume and (context.directory / "editorial-inventory.json").is_file()):
         # Freeze the same full inventory for Reviewer and deterministic gate.
         # Missing inventory is a hard stop before writing any article.
         shutil.copy2(
@@ -2339,7 +2429,7 @@ def run_topic_pipeline(
                 from scripts.editorial_epoch import reject_retired_publication
                 reject_retired_publication(load_document(context.directory / "publish.md").metadata,
                                            PROJECT_ROOT / "output/evidence-deep-article-runs", PROJECT_ROOT)
-                if context.content_type == "evidence_deep_article":
+                if context.content_type in {"evidence_deep_article", "foundation_concept"} or context.category in PHYSICAL_AI_CATEGORIES:
                     from scripts.editorial_gate import enforce_prepublication
                     enforce_prepublication(
                         context.directory / "publish.md",
@@ -2374,7 +2464,7 @@ def run_topic_pipeline(
         if stage.name == "Research Agent":
             validate_research_readiness(context)
         if stage.name == "Humanize Experiment Agent":
-            if humanize_experiment_mode() in {"manual-one-off", "on"}:
+            if physical_style_pass_enabled(context) or humanize_experiment_mode() in {"manual-one-off", "on"}:
                 from scripts.editorial_gate import style_preservation
                 style_report = style_preservation(
                     (context.directory / "draft.md").read_text(encoding="utf-8"),
@@ -2400,8 +2490,9 @@ def run_topic_pipeline(
                     original,
                     context.directory / "draft.md",
                 )
-            with humanize_lock:
-                consume_humanize_experiment_slot(context)
+            if not physical_style_pass_enabled(context):
+                with humanize_lock:
+                    consume_humanize_experiment_slot(context)
     publish_result = read_publish_result(context)
     logger.info(
         "topic=%r run_id=%s topic_id=%s event=post_published "

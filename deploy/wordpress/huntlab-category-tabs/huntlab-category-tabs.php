@@ -22,8 +22,9 @@ function huntlab_category_tabs_items() {
 	}
 
 	$items = array();
-	$items[] = array( 'label' => '문제 해결 글', 'url' => home_url( '/#hunt-news-latest-verified' ), 'slug' => 'library', 'meta' => '코드와 근거' );
-	$items[] = array( 'label' => '응답 진단 도구', 'url' => home_url( '/wordpress-response-check/' ), 'slug' => 'tools', 'meta' => '직접 입력' );
+	$items[] = array( 'label' => '처음 시작하기', 'url' => home_url( '/#learning-path' ), 'slug' => 'start', 'meta' => '기초부터' );
+	$items[] = array( 'label' => '피지컬 AI 글', 'url' => home_url( '/#physical-articles' ), 'slug' => 'physical', 'meta' => '원리와 실습' );
+	$items[] = array( 'label' => '운영 아카이브', 'url' => home_url( '/#operations-archive' ), 'slug' => 'library', 'meta' => '이전 기록' );
 	$items[] = array(
 		'label' => '기술 브리핑',
 		'url'   => $archive_url,
@@ -39,9 +40,11 @@ function huntlab_category_tabs_items() {
  * @return string
  */
 function huntlab_category_tabs_active_slug() {
-	if ( is_page( 'wordpress-response-check' ) ) { return 'tools'; }
+	if ( is_page( 'wordpress-response-check' ) ) { return 'library'; }
 	if ( is_category( array( 'rest-api-publishing', 'automation-testing', 'wordpress-operations' ) ) ) { return 'library'; }
-	if ( is_home() || is_front_page() || is_singular( 'post' ) ) { return 'library'; }
+	if ( is_category( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ) ) ) { return 'physical'; }
+	if ( is_singular( 'post' ) ) { return has_category( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ) ) ? 'physical' : 'library'; }
+	if ( is_home() || is_front_page() ) { return 'start'; }
 	if ( is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) {
 		return 'archive';
 	}

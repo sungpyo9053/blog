@@ -1,9 +1,30 @@
-# Korean humanization shadow experiment
+# Korean technical copy-editing — im-not-ai integration
 
-This is a bounded, two-draft shadow experiment inspired by the public
-[`im-not-ai`](https://github.com/epoko77-ai/im-not-ai) project (MIT license).
+Physical AI articles use an explicitly configured conservative copy-edit pass.
+Legacy articles retain their bounded/expiring experiment settings. Read the pinned
+`third_party/im-not-ai/quick-rules.md` fully before editing; provenance and MIT license
+are stored alongside it. This imports the Codex-style single-pass rules, not the
+Claude-only multi-agent runtime of [`im-not-ai`](https://github.com/epoko77-ai/im-not-ai).
 It is a style pass, not an AI-detector bypass and not a license to invent
 experience.
+
+## Technical adaptation (takes precedence over generic style rules)
+
+- Preserve teaching vocabulary (관측, 상태, 행동, 정책, 제어, 피드백), variable names,
+  mathematical relationships, units, code, tables, claims, source attribution and limits.
+- Repetition needed to teach a term is not a defect. Keep useful lists and explanatory
+  parallels. Do not mechanically force sentence-length variation or delete connectors.
+- Never change a possibility/requirement into a fact, remove a negation, reverse a
+  comparison or substitute a technical term with a looser synonym.
+- Only edit an identified awkward span. Record the upstream rule ID, exact before/after
+  wording and why the meaning is unchanged. No finding means UNCHANGED is correct.
+- Do not use upstream G-3 (held rule) to remove genuine uncertainty or balanced evidence.
+- Do not invent first-person experience, a personality, experiments or anecdotes.
+- The deterministic checker is only a guard. Reviewer must compare original and selected
+  wording for meaning, polarity, causality, certainty and technical accuracy.
+- Apply once before assembly/final review; do not rerun in the Reviewer repair loop.
+  A failed preservation check selects the original and records why; it is not a publish
+  approval. The final content still needs independent quality and Publisher checks.
 
 ## Contract
 
@@ -27,12 +48,15 @@ experience.
 
 ```text
 status: COMPLETED | UNCHANGED | BLOCKED
-source: im-not-ai (shadow experiment)
+source: im-not-ai pinned rules, HuntLab conservative adapter
 changed_sections: <comma-separated headings or none>
 protected_content: frontmatter, facts, code, logs, links, citations
 meaning_or_evidence_changed: no
 notes: <short comparison note>
 ```
+
+Append a findings table with rule_id, before, after and preservation_reason. Record
+UNCHANGED without manufacturing edits to achieve an upstream change-rate grade.
 
 In shadow mode the original `draft.md` remains selected. In ON mode a rewrite
 may replace the selected draft only after the deterministic preservation check

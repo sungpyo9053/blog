@@ -104,8 +104,8 @@ function hunt_news_home_search_metadata() {
 		return array( 'title' => '', 'description' => '' );
 	}
 	return array(
-		'title'       => 'WordPress 자동발행 실전 운영 노트 - HuntLab',
-		'description' => 'WordPress REST API, 자동발행, sitemap과 운영 문제를 실제 코드·로그·회귀 테스트로 재현하고 해결한 검증 사례를 제공합니다.',
+		'title'       => '피지컬 AI, 기초에서 실습까지 - HuntLab',
+		'description' => '피지컬 AI와 에이전트의 용어, 작동 원리, 프레임워크와 실습을 연결하는 HuntLab. 공식 자료와 실행 근거를 구분해 설명합니다.',
 	);
 }
 

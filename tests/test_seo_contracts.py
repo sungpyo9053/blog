@@ -212,10 +212,13 @@ class SEOAgentContractTests(unittest.TestCase):
         for field in ("original_contribution", "evidence", "limitations", "INSUFFICIENT"):
             self.assertIn(field, researcher)
         self.assertIn("INSUFFICIENT", writer)
-        self.assertIn("단순 재요약은 REJECT", reviewer)
+        self.assertIn("단순 재요약이나 DEV.to 번역·재작성만으로 승인하지 않는다", reviewer)
         self.assertIn("AI를 조사 정리와 초안 작성의 보조 도구", policy)
-        self.assertIn("하루 발행량보다 품질 기준", policy)
-        self.assertIn("유사 글 증산보다", policy)
+        self.assertIn("READY가 있는 경우만 작성 → 검수 → 발행", policy)
+        self.assertIn("KST 하루 최대 1건", policy)
+        self.assertIn("글을 억지로 작성하지 않고", policy)
+        self.assertIn("기존 글 보강·통합·명확한 후속 관점을 우선", policy)
+        self.assertIn("기존 공개 글과 모든 초안의 전체 비교", policy)
 
     def test_explainer_title_shape_is_checked_across_recent_posts(self):
         planner = read("agents/technical-explainer-agent.md")
@@ -294,9 +297,13 @@ class SEOImageAndPublisherPolicyTests(unittest.TestCase):
 
     def test_editorial_policy_exposes_author_and_verification_contract(self):
         text = read("guides/editorial-policy.md")
-        self.assertIn("Hunt News 편집팀", text)
-        self.assertIn("작성자와 운영 환경", text)
-        self.assertIn("Reviewer 승인", text)
+        self.assertIn("HuntLab 운영자", text)
+        self.assertIn("/about/", text)
+        self.assertIn("작성 책임, 이해관계와 안전", text)
+        self.assertIn("작성자와 별도의 Reviewer", text)
+        self.assertIn("승인 후 본문 변경은 기존 승인을 무효화", text)
+        self.assertIn("실행 버전/환경", text)
+        self.assertIn("가상의 경험을 만들지 않는다", text)
 
     def test_research_writer_reviewer_share_execution_evidence_contract(self):
         planner = read("agents/topic-planner-agent.md")
