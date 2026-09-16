@@ -47,6 +47,22 @@ class PublicationNotificationTests(unittest.TestCase):
         self.assertIn('https://huntlab.app/robotics/', self.sender.call_args.args[0])
         self.assertEqual(self.receipt()['attempt'], 1)
 
+    def test_actual_pipeline_topic_field_becomes_notification_title(self):
+        # read_publish_result returns topic, not title; preserve that live contract.
+        publication = self.result['publication']
+        publication['topic'] = publication.pop('title')
+        publication.update(run_id=self.result['run_id'], topic_id='robotics', image_count=1)
+        self.assertEqual(self.notify()['status'], 'sent')
+        message = self.sender.call_args.args[0]
+        self.assertIn(publication['topic'], message)
+        self.assertIn(publication['url'], message)
+
+    def test_explicit_title_takes_precedence_over_topic(self):
+        self.result['publication']['topic'] = 'Older planner topic'
+        self.assertEqual(self.notify()['status'], 'sent')
+        self.assertIn(self.result['publication']['title'], self.sender.call_args.args[0])
+        self.assertNotIn('Older planner topic', self.sender.call_args.args[0])
+
     def test_unverified_states_never_send(self):
         changes = [
             {'failed': True}, {'deep_article': 'no_publishable_topic'},

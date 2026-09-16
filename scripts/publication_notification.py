@@ -73,7 +73,7 @@ def _notify(result, root, sender, retry_unconfirmed):
     url = publication['url']
     # Preserve a complete article link, including when an encoded slug is long.
     link = url if len(url) <= 150 else f'https://huntlab.app/?p={post_id}'
-    title = ' '.join(str(publication.get('title', '')).split())
+    title = ' '.join(str(publication.get('title') or publication.get('topic') or '').split())
     lines = ['[HuntLab 새 글 발행]', '공개 본문·근거 확인 완료']
     available = 200 - len('\n'.join(lines + [link])) - 1
     if title and available > 0:
