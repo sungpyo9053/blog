@@ -182,8 +182,11 @@ def notify_result(result, directory, sender=send):
     update = result.get('update', {})
     status = '실패' if result.get('failed') else ('수정 완료' if update.get('status') in {'updated', 'already_updated'} else '수정 보류/없음')
     reason = str(update.get('reason') or result.get('reason') or result.get('summary') or '검토 기록 확인')
+    proposals = result.get('proposals', [])
+    change = result.get('proposed_change') or {}
+    detail = str(change.get('reason') or (proposals[0].get('title') if proposals else '') or '제안 없음')
     message = (f"[HuntLab 주간 {result['week']}] {status}\n글: {update.get('post_id', '-')}\n"
-               f"{reason[:75]}\n후보 {len(result.get('proposals', []))}건 / 지표 {result.get('metrics_status', '미확인')}\n"
+               f"{reason[:35]}\n{'개선' if change else '연구 제안'}: {detail[:55]}\n후보 {len(proposals)}건 / 지표 {result.get('metrics_status', '미확인')}\n"
                f"4주 평가: {result.get('assessment', '미실행')}")[:200]
     marker = {'status': 'attempting', 'message': message}
     save(receipt, marker)
