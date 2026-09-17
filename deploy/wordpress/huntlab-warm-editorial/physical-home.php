@@ -19,14 +19,14 @@ $query_ids = $selected ? ( isset( $terms[ $selected ] ) ? array( $terms[ $select
 $page = max( 1, (int) get_query_var( 'paged' ), (int) get_query_var( 'page' ) );
 $lessons = $query_ids ? new WP_Query( array( 'post_type' => 'post', 'post_status' => 'publish', 'category__in' => $query_ids, 'posts_per_page' => 12, 'paged' => $page, 'ignore_sticky_posts' => true ) ) : null;
 ?>
-<main id="main" class="huntlab-physical-home">
+<div id="main" class="huntlab-physical-home">
  <?php if ( ! $selected ) : ?>
  <header class="huntlab-physical-hero">
-  <div><p class="huntlab-physical-kicker">HUNTLAB / PHYSICAL AI</p><h1>AI가 세상을 이해하고<br>움직이는 원리.</h1><p class="huntlab-physical-lead">피지컬 AI와 에이전트를 기초부터.<br>용어를 이해하고, 원리를 짚고, 작은 실습으로 연결합니다.</p><div class="huntlab-tool-actions"><a class="huntlab-primary-link" href="#learning-path">처음 시작하기</a><a href="#physical-articles">공개된 글 보기 ↓</a></div></div>
+  <div><p class="huntlab-physical-kicker">HUNTLAB / PHYSICAL AI</p><h1>피지컬 AI,<br>기초에서 실습까지.</h1><p class="huntlab-physical-lead">AI가 세상을 이해하고 움직이는 원리.<br>낯선 용어부터 알고리즘과 도구까지, 예제로 연결합니다.</p><div class="huntlab-tool-actions"><a class="huntlab-primary-link" href="#learning-path">처음 시작하기</a><a href="#physical-articles">공개된 글 보기 ↓</a></div></div>
   <figure><img src="<?php echo esc_url( plugins_url( 'assets/physical-ai-hero.png', __FILE__ ) ); ?>" width="1672" height="941" fetchpriority="high" decoding="async" alt="카메라로 블록을 인식하고 이동 경로를 계획하는 로봇 팔의 개념 일러스트"><figcaption>AI 생성 개념 일러스트 · 실제 실험 사진이 아닙니다.</figcaption></figure>
  </header>
  <?php else : ?>
- <header><p><a href="<?php echo esc_url( home_url( '/' ) ); ?>">HuntLab</a> / 학습 주제</p><h1><?php echo esc_html( $tracks[ $selected ][0] ?? single_cat_title( '', false ) ); ?></h1></header>
+ <header><p><a href="<?php echo esc_url( home_url( '/' ) ); ?>">HuntLab</a> / 학습 주제</p><h1><?php echo esc_html( $tracks[ $selected ][0] ?? single_cat_title( '', false ) ); ?></h1><p><?php echo esc_html( $tracks[ $selected ][2] ?? '' ); ?></p></header>
  <?php endif; ?>
  <section id="learning-path" aria-labelledby="learning-heading"><div class="huntlab-section-heading"><p>LEARNING PATH</p><h2 id="learning-heading">기초부터, 한 단계씩.</h2><p>순서는 학습 안내입니다. 아직 공개되지 않은 과정은 준비 중으로 표시합니다.</p></div><div class="huntlab-learning-grid">
  <?php $step = 0; foreach ( $tracks as $slug => $track ) : ++$step; $term = $terms[ $slug ] ?? null; ?>
@@ -42,5 +42,5 @@ $lessons = $query_ids ? new WP_Query( array( 'post_type' => 'post', 'post_status
  </section>
  <section class="huntlab-editorial-promise" aria-labelledby="promise-heading"><h2 id="promise-heading">쉽게 설명하고, 확인한 만큼만 말합니다.</h2><p>기초 용어는 예시와 함께 설명합니다. 공식 자료 해설, 시뮬레이션, 실제 장비 실험을 구분하고, 실행한 예제에는 환경·버전·결과와 한계를 남깁니다.</p><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">현재 공개된 편집·정정 원칙 →</a></section>
  <section id="operations-archive" class="huntlab-operations-archive"><h2>이전 운영 노트</h2><p>WordPress 운영과 자동화 기록은 별도 아카이브로 보존합니다.</p><nav aria-label="기존 운영 글"><a href="<?php echo esc_url( home_url( '/category/rest-api-publishing/' ) ); ?>">REST API 발행</a><a href="<?php echo esc_url( home_url( '/category/automation-testing/' ) ); ?>">자동화·테스트</a><a href="<?php echo esc_url( home_url( '/category/wordpress-operations/' ) ); ?>">WordPress 운영</a><a href="<?php echo esc_url( home_url( '/wordpress-response-check/' ) ); ?>">응답 진단 도구</a></nav></section>
-</main>
+</div>
 <?php get_footer(); ?>

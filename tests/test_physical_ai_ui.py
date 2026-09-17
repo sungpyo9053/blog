@@ -64,12 +64,20 @@ class PhysicalAIUIContractTests(unittest.TestCase):
             tabs = (ROOT / "deploy/wordpress/huntlab-category-tabs/huntlab-category-tabs.php").read_text()
             self.assertIn("/#" + anchor, tabs)
         self.assertNotIn("/#hunt-news-latest-verified", tabs)
-        self.assertIn('<main id="main"', template)
+        # Kadence get_header() opens the surrounding main landmark.
+        self.assertIn('<div id="main"', template)
+        self.assertNotIn('<main ', template)
         self.assertIn(":focus-visible", css)
         self.assertIn("@media(max-width:540px)", css)
         self.assertIn("grid-template-columns:1fr", css)
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text()
         self.assertIn("피지컬 AI, 기초에서 실습까지 - HuntLab", php)
+
+    def test_briefing_does_not_reuse_retired_home_copy(self):
+        router = (PLUGIN / "reader-tools.php").read_text()
+        self.assertIn("function huntlab_hide_retired_briefing_intro", router)
+        self.assertIn("add_action( 'wp', 'huntlab_hide_retired_briefing_intro', 30 )", router)
+        self.assertIn("function huntlab_site_page_description", router)
 
 
 @unittest.skipUnless(PHP_COMMAND, "PHP CLI unavailable: template runtime and syntax are not verified locally")

@@ -19,6 +19,25 @@ function huntlab_library_template( $template ) {
 }
 add_filter( 'template_include', 'huntlab_library_template', 99 );
 
+/** Briefings already have their own heading; do not prepend the retired homepage. */
+function huntlab_hide_retired_briefing_intro() {
+	if ( is_post_type_archive( 'hunt_briefing' ) || is_singular( 'hunt_briefing' ) ) {
+		remove_action( 'wp_body_open', 'huntlab_warm_editorial_home_intro', 25 );
+	}
+}
+add_action( 'wp', 'huntlab_hide_retired_briefing_intro', 30 );
+
+function huntlab_site_page_description( $description ) {
+	if ( is_page( 'about' ) ) {
+		return 'HuntLab은 피지컬 AI의 기초와 원리, 도구와 실습을 다루는 개인 기술 블로그입니다. 작성 방식과 AI 활용, 근거의 확인 범위, 기존 운영 기록을 안내합니다.';
+	}
+	if ( is_page( 'editorial-policy' ) ) {
+		return '피지컬 AI 글의 출처와 예제 검증, 실제 실행과 시뮬레이션의 구분, 조건부 발행과 오류 정정에 관한 HuntLab 편집 원칙입니다.';
+	}
+	return $description;
+}
+add_filter( 'aioseo_description', 'huntlab_site_page_description', 30 );
+
 /** Kadence also scrolls initial URL fragments; its JS does not read CSS margins. */
 function huntlab_reader_anchor_offset( $offset ) {
 	// Initial fragments and theme-managed anchors need the same space as the
