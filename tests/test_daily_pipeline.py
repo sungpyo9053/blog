@@ -1667,6 +1667,28 @@ class DailyPipelineIsolationTests(unittest.TestCase):
 
             self.assertEqual(read_review_decision(context), "APPROVED")
 
+    def test_review_decision_markdown_and_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            context = TopicContext(title="Review", run_id="run", topic_id="topic", directory=directory)
+            cases = {
+                "# Reviewer 최종 검토\n\n- verdict: **APPROVED**\n": "APPROVED",
+                "- verdict: **REJECTED**\n": "REJECTED",
+                "decision: __APPROVED__\n": "APPROVED",
+                "status: `APPROVED`\n": "APPROVED",
+                "APPROVED\n": "APPROVED",
+                "verdict: **APPROVED__\n": None,
+                "verdict: **APPROVED\n": None,
+                "verdict: APPROVED if fixed\n": None,
+                "본문에서 APPROVED라고 언급\n": None,
+                "verdict: APPROVED\nstatus: REJECTED\n": None,
+                "verdict: REJECTED\nstatus: APPROVED\n": None,
+            }
+            for content, expected in cases.items():
+                with self.subTest(content=content):
+                    (directory / "review.md").write_text(content, encoding="utf-8")
+                    self.assertEqual(read_review_decision(context), expected)
+
     def test_repair_cycle_reuses_existing_agents_and_preserves_reviewer(self):
         context = make_topic_context("run-repair", "검증 근거 보정")
         stages = review_repair_stages(context, attempt=1)

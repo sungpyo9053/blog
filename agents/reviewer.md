@@ -187,6 +187,7 @@ repair 후 재검토도 이전 반려 사유만 확인하는 부분 승인이 �
 이전 검토에서 통과한 항목이 보정 중 깨지지 않았는지도 확인한 뒤 새 해시를 승인한다.
 
 하나라도 부족하면 `REJECTED`로 처리하고 Publisher를 실행하지 않는다. 모두 통과한 경우에만 `publish.md`의 SHA-256, `APPROVED`, `run_id`, `topic_id`, `source_id`, Category를 `review.md`에 기록한다.
+기계 판독용 최종 결정은 독립된 줄에 `verdict: APPROVED` 또는 `verdict: REJECTED`로 한 번 기록한다. 서로 충돌하는 결정은 함께 남기지 않는다.
 
 Reviewer는 승인 후 `publish.md`가 바뀌면 기존 승인을 무효로 본다. 다른 run, 다른 topic 또는 다른 source의 승인 기록을 재사용하지 않는다.
 

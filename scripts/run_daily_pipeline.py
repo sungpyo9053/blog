@@ -141,8 +141,8 @@ LEGACY_CONTENT_TYPE_BY_CATEGORY = {
 MAX_REVIEW_REPAIR_ATTEMPTS = 1
 RECENT_STYLE_LIMIT = 5
 REVIEW_STATUS_PATTERN = re.compile(
-    r"(?im)^\s*(?:-\s*)?(?:status|decision|verdict)\s*:\s*`?(APPROVED|REJECTED)`?\s*$"
-    r"|^\s*(APPROVED|REJECTED)\s*$"
+    r"(?im)^[ \t]*(?:(?:-[ \t]*)?(?:status|decision|verdict)[ \t]*:[ \t]*)?"
+    r"(?P<marker>\*\*|__|`|\*|_|)(?P<decision>APPROVED|REJECTED)(?P=marker)[ \t]*$"
 )
 
 
@@ -1240,10 +1240,10 @@ def read_review_decision(context: TopicContext) -> str | None:
     assert_owned_path(context, review_path)
     if not review_path.is_file():
         return None
-    match = REVIEW_STATUS_PATTERN.search(review_path.read_text(encoding="utf-8"))
-    if match is None:
-        return None
-    return next(value for value in match.groups() if value is not None).upper()
+    decisions = {match.group("decision").upper() for match in
+                 REVIEW_STATUS_PATTERN.finditer(review_path.read_text(encoding="utf-8"))}
+    # Conflicting explicit decisions must never be resolved by first-match order.
+    return next(iter(decisions)) if len(decisions) == 1 else None
 
 
 def review_repair_stages(
