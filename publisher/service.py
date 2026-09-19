@@ -16,7 +16,7 @@ import markdown as markdown_lib
 
 from .frontmatter import FrontmatterError, MarkdownDocument, load_document
 from .models import PublishResult, ValidationIssue, ValidationReport
-from .validation import normalize_tags, validate_document
+from .validation import PHYSICAL_AI_CATEGORIES, normalize_tags, validate_document
 from .wordpress import WordPressClient, WordPressError
 
 LOCAL_MARKDOWN_IMAGE = re.compile(
@@ -166,6 +166,15 @@ class DraftPublisher:
             reviewer_approved=reviewer_approved,
         )
         if document.metadata.get("publish_mode") == "publish":
+            if document.metadata.get("category") in PHYSICAL_AI_CATEGORIES:
+                from scripts.physical_ai_quality_gate import enforce_quality, PhysicalAIQualityError
+                try:
+                    enforce_quality(path, path.parent / "physical-ai-quality-review.json")
+                except PhysicalAIQualityError:
+                    report.errors.append(ValidationIssue(
+                        code="physical_quality_review_failed",
+                        message="Physical AI publication requires current independent quality and naturalness approval.",
+                    ))
             identity = expected_identity or {}
             for field in ("run_id", "topic_id", "source_id", "category"):
                 expected_value = identity.get(field)

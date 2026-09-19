@@ -178,9 +178,14 @@ def load_foundation_candidates(*, repo, inventory_path, seal=None, consumed_ids=
             candidate = evaluate_foundation(path, repo=repo, inventory_path=inventory_path, seal=seal, now=now)
             if candidate['candidate_id'] not in set(consumed_ids):
                 records.append(candidate)
-        except (FoundationError, EpochError, OSError, ValueError, KeyError, TypeError, AttributeError):
+        except (FoundationError, EpochError, OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             # No raw data/error output: invalid private artifacts may contain secrets.
-            rejections.append({'manifest': path.name, 'reason': 'foundation_contract_not_ready'})
+            # Only a small static allowlist may leave the exception boundary.
+            safe_reasons = {'existing_search_intent_overlap', 'stale_or_future_review',
+                            'candidate_review_hash_mismatch', 'artifact_hash_mismatch',
+                            'candidate_review_not_approved', 'foundation_artifact_not_committed'}
+            reason = str(exc) if type(exc) is FoundationError and str(exc) in safe_reasons else 'foundation_contract_not_ready'
+            rejections.append({'manifest': path.name, 'reason': reason})
     return records, rejections
 
 

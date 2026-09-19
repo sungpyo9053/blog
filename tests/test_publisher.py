@@ -447,6 +447,28 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(result.published_url, "https://huntlab.app/?p=123")
             self.assertEqual(client.created_payload["status"], "publish")
 
+    def test_physical_manual_publish_without_quality_review_makes_no_api_writes(self):
+        for category in ('피지컬 AI 기초', '원리·알고리즘', '프레임워크·라이브러리', '실습·실험'):
+            with self.subTest(category=category), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                text = VALID_MARKDOWN.replace('category: Tech', f'category: {category}').replace(
+                    'publish_mode: draft', 'publish_mode: publish\nrun_id: fixture-run\ntopic_id: fixture-topic\nsource_id: huntlab:fixture-run:fixture-topic')
+                path = self._write_document(root, text)
+                digest = __import__('hashlib').sha256(path.read_bytes()).hexdigest()
+                review = root/'review.md'
+                review.write_text(f'APPROVED\nfixture-run\nfixture-topic\n{digest}\n')
+                client = FakeWordPressClient()
+                result = DraftPublisher(client, audit_log=root/'audit.jsonl').publish_file(
+                    path, reviewer_approved=True, review_path=review,
+                    expected_identity={'run_id': 'fixture-run', 'topic_id': 'fixture-topic',
+                                       'source_id': 'huntlab:fixture-run:fixture-topic', 'category': category})
+                self.assertEqual(result.status, 'Failed')
+                self.assertIn('physical_quality_review_failed', {issue.code for issue in result.validation_report.errors})
+                self.assertIsNone(client.created_payload)
+                self.assertEqual(client.upload_calls, [])
+                self.assertEqual(client.tags, {})
+                self.assertEqual(client.create_category_calls, [])
+
     def test_approved_existing_post_id_updates_matching_post(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

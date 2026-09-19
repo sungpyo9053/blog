@@ -66,7 +66,7 @@ def deep_status(root, day, is_active=False):
     for path in (root/'output/runs').glob('*/*/publisher-audit.jsonl'):
         try:
             context = json.loads((path.parent/'planner-context.json').read_text())
-            if context.get('content_type') != 'evidence_deep_article':
+            if context.get('content_type') not in {'evidence_deep_article', 'foundation_concept'}:
                 continue
             for line in path.read_text().splitlines():
                 event = json.loads(line)
@@ -86,11 +86,24 @@ def deep_status(root, day, is_active=False):
         return '실행 결과 없음(누락/중단 확인 필요)', ''
     latest = rows[-1]
     if latest.get('failed'):
+        if latest.get('failure_stage') == 'candidate_supply':
+            return '실패: 새 주제 조사·후보 공급 단계', ''
         return '실패: '+str(latest.get('error_type', '원인 미확인'))[:40], ''
     state = latest.get('deep_article')
+    if state == 'published':
+        audit = latest.get('public_audit') or {}
+        publication = latest.get('publication') or {}
+        url = publication.get('url', '')
+        if (latest.get('wordpress_write_count') == 1 and audit.get('http_status') == 200
+                and audit.get('url') == url and audit.get('title_present') is True
+                and audit.get('evidence_links_present') is True
+                and url.startswith('https://huntlab.app/')):
+            return '발행 1건(공개 확인 완료)', url
     if state == 'no_publishable_topic':
         if latest.get('reconciliation_required'):
             return '미발행: READY 0건 / 과거 발행 결과 대조 필요', ''
+        if (latest.get('discovery') or {}).get('status') == 'no_candidate':
+            return '미발행: 새 주제 조사 후 READY 0건', ''
         return '미발행: READY 0건(정상 종료)', ''
     if state == 'daily_limit_reached':
         return '미발행: 일일 한도 도달', ''

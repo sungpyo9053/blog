@@ -28,6 +28,21 @@ LOCK = ROOT / "logs/evidence-deep-article.lock"
 DAILY_LIMIT = 1
 
 
+def discovery_enabled(repo: Path) -> bool:
+    path = repo / "config/physical-ai-discovery.json"
+    if not path.exists():
+        return False
+    config = json.loads(path.read_text(encoding="utf-8"))
+    return config.get("producer_status") == "enabled"
+
+
+def replenish_candidates(repo, inventory_path, run_id, now, logger):
+    # Lazy import keeps read-only/legacy evaluations independent of provider setup.
+    from scripts.discover_physical_ai import run_discovery
+    return run_discovery(repo=repo, inventory_path=inventory_path, run_id=run_id,
+                         now=now, logger=logger)
+
+
 def write_json_new(path: Path, payload: Mapping[str, Any]) -> None:
     atomic_write_new(path, (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode())
 
@@ -322,6 +337,26 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
         repo=repo, inventory_path=inventory_path, seal=epoch,
         consumed_ids=consumed_foundation_ids(output_root), now=now)
     accepted_foundations = [row for row in foundations if candidate_in_editorial_scope(row)]
+    discovery = {"status": "not_needed"}
+    eligible_existing = payload["candidates"] or accepted_foundations
+    if not eligible_existing and discovery_enabled(repo):
+        if not apply:
+            discovery = {"status": "dry_run_not_executed"}
+        elif published_today(output_root, day, repo=repo) >= DAILY_LIMIT:
+            discovery = {"status": "daily_limit_reached"}
+        else:
+            write_progress(progress_path, stage="discovery_started", wordpress_write_count=0)
+            discovery = replenish_candidates(repo, inventory_path, run_id, now, logger)
+            if not isinstance(discovery, dict) or discovery.get("status") not in {"ready", "no_candidate"}:
+                raise PipelineError("discovery_failed")
+            # Never trust a producer's READY label; repeat the existing complete contract.
+            foundations, foundation_rejections = load_foundation_candidates(
+                repo=repo, inventory_path=inventory_path, seal=epoch,
+                consumed_ids=consumed_foundation_ids(output_root), now=datetime.now(KST))
+            accepted_foundations = [row for row in foundations if candidate_in_editorial_scope(row)]
+            if discovery["status"] == "ready" and not accepted_foundations:
+                raise PipelineError("discovery_candidate_contract_rejected")
+            write_progress(progress_path, stage="discovery_completed", wordpress_write_count=0)
     payload["scope_rejections"].extend(row["candidate_id"] for row in foundations if not candidate_in_editorial_scope(row))
     payload["foundation_rejections"] = foundation_rejections
     payload["candidates"] = choose_candidates([*payload["candidates"], *accepted_foundations])
@@ -336,8 +371,11 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     def advance_checkpoint() -> None:
         atomic_replace(checkpoint_path, (json.dumps(next_checkpoint, ensure_ascii=False, indent=2) + "\n").encode())
     base = {"run_id":run_id,"kst_date":day,"publication_mode":"briefing_only","failed":False,"wordpress_write_count":0,"candidate_count":len(payload["candidates"]),"scope_rejections":payload["scope_rejections"],"foundation_rejection_count":len(foundation_rejections)}
+    base["discovery"] = {"status": discovery["status"]}
     if epoch:
         base.update(retired_unknown_run_ids=[row["run_id"] for row in epoch["retired_runs"]], epoch_rejections=epoch_rejections)
+    if discovery["status"] == "daily_limit_reached":
+        return {**base, "deep_article": "daily_limit_reached"}
     if not payload["candidates"]:
         try:
             published_today(output_root, day, repo=repo)
@@ -402,9 +440,15 @@ def main() -> int:
         print(json.dumps(result,ensure_ascii=False)); return 0
     except Exception as exc:
         progress_path=OUTPUT/run_id/"progress.json"
-        try: write_count=json.loads(progress_path.read_text(encoding="utf-8")).get("wordpress_write_count", "unknown")
-        except Exception: write_count="unknown" if args.apply and owns_run else 0
+        try:
+            progress = json.loads(progress_path.read_text(encoding="utf-8"))
+            write_count = progress.get("wordpress_write_count", "unknown")
+        except Exception:
+            progress = {}
+            write_count="unknown" if args.apply and owns_run else 0
         failure={"run_id":run_id,"kst_date":datetime.now(KST).date().isoformat(),"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
+        if progress.get("stage") == "discovery_started":
+            failure.update(reason="discovery_failed", failure_stage="candidate_supply")
         if owns_run:
             try: write_json_new(OUTPUT/run_id/"result.json",failure)
             except Exception: pass

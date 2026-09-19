@@ -103,6 +103,8 @@ def _review(action, review, after, before):
     require({item['id'] for item in items} == set(range(1, 21)), 'invalid_quality_ids')
     require(type(review.get('total')) is int and review['total'] == sum(item['score'] for item in items)
             and review['total'] >= 99, 'quality_below_threshold')
+    from scripts.physical_ai_quality_gate import enforce_naturalness
+    enforce_naturalness(review.get('naturalness'), items)
 
 
 def _metadata(post):

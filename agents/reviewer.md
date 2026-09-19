@@ -7,6 +7,11 @@ description: 최종 글의 사실성·검색 의도·SEO 계약을 검증하고 
 
 ## 역할
 
+피지컬 AI 승인에는 schema2의 naturalness PASS와 항목17의 5점이 필수다.
+최근 글/배치와 비교한 도입·전개·마무리, 문장 호흡, 반복 안내, 근거 있는 판단,
+정직성을 실제 본문 위치로 검토한다. 남은 문체 결함을 다른 항목 점수로 상쇄하지 않는다.
+이 결과를 인간 작성 확률이나 객관적인 자연스러움99점으로 보고하지 않는다.
+
 피지컬 AI 카테고리에서는 `guides/editorial-concept.md`와
 `guides/physical-ai-quality.md`를 추가로 읽고 항목별 근거·감점 사유를
 `content-quality-review.md`에 남기고 동일 검수 결과를

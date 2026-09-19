@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import tempfile
@@ -15,7 +16,7 @@ class PhysicalAIQualityGateTests(unittest.TestCase):
         self.review = Path(self.temp.name) / 'physical-ai-quality-review.json'
         self.publish.write_text('# Observation and action\nA reviewed explanation.\n')
         self.payload = {
-            'schema_version': 1,
+            'schema_version': 2,
             'publish_sha256': hashlib.sha256(self.publish.read_bytes()).hexdigest(),
             'writer_id': 'writer-agent-1', 'reviewer_id': 'reviewer-agent-2',
             'reviewed_at': '2026-09-17T10:00:00+09:00',
@@ -24,6 +25,14 @@ class PhysicalAIQualityGateTests(unittest.TestCase):
                            body_location='publish.md:1', evidence_ref='research.md:1')
                       for i in range(1, 21)],
             'total': 100, 'verdict': 'APPROVED',
+            # Synthetic contract fixture, never a real content approval.
+            'naturalness': {
+                'verdict': 'PASS', 'unresolved_issues': [],
+                'comparison_refs': ['synthetic recent-article fixture'],
+                'checks': [dict(id=name, passed=True, reason='Synthetic checked reason',
+                                body_location='fixture paragraph', evidence_ref='synthetic fixture')
+                           for name in ('structure', 'rhythm', 'restraint', 'judgment', 'honesty')],
+            },
         }
 
     def check(self):
@@ -68,10 +77,10 @@ class PhysicalAIQualityGateTests(unittest.TestCase):
         self.rejects()
 
     def test_invalid_schema_or_verdict_rejected(self):
-        for version in (True, '1', 2):
+        for version in (True, '2', 1, 3):
             self.payload['schema_version'] = version
             self.rejects()
-        self.payload['schema_version'] = 1
+        self.payload['schema_version'] = 2
         for verdict in ('HOLD', 'approved', '', None):
             self.payload['verdict'] = verdict
             self.rejects()
@@ -86,6 +95,61 @@ class PhysicalAIQualityGateTests(unittest.TestCase):
         del self.payload['gates']['gate_9']
         del self.payload['gates']['gate_1']
         self.rejects()
+
+    def test_naturalness_cannot_be_missing_or_unresolved_at_100(self):
+        original = copy.deepcopy(self.payload)
+        for value in (None, {}, [], 'PASS'):
+            with self.subTest(value=value):
+                self.payload = copy.deepcopy(original)
+                self.payload['naturalness'] = value
+                self.rejects()
+        for verdict in ('HOLD', 'NOT_EVALUATED', 'pass', True):
+            self.payload = copy.deepcopy(original)
+            self.payload['naturalness']['verdict'] = verdict
+            self.rejects()
+        self.payload = copy.deepcopy(original)
+        self.payload['naturalness']['unresolved_issues'] = ['repeated conclusion']
+        self.rejects()
+
+    def test_naturalness_exact_five_unique_checks_and_fields(self):
+        original = copy.deepcopy(self.payload['naturalness'])
+        for key in original:
+            self.payload['naturalness'] = copy.deepcopy(original)
+            del self.payload['naturalness'][key]
+            self.rejects()
+        for count in (0, 4, 6):
+            self.payload['naturalness'] = copy.deepcopy(original)
+            self.payload['naturalness']['checks'] = (original['checks'] * 2)[:count]
+            self.rejects()
+        for invalid in ('structure', 'invented', 17, None):
+            self.payload['naturalness'] = copy.deepcopy(original)
+            self.payload['naturalness']['checks'][-1]['id'] = invalid
+            self.rejects()
+        self.payload['naturalness'] = copy.deepcopy(original)
+        self.payload['naturalness']['checks'][0]['extra'] = True
+        self.rejects()
+
+    def test_naturalness_unconfirmed_checks_and_missing_evidence_rejected(self):
+        original = copy.deepcopy(self.payload['naturalness'])
+        for value in (False, 1, 'true', None, 'NOT_EVALUATED'):
+            self.payload['naturalness'] = copy.deepcopy(original)
+            self.payload['naturalness']['checks'][0]['passed'] = value
+            self.rejects()
+        for key in ('reason', 'body_location', 'evidence_ref'):
+            for value in ('', ' ', None, 'NOT_EVALUATED', '미확인', '미검증', 'TBD'):
+                self.payload['naturalness'] = copy.deepcopy(original)
+                self.payload['naturalness']['checks'][0][key] = value
+                self.rejects()
+        for refs in ([], None, 'fixture', [''], ['NOT_EVALUATED']):
+            self.payload['naturalness'] = copy.deepcopy(original)
+            self.payload['naturalness']['comparison_refs'] = refs
+            self.rejects()
+
+    def test_item_17_four_rejected_even_with_valid_total_99(self):
+        self.payload['items'][16]['score'] = 4
+        self.payload['total'] = 99
+        with self.assertRaisesRegex(PhysicalAIQualityError, 'item 17'):
+            self.check()
 
     def test_item_count_and_ids_are_exact(self):
         item = self.payload['items'].pop()

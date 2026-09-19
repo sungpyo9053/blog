@@ -7,6 +7,11 @@ description: 주제별 리서치 결과와 문체·SEO 가이드를 모두 읽�
 
 ## 역할
 
+피지컬 AI 글은 99점에 자연스러움도 포함한다. `physical-ai-quality.md`의
+structure/rhythm/restraint/judgment/honesty를 작성 중 확인한다. 기계적 독자선언과
+반복 면책을 줄이되 중요한 한계는 유지한다. 수정 글은 구체적인 전후 사례와
+의미 보존 근거를 handoff에 남긴다. 사람처럼 보이기 위한 가짜 경험은 쓰지 않는다.
+
 피지컬 AI 카테고리의 글은 `guides/editorial-concept.md`,
 `guides/physical-ai-quality.md`를 추가로 읽는다. 독자의 선수 지식과 학습 목표를
 명확히 하고 새 용어는 첫 등장에 한국어 뜻·영문·구체적인 예를 연결한다.

@@ -115,6 +115,117 @@ class EvidenceDeepArticleTests(unittest.TestCase):
         self.assertEqual(result["deep_article"],"no_publishable_topic")
         self.assertFalse(result["failed"]); self.assertEqual(result["wordpress_write_count"],0); runner.assert_not_called()
 
+    def test_supply_runs_only_when_apply_enabled_empty_and_below_limit(self):
+        cases = ((True, True, 0, False, True), (False, True, 0, False, False),
+                 (True, False, 0, False, False), (True, True, 1, False, False),
+                 (True, True, 0, True, False))
+        for apply, enabled, count, existing, expected in cases:
+            with self.subTest(case=(apply, enabled, count, existing)), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); runner = Mock(return_value={'post_id': 999, 'url': 'https://example.test/post'})
+                with patch('scripts.run_evidence_deep_article.build_payload', return_value=self.payload([{}] if existing else [])), \
+                     patch('scripts.run_evidence_deep_article.discovery_enabled', return_value=enabled), \
+                     patch('scripts.run_evidence_deep_article.published_today', return_value=count), \
+                     patch('scripts.run_evidence_deep_article.load_foundation_candidates', return_value=([], [])), \
+                     patch('scripts.run_evidence_deep_article.replenish_candidates', return_value={'status': 'no_candidate'}) as supply:
+                    execute(run_id='supply-policy', inventory_path=self.inventory(root), apply=apply,
+                            topic_runner=runner, public_auditor=Mock(return_value={'http_status': 200}),
+                            output_root=root/'runs', miner_root=root/'miner', repo=root)
+                self.assertEqual(supply.call_count, int(expected))
+                if not existing or not apply:
+                    runner.assert_not_called()
+
+    def test_existing_foundation_ready_does_not_invoke_supply(self):
+        candidate = self.payload([{'candidate_origin': 'foundation_concept'}])[0]['candidates'][0]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch('scripts.run_evidence_deep_article.build_payload', return_value=self.payload([])), \
+                 patch('scripts.run_evidence_deep_article.load_foundation_candidates', return_value=([candidate], [])), \
+                 patch('scripts.run_evidence_deep_article.discovery_enabled', return_value=True), \
+                 patch('scripts.run_evidence_deep_article.foundation_activation_ready', return_value=False), \
+                 patch('scripts.run_evidence_deep_article.replenish_candidates') as supply:
+                result = execute(run_id='existing', inventory_path=self.inventory(root), apply=True,
+                                 output_root=root/'runs', miner_root=root/'miner', repo=root)
+            supply.assert_not_called()
+            self.assertEqual(result['deep_article'], 'foundation_activation_required')
+
+    def test_unknown_write_history_blocks_supply_before_provider_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); previous = root/'runs/previous'; previous.mkdir(parents=True)
+            (previous/'progress.json').write_text(json.dumps({'wordpress_write_count': 'unknown'}))
+            runner = Mock()
+            with patch('scripts.run_evidence_deep_article.build_payload', return_value=self.payload([])), \
+                 patch('scripts.run_evidence_deep_article.discovery_enabled', return_value=True), \
+                 patch('scripts.run_evidence_deep_article.load_foundation_candidates', return_value=([], [])), \
+                 patch('scripts.run_evidence_deep_article.replenish_candidates') as supply:
+                with self.assertRaisesRegex(PipelineError, 'reconciliation required'):
+                    execute(run_id='blocked', inventory_path=self.inventory(root), apply=True,
+                            topic_runner=runner, output_root=root/'runs', miner_root=root/'miner', repo=root)
+            supply.assert_not_called()
+            runner.assert_not_called()
+
+    def test_producer_ready_is_reloaded_through_candidate_contract(self):
+        candidate = self.payload([{'candidate_origin': 'foundation_concept'}])[0]['candidates'][0]
+        for accepted in (True, False):
+            with self.subTest(accepted=accepted), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); runner = Mock(return_value={'post_id': 999, 'url': 'https://example.test/post'})
+                reloaded = ([candidate], []) if accepted else ([], [{'reason': 'invalid manifest'}])
+                with patch('scripts.run_evidence_deep_article.build_payload', return_value=self.payload([])), \
+                     patch('scripts.run_evidence_deep_article.load_foundation_candidates', side_effect=[([], []), reloaded]) as loader, \
+                     patch('scripts.run_evidence_deep_article.discovery_enabled', return_value=True), \
+                     patch('scripts.run_evidence_deep_article.foundation_activation_ready', return_value=True), \
+                     patch('scripts.run_evidence_deep_article.replenish_candidates', return_value={'status': 'ready'}) as supply:
+                    args = dict(run_id='reload', inventory_path=self.inventory(root), apply=True,
+                                topic_runner=runner, public_auditor=Mock(return_value={'http_status': 200}),
+                                output_root=root/'runs', miner_root=root/'miner', repo=root)
+                    if accepted:
+                        self.assertEqual(execute(**args)['deep_article'], 'published')
+                        runner.assert_called_once()
+                    else:
+                        with self.assertRaisesRegex(PipelineError, 'discovery_candidate_contract_rejected'):
+                            execute(**args)
+                        runner.assert_not_called()
+                    supply.assert_called_once()
+                    self.assertEqual(loader.call_count, 2)
+
+    def test_supply_provider_failure_is_not_empty_topic_success(self):
+        for output in (None, {'status': 'provider_failed'}, TimeoutError('synthetic provider outage')):
+            with self.subTest(output=output), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); runner = Mock()
+                supply = Mock(side_effect=output) if isinstance(output, Exception) else Mock(return_value=output)
+                with patch('scripts.run_evidence_deep_article.build_payload', return_value=self.payload([])), \
+                     patch('scripts.run_evidence_deep_article.discovery_enabled', return_value=True), \
+                     patch('scripts.run_evidence_deep_article.load_foundation_candidates', return_value=([], [])), \
+                     patch('scripts.run_evidence_deep_article.replenish_candidates', supply):
+                    with self.assertRaises((PipelineError, TimeoutError)):
+                        execute(run_id='outage', inventory_path=self.inventory(root), apply=True,
+                                topic_runner=runner, output_root=root/'runs', miner_root=root/'miner', repo=root)
+                runner.assert_not_called()
+                progress = json.loads((root/'runs/outage/progress.json').read_text())
+                self.assertEqual(progress['stage'], 'discovery_started')
+                self.assertEqual(progress['wordpress_write_count'], 0)
+
+    def test_cli_supply_failure_reports_candidate_supply_and_zero_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); runs = root/'runs'; stdout = io.StringIO()
+            def failed_execution(**kwargs):
+                run = runs/kwargs['run_id']; run.mkdir(parents=True)
+                (run/'progress.json').write_text(json.dumps({'stage': 'discovery_started', 'wordpress_write_count': 0}))
+                raise TimeoutError('synthetic provider error')
+            with patch('scripts.run_evidence_deep_article.OUTPUT', runs), \
+                 patch('scripts.run_evidence_deep_article.LOCK', root/'lock'), \
+                 patch('scripts.run_evidence_deep_article.execute', side_effect=failed_execution), \
+                 patch('scripts.run_evidence_deep_article.notify_publication') as notify, \
+                 patch('sys.argv', ['deep', '--apply', '--run-id', 'supply-cli', '--inventory', str(root/'inventory')]), \
+                 contextlib.redirect_stdout(stdout):
+                self.assertEqual(main(), 1)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result['failed'])
+            self.assertEqual(result['deep_article'], 'failed')
+            self.assertEqual(result['failure_stage'], 'candidate_supply')
+            self.assertEqual(result['wordpress_write_count'], 0)
+            self.assertEqual(json.loads((runs/'supply-cli/result.json').read_text()), result)
+            notify.assert_not_called()
+
     def test_ready_dry_run_has_zero_wordpress_writes(self):
         candidate={"candidate_id":"one"}
         with tempfile.TemporaryDirectory() as directory:
@@ -379,7 +490,7 @@ class EvidenceDeepArticleTests(unittest.TestCase):
             runner = Mock()
             with patch("scripts.run_evidence_deep_article.build_payload", return_value=self.payload([])):
                 result = execute(run_id="empty", inventory_path=self.inventory(root), apply=True,
-                                 topic_runner=runner, output_root=root / "runs", miner_root=root / "miner")
+                                 topic_runner=runner, output_root=root / "runs", miner_root=root / "miner", repo=root)
             self.assertFalse(result["failed"])
             self.assertEqual(result["deep_article"], "no_publishable_topic")
             self.assertTrue(result["reconciliation_required"])

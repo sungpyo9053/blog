@@ -906,12 +906,16 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         content_guidance += physical_guidance
         physical_review_contract = (
             f"Reviewer는 {str(topic_dir / 'physical-ai-quality-review.json')!r}도 작성하세요. "
-            "추가 필드 없이 JSON schema_version:1, publish_sha256:최종 publish.md 바이트의 소문자 SHA256, "
+            "추가 필드 없이 JSON schema_version:2, publish_sha256:최종 publish.md 바이트의 소문자 SHA256, "
             "writer_id와 reviewer_id:실제 서로 다른 작성·검토 역할 식별자, reviewed_at:타임존 포함 ISO8601, "
             "gates:{gate_1:true,...,gate_8:true}, items:[{id:1,score:0~5 정수,reason:구체적 근거,"
             "body_location:본문 위치,evidence_ref:검증 근거},...id:20], total:점수 합계, verdict:APPROVED를 기록하세요. "
             "각 gate와 20개 항목의 의미는 physical-ai-quality.md를 따릅니다. 모든 gate가 참이고 "
             "합계 99 이상인 경우에만 승인 가능합니다. 목표를 맞추려고 점수를 부풀리거나 검토자를 꾸미지 마세요. "
+            "naturalness 객체도 필수입니다. 정확한 스키마는 physical-ai-quality.md를 따르고 "
+            "structure/rhythm/restraint/judgment/honesty 다섯 항목을 본문과 최근 글에 대조하세요. "
+            "naturalness PASS, unresolved_issues 빈 배열, 품질항목17의 5점 없이는 합계99여도 반려합니다. "
+            "AI 탐지율이나 인간 저작 확률을 점수로 만들지 마세요. "
             "기준 미달은 review.md에 REJECTED로 기록하고 보정 사유를 남기세요. "
         )
     common += editorial

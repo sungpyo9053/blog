@@ -8,6 +8,34 @@ from scripts.send_kakao_report import deep_status, message_for, run_day, send
 
 
 class KakaoReportTests(unittest.TestCase):
+    def test_candidate_supply_failure_and_researched_empty_are_distinct(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            run = root/'output/evidence-deep-article-runs/20260920T010000Z-test'
+            run.mkdir(parents=True)
+            result = run/'result.json'
+            result.write_text(json.dumps({'failed': True, 'failure_stage': 'candidate_supply'}))
+            self.assertEqual(deep_status(root, '2026-09-20')[0], '실패: 새 주제 조사·후보 공급 단계')
+            result.write_text(json.dumps({'failed': False, 'deep_article': 'no_publishable_topic',
+                                         'discovery': {'status': 'no_candidate'}}))
+            self.assertIn('새 주제 조사 후 READY 0건', deep_status(root, '2026-09-20')[0])
+
+    def test_publication_result_requires_public_audit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            run = root/'output/evidence-deep-article-runs/20260920T010000Z-test'
+            run.mkdir(parents=True)
+            payload = {'failed': False, 'deep_article': 'published', 'wordpress_write_count': 1,
+                       'publication': {'url': 'https://huntlab.app/lesson/'}}
+            result = run/'result.json'
+            result.write_text(json.dumps(payload))
+            self.assertEqual(deep_status(root, '2026-09-20')[0], '발행 결과 확인 필요')
+            payload['public_audit'] = {'url': payload['publication']['url'], 'http_status': 200,
+                                     'title_present': True, 'evidence_links_present': True}
+            result.write_text(json.dumps(payload))
+            self.assertEqual(deep_status(root, '2026-09-20'),
+                             ('발행 1건(공개 확인 완료)', 'https://huntlab.app/lesson/'))
+
     def test_seven_includes_today_briefing_only(self):
         message=message_for('2026-09-13','07',('발행 완료','https://huntlab.app/briefing/2026-09-13/'))
         self.assertIn('브리핑: 발행 완료',message)

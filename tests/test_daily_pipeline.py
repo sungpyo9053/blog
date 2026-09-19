@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import copy
 import json
 import logging
 import os
@@ -1373,15 +1374,41 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             with self.assertRaisesRegex(PipelineError, "Physical AI quality gate rejected"):
                 validate_publish_contract(context)
             receipt = {
-                "schema_version": 1, "publish_sha256": hashlib.sha256((directory / "publish.md").read_bytes()).hexdigest(),
+                "schema_version": 2, "publish_sha256": hashlib.sha256((directory / "publish.md").read_bytes()).hexdigest(),
                 "writer_id": "writer-test", "reviewer_id": "independent-review-test", "reviewed_at": "2026-09-16T09:00:00+09:00",
                 "gates": {f"gate_{number}": True for number in range(1, 9)},
                 "items": [{"id": number, "score": 5, "reason": "test evidence", "body_location": "## 관측", "evidence_ref": "test fixture"} for number in range(1, 21)],
                 "total": 100, "verdict": "APPROVED",
+                # Synthetic contract fixture, not an editorial approval.
+                "naturalness": {
+                    "verdict": "PASS", "unresolved_issues": [],
+                    "comparison_refs": ["synthetic recent-article fixture"],
+                    "checks": [dict(id=name, passed=True, reason="Synthetic reason",
+                                    body_location="fixture paragraph", evidence_ref="synthetic fixture")
+                               for name in ("structure", "rhythm", "restraint", "judgment", "honesty")],
+                },
             }
             quality = directory / "physical-ai-quality-review.json"
             quality.write_text(json.dumps(receipt))
             self.assertEqual(validate_publish_contract(context), receipt["publish_sha256"])
+            original_naturalness = copy.deepcopy(receipt['naturalness'])
+            for invalid in (None, {**original_naturalness, 'verdict': 'HOLD'}):
+                receipt['naturalness'] = invalid
+                quality.write_text(json.dumps(receipt))
+                with self.assertRaisesRegex(PipelineError, 'Physical AI quality gate rejected'):
+                    validate_publish_contract(context)
+            for flag in (False, 'NOT_EVALUATED'):
+                receipt['naturalness'] = copy.deepcopy(original_naturalness)
+                receipt['naturalness']['checks'][0]['passed'] = flag
+                quality.write_text(json.dumps(receipt))
+                with self.assertRaisesRegex(PipelineError, 'Physical AI quality gate rejected'):
+                    validate_publish_contract(context)
+            receipt['naturalness'] = original_naturalness
+            receipt['items'][16]['score'] = 4; receipt['total'] = 99
+            quality.write_text(json.dumps(receipt))
+            with self.assertRaisesRegex(PipelineError, 'item 17'):
+                validate_publish_contract(context)
+            receipt['items'][16]['score'] = 5; receipt['total'] = 100
             receipt["items"][0]["score"] = 3; receipt["total"] = 98
             quality.write_text(json.dumps(receipt))
             with self.assertRaisesRegex(PipelineError, "Physical AI quality gate rejected"):

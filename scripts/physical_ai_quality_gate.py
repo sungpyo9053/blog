@@ -18,10 +18,40 @@ class PhysicalAIQualityError(ValueError):
 
 FIELDS = {
     'schema_version', 'publish_sha256', 'writer_id', 'reviewer_id', 'reviewed_at',
-    'gates', 'items', 'total', 'verdict',
+    'gates', 'items', 'total', 'verdict', 'naturalness',
 }
 ITEM_FIELDS = {'id', 'score', 'reason', 'body_location', 'evidence_ref'}
 GATES = {f'gate_{number}' for number in range(1, 9)}
+NATURALNESS_CHECKS = {'structure', 'rhythm', 'restraint', 'judgment', 'honesty'}
+
+
+def enforce_naturalness(value, items):
+    """Validate a semantic review record, not an AI-authorship detector."""
+    _require(isinstance(value, dict) and set(value) == {
+        'verdict', 'checks', 'comparison_refs', 'unresolved_issues'},
+        'Naturalness review is required with exact fields')
+    _require(value['verdict'] == 'PASS' and value['unresolved_issues'] == [],
+             'Naturalness review must pass without unresolved issues')
+    refs = value['comparison_refs']
+    _require(isinstance(refs, list) and bool(refs) and all(_nonempty(ref) for ref in refs),
+             'Naturalness review requires recent-article comparison evidence')
+    checks = value['checks']
+    _require(isinstance(checks, list) and len(checks) == len(NATURALNESS_CHECKS),
+             'All five naturalness checks are required')
+    seen = set()
+    for check in checks:
+        _require(isinstance(check, dict) and set(check) == {
+            'id', 'passed', 'reason', 'body_location', 'evidence_ref'},
+            'Naturalness check has missing or unknown fields')
+        name = check['id']
+        _require(isinstance(name, str) and name in NATURALNESS_CHECKS and name not in seen,
+                 'Naturalness check IDs must be unique and complete')
+        seen.add(name)
+        _require(check['passed'] is True, 'Unconfirmed naturalness check')
+        _require(all(_nonempty(check[field]) for field in ('reason', 'body_location', 'evidence_ref')),
+                 'Naturalness check requires reason, location and evidence')
+    _require(any(item.get('id') == 17 and item.get('score') == 5 for item in items),
+             'Natural prose quality item 17 must score five')
 
 
 def _require(condition, message):
@@ -32,7 +62,7 @@ def _require(condition, message):
 def _nonempty(value):
     return (isinstance(value, str) and bool(value.strip())
             and value.strip().casefold() not in
-            {'not_evaluated', 'unknown', 'n/a', 'todo', 'tbd', '미확인'})
+            {'not_evaluated', 'unknown', 'unverified', 'not_verified', 'n/a', 'todo', 'tbd', '미확인', '미검증'})
 
 
 def _unique_object(pairs):
@@ -55,7 +85,7 @@ def enforce_quality(publish_path, review_path):
         raise PhysicalAIQualityError('Final document or quality review is unreadable') from exc
     _require(isinstance(review, dict) and set(review) == FIELDS,
              'Quality review has missing or unknown fields')
-    _require(type(review['schema_version']) is int and review['schema_version'] == 1,
+    _require(type(review['schema_version']) is int and review['schema_version'] == 2,
              'Unknown quality review schema')
     _require(review['publish_sha256'] == hashlib.sha256(document).hexdigest(),
              'Quality review does not match final publish.md SHA256')
@@ -94,4 +124,5 @@ def enforce_quality(publish_path, review_path):
     _require(type(review['total']) is int and review['total'] == total and total >= 99,
              'Quality review total must equal item sum and reach 99')
     _require(review['verdict'] == 'APPROVED', 'Quality review verdict must be APPROVED')
+    enforce_naturalness(review['naturalness'], items)
     return review

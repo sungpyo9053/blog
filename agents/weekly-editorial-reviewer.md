@@ -14,4 +14,7 @@
 승인은 실행부에서 전달한 정확한 대상·action/after 해시·writer/reviewer ID와 함께
 verdict, post_id, title, slug, action_sha256, after_sha256, writer_id, reviewer_id,
 gates(gate1..gate8 boolean true), items(20개 id/score/reason/body_location/evidence_ref),
-total(합계99이상)을 반환한다. 승인 스키마를 채웠다는 사실이 독립 검토를 대신하지 않는다.
+total(합계99이상), naturalness(physical-ai-quality.md schema2의 정확한 객체)를 반환한다.
+전체 수정 후 글의 자연스러움 다섯 항목과 품질항목17=5가 필수이며, 최근 글 비교는
+입력 eligible_posts와 비교 기록을 사용한다. 자료가 부족하면 HOLD다.
+승인 스키마를 채웠다는 사실이 독립 검토를 대신하지 않는다.

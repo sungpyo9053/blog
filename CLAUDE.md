@@ -50,7 +50,11 @@ READY가 있을 때만 하루 최대 한 편을 처리하며, READY가 없으면
 1. 04:00 Daily Briefing을 `briefing_only`로 실행한다.
 2. 10:00 Evidence-first Topic Miner를 실행한다.
 3. 실제 사건을 묶고 현재 공개 글·Draft와 검색 의도를 대조한다.
-4. READY가 없으면 Publisher를 호출하지 않고 `failed=false`로 종료한다.
+4. READY가 없고 일일 한도가 남으면 `scripts/discover_physical_ai.py`로 공식 자료 기반
+   후보를 최대1개 보충한다. 독립 후보 검수·공개 근거 고정 후 기존 READY 검사를
+   다시 적용한다. 그래도 없으면 Publisher를 호출하지 않고 `failed=false`로 종료한다.
+   조회·모델·근거공개 실패는 무후보로 숨기지 않는다. `--apply` 없는 검사는 공급기나
+   외부 쓰기를 실행하지 않는다. 후보 승인은 최종 글 승인과 별개다.
 5. READY가 있으면 최대 한 편만 Research → Writer → Image Maker → Assembler →
    Reviewer → Publisher로 전달하고 공개 HTML을 다시 감사한다.
 

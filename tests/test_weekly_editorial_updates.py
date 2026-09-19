@@ -69,6 +69,14 @@ class WeeklyUpdateTests(unittest.TestCase):
                        'title': '기초', 'slug': 'basics', 'gates': {f'gate{i}': True for i in range(1, 9)},
                        'items': [{'id': i, 'score': 5, 'reason': 'reviewed', 'body_location': 'paragraph1',
                                   'evidence_ref': 'source.json'} for i in range(1, 21)], 'total': 100}
+        # Synthetic schema fixture; these are not content review findings.
+        self.review['naturalness'] = {
+            'verdict': 'PASS', 'unresolved_issues': [],
+            'comparison_refs': ['synthetic recent-article fixture'],
+            'checks': [dict(id=name, passed=True, reason='Synthetic reason',
+                            body_location='fixture paragraph', evidence_ref='synthetic fixture')
+                       for name in ('structure', 'rhythm', 'restraint', 'judgment', 'honesty')],
+        }
         self.inventory = {'metadata': {'complete': True, 'full_content': True,
                                       'collected_at': datetime.now(UTC).isoformat(),
                                       'statuses': {'publish': 1, 'draft': 0}},
@@ -96,6 +104,32 @@ class WeeklyUpdateTests(unittest.TestCase):
 
     def test_missing_review(self):
         self.review = {}
+        self.assertEqual(self.run_update()['status'], 'rejected')
+        self.assertFalse(self.client.writes)
+
+    def test_naturalness_fail_closed_before_any_wordpress_write(self):
+        original = copy.deepcopy(self.review)
+        invalids = [None, {}, {**original['naturalness'], 'verdict': 'HOLD'}]
+        for flag in (False, 1, 'NOT_EVALUATED'):
+            invalid = copy.deepcopy(original['naturalness'])
+            invalid['checks'][0]['passed'] = flag
+            invalids.append(invalid)
+        for invalid in invalids:
+            with self.subTest(invalid=invalid):
+                self.review = copy.deepcopy(original)
+                self.review['naturalness'] = invalid
+                result = self.run_update()
+                self.assertEqual(result['status'], 'rejected')
+                self.assertEqual(result['wp_write_count'], 0)
+                self.assertFalse(self.client.writes)
+        self.review = copy.deepcopy(original)
+        del self.review['naturalness']
+        self.assertEqual(self.run_update()['status'], 'rejected')
+        self.assertFalse(self.client.writes)
+
+    def test_naturalness_item17_four_blocks_otherwise_passing_99(self):
+        self.review['items'][16]['score'] = 4
+        self.review['total'] = 99
         self.assertEqual(self.run_update()['status'], 'rejected')
         self.assertFalse(self.client.writes)
 
