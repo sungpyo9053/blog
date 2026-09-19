@@ -50,8 +50,15 @@ Preview eligibility (no send):
 Retry only a notification after fixing a missing executable/configuration:
 
 ```sh
+PATH=/home/ubuntu/.local/share/huntlab-mcp/node_modules/.bin:/usr/local/bin:/usr/bin:/bin \
+MCPORTER_BIN=/home/ubuntu/.local/share/huntlab-mcp/node_modules/.bin/mcporter \
 .venv/bin/python scripts/publication_notification.py --result output/evidence-deep-article-runs/<run-id>/result.json --send
 ```
+
+Use the same PATH for `run_evidence_deep_article.py --resume-public-audit` because
+successful read-only recovery also invokes the notification helper. Setting only
+`MCPORTER_BIN` does not select its Node interpreter: a manual SSH shell may still
+use the incompatible system Node 18 even while the systemd timer works correctly.
 
 Already-sent receipts do not resend. `not_sent` means the executable never
 started and is retryable. `attempting` or `delivery_unconfirmed` means delivery
