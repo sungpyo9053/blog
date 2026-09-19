@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (0*0.5+1*0.5)
+assert math.isclose(value, 0.5, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '0.5초 간격의 최종 위치', "actual": value})
+value = (0*0.25+0.5*0.25+1*0.25+1.5*0.25)
+assert math.isclose(value, 0.75, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '0.25초 간격의 최종 위치', "actual": value})
+value = (2*1*1/2)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '일정 가속도 기준 위치', "actual": value})
+value = (1-0.5)
+assert math.isclose(value, 0.5, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '0.5초 간격의 위치 절대오차', "actual": value})
+value = (1-0.75)
+assert math.isclose(value, 0.25, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '0.25초 간격의 위치 절대오차', "actual": value})
+value = (2*0.5+2*0.5)
+assert math.isclose(value, 2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '0.5초 간격의 최종 속도', "actual": value})
+value = (2*0.25+2*0.25+2*0.25+2*0.25)
+assert math.isclose(value, 2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '0.25초 간격의 최종 속도', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
