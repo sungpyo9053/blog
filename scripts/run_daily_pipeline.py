@@ -957,11 +957,16 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             "이 글은 기초·원리 해설입니다. 20초 핵심 요약·FAQ·표를 강제하지 말고 "
             "쉬운 정의→자체 예제→정확한 원리→확인 문제→적용 한계로 구성하세요. "
             "프로젝트 장애나 Git 수정 사건을 꾸미지 마세요. 자체 검산과 로봇 실험을 구분하세요. "
+            "planner-context.json의 foundation_contract가 있으면 worked_example.public_url과 "
+            "verification.public_url을 모두 publish.md 본문의 실제 Markdown 링크 또는 HTML anchor로 "
+            "정확히 연결하세요. frontmatter·코드·주석·단순 URL 문자열은 독자용 근거 링크가 아닙니다. "
         )
         quick_view_review = (
             "publish.md Frontmatter에 content_type: foundation_concept을 반드시 기록하세요. "
             "20초 핵심 요약·FAQ·표의 유무를 승인 조건으로 삼지 마세요. "
             "foundation_contract의 1차 자료와 자체 예제·검산 기록을 문장 단위로 대조하세요. "
+            "worked_example.public_url과 verification.public_url 두 링크가 최종 본문의 실제 href로 "
+            "모두 보이는지 확인하고 누락하면 REJECT하세요. 코드·frontmatter의 URL은 인정하지 않습니다. "
             f"{str(topic_dir / 'editorial-inventory.json')!r}의 publish·draft 전체 본문을 "
             "검색 의도·결론·실행 방법 관점에서 비교하고 검토한 글 수와 충돌 ID를 review.md에 기록하세요. "
             "후보 승인과 최종 글 승인은 다르며, 새로운 구현 사고를 만들어 근거를 채우지 마세요. "
@@ -1427,6 +1432,11 @@ def validate_publish_contract(context: TopicContext) -> str:
         raise PipelineError(f"{context.topic_id}: publish.md Frontmatter 오류") from exc
 
     metadata = document.metadata
+    from publisher.foundation_links import enforce_foundation_links, FoundationLinkError
+    try:
+        enforce_foundation_links(document)
+    except FoundationLinkError as exc:
+        raise PipelineError(f"{context.topic_id}: {exc}") from exc
     expected = {
         "title": context.title,
         "run_id": context.run_id,

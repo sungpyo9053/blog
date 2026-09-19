@@ -469,6 +469,27 @@ class PublisherTests(unittest.TestCase):
                 self.assertEqual(client.tags, {})
                 self.assertEqual(client.create_category_calls, [])
 
+    def test_direct_foundation_publish_missing_links_rejected_without_api_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = VALID_MARKDOWN.replace('publish_mode: draft', 'publish_mode: publish\ncontent_type: foundation_concept\nrun_id: fixture-run\ntopic_id: fixture-topic\nsource_id: huntlab:fixture-run:fixture-topic')
+            path = self._write_document(root, text)
+            digest = __import__('hashlib').sha256(path.read_bytes()).hexdigest()
+            review = root/'review.md'; review.write_text(f'APPROVED\nfixture-run\nfixture-topic\n{digest}\n')
+            (root/'planner-context.json').write_text(json.dumps({'foundation_contract': {
+                'worked_example': {'public_url': 'https://example.org/example.py'},
+                'verification': {'public_url': 'https://example.org/verification.json'}}}))
+            client = FakeWordPressClient()
+            result = DraftPublisher(client, audit_log=root/'audit.jsonl').publish_file(
+                path, reviewer_approved=True, review_path=review,
+                expected_identity={'run_id': 'fixture-run', 'topic_id': 'fixture-topic',
+                                   'source_id': 'huntlab:fixture-run:fixture-topic', 'category': 'Tech'})
+            self.assertEqual(result.status, 'Failed')
+            self.assertIn('foundation_public_evidence_links_missing', {x.code for x in result.validation_report.errors})
+            self.assertIsNone(client.created_payload)
+            self.assertFalse(client.tags)
+            self.assertFalse(client.upload_calls)
+
     def test_approved_existing_post_id_updates_matching_post(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

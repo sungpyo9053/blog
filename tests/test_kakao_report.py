@@ -8,6 +8,31 @@ from scripts.send_kakao_report import deep_status, message_for, run_day, send
 
 
 class KakaoReportTests(unittest.TestCase):
+    def test_verified_recovery_supersedes_but_preserves_failed_result(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            run_id = '20260920T010000Z-test'
+            run = root/'output/evidence-deep-article-runs'/run_id
+            run.mkdir(parents=True)
+            failed = {'failed': True, 'error_type': 'PipelineError', 'wordpress_write_count': 1}
+            (run/'result.json').write_text(json.dumps(failed))
+            publication = {'post_id': 777, 'url': 'https://huntlab.app/lesson/'}
+            receipt = {'run_id': run_id, 'kst_date': '2026-09-20',
+                       'wordpress_write_count': 1, 'publication': publication}
+            (run/'publication.json').write_text(json.dumps(receipt))
+            recovery = {**receipt, 'failed': False, 'deep_article': 'published',
+                        'public_audit': {'url': publication['url'], 'http_status': 200,
+                                         'title_present': True, 'evidence_links_present': True}}
+            path = run/'public-audit-recovery.json'
+            path.write_text(json.dumps(recovery))
+            self.assertEqual(deep_status(root, '2026-09-20')[0], '발행 1건(공개 확인 완료)')
+            self.assertEqual(json.loads((run/'result.json').read_text()), failed)
+            for key, value in [('run_id', 'other'), ('publication', {'post_id': 999}),
+                               ('public_audit', {'http_status': 200})]:
+                with self.subTest(key=key):
+                    path.write_text(json.dumps({**recovery, key: value}))
+                    self.assertIn('실패:', deep_status(root, '2026-09-20')[0])
+
     def test_candidate_supply_failure_and_researched_empty_are_distinct(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

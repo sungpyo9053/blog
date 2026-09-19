@@ -668,7 +668,7 @@ class DailyPipelineIsolationTests(unittest.TestCase):
     def _write_approved_publish(self, context: TopicContext, body: str) -> None:
         publish = context.directory / "publish.md"
         tags = "\n".join(f'  - "{tag}"' for tag in context.tags)
-        content_type = 'content_type: evidence_deep_article\n' if context.content_type == "evidence_deep_article" else ""
+        content_type = f'content_type: {context.content_type}\n' if context.content_type in {"evidence_deep_article", "foundation_concept"} else ""
         publish.write_text(
             "---\n"
             f'title: "{context.title}"\n'
@@ -1418,6 +1418,26 @@ class DailyPipelineIsolationTests(unittest.TestCase):
             self._write_approved_publish(context, "## 관측\n변경한 본문은 재검토해야 한다.\n")
             with self.assertRaisesRegex(PipelineError, "Physical AI quality gate rejected"):
                 validate_publish_contract(context)
+
+    def test_foundation_body_evidence_required_before_publisher(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            context = TopicContext(title='Fixture concept', run_id='fixture-run', topic_id='fixture-topic',
+                                   directory=directory, category='Tech', tags=('Robot',), content_type='foundation_concept')
+            example = 'https://example.org/example.py'
+            proof = 'https://example.org/verification.json'
+            (directory/'planner-context.json').write_text(json.dumps({'foundation_contract': {
+                'worked_example': {'public_url': example}, 'verification': {'public_url': proof}}}))
+            for body in ('## Example\nNo links', f'## Example\n[Code]({example})',
+                         f'## Example\n```text\n{example}\n{proof}\n```'):
+                self._write_approved_publish(context, body)
+                with self.assertRaisesRegex(PipelineError, 'foundation_public_evidence_links_missing'):
+                    validate_publish_contract(context)
+            self._write_approved_publish(context, f'## Example\n[Code]({example}) [Run]({proof})')
+            self.assertTrue(validate_publish_contract(context))
+            stages = {s.name: s for s in topic_stages(context)}
+            for name in ('Writer Agent', 'Reviewer Agent'):
+                self.assertIn('verification.public_url', stages[name].prompt)
 
     def test_selected_planner_evidence_is_copied_into_topic_boundary(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -166,6 +166,11 @@ class DraftPublisher:
             reviewer_approved=reviewer_approved,
         )
         if document.metadata.get("publish_mode") == "publish":
+            from publisher.foundation_links import enforce_foundation_links, FoundationLinkError
+            try:
+                enforce_foundation_links(document)
+            except FoundationLinkError as exc:
+                report.errors.append(ValidationIssue(code=str(exc), message="Foundation evidence must be linked in the article body."))
             if document.metadata.get("category") in PHYSICAL_AI_CATEGORIES:
                 from scripts.physical_ai_quality_gate import enforce_quality, PhysicalAIQualityError
                 try:

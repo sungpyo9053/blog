@@ -57,6 +57,24 @@ def deep_status(root, day, is_active=False):
             continue
         try:
             row = json.loads(path.read_text())
+            recovery_path = directory/'public-audit-recovery.json'
+            if recovery_path.is_file():
+                recovery = json.loads(recovery_path.read_text())
+                receipt = json.loads((directory/'publication.json').read_text())
+                audit = recovery.get('public_audit') or {}
+                publication = receipt.get('publication') or {}
+                if (recovery.get('run_id') == receipt.get('run_id') == directory.name
+                        and recovery.get('kst_date') == receipt.get('kst_date') == day
+                        and recovery.get('publication') == publication
+                        and receipt.get('wordpress_write_count') == 1
+                        and recovery.get('wordpress_write_count') == 1
+                        and recovery.get('failed') is False
+                        and recovery.get('deep_article') == 'published'
+                        and audit.get('url') == publication.get('url')
+                        and audit.get('http_status') == 200
+                        and audit.get('title_present') is True
+                        and audit.get('evidence_links_present') is True):
+                    row = recovery
             # dry-run does not prove the scheduled execution happened.
             if row.get('deep_article') != 'ready_not_published':
                 rows.append(row)
