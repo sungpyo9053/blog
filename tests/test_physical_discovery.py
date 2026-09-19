@@ -191,6 +191,56 @@ class DiscoveryTests(unittest.TestCase):
                 d.publish_files(self.root, ['editorial/new.py'], self.config, 'Test')
             self.assertEqual(command.call_count, 1)
 
+    def _git_origin_commands(self, fetch_origin, push_origin):
+        commands = []
+        def command(repo, *args):
+            commands.append(args)
+            if args == ('branch', '--show-current'): return 'main'
+            if args == ('remote', 'get-url', 'origin'): return fetch_origin
+            if args == ('remote', 'get-url', '--push', 'origin'): return push_origin
+            if args[:2] == ('ls-remote', 'origin'):
+                committed = any('commit' in item for item in commands)
+                return ('a' if committed else 'b') * 40 + '\trefs/heads/main'
+            if args == ('rev-parse', 'HEAD'):
+                return ('a' if any('commit' in item for item in commands) else 'b') * 40
+            if args[0] == 'diff-tree': return 'editorial/new.py'
+            return ''
+        return commands, command
+
+    def test_git_https_fetch_ssh_push_explicitly_allowed(self):
+        config = {**self.config, 'expected_git_push_origin': 'git@github.com:sungpyo9053/blog.git'}
+        commands, command = self._git_origin_commands(config['expected_git_origin'], config['expected_git_push_origin'])
+        with patch.object(d, 'git_command', side_effect=command):
+            self.assertEqual(d.publish_files(self.root, ['editorial/new.py'], config, 'Test'), 'a'*40)
+        self.assertIn(('remote', 'get-url', 'origin'), commands)
+        self.assertIn(('remote', 'get-url', '--push', 'origin'), commands)
+        self.assertTrue(any('commit' in args for args in commands))
+        self.assertTrue(any('push' in args for args in commands))
+        self.assertFalse(any('set-url' in args for args in commands))
+
+    def test_git_different_push_destination_rejected_before_changes(self):
+        config = {**self.config, 'expected_git_push_origin': 'git@github.com:sungpyo9053/blog.git'}
+        commands, command = self._git_origin_commands(config['expected_git_origin'], 'git@github.com:other/repository.git')
+        with patch.object(d, 'git_command', side_effect=command):
+            with self.assertRaisesRegex(d.DiscoveryError, '^git_origin_mismatch$'):
+                d.publish_files(self.root, ['editorial/new.py'], config, 'Test')
+        self.assertFalse(any(any(token in args for token in ('add', 'commit', 'push')) for args in commands))
+
+    def test_git_single_origin_legacy_fallback(self):
+        self.assertNotIn('expected_git_push_origin', self.config)
+        commands, command = self._git_origin_commands(self.config['expected_git_origin'], self.config['expected_git_origin'])
+        with patch.object(d, 'git_command', side_effect=command):
+            self.assertEqual(d.publish_files(self.root, ['editorial/new.py'], self.config, 'Test'), 'a'*40)
+        self.assertTrue(any('push' in args for args in commands))
+
+    def test_git_fetch_identity_cannot_switch_to_ssh(self):
+        config = {**self.config, 'expected_git_push_origin': 'git@github.com:sungpyo9053/blog.git'}
+        commands, command = self._git_origin_commands(config['expected_git_push_origin'], config['expected_git_push_origin'])
+        with patch.object(d, 'git_command', side_effect=command):
+            with self.assertRaisesRegex(d.DiscoveryError, '^git_origin_mismatch$'):
+                d.publish_files(self.root, ['editorial/new.py'], config, 'Test')
+        self.assertFalse(any(any(token in args for token in ('add', 'commit', 'push')) for args in commands))
+
     def test_fresh_inventory_required_before_agent(self):
         inventory = json.loads(self.inventory.read_text())
         inventory['metadata']['collected_at'] = '2020-01-01T00:00:00+00:00'

@@ -443,6 +443,11 @@ def main() -> int:
         try:
             progress = json.loads(progress_path.read_text(encoding="utf-8"))
             write_count = progress.get("wordpress_write_count", "unknown")
+        except FileNotFoundError:
+            # execute persists progress before it can reach any Publisher call.
+            # A preflight/epoch failure without that checkpoint cannot have written.
+            progress = {}
+            write_count = 0
         except Exception:
             progress = {}
             write_count="unknown" if args.apply and owns_run else 0

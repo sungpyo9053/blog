@@ -212,9 +212,10 @@ def git_command(repo, *args):
 
 def publish_files(repo, paths, config, message):
     expected = config['expected_git_origin']
+    push_expected = config.get('expected_git_push_origin', expected)
     need(git_command(repo, 'branch', '--show-current') == 'main', 'git_not_main')
     need(git_command(repo, 'remote', 'get-url', 'origin') == expected
-         and git_command(repo, 'remote', 'get-url', '--push', 'origin') == expected, 'git_origin_mismatch')
+         and git_command(repo, 'remote', 'get-url', '--push', 'origin') == push_expected, 'git_origin_mismatch')
     remote = git_command(repo, 'ls-remote', 'origin', 'refs/heads/main').split()[0]
     need(remote == git_command(repo, 'rev-parse', 'HEAD'), 'git_remote_head_mismatch')
     need(all(not Path(path).is_absolute() and '..' not in Path(path).parts

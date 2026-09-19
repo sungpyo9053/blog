@@ -14,6 +14,20 @@ from scripts.run_daily_pipeline import PipelineLock
 class EvidenceDeepArticleTests(unittest.TestCase):
     logger = logging.getLogger("evidence-deep-test")
 
+    def test_preflight_failure_before_any_progress_records_zero_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            from scripts.editorial_epoch import EpochError
+            with patch('scripts.run_evidence_deep_article.LOCK', root/'lock'), \
+                 patch('scripts.run_evidence_deep_article.OUTPUT', root/'runs'), \
+                 patch('scripts.run_evidence_deep_article.execute', side_effect=EpochError('preflight')), \
+                 patch('sys.argv', ['deep', '--apply', '--run-id', '20260920T010000Z-preflight', '--inventory', str(root/'inventory')]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(), 1)
+            result = json.loads((root/'runs/20260920T010000Z-preflight/result.json').read_text())
+            self.assertEqual(result['wordpress_write_count'], 0)
+            self.assertTrue(result['failed'])
+
     def test_cli_notifies_only_after_execution_result_is_persisted(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); runs = root / "runs"
