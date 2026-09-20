@@ -2186,8 +2186,11 @@ def run_daily_briefing_analysis(
             run_directory=run_directory,
         )
         if not source_snapshot_path.is_file():
+            read_editorial_source_observation(DEFAULT_EDITORIAL_SOURCE_CACHE)
             source_payload = json.loads(DEFAULT_EDITORIAL_SOURCE_CACHE.read_text(encoding="utf-8"))
             atomic_write_manifest(source_snapshot_path, source_payload)
+        # Resume is not permission to turn an old frozen collection into today's news.
+        read_editorial_source_observation(source_snapshot_path)
         source_cache = load_editorial_source_cache(source_snapshot_path)
         source_hash = str(source_cache.get("source_snapshot_hash", ""))
         if not source_cache.get("rows") or not source_hash:

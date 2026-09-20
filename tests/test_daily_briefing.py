@@ -3,6 +3,7 @@ import logging
 import tempfile
 import unittest
 import urllib.error
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -326,7 +327,7 @@ class DailyBriefingTests(unittest.TestCase):
                     {
                         "provider": "hunt_news_editorial_sources",
                         "contract_version": "editorial-source-cache.v1",
-                        "checked_at": "2026-08-27T12:00:00+00:00",
+                        "checked_at": datetime.now(UTC).isoformat(),
                         "source_snapshot_hash": "a" * 64,
                         "rows": source_rows_for_analysis(),
                     },
@@ -375,7 +376,7 @@ class DailyBriefingTests(unittest.TestCase):
                     {
                         "provider": "hunt_news_editorial_sources",
                         "contract_version": "editorial-source-cache.v1",
-                        "checked_at": "2026-08-27T12:00:00+00:00",
+                        "checked_at": datetime.now(UTC).isoformat(),
                         "source_snapshot_hash": "a" * 64,
                         "rows": source_rows_for_analysis(),
                     },
@@ -406,6 +407,41 @@ class DailyBriefingTests(unittest.TestCase):
                     logger=logging.getLogger("invalid-briefing-test"),
                     timeout_seconds=10,
                 )
+
+    def test_pipeline_rejects_stale_collection_before_model_even_on_resume(self):
+        for frozen in (False, True):
+            with self.subTest(frozen=frozen), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                run = root / 'run'
+                run.mkdir()
+                cache = root / 'cache.json'
+                payload = {
+                    'provider': 'hunt_news_editorial_sources',
+                    'contract_version': 'editorial-source-cache.v1',
+                    'checked_at': (datetime.now(UTC) - timedelta(days=15)).isoformat(),
+                    'source_snapshot_hash': 'a' * 64,
+                    'rows': source_rows_for_analysis(),
+                }
+                cache.write_text(json.dumps(payload))
+                if frozen:
+                    (run / 'editorial-sources-snapshot.json').write_text(json.dumps(payload))
+                    payload['checked_at'] = datetime.now(UTC).isoformat()
+                    cache.write_text(json.dumps(payload))
+                with mock.patch.object(pipeline, 'DEFAULT_EDITORIAL_SOURCE_CACHE', cache), \
+                     mock.patch.object(pipeline, 'RUNS_DIR', root / 'isolated'), \
+                     mock.patch.object(pipeline, 'run_stage') as stage, \
+                     self.assertRaises(pipeline.PipelineError) as caught:
+                    pipeline.run_daily_briefing_analysis(
+                        'codex', run_id='20260920T030000Z-1234567890',
+                        run_directory=run, topics_path=run/'topics.md',
+                        logger=logging.getLogger('stale-test'), timeout_seconds=10)
+                stage.assert_not_called()
+                self.assertIn('6시간', str(caught.exception.__cause__))
+
+    def test_daily_service_refreshes_sources_before_analysis(self):
+        unit = (Path(__file__).resolve().parents[1] / 'deploy/huntlab-daily-pipeline.service').read_text()
+        self.assertIn('ExecStartPre=', unit)
+        self.assertLess(unit.index('scripts/collect_editorial_sources.py'), unit.index('scripts/run_daily_pipeline.py'))
 
     def test_validates_complete_evidence_backed_contract(self):
         with tempfile.TemporaryDirectory() as tmp:

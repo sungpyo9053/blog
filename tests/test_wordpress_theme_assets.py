@@ -1,5 +1,8 @@
 from pathlib import Path
 import unittest
+import json
+import shutil
+import subprocess
 
 from PIL import Image
 
@@ -12,6 +15,35 @@ CATEGORY_TABS = (
 
 
 class HuntLabWarmEditorialTests(unittest.TestCase):
+    def test_report_navigation_and_honest_source_dates(self):
+        php = (PLUGIN / 'huntlab-warm-editorial.php').read_text()
+        css = (PLUGIN / 'assets/warm-editorial.css').read_text()
+        self.assertIn('aria-label="보고서 항목 바로가기"', php)
+        self.assertIn('전체 보고서 읽기 →', php)
+        self.assertIn("$is_briefing_detail ? '' : $briefing_detail_url", php)
+        self.assertIn('수집 자료 최신성 주의', php)
+        self.assertIn('배경 자료 · 72시간 이전', php)
+        self.assertNotIn('Hunt News 선정 오늘의 필독', php)
+        self.assertNotIn("$source_match['published_at'] ?? $analysis['generated_at']", php)
+        self.assertIn('.hunt-news-report-guide a:focus-visible', css)
+        self.assertIn('min-height: 44px', css)
+
+    @unittest.skipUnless(shutil.which('php'), 'PHP runtime required')
+    def test_source_age_labels_execute_at_report_time(self):
+        code = '''$s=file_get_contents($argv[1]);
+        preg_match('/function hunt_news_source_age_label\\(.*?\\n}/s', $s, $m);
+        eval($m[0]);
+        $report='2026-09-20T12:00:00+09:00';
+        $dates=['2026-09-20T11:00:00+09:00','2026-09-17T12:00:00+09:00',
+        '2026-09-17T11:59:59+09:00','2026-09-05T12:00:00+09:00',
+        '', 'bad-date', '2026-09-21T12:00:00+09:00'];
+        echo json_encode(array_map(fn($d)=>hunt_news_source_age_label($d,$report),$dates));'''
+        result = subprocess.run(['php', '-r', code, str(PLUGIN / 'huntlab-warm-editorial.php')],
+                                capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(result.stdout),
+                         ['보고서 기준 최근 72시간'] * 2 + ['배경 자료 · 72시간 이전'] * 2
+                         + ['발행 시각 확인 필요'] * 3)
+
     def test_plugin_loads_a_versioned_local_stylesheet(self):
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text(encoding="utf-8")
         self.assertIn("Plugin Name: Hunt News Warm Editorial Theme", php)
@@ -203,12 +235,12 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("$analysis['retrospective']['items']", php)
         self.assertIn("$retrospective_counts", php)
         self.assertIn("hunt-news-retrospective__summary", php)
-        self.assertIn("Hunt News 선정 오늘의 필독", php)
+        self.assertIn("Hunt News 선별 자료", php)
         self.assertIn("공식 원문, 독립 출처와 실무 영향을 대조해 고른", php)
         self.assertIn("$must_read_display_count", php)
         self.assertIn("고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개", php)
         self.assertNotIn("고른 5개입니다", php)
-        self.assertIn("지금 놓치면 아쉬운 기술 뉴스", php)
+        self.assertIn("선별 원문과 읽는 이유", php)
         self.assertIn('id="hunt-news-decision-matrix-title"', php)
         self.assertIn("적용 판단", php)
         self.assertIn("개발자 인사이트", php)
@@ -216,7 +248,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertIn("$analysis['matrix']", php)
         self.assertIn("$analysis['developer_insights']", php)
         self.assertIn("$analysis['watchlist']", php)
-        self.assertIn("오늘 수집한 기술 뉴스", php)
+        self.assertIn("보고서에 사용한 수집 자료", php)
         self.assertIn("날짜 아카이브", php)
         self.assertIn("hunt_briefing", php)
         self.assertNotIn('data-brief-view=', php)

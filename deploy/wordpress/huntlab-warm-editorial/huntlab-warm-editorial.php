@@ -749,6 +749,16 @@ function hunt_news_source_time_label( $published_at, $report_at ) {
 	return wp_date( $format, $published );
 }
 
+/** Classify against the report time, not today's clock for archived reports. */
+function hunt_news_source_age_label( $published_at, $report_at ) {
+	$published = strtotime( (string) $published_at );
+	$report = strtotime( (string) $report_at );
+	if ( ! $published || ! $report || $published > $report + 300 ) {
+		return '발행 시각 확인 필요';
+	}
+	return $report - $published > 72 * 3600 ? '배경 자료 · 72시간 이전' : '보고서 기준 최근 72시간';
+}
+
 /**
  * Prefer the two verified publications from the latest manifest, then fill the
  * third briefing slot with the next public post.
@@ -1614,7 +1624,7 @@ function hunt_news_home_sections() {
 					'title' => (string) ( $source_match['title'] ?? $item['title'] ?? '' ),
 					'korean_title' => (string) ( $item['korean_title'] ?? ( $source_title_translations[ $source_url ] ?? '' ) ),
 					'url' => $source_url,
-					'published_at' => (string) ( $source_match['published_at'] ?? $analysis['generated_at'] ?? '' ),
+					'published_at' => (string) ( $source_match['published_at'] ?? '' ),
 					'why_it_matters' => (string) ( $item['why_it_matters'] ?? '' ),
 					'action' => (string) ( $item['action'] ?? '' ),
 				);
@@ -1675,6 +1685,18 @@ function hunt_news_home_sections() {
 	$briefing_must_read_count = ! empty( $analysis['must_read'] ) ? count( $analysis['must_read'] ) : min( 5, count( $must_read_items ) );
 	$must_read_display_count  = min( 5, count( $must_read_items ) );
 	$briefing_detail_url      = home_url( '/briefing/' . hunt_news_briefing_display_date( $manifest ) . '/' );
+	$report_at = (string) ( $analysis['generated_at'] ?? $manifest['generated_at'] ?? '' );
+	$collection_at = (string) ( $manifest['editorial_sources']['checked_at'] ?? '' );
+	$report_timestamp = strtotime( $report_at );
+	$collection_timestamp = strtotime( $collection_at );
+	$collection_outdated = ! $report_timestamp || ! $collection_timestamp || $report_timestamp - $collection_timestamp > 6 * 3600 || $collection_timestamp > $report_timestamp + 300;
+	$report_links = array( 'hunt-news-signal-title' => '핵심 신호' );
+	if ( $keywords ) { $report_links['hunt-news-keyword-title'] = '키워드'; }
+	$report_links['hunt-news-timeline-title'] = '확인 타임라인';
+	if ( $analysis || $brief_posts ) { $report_links['hunt-news-focus-title'] = '판단 근거'; }
+	if ( ! empty( $analysis['matrix'] ) ) { $report_links['hunt-news-decision-matrix-title'] = '적용 판단'; }
+	$report_links['hunt-news-must-read-title'] = '선별 원문';
+	if ( $source_groups ) { $report_links['hunt-news-source-title'] = '수집 자료'; }
 	$latest_explainer         = $is_category ? null : hunt_news_latest_special_post( 'technical-explainer' );
 	?>
 	<?php if ( ! $is_category && ( $manifest || $brief_posts ) ) : ?>
@@ -1692,6 +1714,20 @@ function hunt_news_home_sections() {
 				<a href="<?php echo esc_url( get_post_type_archive_link( 'hunt_briefing' ) ); ?>">날짜 아카이브</a>
 			</div>
 		</header>
+		<?php if ( $manifest ) : ?>
+		<section class="hunt-news-report-guide" aria-label="전체 보고서 안내">
+			<div><strong><?php echo $is_briefing_detail ? '전체 보고서 목차' : '요약 너머, 판단 근거까지'; ?></strong><p><?php echo $is_briefing_detail ? '필요한 항목으로 바로 이동하세요.' : '이 화면은 요약입니다. 키워드와 적용 조건, 확인할 시점은 전체 보고서에서 이어집니다.'; ?></p></div>
+			<?php if ( ! $is_briefing_detail ) : ?><a class="hunt-news-report-guide__open" href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서 읽기 →</a><?php endif; ?>
+			<nav aria-label="보고서 항목 바로가기">
+				<?php foreach ( $report_links as $section_id => $section_label ) : ?>
+				<a href="<?php echo esc_url( ( $is_briefing_detail ? '' : $briefing_detail_url ) . '#' . $section_id ); ?>"><?php echo esc_html( $section_label ); ?></a>
+				<?php endforeach; ?>
+			</nav>
+		</section>
+		<?php if ( $collection_outdated ) : ?>
+		<p class="hunt-news-source-notice"><strong>수집 자료 최신성 주의</strong> 이 보고서의 원문 목록은 보고서 작성 시점에 최신 수집을 확인하지 못한 자료입니다. 최신 뉴스 목록으로 보지 마세요. 마지막 수집: <?php echo esc_html( $collection_timestamp ? wp_date( 'Y.m.d H:i', $collection_timestamp ) . ' KST' : '확인 불가' ); ?>.</p>
+		<?php endif; ?>
+		<?php endif; ?>
 		<?php if ( $is_briefing_detail && $manifest ) : ?>
 		<section id="hunt-news-reader-summary" class="hunt-news-reader-summary" aria-label="오늘 브리핑 구성">
 			<div><span>핵심 변화</span><strong><?php echo esc_html( (string) $briefing_core_count ); ?>개</strong><small>오늘 먼저 볼 변화</small></div>
@@ -1905,9 +1941,10 @@ function hunt_news_home_sections() {
 
 		<section class="hunt-news-must-read" aria-labelledby="hunt-news-must-read-title">
 			<header class="hunt-news-must-read__header">
-				<div><p>Hunt News 선정 오늘의 필독</p><h3 id="hunt-news-must-read-title">지금 놓치면 아쉬운 기술 뉴스</h3></div>
+				<div><p>Hunt News 선별 자료</p><h3 id="hunt-news-must-read-title">선별 원문과 읽는 이유</h3></div>
 			</header>
 			<p class="hunt-news-must-read__status">
+				원문 발행일과 보고서 기준 시차를 함께 표시합니다. 72시간이 지난 원문은 배경 자료로 구분합니다.
 				<?php if ( $is_briefing_detail ) : ?>
 					공식 원문, 독립 출처와 실무 영향을 대조해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.
 				<?php else : ?>
@@ -1921,6 +1958,7 @@ function hunt_news_home_sections() {
 							<b class="hunt-news-brief-card__rank">#<?php echo esc_html( (string) ( $index + 1 ) ); ?></b>
 							<div><span><?php echo esc_html( (string) ( $item['source'] ?? '' ) ); ?></span><time datetime="<?php echo esc_attr( (string) ( $item['published_at'] ?? '' ) ); ?>"><?php echo esc_html( hunt_news_source_time_label( (string) ( $item['published_at'] ?? '' ), (string) ( $analysis['generated_at'] ?? '' ) ) ); ?></time></div>
 							<h4><?php echo esc_html( (string) ( $item['title'] ?? '' ) ); ?></h4>
+							<p class="hunt-news-source-age"><?php echo esc_html( hunt_news_source_age_label( (string) ( $item['published_at'] ?? '' ), $report_at ) ); ?></p>
 							<?php if ( ! empty( $item['korean_title'] ) && (string) $item['korean_title'] !== (string) ( $item['title'] ?? '' ) ) : ?><p class="hunt-news-source-card__translated">한국어 제목 · <?php echo esc_html( (string) $item['korean_title'] ); ?></p><?php endif; ?>
 							<p><?php echo esc_html( ! empty( $item['why_it_matters'] ) ? (string) $item['why_it_matters'] : ( (string) ( $item['category'] ?? '기술 뉴스' ) . ' · 공식 원문과 독립 출처를 확인하세요.' ) ); ?></p>
 							<a href="<?php echo esc_url( (string) ( $item['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer">근거 원문 <b aria-hidden="true">→</b></a>
@@ -1962,7 +2000,7 @@ function hunt_news_home_sections() {
 
 		<?php if ( $is_briefing_detail && $source_groups ) : ?>
 		<section class="hunt-news-source-board" aria-labelledby="hunt-news-source-title">
-			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">▤</span><h3 id="hunt-news-source-title">오늘 수집한 기술 뉴스</h3></div><p>제목은 발견용이며 핵심 사실은 원문에서 확인합니다</p></header>
+			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">▤</span><h3 id="hunt-news-source-title">보고서에 사용한 수집 자료</h3></div><p>제목은 발견용이며 핵심 사실과 발행일은 원문에서 확인합니다</p></header>
 			<div class="hunt-news-source-board__grid">
 				<?php foreach ( array_keys( $source_groups ) as $source_category ) : ?>
 				<section class="hunt-news-source-column">
