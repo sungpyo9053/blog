@@ -103,8 +103,6 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
         # ponytail: seven-day scan; add indexed incident storage if retention grows.
         if not timedelta(0) <= now - stamp <= timedelta(days=7):
             continue
-        if (run/'result.json').exists() and stamp.date() == now.date():
-            today_runs.append(run.name)
         if busy:
             continue
         try:
@@ -113,6 +111,8 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                     issue(run.name, 'run_incomplete')
                 continue
             record = read(run/'result.json')
+            if stamp.date() == now.date() and record.get('deep_article') != 'ready_not_published':
+                today_runs.append(run.name)
             receipt_path = run/'publication.json'
             recovery_path = run/'public-audit-recovery.json'
             receipt = read(receipt_path) if receipt_path.exists() else None
