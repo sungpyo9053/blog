@@ -4,7 +4,9 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+import contextlib
+import io
 from zoneinfo import ZoneInfo
 
 
@@ -157,6 +159,58 @@ class OperationsWatchdogTests(unittest.TestCase):
     def test_live_process_without_result_is_not_a_failure(self):
         self.active.return_value = True
         self.assertEqual(self.execute()['issues'], [])
+
+    def test_dry_run_record_does_not_hide_missing_scheduled_execution(self):
+        self.now = self.now.replace(hour=13)
+        self.save(str((self.directory/'result.json').relative_to(self.root)),
+                  {'failed': False, 'deep_article': 'ready_not_published'})
+        self.assertTrue(any(x['reason'] == 'deep_run_missing' for x in self.execute()['issues']))
+
+    def test_persisted_recovery_is_used_without_repeat_audit(self):
+        self.failed_publication()
+        self.save(str((self.directory/'public-audit-recovery.json').relative_to(self.root)), self.verified)
+        self.execute()
+        self.recover.assert_not_called()
+        self.notify.assert_called_once()
+
+    def test_cli_locks_release_on_success_busy_and_failure(self):
+        module = importlib.import_module('scripts.operations_watchdog')
+        from scripts.run_daily_pipeline import PipelineError
+        for error, expected in ((None, 0), (PipelineError('busy'), 0), (ValueError('bad'), 1)):
+            with self.subTest(error=error), patch.object(module, 'PipelineLock') as factory, \
+                    patch.object(module, 'run_watchdog', return_value={}, side_effect=error), \
+                    patch('sys.argv', ['watchdog', '--apply']), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(module.main(), expected)
+                self.assertEqual(factory.return_value.release.call_count, 2)
+
+    def test_system_service_and_public_probe(self):
+        module = importlib.import_module('scripts.operations_watchdog')
+        with patch.object(module.subprocess, 'run') as run:
+            run.return_value.stdout = 'activating\n'
+            self.assertTrue(module.service_active(module.DEEP))
+            run.return_value.stdout = 'inactive\n'
+            self.assertFalse(module.service_active(module.DEEP))
+        with patch.object(module, 'build_opener') as opener:
+            opener.return_value.open.return_value.__enter__.return_value.status = 200
+            self.assertTrue(module.site_healthy())
+
+    def test_weekly_failure_and_corrupt_report_are_reported(self):
+        self.now = self.now.replace(hour=22)
+        self.save('output/weekly-editorial/2026-09-20/result.json',
+                  {'failed': True, 'metrics_status': 'INCOMPLETE'})
+        self.save('output/kakao-reports/2026-09-20-11.json', {'status': 'delivery_unconfirmed'})
+        reasons = {x['reason'] for x in self.execute()['issues']}
+        self.assertTrue({'weekly_needs_repair', 'analytics_incomplete', 'report_delivery_unknown'} <= reasons)
+
+    def test_naive_time_rejected_and_invalid_recovery_not_trusted(self):
+        self.now = self.now.replace(tzinfo=None)
+        with self.assertRaises(ValueError):
+            self.execute()
+        self.now = self.now.replace(tzinfo=ZoneInfo('Asia/Seoul'))
+        self.failed_publication()
+        self.save(str((self.directory/'public-audit-recovery.json').relative_to(self.root)), {'failed': False})
+        self.assertTrue(any(x['reason'] == 'record_invalid' for x in self.execute()['issues']))
+        self.notify.assert_not_called()
 
 
 if __name__ == '__main__':
