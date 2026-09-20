@@ -31,7 +31,23 @@ class ArithmeticTests(unittest.TestCase):
 
     def test_relevant_body_budget_fails_without_silent_truncation(self):
         with self.assertRaisesRegex(d.DiscoveryError,'relevant_inventory_too_large'):
-            d.compact_inventory({'posts':[{'post_id':1,'title':'ROS example','slug':'ros-example','content':'x'*210000}]})
+            d.compact_inventory({'posts':[{'post_id':1,'title':'ROS example','slug':'ros-example','content':'x'*240000}]})
+
+    def test_metadata_omits_summary_without_transforming_selected_raw_body(self):
+        raw='<table><tr><td>A</td><td>0.25</td></tr></table><pre> x = 1\n  y = 2</pre><a href="https://example.test/">근거</a>'
+        result=d.compact_inventory({'posts':[{'post_id':1,'status':'future','title':'로봇 단위','slug':'robot-unit','excerpt':'redundant '*400,'content':raw}]})
+        self.assertNotIn('excerpt',result['all_post_metadata'][0])
+        self.assertEqual(result['related_full_bodies'][0]['content'],raw)
+
+    def test_five_more_fifteen_kb_lessons_fit_inventory_and_global_prompt_budget(self):
+        # Synthetic capacity fixture, not a claim that a future article passed review.
+        posts=[{'post_id':i,'status':'future','title':'로봇 기초 '+str(i),'slug':'robot-'+str(i),'excerpt':'summary'*400,'content':'x'*15000} for i in range(14)]
+        compact=d.compact_inventory({'posts':posts})
+        sources=[{'id':str(i),'text':'x'*12000,'text_truncated':True} for i in range(8)]
+        payload={'inventory':compact,'sources':sources,'candidate_and_instructions_budget':'x'*14000}
+        self.assertLess(len(json.dumps(compact,ensure_ascii=False).encode()),240000)
+        self.assertLess(len(json.dumps(payload,ensure_ascii=False).encode()),350000)
+        self.assertEqual(len(compact['related_full_bodies']),14)
 
     def test_qos_query_does_not_expand_on_generic_word_or_ros_substring(self):
         posts=[{'post_id':i,'title':title,'slug':slug,'content':'x'*15000} for i,title,slug in (

@@ -186,8 +186,9 @@ def invoke_agent(repo, role, payload, directory):
 
 def compact_inventory(inventory, query=''):
     rows = inventory['posts']
-    metadata = [{key: row.get(key, '') for key in ('post_id', 'status', 'title', 'slug', 'excerpt')} for row in rows]
-    for row in metadata: row['excerpt'] = str(row['excerpt'])[:400]
+    # Summaries duplicate selected raw bodies and are not full-content evidence.
+    # Keep identities for every post; host full-inventory checks remain unchanged.
+    metadata = [{key: row.get(key, '') for key in ('post_id', 'status', 'title', 'slug')} for row in rows]
     terms = set(re.findall(r'[\w가-힣]{3,}', query.casefold())) - {
         '피지컬', '로봇', '어떻게', '무엇인가', '설명', '기초', '계산하기', '확인하기',
     }
@@ -219,7 +220,10 @@ def compact_inventory(inventory, query=''):
               'unselected_body_count': len(rows) - len(related),
               'semantic_relevance_exhaustive': False}
     # Never silently drop or truncate relevant articles to satisfy the budget.
-    need(len(json.dumps(result, ensure_ascii=False).encode()) < 210_000, 'relevant_inventory_too_large')
+    # Allocate up to 240KB to raw inventory, 96KB to eight source excerpts.
+    # invoke_agent still enforces the independent 350KB complete-prompt limit,
+    # including schemas, instructions, proposal, and verification output.
+    need(len(json.dumps(result, ensure_ascii=False).encode()) < 240_000, 'relevant_inventory_too_large')
     return result
 
 
