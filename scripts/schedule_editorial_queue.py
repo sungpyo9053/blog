@@ -84,12 +84,17 @@ def schedule_one():
     if slot is None:
         return {'status': 'schedule_week_full', 'wordpress_write_count': 0}
     row = sorted(candidates, key=lambda row: row['prepared_at'])[0]
-    context = queue.preflight(row, repo=ROOT, inventory_path=inventory, now=now)
-    review_dir = ROOT / 'output/schedule-reviews' / deep.make_run_id()
-    review_dir.mkdir(parents=True, exist_ok=False)
-    logger = configure_logger(now.date())
-    queue.review_fresh_context(context, row['candidate'], inventory, review_dir, ROOT, logger)
-    queue.preflight(row, repo=ROOT, inventory_path=inventory, now=queue.clock())
+    try:
+        context = queue.preflight(row, repo=ROOT, inventory_path=inventory, now=now)
+        review_dir = ROOT / 'output/schedule-reviews' / deep.make_run_id()
+        review_dir.mkdir(parents=True, exist_ok=False)
+        logger = configure_logger(now.date())
+        queue.review_fresh_context(context, row['candidate'], inventory, review_dir, ROOT, logger)
+        queue.preflight(row, repo=ROOT, inventory_path=inventory, now=queue.clock())
+    except Exception:
+        row.update(status='held', held_at=queue.clock().isoformat(), reason='schedule_review_hold')
+        queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)
+        raise
     # Reserve the item durably before the first possible WordPress mutation.
     row.update(status='publishing', scheduled_at=slot.isoformat())
     queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)

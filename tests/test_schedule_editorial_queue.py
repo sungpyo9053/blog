@@ -74,6 +74,15 @@ class ScheduleSafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'reconciliation'): scheduler.schedule_one()
         self.publisher.assert_called_once()
 
+    def test_review_hold_is_not_retried_each_timer_tick(self):
+        self.add_row()
+        with patch.object(queue,'review_fresh_context',side_effect=ValueError('review_hold')) as review:
+            with self.assertRaises(ValueError): scheduler.schedule_one()
+            self.assertEqual(json.loads(self.path.read_text())['status'],'held')
+            self.assertEqual(scheduler.schedule_one()['status'],'no_approved_article')
+            review.assert_called_once()
+        self.publisher.assert_not_called()
+
     def test_failed_future_body_confirmation_blocks_retry(self):
         self.add_row();self.publisher.return_value['content_verified']=False
         with self.assertRaisesRegex(ValueError,'reconciliation'): scheduler.schedule_one()
