@@ -126,9 +126,13 @@ def deep_status(root, day, is_active=False):
         return '실행 결과 없음(누락/중단 확인 필요)', ''
     latest = rows[-1]
     if latest.get('failed'):
+        if latest.get('wordpress_write_count') == 'unknown':
+            return '실패: 글 저장 결과 미확인(중복 방지를 위해 재발행 중지)', ''
         if latest.get('failure_stage') == 'candidate_supply':
             return '실패: 새 주제 조사·후보 공급 단계', ''
-        return '실패: '+str(latest.get('error_type', '원인 미확인'))[:40], ''
+        if latest.get('wordpress_write_count') == 1:
+            return '실패: 글 저장 후 공개 내용 확인 단계', ''
+        return '실패: 글 작성·검수 단계(원인 확인 필요)', ''
     state = latest.get('deep_article')
     if state == 'published':
         audit = latest.get('public_audit') or {}

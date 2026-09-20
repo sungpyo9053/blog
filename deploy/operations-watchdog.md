@@ -62,6 +62,23 @@ They are never resent. Uncertain publication writes still require immediate esca
 
 ## Not automatic
 
+### Collection freshness and reader-facing errors (2026-09-20)
+
+Every watchdog pass now inspects the source cache independently of whether a post
+was published. After 04:30 KST it requires a valid collection timestamp since 03:30
+that day; before that deadline it accepts the prior day's collection. This matches
+the once-daily pre-publication collector, so a healthy cache is not falsely called
+stale six hours after collection. Missing, malformed, empty and future-dated records
+are failures. Three consecutive observations trigger the existing deduplicated Kakao
+alert; recovery of the input clears the observation without a fake repair claim.
+This observer does not collect, rewrite timestamps or publish. The separate analysis
+gate still applies the stricter six-hour limit whenever a briefing is actually built.
+
+Human-facing messages distinguish writing/review failure, uncertain WordPress writes,
+post-save public verification failure, and Kakao delivery uncertainty. Internal error
+class names are retained in private artifacts, not presented as explanations to the
+operator. Uncertain Kakao sends remain un-retried.
+
 No Publisher invocation, article or media creation, content editing, quality-gate
 bypass, service restart, Git mutation, model call, code patch/deployment, credentials
 change, or OAuth login. Unknown publication/delivery states remain unresolved until

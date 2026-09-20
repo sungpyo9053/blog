@@ -81,6 +81,18 @@ class KakaoReportTests(unittest.TestCase):
                     path.write_text(json.dumps({**recovery, key: value}))
                     self.assertIn('실패:', deep_status(root, '2026-09-20')[0])
 
+    def test_failure_message_explains_stage_without_raw_internal_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            run = root/'output/evidence-deep-article-runs/20260920T010000Z-test'
+            run.mkdir(parents=True)
+            for writes, phrase in [('unknown','저장 결과 미확인'), (1,'저장 후 공개 내용 확인'), (0,'작성·검수 단계')]:
+                (run/'result.json').write_text(json.dumps({
+                    'failed':True,'wordpress_write_count':writes,'error_type':'PrivateInternalException'}))
+                message = deep_status(root, '2026-09-20')[0]
+                self.assertIn(phrase, message)
+                self.assertNotIn('PrivateInternalException', message)
+
     def test_candidate_supply_failure_and_researched_empty_are_distinct(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

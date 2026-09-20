@@ -32,6 +32,46 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.active = Mock(return_value=False)
         self.confirm = Mock(return_value=True)
         self.save('output/kakao-reports/2026-09-20-07.json', {'status': 'sent'})
+        self.save_collection('2026-09-20T04:00:00+09:00')
+
+    def save_collection(self, checked_at):
+        self.save('output/search-signals/editorial-sources.json', {
+            'provider': 'hunt_news_editorial_sources',
+            'contract_version': 'editorial-source-cache.v1',
+            'checked_at': checked_at, 'rows': [{'url':'https://example.org/news'}]})
+
+    def test_stale_collector_is_detected_without_publishing_or_retrying_collection(self):
+        self.save_collection('2026-09-05T04:00:00+09:00')
+        self.save(str((self.directory/'result.json').relative_to(self.root)),
+                  {'failed': False, 'deep_article': 'no_publishable_topic', 'wordpress_write_count': 0})
+        for _ in range(3):
+            result = self.execute()
+        self.assertIn({'key':'editorial_collection','reason':'news_collection_stale'}, result['issues'])
+        self.assertEqual(result['checks']['editorial_collection']['status'], 'stale')
+        self.assertEqual(result['wordpress_write_count'], 0)
+        self.assertIn('뉴스 수집 갱신 지연', self.sender.call_args.args[0])
+        self.recover.assert_not_called()
+        self.notify.assert_not_called()
+
+    def test_daily_collection_deadline_and_invalid_records(self):
+        from scripts.operations_watchdog import editorial_collection_status
+        self.save_collection('2026-09-19T04:00:00+09:00')
+        self.assertEqual(editorial_collection_status(self.root, self.now.replace(hour=4, minute=29))['status'], 'fresh')
+        self.assertEqual(editorial_collection_status(self.root, self.now.replace(hour=4, minute=30))['status'], 'stale')
+        self.save_collection('2026-09-20T04:00:00+09:00')
+        self.assertEqual(editorial_collection_status(self.root, self.now.replace(hour=23))['status'], 'fresh')
+        for stamp in ('bad-time','2026-09-20T04:00:00','2026-09-21T04:00:00+09:00'):
+            self.save_collection(stamp)
+            self.assertEqual(editorial_collection_status(self.root, self.now)['status'], 'invalid')
+
+    def test_collection_recovery_clears_observation_without_false_success(self):
+        self.save_collection('2026-09-05T04:00:00+09:00')
+        self.execute()
+        self.save_collection('2026-09-20T04:00:00+09:00')
+        result = self.execute()
+        self.assertFalse(any(i['key']=='editorial_collection' for i in result['issues']))
+        self.assertEqual(result['recovered'], [])
+        self.sender.assert_not_called()
 
     def save(self, path, data):
         target = self.root/path

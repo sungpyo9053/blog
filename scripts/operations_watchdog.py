@@ -31,6 +31,31 @@ WEEKLY = 'huntlab-weekly-editorial.service'
 REPORT = 'huntlab-kakao-report.service'
 
 
+def editorial_collection_status(root, now):
+    """Observe the daily collector deadline, not a six-hour always-on schedule."""
+    now = now.astimezone(KST)
+    # Collection starts at 04:00; allow it 30 minutes. Between daily runs the
+    # cache may legitimately exceed six hours without being a stuck collector.
+    due = now.replace(hour=4, minute=30, second=0, microsecond=0)
+    expected = (now if now >= due else now - timedelta(days=1)).replace(
+        hour=3, minute=30, second=0, microsecond=0)
+    path = Path(root)/'output/search-signals/editorial-sources.json'
+    try:
+        payload = read(path)
+        stamp = datetime.fromisoformat(payload['checked_at'])
+        if (stamp.tzinfo is None or stamp > now + timedelta(minutes=5)
+                or payload.get('provider') != 'hunt_news_editorial_sources'
+                or payload.get('contract_version') != 'editorial-source-cache.v1'
+                or not isinstance(payload.get('rows'), list) or not payload['rows']):
+            raise ValueError('invalid_collection')
+        return {'status': 'stale' if stamp < expected else 'fresh',
+                'checked_at': stamp.isoformat(), 'row_count': len(payload['rows'])}
+    except FileNotFoundError:
+        return {'status': 'missing'}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {'status': 'invalid'}
+
+
 def read(path):
     if path.is_symlink() or path.stat().st_size > 2_000_000:
         raise ValueError('invalid_record')
@@ -108,6 +133,10 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
             issue('site', 'public_site_unreachable')
     except Exception:
         issue('site', 'public_site_unreachable')
+    collection = editorial_collection_status(root, now)
+    result['checks'] = {'editorial_collection': collection}
+    if collection['status'] != 'fresh':
+        issue('editorial_collection', 'news_collection_' + collection['status'])
     busy = active(DEEP)
     today_runs = []
     for run in sorted((root/'output/evidence-deep-article-runs').glob('*')):
@@ -255,12 +284,15 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                 labels = {
                     'public_site_unreachable': '사이트 접속 오류', 'publication_unknown': '발행 여부 확인 필요',
                     'public_audit_needs_repair': '공개 글 검증 실패', 'pipeline_needs_repair': '글 작성 오류',
-                    'notification_unknown': '카톡 전송 여부 불명', 'notification_not_sent': '카톡 실행 오류',
+                    'notification_unknown': '글 발행과 별개로 카톡 도착 확인 불가', 'notification_not_sent': '카톡 발송 시작 전 오류',
                     'record_invalid': '실행 기록 오류', 'run_incomplete': '작업 중단',
                     'deep_run_missing': '정기 글 작업 누락', 'weekly_run_missing': '주간 점검 누락',
                     'weekly_needs_repair': '주간 점검 오류', 'analytics_incomplete': '통계 연결 확인 필요',
-                    'report_missing': '정기 보고 누락', 'report_delivery_unknown': '보고 전송 확인 필요',
-                    'scheduled_check_failed': '정기 점검에서 오류 확인'}
+                    'report_missing': '정기 보고 누락', 'report_delivery_unknown': '정기 보고의 카톡 도착 확인 불가',
+                    'scheduled_check_failed': '정기 점검에서 오류 확인',
+                    'news_collection_stale': '뉴스 수집 갱신 지연(오래된 자료 발행 차단)',
+                    'news_collection_missing': '뉴스 수집 기록 없음(발행 전 확인 필요)',
+                    'news_collection_invalid': '뉴스 수집 기록 검증 실패(발행 전 확인 필요)'}
                 reasons = ', '.join(sorted({labels[x['reason']] for x in actionable}))[:75]
                 message = f"[훈트랩 조치 필요]\n{reasons}\n자동 처리로 해결되지 않았습니다. 기록은 보존했습니다.\n로그를 복사하지 말고 ‘훈트랩 복구해줘’라고 요청하면 됩니다."[:200]
                 try:
