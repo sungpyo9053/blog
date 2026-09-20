@@ -1,0 +1,18 @@
+[Unit]
+Description=Publish only due WordPress future posts
+After=network.target mariadb.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/html
+# WP-CLI errors if the named hook does not exist. Empty schedules are a
+# successful skip; database/CLI lookup failures are not hidden as empty.
+ExecCondition=/bin/sh -c 'count=$$(/usr/local/bin/wp --path=/var/www/html cron event list --hook=publish_future_post --format=count) || exit 255; case "$$count" in ""|*[!0-9]*) exit 255;; esac; test "$$count" -gt 0'
+ExecStart=/usr/local/bin/wp --path=/var/www/html cron event run publish_future_post --due-now
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+

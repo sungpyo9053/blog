@@ -477,8 +477,17 @@ def main() -> int:
             else:
                 result = execute(run_id=run_id, inventory_path=inventory, apply=args.apply, prepare_only=True)
         elif queue_enabled:
-            result = editorial_queue.release(run_id=run_id, inventory_path=inventory, apply=args.apply,
-                                             repo=ROOT, output_root=OUTPUT, logger=configure_logger(datetime.now(KST).date()))
+            queue_config = json.loads((ROOT / 'config/editorial-queue.json').read_text()) if (ROOT / 'config/editorial-queue.json').exists() else {}
+            if queue_config.get('wordpress_schedule'):
+                # WordPress owns timed publication; never also release another post here.
+                (OUTPUT / run_id).mkdir(parents=True, exist_ok=False)
+                write_progress(OUTPUT / run_id / 'progress.json', stage='wordpress_schedule_managed', wordpress_write_count=0)
+                result = {'run_id': run_id, 'kst_date': datetime.now(KST).date().isoformat(),
+                          'failed': False, 'wordpress_write_count': 0,
+                          'deep_article': 'wordpress_schedule_managed'}
+            else:
+                result = editorial_queue.release(run_id=run_id, inventory_path=inventory, apply=args.apply,
+                                                 repo=ROOT, output_root=OUTPUT, logger=configure_logger(datetime.now(KST).date()))
         else:
             result=execute(run_id=run_id,inventory_path=inventory,apply=args.apply)
         if args.prepare_only:

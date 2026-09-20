@@ -46,6 +46,13 @@ READY가 있을 때만 하루 최대 한 편을 처리하며, READY가 없으면
 ## 주제 처리 순서
 
 `config/editorial-queue.json`이 enabled=true이면 검수 완료 대기열 운영이 우선한다.
+2026-09-20 사용자 정정: wordpress_schedule=true이면 비공개 대기열 저장만으로
+예약 완료가 아니다. 독립 검수 원고7편을 WordPress status=future로 실제 예약하고
+매일10시 Asia/Seoul에1편 공개한다. scripts/schedule_editorial_queue.py가
+날짜 충돌·전체future포함중복·원자료·독립재검수를 확인한다. WordPress의
+publish_future_post 전용 타이머가 공개하며 기존10시runner는 이중 공개하지 않는다.
+예약저장/공개확인/카카오보고는 별도 상태로 보고한다. 아래 이전파일대기열
+운영은 wordpress_schedule=false일 때만 적용된다.
 02:00/14:00 준비는 후보→작성→독립검수에서 멈추고 WordPress에 쓰지 않는다.
 10:00 실행은 동결 원고의 원자료·최신 전체 목록·대기열을 다시 검수한 뒤 Publisher만
 호출한다. 목표3편·상한7편, 하루 공개 최대1편이며 HOLD/빈 대기열은 발행하지 않는다.

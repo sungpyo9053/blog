@@ -58,6 +58,30 @@ class EditorialGateTests(unittest.TestCase):
         inv["posts"].append(dict(inv["posts"][0]))
         self.assertIn("duplicate_inventory_ids", inspect_article("본문", inv)["failures"])
 
+    def test_future_full_body_participates_in_duplicate_comparison(self):
+        passage = '예약 글의 고유한 설명입니다. ' * 30
+        inv = self.inventory()
+        inv['posts'].append({'post_id': 2, 'status': 'future', 'content': passage})
+        inv['metadata']['statuses']['future'] = 1
+        result = inspect_article(passage, inv)
+        self.assertIn('substantial_existing_passage', result['failures'])
+        self.assertEqual(result['duplicates'][0]['post_id'], 2)
+        self.assertEqual(result['checked_posts'], 2)
+
+    def test_future_inventory_counts_are_validated_and_legacy_is_supported(self):
+        inv = self.inventory()
+        self.assertTrue(inspect_article('새 설명', inv)['passed'])
+        inv['metadata']['statuses']['future'] = 0
+        self.assertTrue(inspect_article('새 설명', inv)['passed'])
+        inv['posts'].append({'post_id': 2, 'status': 'future', 'content': '예약된 다른 글'})
+        for count in (0, True, None):
+            inv['metadata']['statuses']['future'] = count
+            self.assertIn('inventory_status_count_mismatch', inspect_article('새 설명', inv)['failures'])
+        del inv['metadata']['statuses']['future']
+        self.assertIn('inventory_status_count_mismatch', inspect_article('새 설명', inv)['failures'])
+        inv['metadata']['statuses']['future'] = 1
+        self.assertTrue(inspect_article('새 설명', inv)['passed'])
+
     def test_malformed_inventory_and_empty_body_fail_closed(self):
         for inv in (None, {}, {"metadata": None, "posts": "oops"}):
             self.assertFalse(inspect_article("본문", inv)["passed"])

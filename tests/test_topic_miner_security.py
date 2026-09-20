@@ -97,6 +97,8 @@ class TopicMinerSecurityTests(unittest.TestCase):
             def __init__(self): self.calls = []
             def request(self, method, path, expected):
                 self.calls.append((method, path, expected))
+                if "status=future" in path:
+                    return []
                 status = "draft" if "status=draft" in path else "publish"
                 page = 2 if "page=2" in path else 1
                 count = 1 if status == "draft" else (100 if page == 1 else 19)
@@ -104,7 +106,7 @@ class TopicMinerSecurityTests(unittest.TestCase):
                 return [{"id": page * 1000 + i, "link": f"https://example.test/{status}-{page}-{i}", "slug": f"{status}-{page}-{i}", "status": status, "title": {"rendered": "title"}, "excerpt": {"rendered": "excerpt"}, "content": {"raw": "Full article body"}} for i in range(count)]
         client = Client()
         snapshot = build_snapshot(client)
-        self.assertEqual(snapshot["metadata"]["statuses"], {"publish": 119, "draft": 1})
+        self.assertEqual(snapshot["metadata"]["statuses"], {"publish": 119, "draft": 1, "future": 0})
         self.assertEqual(len(snapshot["posts"]), 120)
         self.assertTrue(all(method == "GET" for method, _, _ in client.calls))
         self.assertTrue(snapshot["metadata"]["full_content"])

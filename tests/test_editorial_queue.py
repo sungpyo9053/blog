@@ -134,12 +134,12 @@ class EditorialQueueTests(unittest.TestCase):
                     queue.rows(self.repo)
         self.publisher.assert_not_called()
 
-    def test_preparation_target_three_and_unresolved_barrier(self):
+    def test_preparation_target_seven_and_unresolved_barrier(self):
         self.assertTrue(queue.preparation_allowed(self.repo))
-        for i in range(3):
+        for i in range(7):
             self.row(str(i))
         self.assertFalse(queue.preparation_allowed(self.repo))
-        self.assertEqual(queue.reserved_candidate_ids(self.repo), {'0', '1', '2'})
+        self.assertEqual(queue.reserved_candidate_ids(self.repo), {str(i) for i in range(7)})
 
     def test_preparation_blocks_unresolved_even_below_target(self):
         self.row(status='publishing')

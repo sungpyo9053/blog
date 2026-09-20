@@ -17,7 +17,7 @@ import requests
 from scripts.evidence_topic_miner import atomic_replace, atomic_write_new
 
 KST = timezone(timedelta(hours=9))
-TARGET = 3
+TARGET = 7
 MAXIMUM = 7
 MAX_AGE = timedelta(days=7)
 
@@ -75,7 +75,7 @@ def rows(repo):
     result = []
     for path in sorted(directory(repo).glob('*.json')):
         row = json.loads(path.read_text())
-        if row.get('schema_version') != 1 or row.get('status') not in {'queued','held','publishing','published'}:
+        if row.get('schema_version') != 1 or row.get('status') not in {'queued','held','publishing','published','scheduled'}:
             raise ValueError('queue_state_invalid')
         if row.get('queue_id') != path.stem:
             raise ValueError('queue_identity_invalid')
@@ -92,7 +92,7 @@ def preparation_allowed(repo, now=None):
     # Stop preparation too when a publication is unresolved; do not bury its alert.
     if any(row['status'] == 'publishing' for row in items):
         return False
-    return sum(row['status'] == 'queued' for row in items) < TARGET
+    return sum(row['status'] in {'queued','scheduled'} for row in items) < TARGET
 
 
 def timestamp(value):

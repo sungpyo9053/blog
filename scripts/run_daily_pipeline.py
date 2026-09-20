@@ -2416,6 +2416,7 @@ def persist_prepared_result(context: TopicContext, digest: str) -> dict[str, Any
 
 def publish_prepared_topic(
     context: TopicContext, logger: logging.Logger, *, inventory_path: Path,
+    scheduled_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Publish frozen reviewed artifacts only. Caller owns queue/day-limit lock.
 
@@ -2474,7 +2475,8 @@ def publish_prepared_topic(
         try:
             result = DraftPublisher(client, audit_log=context.directory / "publisher-audit.jsonl").publish_file(
                 context.directory / "publish.md", reviewer_approved=True,
-                review_path=context.directory / "review.md", expected_identity=identity)
+                review_path=context.directory / "review.md", expected_identity=identity,
+                **({"scheduled_at": scheduled_at} if scheduled_at is not None else {}))
         except Exception as exc:
             if not isinstance(client.confirmed, dict) or not client.confirmed.get("id"):
                 raise PipelineError("prepared_publisher_failed_requires_reconciliation") from exc
@@ -2494,15 +2496,17 @@ def publish_prepared_topic(
             raw = post.get("content", {}).get("raw")
             featured = post.get("featured_media")
             if (not isinstance(client.expected_html, str) or raw != client.expected_html
-                    or type(featured) is not int or featured <= 0 or post.get("status") != "publish"):
+                    or type(featured) is not int or featured <= 0 or post.get("status") != ("future" if scheduled_at else "publish")):
                 raise PipelineError("prepared_stored_body_or_media_mismatch")
             media = client.request("GET", f"media/{featured}?context=edit", expected=(200,))
             if media.get("id") != featured or not media.get("alt_text") or not media.get("source_url"):
                 raise PipelineError("prepared_featured_media_invalid")
-            if result is None or result.status != "Success" or not result.published_url:
+            if result is None or result.status != "Success" or (not scheduled_at and not result.published_url):
                 raise PipelineError("prepared_publisher_audit_failed")
-            publication.update(status="published", url=result.published_url, content_verified=True,
+            publication.update(status="scheduled" if scheduled_at else "published", url=post.get("link"), content_verified=True,
                                image_count=1 + len(result.publish_summary.get("body_media_ids", []) or []))
+            if scheduled_at:
+                publication.update(scheduled_at=scheduled_at.isoformat(), date=post.get("date"), date_gmt=post.get("date_gmt"))
         except Exception:
             publication["audit_failure"] = "prepared_readback_audit_failed"
         receipt_path = context.directory / "prepared-publication-result.json"

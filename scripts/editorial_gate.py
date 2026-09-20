@@ -183,7 +183,7 @@ def inspect_article(text: str, inventory: dict, *, now: datetime | None = None, 
     valid_rows = isinstance(posts, list) and all(
         isinstance(post, dict) and type(post.get("post_id")) is int
         and post["post_id"] > 0 and isinstance(post.get("content"), str)
-        and post.get("status") in {"publish", "draft"} for post in posts
+        and post.get("status") in {"publish", "draft", "future"} for post in posts
     )
     if not valid_rows:
         failures.append("invalid_inventory_posts")
@@ -191,6 +191,10 @@ def inspect_article(text: str, inventory: dict, *, now: datetime | None = None, 
     elif len({post["post_id"] for post in posts}) != len(posts):
         failures.append("duplicate_inventory_ids")
     actual = {status: sum(post["status"] == status for post in posts) for status in ("publish", "draft")}
+    # Legacy snapshots may omit future only when no scheduled rows are present.
+    # Scheduling callers separately require an explicit, fresh future inventory.
+    if any(post['status'] == 'future' for post in posts) or isinstance(counts, dict) and 'future' in counts:
+        actual['future'] = sum(post['status'] == 'future' for post in posts)
     if not isinstance(counts, dict) or any(type(counts.get(status)) is not int or counts[status] != count for status, count in actual.items()):
         failures.append("inventory_status_count_mismatch")
     if not body:

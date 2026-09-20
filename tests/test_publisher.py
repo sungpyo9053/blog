@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import hashlib
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
@@ -738,6 +741,129 @@ class PublisherTests(unittest.TestCase):
 
             self.assertEqual(result.status, "Failed")
             self.assertIsNone(client.created_payload)
+
+
+class ScheduledPublisherTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.path = self.root / 'publish.md'
+        self.path.write_text(VALID_MARKDOWN.replace('publish_mode: draft',
+            'publish_mode: publish\nrun_id: schedule-run\ntopic_id: schedule-topic\nsource_id: schedule-source'))
+        self.review = self.root / 'review.md'
+        self.review.write_text('APPROVED schedule-run schedule-topic ' + hashlib.sha256(self.path.read_bytes()).hexdigest())
+        self.identity = dict(run_id='schedule-run', topic_id='schedule-topic', source_id='schedule-source', category='Tech')
+        self.when = (datetime.now(ZoneInfo('Asia/Seoul')) + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+        class Client(FakeWordPressClient):
+            max_retries = 0
+            transitions = None
+            def create_post(self, payload, *, status):
+                row = super().create_post(payload, status=status)
+                row.update(date=payload.get('date'), date_gmt=payload.get('date_gmt'), content={'raw':payload['content']})
+                self.transitions = [(row['id'], status)]
+                return row
+            def update_post(self, ident, payload, *, status):
+                row = super().update_post(ident, payload, status=status)
+                row.update(date=payload.get('date'), date_gmt=payload.get('date_gmt'), content={'raw':payload['content']})
+                self.transitions.append((ident, status))
+                return row
+        self.client = Client()
+        self.publisher = DraftPublisher(self.client, audit_log=self.root/'audit.jsonl')
+
+    def call(self, when=None):
+        return self.publisher.publish_file(self.path, reviewer_approved=True,
+            review_path=self.review, expected_identity=self.identity,
+            scheduled_at=self.when if when is None else when)
+
+    def test_future_envelope_preserves_approved_bytes_and_is_not_public_success(self):
+        before = self.path.read_bytes()
+        result = self.call()
+        self.assertEqual((result.status, result.action), ('Success', 'Schedule'))
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(self.client.created_payload['status'], 'future')
+        self.assertTrue(self.client.created_payload['date'].endswith('T10:00:00'))
+        self.assertTrue(self.client.created_payload['date_gmt'].endswith('T01:00:00'))
+        self.assertIsNone(result.published_url)
+        self.assertIn('wp-admin', result.draft_url)
+        self.assertFalse(result.publish_summary['publicly_published'])
+        self.assertEqual(self.client.transitions, [(123, 'draft'), (123, 'future')])
+        audit = [json.loads(x) for x in (self.root/'audit.jsonl').read_text().splitlines()]
+        self.assertEqual(audit[-1]['event'], 'post_scheduled')
+        self.assertIsNone(audit[-1]['published_url'])
+
+    def test_invalid_times_fail_before_any_external_write(self):
+        for when in [self.when.replace(tzinfo=None), self.when-timedelta(days=3),
+                     self.when+timedelta(days=8), self.when.replace(hour=11),
+                     self.when.replace(second=1), 'tomorrow']:
+            with self.subTest(when=str(when)):
+                result = self.call(when)
+                self.assertEqual(result.status, 'Failed')
+                self.assertIsNone(self.client.created_payload)
+                self.assertEqual(self.client.tags, {})
+                self.assertEqual(self.client.upload_calls, [])
+
+    def test_retry_enabled_client_is_rejected_before_write(self):
+        self.client.max_retries = 3
+        self.assertEqual(self.call().status, 'Failed')
+        self.assertEqual(self.client.tags, {})
+
+    def test_draft_document_cannot_be_scheduled(self):
+        self.path.write_text(VALID_MARKDOWN)
+        self.assertEqual(self.call().status, 'Failed')
+        self.assertIsNone(self.client.created_payload)
+
+    def test_schedule_cannot_bypass_review_hash(self):
+        self.review.write_text('APPROVED stale-hash')
+        result = self.call()
+        self.assertEqual(result.status, 'Failed')
+        self.assertEqual(self.client.tags, {})
+
+    def test_readback_date_mismatch_is_uncertain_not_published(self):
+        original = self.client.get_post
+        def corrupt(ident):
+            row = dict(original(ident))
+            row['date_gmt'] = '2000-01-01T00:00:00'
+            return row
+        self.client.get_post = corrupt
+        result = self.call()
+        self.assertEqual(result.status, 'Failed')
+        self.assertIsNone(result.published_url)
+        self.assertEqual(result.error_report['resources_created'], 'unknown')
+        self.assertTrue(result.error_report['requires_read_only_reconciliation'])
+
+    def test_bad_draft_body_stops_before_future_transition(self):
+        original = self.client.get_post
+        def corrupt(ident):
+            row = dict(original(ident))
+            row['content'] = {'raw':'bad body'}
+            return row
+        self.client.get_post = corrupt
+        result = self.call()
+        self.assertEqual(result.status, 'Failed')
+        self.assertEqual(self.client.transitions, [(123, 'draft')])
+
+    def test_future_utc_input_maps_to_same_korean_slot(self):
+        result = self.call(self.when.astimezone(timezone.utc))
+        self.assertEqual(result.action, 'Schedule')
+        self.assertTrue(result.publish_summary['scheduled_at'].endswith('T10:00:00+09:00'))
+
+    def test_existing_future_duplicate_is_not_created_again(self):
+        self.client.posts[77] = {'id':77, 'status':'future', 'slug':'huntlab-publisher-test',
+            'title':{'rendered':'HuntLab Publisher 테스트'}}
+        result = self.call()
+        self.assertEqual(result.status, 'Failed')
+        self.assertEqual(self.client.tags, {})
+        self.assertIsNone(self.client.created_payload)
+
+    def test_physical_quality_gate_remains_required_for_scheduling(self):
+        self.path.write_text(self.path.read_text().replace('category: Tech', 'category: 피지컬 AI 기초'))
+        self.identity['category'] = '피지컬 AI 기초'
+        self.review.write_text('APPROVED schedule-run schedule-topic ' + hashlib.sha256(self.path.read_bytes()).hexdigest())
+        result = self.call()
+        self.assertEqual(result.status, 'Failed')
+        self.assertIn('physical_quality_review_failed', [x.code for x in result.validation_report.errors])
+        self.assertEqual(self.client.tags, {})
 
 
 if __name__ == "__main__":

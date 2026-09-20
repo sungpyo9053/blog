@@ -6,7 +6,8 @@ import json
 import hashlib
 import re
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -138,6 +139,7 @@ class DraftPublisher:
         reviewer_approved: bool,
         review_path: Path | None = None,
         expected_identity: dict[str, str] | None = None,
+        scheduled_at: datetime | None = None,
     ) -> PublishResult:
         audit_id = str(uuid.uuid4())
         try:
@@ -165,6 +167,12 @@ class DraftPublisher:
             document,
             reviewer_approved=reviewer_approved,
         )
+        if scheduled_at is not None:
+            schedule_error = self._schedule_error(scheduled_at, document.metadata)
+            if schedule_error:
+                report.errors.append(ValidationIssue(code=schedule_error,
+                    message="Scheduling requires an aware future 10:00 KST time within seven days, publish approval, and zero retries."))
+            report.checks["schedule_envelope"] = "failed" if schedule_error else "passed"
         if document.metadata.get("publish_mode") == "publish":
             from publisher.foundation_links import enforce_foundation_links, FoundationLinkError
             try:
@@ -248,6 +256,7 @@ class DraftPublisher:
                 audit_id=audit_id,
                 document=document,
                 report=report,
+                scheduled_at=scheduled_at,
             )
         except WordPressError as exc:
             self.audit.write(
@@ -261,7 +270,7 @@ class DraftPublisher:
                     "retry_count": exc.retry_count,
                 }
             )
-            return self._failed(
+            result = self._failed(
                 audit_id=audit_id,
                 report=report,
                 stage="wordpress_api",
@@ -271,6 +280,27 @@ class DraftPublisher:
                 wp_code=exc.wp_code,
                 retry_count=exc.retry_count,
             )
+            if scheduled_at is not None:
+                # Media or the future post may already have been stored.
+                # Never tell the caller it is safe to blindly repeat this run.
+                result.error_report["resources_created"] = "unknown"
+                result.error_report["requires_read_only_reconciliation"] = True
+            return result
+
+    def _schedule_error(self, scheduled_at: datetime, metadata: dict) -> str | None:
+        if metadata.get("publish_mode") != "publish":
+            return "schedule_requires_publish_approval"
+        if not isinstance(scheduled_at, datetime) or scheduled_at.tzinfo is None or scheduled_at.utcoffset() is None:
+            return "schedule_timezone_required"
+        current = datetime.now(UTC)
+        if not current < scheduled_at.astimezone(UTC) <= current + timedelta(days=7):
+            return "schedule_outside_window"
+        local = scheduled_at.astimezone(ZoneInfo("Asia/Seoul"))
+        if (local.hour, local.minute, local.second, local.microsecond) != (10, 0, 0, 0):
+            return "schedule_requires_10_kst"
+        if getattr(self.client, "max_retries", None) != 0:
+            return "schedule_requires_zero_retries"
+        return None
 
     def _create_post(
         self,
@@ -278,17 +308,25 @@ class DraftPublisher:
         audit_id: str,
         document: MarkdownDocument,
         report: ValidationReport,
+        scheduled_at: datetime | None = None,
     ) -> PublishResult:
         metadata = document.metadata
         title = str(metadata["title"]).strip()
         slug = str(metadata.get("slug", "")).strip() or None
         publish_mode = str(metadata["publish_mode"])
+        if scheduled_at is not None:
+            error = self._schedule_error(scheduled_at, metadata)
+            if error:
+                raise WordPressError("validation", error)
+        post_status = "future" if scheduled_at is not None else publish_mode
         existing_post_id = metadata.get("existing_post_id")
         target_post_id = int(existing_post_id) if existing_post_id is not None else None
         target: dict[str, Any] | None = None
 
         if target_post_id is not None:
             target = self.client.get_post(target_post_id)
+            if scheduled_at is not None and target.get("status") != "draft":
+                raise WordPressError("validation", "Scheduling an existing target requires a draft; published or future posts are not overwritten.")
             target_title = _normalized(_plain_text(target.get("title")))
             target_slug = str(target.get("slug", "")).strip()
             if target_title != _normalized(title):
@@ -333,6 +371,10 @@ class DraftPublisher:
         category_id = int(category["id"])
 
         tag_ids: list[int] = []
+        if scheduled_at is not None:
+            error = self._schedule_error(scheduled_at, metadata)
+            if error:
+                raise WordPressError("validation", error)
         for tag_name in normalize_tags(metadata.get("tags")):
             term = self.client.find_term("tags", tag_name)
             if term is None:
@@ -488,10 +530,13 @@ class DraftPublisher:
         payload: dict[str, Any] = {
             "title": title,
             "content": html,
-            "status": publish_mode,
+            "status": post_status,
             "tags": tag_ids,
             "categories": [category_id],
         }
+        if scheduled_at is not None:
+            payload["date_gmt"] = scheduled_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+            payload["date"] = scheduled_at.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%dT%H:%M:%S")
         if slug:
             payload["slug"] = slug
         if featured_media_id is not None:
@@ -510,13 +555,39 @@ class DraftPublisher:
                 "_hunt_news_asset_url": str(metadata.get("asset_url", "")),
             }
 
+        if scheduled_at is not None:
+            error = self._schedule_error(scheduled_at, metadata)
+            if error:
+                raise WordPressError("validation", error)
         if target_post_id is None:
-            post = self.client.create_post(payload, status=publish_mode)
+            if scheduled_at is not None:
+                # First use of the scheduling workflow must prove a stored draft
+                # before converting that same resource to native WP future.
+                draft_payload = {key: value for key, value in payload.items()
+                                 if key not in {"date", "date_gmt"}}
+                post = self.client.create_post(draft_payload, status="draft")
+                draft_id = int(post["id"])
+                draft_readback = self.client.get_post(draft_id)
+                if (draft_readback.get("id") != draft_id
+                    or draft_readback.get("status") != "draft"
+                    or _normalized(_plain_text(draft_readback.get("title"))) != _normalized(title)
+                    or (slug and draft_readback.get("slug") != slug)
+                    or draft_readback.get("content", {}).get("raw") != html):
+                    raise WordPressError("readback", "Scheduling draft-first identity/body verification failed.")
+                report.checks["schedule_draft_first"] = "passed"
+                self.audit.write({"audit_id": audit_id, "event": "schedule_draft_verified",
+                                  "post_id": draft_id, "post_status": "draft"})
+                error = self._schedule_error(scheduled_at, metadata)
+                if error:
+                    raise WordPressError("validation", error)
+                post = self.client.update_post(draft_id, payload, status="future")
+            else:
+                post = self.client.create_post(payload, status=post_status)
         else:
             post = self.client.update_post(
                 target_post_id,
                 payload,
-                status=publish_mode,
+                status=post_status,
             )
         post_id = int(post["id"])
         readback = self.client.get_post(post_id)
@@ -527,20 +598,29 @@ class DraftPublisher:
             int(readback.get("id", 0)) != post_id
             or readback_title != _normalized(title)
             or (slug and readback_slug != slug)
-            or readback_status != publish_mode
+            or readback_status != post_status
         ):
             raise WordPressError(
                 "readback",
                 "WordPress REST read-back did not match the approved post identity.",
             )
+        if scheduled_at is not None:
+            if any(readback.get(field) != payload[field] for field in ("date", "date_gmt")):
+                raise WordPressError("readback", "WordPress scheduled dates do not match the scheduling envelope.")
+            if readback.get("content", {}).get("raw") != html:
+                raise WordPressError("readback", "WordPress scheduled content does not match the approved body.")
+            report.checks["wordpress_schedule_readback"] = "passed"
         report.checks["wordpress_readback"] = "passed"
         post = readback
         draft_url = (
             f"{self.client.config.base_url}/wp-admin/post.php"
             f"?post={post_id}&action=edit"
         )
-        published_url = str(post.get("link", "")).strip() or None
-        if target_post_id is not None:
+        published_url = (str(post.get("link", "")).strip() or None) if post_status == "publish" else None
+        if scheduled_at is not None:
+            action = "Schedule"
+            event_name = "post_scheduled"
+        elif target_post_id is not None:
             action = "Update"
             event_name = "post_updated"
         else:
@@ -560,11 +640,15 @@ class DraftPublisher:
             ],
             "completed_at": datetime.now(UTC).isoformat(),
         }
+        if scheduled_at is not None:
+            summary.update(scheduled_at=scheduled_at.astimezone(ZoneInfo("Asia/Seoul")).isoformat(),
+                           date=post["date"], date_gmt=post["date_gmt"], publicly_published=False)
         self.audit.write(
             {
                 "audit_id": audit_id,
                 "status": "Success",
                 "event": event_name,
+                "action": action,
                 "post_id": post_id,
                 "post_status": post.get("status", "draft"),
                 "slug": post.get("slug") or slug,
@@ -576,14 +660,16 @@ class DraftPublisher:
                 ],
                 "published_url": published_url,
                 "edit_url": draft_url,
+                **({"date": post["date"], "date_gmt": post["date_gmt"],
+                    "scheduled_at": summary["scheduled_at"]} if scheduled_at is not None else {}),
             }
         )
         return PublishResult(
             status="Success",
             action=action,
             post_id=post_id,
-            draft_url=draft_url if publish_mode == "draft" else None,
-            published_url=published_url if publish_mode == "publish" else None,
+            draft_url=draft_url if post_status in {"draft", "future"} else None,
+            published_url=published_url,
             validation_report=report,
             error_report=None,
             publish_summary=summary,

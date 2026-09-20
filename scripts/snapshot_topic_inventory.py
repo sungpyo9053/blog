@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Snapshot current publish and draft post search intent using REST GET only."""
+"""Snapshot published, draft and scheduled posts using REST GET only."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def plain(value: str) -> str:
 def fetch_status(client: WordPressClient, status: str) -> list[dict]:
     rows, page = [], 1
     while True:
-        query = urlencode({"context":"edit", "status":status, "per_page":"100", "page":str(page), "_fields":"id,link,slug,status,title,excerpt,content"})
+        query = urlencode({"context":"edit", "status":status, "per_page":"100", "page":str(page), "_fields":"id,link,slug,status,title,excerpt,content,date,date_gmt"})
         try:
             batch = client.request("GET", f"posts?{query}", expected=(200,))
         except WordPressError as exc:
@@ -39,7 +39,7 @@ def fetch_status(client: WordPressClient, status: str) -> list[dict]:
 
 
 def build_snapshot(client: WordPressClient) -> dict:
-    by_status = {status: fetch_status(client, status) for status in ("publish", "draft")}
+    by_status = {status: fetch_status(client, status) for status in ("publish", "draft", "future")}
     posts, seen = [], set()
     for status, rows in by_status.items():
         for row in rows:
@@ -59,6 +59,8 @@ def build_snapshot(client: WordPressClient) -> dict:
                 "excerpt": redact_text(plain(str((row.get("excerpt") or {}).get("rendered", "")))[:1000]),
                 "content": redact_text(content),
                 "status": status,
+                "date": row.get("date"),
+                "date_gmt": row.get("date_gmt"),
             })
     posts.sort(key=lambda row: row["post_id"])
     return {"metadata":{"complete":True,"full_content":True,"source":"wordpress_rest_context_edit_get_only","collected_at":datetime.now(UTC).isoformat(),"statuses":{k:len(v) for k,v in by_status.items()}},"posts":posts}
