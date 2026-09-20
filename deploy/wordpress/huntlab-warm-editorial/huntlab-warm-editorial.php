@@ -1725,6 +1725,31 @@ function hunt_news_home_sections() {
 				<?php endforeach; ?>
 			</nav>
 		</section>
+		<script>
+		(function () {
+			var nav = document.querySelector('.hunt-news-report-guide nav');
+			if (!nav) return;
+			// Isolate report jumps from the theme's margin-blind anchor handler.
+			nav.addEventListener('click', function (event) {
+				var link = event.target.closest && event.target.closest('a[href^="#"]');
+				if (!link || !nav.contains(link)) return;
+				var heading = document.getElementById(link.hash.slice(1));
+				if (!heading) return;
+				event.stopPropagation();
+				if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+				event.preventDefault();
+				var margin = parseFloat(window.getComputedStyle(heading).scrollMarginTop) || 0;
+				var top = Math.max(0, window.scrollY + heading.getBoundingClientRect().top - margin);
+				if (window.location.hash !== link.hash) window.history.pushState(window.history.state, '', link.hash);
+				if (!heading.hasAttribute('tabindex')) {
+					heading.setAttribute('tabindex', '-1');
+					heading.addEventListener('blur', function () { heading.removeAttribute('tabindex'); }, {once:true});
+				}
+				heading.focus({preventScroll:true});
+				window.scrollTo({top:top, left:window.scrollX, behavior:'instant'});
+			}, true);
+		}());
+		</script>
 		<?php if ( $collection_outdated ) : ?>
 		<p class="hunt-news-source-notice"><strong>수집 자료 최신성 주의</strong> 이 보고서의 원문 목록은 보고서 작성 시점에 최신 수집을 확인하지 못한 자료입니다. 최신 뉴스 목록으로 보지 마세요. 마지막 수집: <?php echo esc_html( $collection_timestamp ? wp_date( 'Y.m.d H:i', $collection_timestamp ) . ' KST' : '확인 불가' ); ?>.</p>
 		<?php endif; ?>
