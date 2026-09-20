@@ -28,6 +28,7 @@ class HuntLabWarmEditorialTests(unittest.TestCase):
         self.assertNotIn('Hunt News 선정 오늘의 필독', php)
         self.assertNotIn("$source_match['published_at'] ?? $analysis['generated_at']", php)
         self.assertIn('.hunt-news-report-guide a:focus-visible', css)
+        self.assertIn('.hunt-news-briefing-board h3[id] { scroll-margin-top: 110px; }', css)
         self.assertIn('min-height: 44px', css)
 
     @unittest.skipUnless(shutil.which('php'), 'PHP runtime required')
