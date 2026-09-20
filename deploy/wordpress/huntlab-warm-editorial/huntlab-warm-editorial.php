@@ -1568,6 +1568,7 @@ function hunt_news_home_sections() {
 
 	$is_category        = is_category();
 	$is_briefing_detail = is_singular( 'hunt_briefing' );
+	$show_full_report = $is_briefing_detail || is_post_type_archive( 'hunt_briefing' );
 
 	$brief_posts  = $is_category ? array() : hunt_news_briefing_posts( 12 );
 	$manifest     = $is_category ? array() : hunt_news_latest_briefing_manifest();
@@ -1716,11 +1717,11 @@ function hunt_news_home_sections() {
 		</header>
 		<?php if ( $manifest ) : ?>
 		<section class="hunt-news-report-guide" aria-label="전체 보고서 안내">
-			<div><strong><?php echo $is_briefing_detail ? '전체 보고서 목차' : '요약 너머, 판단 근거까지'; ?></strong><p><?php echo $is_briefing_detail ? '필요한 항목으로 바로 이동하세요.' : '이 화면은 요약입니다. 키워드와 적용 조건, 확인할 시점은 전체 보고서에서 이어집니다.'; ?></p></div>
-			<?php if ( ! $is_briefing_detail ) : ?><a class="hunt-news-report-guide__open" href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서 읽기 →</a><?php endif; ?>
+			<div><strong>전체 보고서 목차</strong><p>핵심 변화부터 판단 근거와 원문까지, 필요한 항목으로 바로 이동하세요.</p></div>
+			<?php if ( ! $is_briefing_detail ) : ?><a class="hunt-news-report-guide__open" href="<?php echo esc_url( $briefing_detail_url ); ?>">이 날짜 보고서 링크 →</a><?php endif; ?>
 			<nav aria-label="보고서 항목 바로가기">
 				<?php foreach ( $report_links as $section_id => $section_label ) : ?>
-				<a href="<?php echo esc_url( ( $is_briefing_detail ? '' : $briefing_detail_url ) . '#' . $section_id ); ?>"><?php echo esc_html( $section_label ); ?></a>
+				<a href="<?php echo esc_url( '#' . $section_id ); ?>"><?php echo esc_html( $section_label ); ?></a>
 				<?php endforeach; ?>
 			</nav>
 		</section>
@@ -1728,7 +1729,7 @@ function hunt_news_home_sections() {
 		<p class="hunt-news-source-notice"><strong>수집 자료 최신성 주의</strong> 이 보고서의 원문 목록은 보고서 작성 시점에 최신 수집을 확인하지 못한 자료입니다. 최신 뉴스 목록으로 보지 마세요. 마지막 수집: <?php echo esc_html( $collection_timestamp ? wp_date( 'Y.m.d H:i', $collection_timestamp ) . ' KST' : '확인 불가' ); ?>.</p>
 		<?php endif; ?>
 		<?php endif; ?>
-		<?php if ( $is_briefing_detail && $manifest ) : ?>
+		<?php if ( $show_full_report && $manifest ) : ?>
 		<section id="hunt-news-reader-summary" class="hunt-news-reader-summary" aria-label="오늘 브리핑 구성">
 			<div><span>핵심 변화</span><strong><?php echo esc_html( (string) $briefing_core_count ); ?>개</strong><small>오늘 먼저 볼 변화</small></div>
 			<div><span>연결된 근거</span><strong><?php echo esc_html( (string) count( $briefing_evidence_urls ) ); ?>개</strong><small>분석에 연결된 원문</small></div>
@@ -1737,7 +1738,7 @@ function hunt_news_home_sections() {
 		</section>
 		<?php endif; ?>
 
-		<div class="hunt-news-briefing-overview<?php echo $is_briefing_detail ? '' : ' hunt-news-briefing-overview--compact'; ?>">
+		<div class="hunt-news-briefing-overview<?php echo $show_full_report ? '' : ' hunt-news-briefing-overview--compact'; ?>">
 			<section class="hunt-news-signal-panel" aria-labelledby="hunt-news-signal-title">
 				<header class="hunt-news-panel-heading">
 					<div><span aria-hidden="true">●</span><h3 id="hunt-news-signal-title">핵심 신호</h3></div>
@@ -1774,7 +1775,7 @@ function hunt_news_home_sections() {
 				</div>
 			</section>
 
-			<?php if ( $is_briefing_detail ) : ?>
+			<?php if ( $show_full_report ) : ?>
 			<aside class="hunt-news-keyword-panel" aria-labelledby="hunt-news-keyword-title">
 				<header class="hunt-news-panel-heading">
 					<div><span aria-hidden="true">▥</span><h3 id="hunt-news-keyword-title">오늘의 키워드</h3></div>
@@ -1792,7 +1793,7 @@ function hunt_news_home_sections() {
 			<?php endif; ?>
 		</div>
 
-		<?php if ( $is_briefing_detail && 'available' === ( $analysis['retrospective']['status'] ?? '' ) ) :
+		<?php if ( $show_full_report && 'available' === ( $analysis['retrospective']['status'] ?? '' ) ) :
 			$retrospective_counts = array( 'confirmed' => 0, 'changed' => 0, 'unresolved' => 0 );
 			$retrospective_change = '';
 			foreach ( (array) $analysis['retrospective']['items'] as $review ) {
@@ -1821,7 +1822,7 @@ function hunt_news_home_sections() {
 		</section>
 		<?php endif; ?>
 
-		<?php if ( $is_briefing_detail ) : ?>
+		<?php if ( $show_full_report ) : ?>
 		<section class="hunt-news-action-timeline" aria-labelledby="hunt-news-timeline-title">
 			<header class="hunt-news-panel-heading">
 				<div><span aria-hidden="true">⚡</span><h3 id="hunt-news-timeline-title">확인 타임라인</h3></div>
@@ -1945,7 +1946,7 @@ function hunt_news_home_sections() {
 			</header>
 			<p class="hunt-news-must-read__status">
 				원문 발행일과 보고서 기준 시차를 함께 표시합니다. 72시간이 지난 원문은 배경 자료로 구분합니다.
-				<?php if ( $is_briefing_detail ) : ?>
+				<?php if ( $show_full_report ) : ?>
 					공식 원문, 독립 출처와 실무 영향을 대조해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. 전체 수집원은 아래에서 분야별로 확인할 수 있습니다.
 				<?php else : ?>
 					공식 원문, 독립 출처와 실무 영향을 대조해 고른 <?php echo esc_html( (string) $must_read_display_count ); ?>개입니다. <a href="<?php echo esc_url( $briefing_detail_url ); ?>">전체 보고서와 수집원 보기 <b aria-hidden="true">→</b></a>
@@ -1998,7 +1999,7 @@ function hunt_news_home_sections() {
 		</section>
 		<?php endif; ?>
 
-		<?php if ( $is_briefing_detail && $source_groups ) : ?>
+		<?php if ( $show_full_report && $source_groups ) : ?>
 		<section class="hunt-news-source-board" aria-labelledby="hunt-news-source-title">
 			<header class="hunt-news-panel-heading"><div><span aria-hidden="true">▤</span><h3 id="hunt-news-source-title">보고서에 사용한 수집 자료</h3></div><p>제목은 발견용이며 핵심 사실과 발행일은 원문에서 확인합니다</p></header>
 			<div class="hunt-news-source-board__grid">
