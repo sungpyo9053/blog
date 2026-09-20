@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (1 + 0.9 * (1 - 0) * 10)
+assert math.isclose(value, 10, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '진행 중인 전이의 부트스트랩', "actual": value})
+value = (1 + 0.9 * (1 - 1) * 10)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '로봇 추락으로 종결', "actual": value})
+value = (1 + 0.9 * (1 - 0) * 10)
+assert math.isclose(value, 10, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '외부 시간 제한 절단의 올바른 목표값', "actual": value})
+value = (1 + 0.9 * (1 - 1) * 10)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '절단을 done으로 합친 잘못된 목표값', "actual": value})
+value = ((1 + 0.9 * 10) - 1)
+assert math.isclose(value, 9, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '절단에서 빠진 미래 가치', "actual": value})
+value = (-2 + 0.5 * (1 - 0) * 8)
+assert math.isclose(value, 2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '음의 즉시 보상이 있는 절단', "actual": value})
+value = (-2 + 0.5 * (1 - 1) * 8)
+assert math.isclose(value, -2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '같은 절단을 종결로 오인한 경계 비교', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
