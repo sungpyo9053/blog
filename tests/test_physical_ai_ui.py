@@ -65,6 +65,7 @@ class PhysicalAIUIContractTests(unittest.TestCase):
         self.assertIn(":focus-visible", css)
         self.assertIn("@media(max-width:540px)", css)
         self.assertIn("grid-template-columns:1fr", css)
+        self.assertIn(".huntlab-featured-lesson h2,.huntlab-featured-lesson p{word-break:keep-all;overflow-wrap:anywhere}", css)
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text()
         self.assertIn("피지컬 AI, 기초에서 실습까지 - HuntLab", php)
         organization = php[php.index("$organization     = array("):]
