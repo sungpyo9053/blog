@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.publication_notification import _save, _verified, notify_publication
 from scripts.run_daily_pipeline import PipelineError, PipelineLock
-from scripts.run_evidence_deep_article import read_reconciliation, resume_public_audit
+from scripts.run_evidence_deep_article import audit_public, read_reconciliation, resume_public_audit
 from scripts.send_kakao_report import send
 from scripts.weekly_editorial_updates import _NoRedirect
 
@@ -60,6 +60,14 @@ def publication_identity(record, run_id, day):
             and type(publication.get('post_id')) is int and publication['post_id'] > 0
             and url.scheme == 'https' and url.netloc == 'huntlab.app'
             and url.path not in ('', '/') and not url.query and not url.fragment)
+
+
+def confirm_publication(run, record):
+    receipt = read(run/'publication.json')
+    if receipt.get('publication') != record.get('publication'):
+        return False
+    return bool(_verified({**record, 'public_audit': audit_public(
+        record['publication'], receipt['candidate'])}))
 
 
 def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
@@ -153,6 +161,8 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                 continue  # No topic / limit / quality HOLD is never retried as a failure.
             if not publication_identity(record, run.name, stamp.date().isoformat()) or not _verified(record):
                 raise ValueError('invalid_publication')
+            if now - stamp > timedelta(days=1):
+                continue  # Never announce old posts as newly published during installation.
             post_id = record['publication']['post_id']
             notification_path = root/f'output/kakao-publications/post-{post_id}.json'
             notification = read(notification_path) if notification_path.exists() else {}
@@ -162,6 +172,9 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                 issue(str(post_id), 'notification_unknown')
                 continue
             if attempt('notify:'+str(post_id)):
+                if not confirm_publication(run, record):
+                    issue(run.name, 'public_audit_needs_repair')
+                    continue
                 notification = notify(record)
                 if notification.get('status') not in {'sent', 'already_sent'}:
                     issue(str(post_id), 'notification_not_sent' if notification.get('status') == 'not_sent'
