@@ -23,12 +23,15 @@ $lessons = $query_ids ? new WP_Query( array( 'post_type' => 'post', 'post_status
 ?>
 <div id="main" class="huntlab-physical-home">
  <?php if ( ! $selected ) : ?>
- <header class="huntlab-physical-hero">
-  <div><p class="huntlab-physical-kicker">HUNTLAB / PHYSICAL AI</p><h1>피지컬 AI,<br>기초에서 실습까지.</h1><p class="huntlab-physical-lead">AI가 세상을 이해하고 움직이는 원리.<br>낯선 용어부터 알고리즘과 도구까지, 예제로 연결합니다.</p><div class="huntlab-tool-actions"><a class="huntlab-primary-link" href="#learning-path">처음 시작하기</a><a href="#physical-articles">공개된 글 보기 ↓</a></div></div>
-  <figure><img src="<?php echo esc_url( plugins_url( 'assets/physical-ai-hero.png', __FILE__ ) ); ?>" width="1672" height="941" fetchpriority="high" decoding="async" alt="카메라로 블록을 인식하고 이동 경로를 계획하는 로봇 팔의 개념 일러스트"><figcaption>AI 생성 개념 일러스트 · 실제 실험 사진이 아닙니다.</figcaption></figure>
- </header>
+ <header class="huntlab-physical-intro"><p class="huntlab-physical-kicker">HUNTLAB / PHYSICAL AI</p><h1>피지컬 AI, 기초에서 실습까지.</h1><p>관측과 행동의 원리부터 도구와 작은 실험까지, 예제로 이해합니다.</p></header>
  <?php else : ?>
  <header><p><a href="<?php echo esc_url( home_url( '/' ) ); ?>">HuntLab</a> / 학습 주제</p><h1><?php echo esc_html( $tracks[ $selected ][0] ?? single_cat_title( '', false ) ); ?></h1><p><?php echo esc_html( $tracks[ $selected ][2] ?? '' ); ?></p></header>
+ <?php endif; ?>
+ <?php if ( ! $selected && $page === 1 && isset( $starting_posts['physical-ai-principles'] ) ) : $featured = $starting_posts['physical-ai-principles']; ?>
+ <section class="huntlab-featured-lesson" aria-labelledby="featured-lesson-heading">
+  <div><p class="huntlab-physical-kicker">그림으로 읽는 원리</p><h2 id="featured-lesson-heading"><a href="<?php echo esc_url( get_permalink( $featured ) ); ?>"><?php echo esc_html( get_the_title( $featured ) ); ?></a></h2><p><?php echo esc_html( wp_strip_all_tags( get_the_excerpt( $featured ) ) ); ?></p><a class="huntlab-featured-read" href="<?php echo esc_url( get_permalink( $featured ) ); ?>">글 읽기 · 약 <?php echo (int) hunt_news_reading_minutes( $featured ); ?>분 →</a></div>
+  <?php if ( has_post_thumbnail( $featured ) ) : ?><a class="huntlab-featured-diagram" href="<?php echo esc_url( get_permalink( $featured ) ); ?>" aria-label="<?php echo esc_html( get_the_title( $featured ) ); ?>"><?php echo get_the_post_thumbnail( $featured, 'large', array( 'loading' => 'eager', 'decoding' => 'async' ) ); ?></a><?php endif; ?>
+ </section>
  <?php endif; ?>
  <section id="learning-path" aria-labelledby="learning-heading"><div class="huntlab-section-heading"><p>LEARNING PATH</p><h2 id="learning-heading">기초부터, 한 단계씩.</h2><p>처음이라면 01부터 읽어보세요. 익숙한 주제는 건너뛰어도 좋습니다.</p></div><div class="huntlab-learning-grid">
  <?php $step = 0; foreach ( $tracks as $slug => $track ) : ++$step; $term = $terms[ $slug ] ?? null; ?>

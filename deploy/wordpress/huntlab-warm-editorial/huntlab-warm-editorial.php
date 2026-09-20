@@ -2309,7 +2309,7 @@ function hunt_news_editorial_organization_schema( $graphs ) {
 		'@id'         => $organization_id,
 		'name'        => 'HuntLab 운영자',
 		'url'         => home_url( '/' ),
-		'description' => 'WordPress 자동발행과 운영 문제를 코드, 로그와 회귀 테스트로 직접 검증하는 HuntLab 운영 주체입니다.',
+		'description' => '피지컬 AI의 기초와 원리, 도구와 실습을 설명하고 공식 자료와 자체 예제의 확인 범위를 구분하는 HuntLab 운영 주체입니다. 기존 WordPress 운영 기록도 보존합니다.',
 		'sameAs'      => array( 'https://github.com/sungpyo9053/blog' ),
 		'logo'        => array(
 			'@type' => 'ImageObject',

@@ -1,12 +1,9 @@
 from pathlib import Path
 import json
 import os
-import re
 import shutil
 import subprocess
 import unittest
-
-from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "deploy/wordpress/huntlab-warm-editorial"
@@ -46,15 +43,13 @@ class PhysicalAIUIContractTests(unittest.TestCase):
         self.assertNotIn("99점", template)
         self.assertNotIn("wp_delete_post", template)
 
-    def test_hero_asset_dimensions_and_disclosure_are_correct(self):
+    def test_compact_intro_uses_existing_article_instead_of_decorative_hero(self):
         template = (PLUGIN / "physical-home.php").read_text()
-        dimensions = re.search(r'width="(\d+)" height="(\d+)"', template)
-        with Image.open(PLUGIN / "assets/physical-ai-hero.png") as hero:
-            self.assertEqual(hero.size, tuple(map(int, dimensions.groups())))
-            hero.verify()
-        self.assertIn("AI 생성 개념 일러스트", template)
-        self.assertIn("실제 실험 사진이 아닙니다", template)
-        self.assertIn('alt="카메라', template)
+        self.assertNotIn("physical-ai-hero.png", template)
+        self.assertIn("get_the_post_thumbnail( $featured", template)
+        self.assertIn("has_post_thumbnail( $featured )", template)
+        self.assertIn("get_the_excerpt( $featured )", template)
+        self.assertLess(template.index('class="huntlab-featured-lesson"'), template.index('id="learning-path"'))
 
     def test_navigation_landmarks_mobile_layout_and_metadata(self):
         template = (PLUGIN / "physical-home.php").read_text()
@@ -72,6 +67,9 @@ class PhysicalAIUIContractTests(unittest.TestCase):
         self.assertIn("grid-template-columns:1fr", css)
         php = (PLUGIN / "huntlab-warm-editorial.php").read_text()
         self.assertIn("피지컬 AI, 기초에서 실습까지 - HuntLab", php)
+        organization = php[php.index("$organization     = array("):]
+        self.assertIn("'description' => '피지컬 AI의 기초와 원리, 도구와 실습을 설명하고", organization)
+        self.assertIn("기존 WordPress 운영 기록도 보존합니다.", organization)
 
     def test_briefing_does_not_reuse_retired_home_copy(self):
         router = (PLUGIN / "reader-tools.php").read_text()
@@ -131,6 +129,10 @@ class PhysicalAIUIRuntimeTests(unittest.TestCase):
         self.assertEqual(len(result["queries"]), 1)
         self.assertEqual(result["queries"][0]["posts_per_page"], 12)
         self.assertNotIn("post__in", result["queries"][0])
+        self.assertIn('existing-diagram.png', result["html"])
+        self.assertLess(result["html"].index('class="huntlab-featured-lesson"'), result["html"].index('id="learning-path"'))
+        self.assertNotIn('class="huntlab-featured-lesson"', self.render("absent")["html"])
+        self.assertNotIn('class="huntlab-featured-lesson"', self.render("selected")["html"])
 
     def test_missing_categories_never_query_all_posts(self):
         for scenario in ("absent", "missing-selected"):

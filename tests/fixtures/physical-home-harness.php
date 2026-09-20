@@ -6,6 +6,8 @@ $queries = array();
 function add_filter( ...$args ) {}
 function get_post( $id ) { return $GLOBALS['scenario'] === 'published-starts' ? (object) array( 'ID' => $id, 'post_type' => 'post', 'post_status' => 'publish', 'post_password' => '' ) : null; }
 function has_category( $slug, $post ) { return true; }
+function has_post_thumbnail( $post ) { return $GLOBALS['scenario'] === 'published-starts'; }
+function get_the_post_thumbnail( $post, $size, $attrs ) { return '<img src="https://example.test/existing-diagram.png" width="1200" height="630" alt="기존 글 도식">'; }
 function get_header() {}
 function get_footer() {}
 function is_category() { return in_array( $GLOBALS['scenario'], array( 'selected', 'missing-selected' ), true ); }

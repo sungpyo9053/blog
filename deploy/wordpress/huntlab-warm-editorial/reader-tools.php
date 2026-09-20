@@ -2,6 +2,7 @@
 /** Reader-facing diagnostics and a server-rendered library entry point. */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 require_once __DIR__ . '/physical-learning.php';
+require_once __DIR__ . '/physical-article-meta.php';
 
 function huntlab_library_template( $template ) {
 	if ( is_front_page() || is_category( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ) ) ) {
