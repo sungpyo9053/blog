@@ -153,7 +153,8 @@ def invoke_agent(repo, role, payload, directory):
         output = Path(temporary) / 'answer.json'
         schema = Path(temporary) / 'schema.json'
         schema.write_text(json.dumps(output_schema(role)))
-        command = ['codex', '--ask-for-approval', 'never', '--sandbox', 'read-only', 'exec',
+        from scripts.editorial_runtime import codex_model_arguments
+        command = ['codex', *codex_model_arguments(), '--ask-for-approval', 'never', '--sandbox', 'read-only', 'exec',
                    '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
                    '--output-schema', str(schema), '--output-last-message', str(output), '--cd', temporary, '-']
         for setting in ('features.shell_tool=false', 'features.apps=false', 'features.hooks=false',

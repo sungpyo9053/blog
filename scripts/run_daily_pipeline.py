@@ -323,8 +323,10 @@ def resolve_codex() -> str:
 
 
 def build_codex_command(codex: str, prompt: str) -> list[str]:
+    from scripts.editorial_runtime import codex_model_arguments
     return [
         codex,
+        *codex_model_arguments(),
         "--ask-for-approval",
         "never",
         "--sandbox",
