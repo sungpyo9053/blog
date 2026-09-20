@@ -20,6 +20,7 @@ from scripts.snapshot_topic_inventory import build_snapshot
 from scripts.editorial_epoch import EpochError, load_epoch, reject_legacy_run, validate_candidate
 from scripts.publication_notification import notify_publication
 from scripts.foundation_candidates import load_foundation_candidates, consumed_foundation_ids, foundation_activation_ready
+from scripts.editorial_queue import SourceCheckError
 
 KST = timezone(timedelta(hours=9))
 OUTPUT = ROOT / "output/evidence-deep-article-runs"
@@ -500,6 +501,8 @@ def main() -> int:
             progress = {}
             write_count="unknown" if args.apply and owns_run and not args.prepare_only else 0
         failure={"run_id":run_id,"kst_date":datetime.now(KST).date().isoformat(),"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
+        if isinstance(exc, SourceCheckError):
+            failure.update(exc.diagnostic)
         if args.prepare_only:
             failure["run_kind"] = "preparation"
         if progress.get("stage") == "discovery_started":

@@ -128,6 +128,26 @@ class QueueIntegrationTests(unittest.TestCase):
                 self.assertEqual(deep.main(),1)
             execution.assert_not_called(); notify.assert_not_called()
 
+    def test_preparation_source_failure_records_safe_cause(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary); queue=self.queue()
+            queue.preparation_allowed.return_value=True
+            def fail(**kwargs):
+                (root/'runs/source-failure').mkdir(parents=True)
+                raise deep.SourceCheckError('source_recheck_http_error',
+                                            'https://example.test/doc?token=secret', status=403)
+            with patch.dict('sys.modules', {'scripts.editorial_queue':queue}), patch('scripts.editorial_queue',queue,create=True), \
+                 patch.object(deep,'ROOT',root), patch.object(deep,'OUTPUT',root/'runs'), patch.object(deep,'LOCK',root/'lock'), \
+                 patch.object(deep,'execute',side_effect=fail), patch.object(deep,'notify_publication') as notify, \
+                 patch('sys.argv',['deep','--apply','--prepare-only','--run-id','source-failure','--inventory',str(root/'inventory')]), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(deep.main(),1)
+            result=json.loads((root/'runs/source-failure/result.json').read_text())
+            self.assertEqual(result['http_status'],403)
+            self.assertEqual(result['failure_stage'],'source_recheck')
+            self.assertEqual(result['wordpress_write_count'],0)
+            self.assertNotIn('secret',json.dumps(result))
+            notify.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -22,6 +22,21 @@ MAXIMUM = 7
 MAX_AGE = timedelta(days=7)
 
 
+class SourceCheckError(ValueError):
+    """Safe diagnostics: never persist response bodies, credentials or query strings."""
+
+    def __init__(self, reason, url, *, status=None):
+        super().__init__(reason)
+        self.diagnostic = {
+            'reason': reason,
+            'failure_stage': 'source_recheck',
+            'source_host': urlparse(url).hostname,
+            'source_url_sha256': hashlib.sha256(url.encode()).hexdigest(),
+        }
+        if status is not None:
+            self.diagnostic['http_status'] = status
+
+
 class SourceText(HTMLParser):
     def __init__(self):
         super().__init__(); self.parts = []; self.ignored = []
@@ -105,12 +120,12 @@ def source_digest(url):
     with requests.get(url, timeout=(5,20), stream=True, allow_redirects=False,
                       headers={'User-Agent':'HuntLab-EditorialRecheck/1.0'}) as response:
         if response.status_code != 200:
-            raise ValueError('source_recheck_http_error')
+            raise SourceCheckError('source_recheck_http_error', url, status=response.status_code)
         chunks = []; size = 0
         for chunk in response.iter_content(65536):
             size += len(chunk)
             if size > 4_000_000:
-                raise ValueError('source_too_large')
+                raise SourceCheckError('source_too_large', url)
             chunks.append(chunk)
         data = b''.join(chunks)
         # HTML navigation/advertising scripts are not the article's source text.
@@ -118,7 +133,7 @@ def source_digest(url):
             parser = SourceText(); parser.feed(data.decode('utf-8',errors='replace'))
             data = re.sub(r'\s+',' ',' '.join(parser.parts)).strip().encode()
         if not data:
-            raise ValueError('source_empty')
+            raise SourceCheckError('source_empty', url)
         return hashlib.sha256(data).hexdigest()
 
 

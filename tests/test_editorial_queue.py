@@ -12,6 +12,21 @@ from scripts import editorial_queue as queue
 
 
 class EditorialQueueTests(unittest.TestCase):
+    def test_source_http_failure_has_safe_diagnostic_and_still_blocks(self):
+        url = 'https://example.test/document?token=do-not-log'
+        response = Mock(status_code=403)
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        with patch.object(queue, 'safe_url'), patch.object(queue.requests, 'get', return_value=response):
+            with self.assertRaises(queue.SourceCheckError) as caught:
+                queue.source_digest(url)
+        diagnostic = caught.exception.diagnostic
+        self.assertEqual(diagnostic['http_status'], 403)
+        self.assertEqual(diagnostic['reason'], 'source_recheck_http_error')
+        self.assertEqual(diagnostic['source_host'], 'example.test')
+        self.assertNotIn('do-not-log', json.dumps(diagnostic))
+        response.iter_content.assert_not_called()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
