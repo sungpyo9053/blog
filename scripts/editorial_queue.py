@@ -157,9 +157,58 @@ def source_urls(text,candidate):
     return urls
 
 
-def freeze_sources(path, *, candidate, destination, fetch=source_digest):
+def source_line_count(url):
+    """Count original UTF-8 source lines; no HTML normalization or redirects."""
+    safe_url(url)
+    with requests.get(url, timeout=(5,20), stream=True, allow_redirects=False,
+                      headers={'User-Agent':'HuntLab-EditorialRecheck/1.0'}) as response:
+        if response.status_code != 200:
+            raise SourceCheckError('source_anchor_http_error', url, status=response.status_code)
+        if 'text/html' in response.headers.get('Content-Type','').lower():
+            raise ValueError('source_anchor_not_raw_text')
+        data = bytearray()
+        for chunk in response.iter_content(65536):
+            data.extend(chunk)
+            if len(data) > 4_000_000:
+                raise ValueError('source_anchor_too_large')
+        text = bytes(data).decode('utf-8')
+        if '\x00' in text:
+            raise ValueError('source_anchor_not_raw_text')
+        return len(text.splitlines())
+
+
+def validate_source_line_anchors(text, *, line_counter=source_line_count):
+    counts = {}
+    for url in sorted(set(re.findall(r'https://[^\s<>\)\]"\']+', text))):
+        parsed = urlparse(html.unescape(url))
+        if parsed.hostname not in {'github.com','raw.githubusercontent.com'} or not parsed.fragment.startswith('L'):
+            continue
+        match = re.fullmatch(r'L([1-9][0-9]*)(?:-L([1-9][0-9]*))?', parsed.fragment)
+        if not match:
+            raise ValueError('source_anchor_invalid_range')
+        if parsed.query or parsed.username or parsed.password or parsed.port not in (None,443):
+            raise ValueError('source_anchor_invalid_url')
+        parts = parsed.path.strip('/').split('/')
+        if parsed.hostname == 'github.com':
+            if len(parts) < 5 or parts[2] != 'blob':
+                raise ValueError('source_anchor_not_blob')
+            parts.pop(2)
+        if len(parts) < 4 or any(part in {'', '.', '..'} for part in parts):
+            raise ValueError('source_anchor_invalid_url')
+        raw = 'https://raw.githubusercontent.com/' + '/'.join(parts)
+        start = int(match[1]); end = int(match[2] or match[1])
+        if start > end:
+            raise ValueError('source_anchor_invalid_range')
+        if raw not in counts:
+            counts[raw] = line_counter(raw)
+        if not 1 <= start <= end <= counts[raw]:
+            raise ValueError('source_anchor_out_of_range')
+
+
+def freeze_sources(path, *, candidate, destination, fetch=source_digest, line_counter=source_line_count):
     from publisher.frontmatter import load_document
     text=load_document(Path(path)).markdown
+    validate_source_line_anchors(text, line_counter=line_counter)
     sources=[{'url':url,'sha256':fetch(url)} for url in source_urls(text,candidate)]
     by_url={row['url']:row['sha256'] for row in sources}
     contract=candidate.get('foundation_contract',{})
@@ -234,7 +283,7 @@ def enqueue(candidate, prepared, *, repo, now=None, fetch=source_digest):
     return {'queue_id':ident,'status':'queued','wordpress_write_count':0}
 
 
-def preflight(row, *, repo, inventory_path, now, fetch=source_digest):
+def preflight(row, *, repo, inventory_path, now, fetch=source_digest, line_counter=source_line_count):
     from scripts.run_daily_pipeline import validate_prepared_artifacts, validate_publish_contract
     from scripts.editorial_gate import enforce_prepublication
     context = context_for(row['prepared'], repo)
@@ -255,6 +304,7 @@ def preflight(row, *, repo, inventory_path, now, fetch=source_digest):
     for source in row['sources']:
         if fetch(source['url']) != source['sha256']:
             raise ValueError('queue_source_changed')
+    validate_source_line_anchors((context.directory/'publish.md').read_text(), line_counter=line_counter)
     enforce_prepublication(context.directory/'publish.md',Path(inventory_path))
     check_queue_overlap(context.directory/'publish.md',repo,exclude=row['queue_id'])
     return context

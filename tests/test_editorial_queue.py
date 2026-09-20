@@ -12,6 +12,34 @@ from scripts import editorial_queue as queue
 
 
 class EditorialQueueTests(unittest.TestCase):
+    def test_line_anchor_ranges_use_raw_source_and_preserve_manifest_url_policy(self):
+        base='https://github.com/owner/repo/blob/'+'a'*40+'/src/example.py'
+        counter=Mock(return_value=10)
+        queue.validate_source_line_anchors(f'[a]({base}#L1-L10) [b]({base}#L10)', line_counter=counter)
+        counter.assert_called_once_with('https://raw.githubusercontent.com/owner/repo/'+'a'*40+'/src/example.py')
+        self.assertEqual(queue.source_urls(f'[a]({base}#L1-L10)',{}),[base])
+
+    def test_invalid_or_missing_source_line_anchor_fails_closed(self):
+        base='https://raw.githubusercontent.com/o/r/main/test.py'
+        for fragment in ('L11','L1-L11','L0','L5-L2','L2-Lx'):
+            with self.subTest(fragment=fragment), self.assertRaises(ValueError):
+                queue.validate_source_line_anchors(f'[source]({base}#{fragment})',line_counter=Mock(return_value=10))
+        with self.assertRaises(ValueError):
+            queue.validate_source_line_anchors(f'[source]({base}#L1)',line_counter=Mock(return_value=0))
+
+    def test_unrelated_html_anchors_do_not_fetch(self):
+        counter=Mock()
+        queue.validate_source_line_anchors('[a](https://docs.example.test/topic#L5) [b](https://github.com/o/r/blob/main/readme.md#example)',line_counter=counter)
+        counter.assert_not_called()
+
+    def test_freeze_anchor_failure_occurs_before_manifest_creation(self):
+        doc=SimpleNamespace(markdown='[a](https://github.com/o/r/blob/main/x.py#L99)')
+        fetch=Mock()
+        with patch('publisher.frontmatter.load_document',return_value=doc), self.assertRaisesRegex(ValueError,'out_of_range'):
+            queue.freeze_sources(self.repo/'publish.md',candidate={},destination=self.repo/'baseline.json',fetch=fetch,line_counter=Mock(return_value=5))
+        fetch.assert_not_called()
+        self.assertFalse((self.repo/'baseline.json').exists())
+
     def test_source_http_failure_has_safe_diagnostic_and_still_blocks(self):
         url = 'https://example.test/document?token=do-not-log'
         response = Mock(status_code=403)
@@ -170,6 +198,27 @@ class EditorialQueueTests(unittest.TestCase):
                 queue.preflight(row, repo=self.repo, inventory_path=self.repo/'inventory', now=self.now, fetch=Mock(return_value='new'))
         gate.assert_not_called()
         self.publisher.assert_not_called()
+
+    def test_reservation_preflight_rechecks_anchor_despite_unchanged_source_hash(self):
+        row=self.row();article=self.repo/'output/article';article.mkdir()
+        (article/'physical-ai-quality-review.json').write_text(json.dumps({'reviewed_at':self.now.isoformat()}))
+        (article/'publish.md').write_text('[bad](https://raw.githubusercontent.com/o/r/main/x.py#L99)')
+        with patch.object(queue,'context_for',return_value=SimpleNamespace(directory=article)), patch('scripts.run_daily_pipeline.validate_prepared_artifacts'), patch('scripts.run_daily_pipeline.validate_publish_contract'), patch('scripts.editorial_gate.enforce_prepublication') as gate:
+            with self.assertRaisesRegex(ValueError,'out_of_range'):
+                queue.preflight(row,repo=self.repo,inventory_path=self.repo/'inventory',now=self.now,fetch=Mock(return_value='old'),line_counter=Mock(return_value=4))
+        gate.assert_not_called();self.publisher.assert_not_called()
+
+    def test_raw_line_fetch_preserves_count_and_rejects_html_and_oversize(self):
+        response=Mock();response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
+        response.status_code=200;response.headers={'Content-Type':'text/plain'}
+        response.iter_content.return_value=[b'one\r\ntwo\nthree']
+        with patch.object(queue,'safe_url') as safe, patch.object(queue.requests,'get',return_value=response) as get:
+            self.assertEqual(queue.source_line_count('https://raw.githubusercontent.com/o/r/main/a.py'),3)
+            safe.assert_called_once();self.assertFalse(get.call_args.kwargs['allow_redirects'])
+            response.headers={'Content-Type':'text/html'}
+            with self.assertRaisesRegex(ValueError,'not_raw_text'):queue.source_line_count('https://raw.githubusercontent.com/o/r/main/a.py')
+            response.headers={'Content-Type':'text/plain'};response.iter_content.return_value=[b'x'*4000001]
+            with self.assertRaisesRegex(ValueError,'too_large'):queue.source_line_count('https://raw.githubusercontent.com/o/r/main/a.py')
 
     def test_freeze_deduplicates_fragments_excludes_internal_and_checks_pinned_hash(self):
         doc = SimpleNamespace(markdown='[one](https://example.test/source#a) [two](https://example.test/source#b) [home](https://huntlab.app/start)')
