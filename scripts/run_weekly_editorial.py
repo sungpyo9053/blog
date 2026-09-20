@@ -175,6 +175,25 @@ def validate_plan(plan):
         raise ValueError('invalid_action')
 
 
+def weekly_publication_count(root, week):
+    """Confirmed automatic deep-lane writes, not all site/manual publications."""
+    end = date.fromisoformat(week)
+    start = (end - timedelta(days=6)).isoformat()
+    post_ids = set()
+    try:
+        for path in (root/'output/evidence-deep-article-runs').glob('*/publication.json'):
+            record = json.loads(path.read_text())
+            if not start <= record.get('kst_date', '') <= week:
+                continue
+            post_id = (record.get('publication') or {}).get('post_id')
+            if (record.get('run_id') == path.parent.name and record.get('wordpress_write_count') == 1
+                    and type(post_id) is int and post_id > 0):
+                post_ids.add(post_id)
+        return len(post_ids)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
 def notify_result(result, directory, sender=send):
     receipt = directory / 'kakao.json'
     if receipt.exists():
@@ -185,7 +204,9 @@ def notify_result(result, directory, sender=send):
     proposals = result.get('proposals', [])
     change = result.get('proposed_change') or {}
     detail = str(change.get('reason') or (proposals[0].get('title') if proposals else '') or '제안 없음')
-    message = (f"[HuntLab 주간 {result['week']}] {status}\n글: {update.get('post_id', '-')}\n"
+    count = weekly_publication_count(ROOT, result['week'])
+    publication_summary = f'자동 발행 기록 {count}편' if count is not None else '발행 집계 확인 필요'
+    message = (f"[HuntLab 주간 {result['week']}] {status}\n{publication_summary}\n개선 글: {update.get('post_id', '-')}\n"
                f"{reason[:35]}\n{'개선' if change else '연구 제안'}: {detail[:55]}\n후보 {len(proposals)}건 / 지표 {result.get('metrics_status', '미확인')}\n"
                f"4주 평가: {result.get('assessment', '미실행')}")[:200]
     marker = {'status': 'attempting', 'message': message}

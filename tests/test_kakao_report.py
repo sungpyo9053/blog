@@ -1,13 +1,61 @@
 import json
 import tempfile
 import unittest
+import contextlib
+import io
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from scripts.send_kakao_report import deep_status, message_for, run_day, send
 
 
 class KakaoReportTests(unittest.TestCase):
+    def test_transport_checks_runtime_before_attempting_send(self):
+        with patch('scripts.send_kakao_report.subprocess.run', return_value=Mock(returncode=1, stdout='', stderr='private')) as run:
+            with self.assertRaises(RuntimeError):
+                send('test', '/approved/bin/mcporter')
+            self.assertEqual(run.call_args.args[0], ['/approved/bin/mcporter', '--version'])
+            self.assertEqual(run.call_count, 1)
+
+    def test_failure_report_is_not_silenced_by_routine_policy(self):
+        from scripts.send_kakao_report import routine_status
+        self.assertFalse(routine_status(('조회 실패(발행 여부 미확인)',''), None))
+        self.assertFalse(routine_status(('발행 완료',''), ('발행 1건(발행 기록) / 후속 처리 실패','')))
+        self.assertTrue(routine_status(('발행 완료',''), ('미발행: READY 0건(정상 종료)','')))
+
+    def test_transport_uses_companion_node_path(self):
+        with patch('scripts.send_kakao_report.subprocess.run', return_value=Mock(returncode=0, stdout='메시지를 성공적으로 보냈습니다')) as run:
+            send('test', '/approved/bin/mcporter')
+            self.assertTrue(run.call_args.kwargs['env']['PATH'].startswith('/approved/bin:'))
+
+    def test_quiet_daily_success_is_recorded_without_message(self):
+        from scripts import send_kakao_report as report
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'config').mkdir()
+            (root/'config/operations-notifications.json').write_text('{"schema_version":1,"routine_reports":"weekly"}')
+            with patch.object(report, 'ROOT', root), patch.object(report, 'briefing_status', return_value=('발행 완료','')), \
+                    patch.object(report, 'send') as sender, patch('sys.argv', ['report','--slot','07','--send']), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(report.main(), 0)
+            sender.assert_not_called()
+            receipt = next((root/'output/kakao-reports').glob('*.json'))
+            self.assertEqual(json.loads(receipt.read_text())['status'], 'suppressed_healthy')
+
+    def test_quiet_daily_error_is_queued_for_watchdog_not_discarded(self):
+        from scripts import send_kakao_report as report
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'config').mkdir()
+            (root/'config/operations-notifications.json').write_text('{"schema_version":1,"routine_reports":"weekly"}')
+            with patch.object(report, 'ROOT', root), patch.object(report, 'briefing_status', return_value=('조회 실패','')), \
+                    patch.object(report, 'send') as sender, patch('sys.argv', ['report','--slot','07','--send']), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(report.main(), 0)
+            sender.assert_not_called()
+            receipt = next((root/'output/kakao-reports').glob('*.json'))
+            self.assertEqual(json.loads(receipt.read_text())['status'], 'queued_issue')
+
     def test_verified_recovery_supersedes_but_preserves_failed_result(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

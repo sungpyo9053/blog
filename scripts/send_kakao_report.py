@@ -6,6 +6,7 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import subprocess
 import urllib.request
 from datetime import datetime, timezone
@@ -14,6 +15,27 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 KST = ZoneInfo('Asia/Seoul')
+
+
+class KakaoNotSent(RuntimeError):
+    """The MCP call was not started; safe to retry with a bounded budget."""
+
+
+def quiet_mode(root):
+    try:
+        config = json.loads((Path(root)/'config/operations-notifications.json').read_text())
+        return config == {'schema_version': 1, 'routine_reports': 'weekly'}
+    except (OSError, ValueError):
+        return False  # Invalid config must never silently disable alerts.
+
+
+def routine_status(briefing, deep):
+    if briefing[0] not in {'발행 완료', '진행 중'}:
+        return False
+    if deep is None:
+        return True
+    return bool(re.fullmatch(r'발행 \d+건\((?:발행 기록|공개 확인 완료)\)', deep[0])) or deep[0] in {
+        '진행 중', '미발행: READY 0건(정상 종료)', '미발행: 새 주제 조사 후 READY 0건', '미발행: 일일 한도 도달'}
 
 
 def run_day(run_id):
@@ -141,7 +163,16 @@ def message_for(day, slot, briefing, deep=None):
 
 
 def send(message, executable):
-    p = subprocess.run([executable, 'call', 'mcp-gateway.KakaotalkChat-MemoChat', '--args', json.dumps({'message':message},ensure_ascii=False), '--timeout','45000','--output','json'], capture_output=True, text=True, timeout=60)
+    env = os.environ.copy()
+    if Path(executable).is_absolute():
+        env['PATH'] = str(Path(executable).parent) + os.pathsep + env.get('PATH', '')
+    try:
+        runtime = subprocess.run([executable, '--version'], capture_output=True, text=True, timeout=15, env=env)
+    except (OSError, subprocess.TimeoutExpired):
+        raise KakaoNotSent('Kakao runtime unavailable before send') from None
+    if runtime.returncode:
+        raise KakaoNotSent('Kakao runtime failed before send')
+    p = subprocess.run([executable, 'call', 'mcp-gateway.KakaotalkChat-MemoChat', '--args', json.dumps({'message':message},ensure_ascii=False), '--timeout','45000','--output','json'], capture_output=True, text=True, timeout=60, env=env)
     # Do not emit raw client output: OAuth diagnostics can contain credentials.
     if p.returncode or '메시지를 성공적으로 보냈습니다' not in p.stdout:
         raise RuntimeError('Kakao delivery unconfirmed; inspect authentication privately')
@@ -172,13 +203,18 @@ def main():
             print(message)
             return 0
         payload={'day':day,'slot':slot,'message':message,'status':'attempting','timestamp':now.isoformat()}
+        if quiet_mode(ROOT):
+            payload['status'] = 'suppressed_healthy' if routine_status(briefing, deep) else 'queued_issue'
+            receipt.write_text(json.dumps(payload, ensure_ascii=False)+'\n')
+            print(payload['status']+'; retained for weekly reporting and watchdog')
+            return 0
         receipt.write_text(json.dumps(payload,ensure_ascii=False)+'\n')
         try:
             send(message,os.environ.get('MCPORTER_BIN','mcporter'))
-        except Exception:
-            payload['status']='delivery_unconfirmed'
+        except Exception as exc:
+            payload['status']='not_sent' if isinstance(exc, KakaoNotSent) else 'delivery_unconfirmed'
             receipt.write_text(json.dumps(payload,ensure_ascii=False)+'\n')
-            print('delivery_unconfirmed; automatic retry disabled to prevent duplicates')
+            print(payload['status']+'; no automatic duplicate send')
             return 1
         payload['status']='sent'
         receipt.write_text(json.dumps(payload,ensure_ascii=False)+'\n')

@@ -16,9 +16,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 try:
-    from scripts.send_kakao_report import send
+    from scripts.send_kakao_report import send, quiet_mode, KakaoNotSent
 except ModuleNotFoundError:  # Direct script execution.
-    from send_kakao_report import send
+    from send_kakao_report import send, quiet_mode, KakaoNotSent
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,6 +87,8 @@ def _notify(result, root, sender, retry_unconfirmed):
         previous = json.loads(path.read_text()) if path.exists() else {}
         if previous.get('status') == 'sent':
             return {'status': 'already_sent', 'post_id': post_id}
+        if previous.get('status') == 'suppressed_healthy':
+            return {'status': 'suppressed_healthy', 'post_id': post_id}
         if previous and previous.get('status') != 'not_sent' and not retry_unconfirmed:
             return {'status': 'delivery_unconfirmed', 'post_id': post_id}
         receipt = {
@@ -95,11 +97,16 @@ def _notify(result, root, sender, retry_unconfirmed):
             'attempt': previous.get('attempt', 0) + 1,
             'timestamp': datetime.now(timezone.utc).isoformat(),
         }
+        if quiet_mode(root):
+            receipt['status'] = 'suppressed_healthy'
+            receipt['attempt'] = previous.get('attempt', 0)
+            _save(path, receipt)
+            return {'status': 'suppressed_healthy', 'post_id': post_id}
         _save(path, receipt)
         try:
             sender(message, os.environ.get('MCPORTER_BIN', 'mcporter'))
-        except FileNotFoundError:
-            # The process was never started, so notification-only retry is safe.
+        except (FileNotFoundError, KakaoNotSent):
+            # The MCP send never started, so bounded notification-only retry is safe.
             receipt['status'] = 'not_sent'
         except Exception:
             # Never persist exception strings or raw MCP/OAuth output.
@@ -135,7 +142,7 @@ def main():
     except Exception:
         status = {'status': 'notification_error'}
     print(json.dumps(status))
-    return 0 if status['status'] in {'sent', 'already_sent', 'eligible'} else 1
+    return 0 if status['status'] in {'sent', 'already_sent', 'eligible', 'suppressed_healthy'} else 1
 
 
 if __name__ == '__main__':

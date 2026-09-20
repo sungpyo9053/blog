@@ -19,8 +19,42 @@ The watchdog's own nonzero service exit and journal expose monitor failures.
   notifier, at most three watchdog attempts per post. No historical notification backfill.
 - Save state before attempting recovery; preserve original failure records.
 - Send a new operations incident summary to the approved Kakao self-chat, deduplicated
-  by incident set and capped at two summaries per KST day. Do not retry an uncertain
-  incident alert. This is separate from repeating a post-publication notification.
+  by incident set and capped at two summaries per KST day. Ordinary problems must
+  persist for three checks; unknown WordPress writes are escalated immediately.
+  Resolved transient incidents do not generate user alerts. The same uninterrupted
+  incident is not resent the next day; a resolved incident that recurs is new.
+  Do not retry an uncertain incident alert. This is separate from repeating a
+  post-publication notification.
+
+## Low-touch operation (2026-09-20)
+
+`config/operations-notifications.json` selects weekly routine reporting. Successful
+post notifications and healthy 07/11 reports are retained as `suppressed_healthy`,
+not falsely marked sent. Failed 07/11 checks are saved as `queued_issue`; the watchdog
+rechecks the live state without sending or modifying the original receipt. Recovered
+checks are recorded separately by original-receipt hash. Only persistent issues are
+escalated. The scheduled checks still run; failures remain visible in private records.
+The Sunday report includes deduplicated confirmed automatic deep-lane publication
+receipts for Monday–Sunday; manual launch batches are not counted as automatic runs.
+The existing 4-week assessment cadence is unchanged.
+
+Kakao is the user's only notification channel. The shared sender prepends mcporter's
+own directory to PATH (to select its companion Node) and tests the runtime before
+starting any MCP call. A failed preflight becomes definite `not_sent`; failures after
+the send starts remain uncertain. Historical uncertain receipts are never rewritten
+as known-not-sent. No email/other account is added.
+
+Actions are described in Korean rather than raw error codes. The user need not
+inspect logs; unresolved code defects still require invoking the coding agent.
+This reduces interruptions, not the need for OAuth interaction, account actions,
+or manual authorization for unsupported repair. Kakao outages cannot be reported
+through a separate channel because none is available.
+
+Low-touch verification: 731 tests run, 725 passed, 6 pre-existing skips. The focused
+reporting/watchdog/weekly suite has80 passing tests. New regression cases prove
+healthy suppression, unknown-receipt preservation, pre-send runtime failure,
+three-check escalation, cross-day deduplication, live-status recheck without
+overwriting original report records, and weekly receipt deduplication.
 
 ## Not automatic
 

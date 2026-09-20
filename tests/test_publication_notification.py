@@ -57,6 +57,25 @@ class PublicationNotificationTests(unittest.TestCase):
         self.assertIn(publication['topic'], message)
         self.assertIn(publication['url'], message)
 
+    def test_weekly_routine_policy_suppresses_success_but_preserves_receipt(self):
+        config = self.root/'config/operations-notifications.json'
+        config.parent.mkdir()
+        config.write_text('{"schema_version":1,"routine_reports":"weekly"}')
+        self.assertEqual(self.notify()['status'], 'suppressed_healthy')
+        self.assertEqual(self.notify()['status'], 'suppressed_healthy')
+        self.assertEqual(self.receipt()['post_id'], 800)
+        self.sender.assert_not_called()
+
+    def test_quiet_policy_never_erases_uncertain_delivery(self):
+        self.sender.side_effect = RuntimeError()
+        self.notify()
+        before = self.receipt()
+        config = self.root/'config/operations-notifications.json'
+        config.parent.mkdir()
+        config.write_text('{"schema_version":1,"routine_reports":"weekly"}')
+        self.assertEqual(self.notify()['status'], 'delivery_unconfirmed')
+        self.assertEqual(self.receipt(), before)
+
     def test_explicit_title_takes_precedence_over_topic(self):
         self.result['publication']['topic'] = 'Older planner topic'
         self.assertEqual(self.notify()['status'], 'sent')
@@ -105,6 +124,13 @@ class PublicationNotificationTests(unittest.TestCase):
 
     def test_missing_executable_can_retry_without_republishing(self):
         self.sender.side_effect = FileNotFoundError()
+        self.assertEqual(self.notify()['status'], 'not_sent')
+        self.sender.side_effect = None
+        self.assertEqual(self.notify()['status'], 'sent')
+
+    def test_preflight_runtime_failure_is_definite_not_sent(self):
+        from scripts.send_kakao_report import KakaoNotSent
+        self.sender.side_effect = KakaoNotSent('runtime failed before call')
         self.assertEqual(self.notify()['status'], 'not_sent')
         self.sender.side_effect = None
         self.assertEqual(self.notify()['status'], 'sent')

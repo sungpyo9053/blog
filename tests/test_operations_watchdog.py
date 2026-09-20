@@ -214,6 +214,41 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.assertTrue(any(x['reason'] == 'record_invalid' for x in self.execute()['issues']))
         self.notify.assert_not_called()
 
+    def test_transient_incident_gets_three_checks_before_interrupting(self):
+        self.health.return_value = False
+        self.execute()
+        self.execute()
+        self.sender.assert_not_called()
+        self.execute()
+        self.sender.assert_called_once()
+        self.assertIn('조치 필요', self.sender.call_args.args[0])
+
+    def test_persistent_same_incident_not_repeated_next_day(self):
+        self.failed_publication()
+        self.recover.side_effect = RuntimeError()
+        for _ in range(3):
+            self.execute()
+        self.assertEqual(self.sender.call_count, 1)
+        self.now = self.now.replace(day=21)
+        self.save('output/kakao-reports/2026-09-21-07.json', {'status':'sent'})
+        self.execute()
+        self.assertEqual(self.sender.call_count, 1)
+
+    def test_suppressed_healthy_daily_receipt_is_not_missing_delivery(self):
+        self.save('output/kakao-reports/2026-09-20-07.json', {'status':'suppressed_healthy'})
+        self.assertEqual(self.execute()['issues'], [])
+
+    def test_transient_daily_check_is_rechecked_without_touching_original(self):
+        from scripts import operations_watchdog as watchdog
+        relative = 'output/kakao-reports/2026-09-20-07.json'
+        self.save(relative, {'status':'queued_issue','day':'2026-09-20','slot':'07'})
+        original = (self.root/relative).read_bytes()
+        with patch.object(watchdog, 'confirm_scheduled_report', return_value=True, create=True) as check:
+            self.assertEqual(self.execute()['issues'], [])
+            check.assert_called_once()
+        self.assertEqual((self.root/relative).read_bytes(), original)
+        self.sender.assert_not_called()
+
     def test_no_historical_notification_backfill(self):
         old_id = '20260915T183332Z-older'
         old = self.root/'output/evidence-deep-article-runs'/old_id

@@ -22,7 +22,7 @@ if str(ROOT) not in sys.path:
 from scripts.publication_notification import _save, _verified, notify_publication
 from scripts.run_daily_pipeline import PipelineError, PipelineLock
 from scripts.run_evidence_deep_article import audit_public, read_reconciliation, resume_public_audit
-from scripts.send_kakao_report import send
+from scripts.send_kakao_report import send, briefing_status, deep_status, routine_status
 from scripts.weekly_editorial_updates import _NoRedirect
 
 KST = ZoneInfo('Asia/Seoul')
@@ -68,6 +68,12 @@ def confirm_publication(run, record):
         return False
     return bool(_verified({**record, 'public_audit': audit_public(
         record['publication'], receipt['candidate'])}))
+
+
+def confirm_scheduled_report(root, day, slot):
+    briefing = briefing_status(day)
+    deep = deep_status(root, day, service_active(DEEP)) if slot == '11' else None
+    return routine_status(briefing, deep)
 
 
 def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
@@ -166,7 +172,7 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
             post_id = record['publication']['post_id']
             notification_path = root/f'output/kakao-publications/post-{post_id}.json'
             notification = read(notification_path) if notification_path.exists() else {}
-            if notification.get('status') == 'sent':
+            if notification.get('status') in {'sent', 'suppressed_healthy'}:
                 continue
             if notification and notification.get('status') != 'not_sent':
                 issue(str(post_id), 'notification_unknown')
@@ -176,7 +182,7 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                     issue(run.name, 'public_audit_needs_repair')
                     continue
                 notification = notify(record)
-                if notification.get('status') not in {'sent', 'already_sent'}:
+                if notification.get('status') not in {'sent', 'already_sent', 'suppressed_healthy'}:
                     issue(str(post_id), 'notification_not_sent' if notification.get('status') == 'not_sent'
                           else 'notification_unknown')
             else:
@@ -208,20 +214,53 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
         try:
             if not path.exists():
                 issue(f'{day}-{hour}', 'report_missing')
-            elif read(path).get('status') != 'sent':
+            elif read(path).get('status') == 'queued_issue':
+                key = hashlib.sha256(path.read_bytes()).hexdigest()
+                resolved = state.setdefault('resolved_reports', {})
+                if key not in resolved:
+                    if confirm_scheduled_report(root, day, f'{hour:02d}'):
+                        if apply:
+                            resolved[key] = now.isoformat()
+                        result['recovered'].append(f'report-{day}-{hour:02d}')
+                    else:
+                        issue(f'{day}-{hour}', 'scheduled_check_failed')
+            elif read(path).get('status') not in {'sent', 'suppressed_healthy'}:
                 issue(f'{day}-{hour}', 'report_delivery_unknown')
         except Exception:
             issue(f'{day}-{hour}', 'record_invalid')
 
     if apply:
-        if result['issues'] or result['recovered']:
-            fingerprint = hashlib.sha256(json.dumps([result['issues'], result['recovered']], sort_keys=True).encode()).hexdigest()
+        previous = state.get('observations', {})
+        observations = {}
+        actionable = []
+        for item in result['issues']:
+            key = json.dumps(item, sort_keys=True)
+            old = previous.get(key, {})
+            observation = {'count': old.get('count', 0)+1, 'opened_at': old.get('opened_at', now.isoformat())}
+            observations[key] = observation
+            if observation['count'] >= 3 or item['reason'] == 'publication_unknown':
+                actionable.append({**item, 'opened_at': observation['opened_at']})
+        state['observations'] = observations
+        result['action_required'] = actionable
+        # Resolved transient incidents stay in records, without interrupting the user.
+        if actionable:
+            fingerprint = hashlib.sha256(json.dumps(actionable, sort_keys=True).encode()).hexdigest()
             alerts = state['alerts'].setdefault(day, {})
-            if fingerprint not in alerts and len(alerts) < 2:
+            prior = next((items[fingerprint] for items in state['alerts'].values() if fingerprint in items), None)
+            if prior is None and len(alerts) < 2:
                 alerts[fingerprint] = 'attempting'
                 _save(state_path, state)
-                reasons = ', '.join(sorted({x['reason'] for x in result['issues']}))
-                message = f"[훈트랩 운영 감시] 복구 {len(result['recovered'])}건 / 확인 필요 {len(result['issues'])}건\n{reasons}\n자동 재발행 없음. 상세: output/operations-watchdog/latest.json"[:200]
+                labels = {
+                    'public_site_unreachable': '사이트 접속 오류', 'publication_unknown': '발행 여부 확인 필요',
+                    'public_audit_needs_repair': '공개 글 검증 실패', 'pipeline_needs_repair': '글 작성 오류',
+                    'notification_unknown': '카톡 전송 여부 불명', 'notification_not_sent': '카톡 실행 오류',
+                    'record_invalid': '실행 기록 오류', 'run_incomplete': '작업 중단',
+                    'deep_run_missing': '정기 글 작업 누락', 'weekly_run_missing': '주간 점검 누락',
+                    'weekly_needs_repair': '주간 점검 오류', 'analytics_incomplete': '통계 연결 확인 필요',
+                    'report_missing': '정기 보고 누락', 'report_delivery_unknown': '보고 전송 확인 필요',
+                    'scheduled_check_failed': '정기 점검에서 오류 확인'}
+                reasons = ', '.join(sorted({labels[x['reason']] for x in actionable}))[:75]
+                message = f"[훈트랩 조치 필요]\n{reasons}\n자동 처리로 해결되지 않았습니다. 기록은 보존했습니다.\n로그를 복사하지 말고 ‘훈트랩 복구해줘’라고 요청하면 됩니다."[:200]
                 try:
                     sender(message, os.environ.get('MCPORTER_BIN', 'mcporter'))
                     alerts[fingerprint] = 'sent'
@@ -230,7 +269,8 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                 _save(state_path, state)
                 result['alert'] = alerts[fingerprint]
             else:
-                result['alert'] = alerts.get(fingerprint, 'daily_alert_limit')
+                result['alert'] = prior or 'daily_alert_limit'
+        _save(state_path, state)
         _save(directory/'latest.json', result)
     return result
 

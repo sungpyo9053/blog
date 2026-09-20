@@ -9,6 +9,20 @@ from scripts import run_weekly_editorial as weekly
 
 
 class WeeklyTests(unittest.TestCase):
+    def test_weekly_count_uses_confirmed_receipts_not_attempts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            base = root/'output/evidence-deep-article-runs'
+            for name, post, day, count in [('one',777,'2026-09-20',1), ('duplicate',777,'2026-09-20',1),
+                                           ('old',700,'2026-09-10',1), ('held',778,'2026-09-20',0)]:
+                directory = base/name
+                directory.mkdir(parents=True)
+                (directory/'publication.json').write_text(json.dumps({'run_id':name,'kst_date':day,
+                     'wordpress_write_count':count,'publication':{'post_id':post}}))
+            self.assertEqual(weekly.weekly_publication_count(root, '2026-09-20'), 1)
+            (base/'one'/'publication.json').write_text('{bad')
+            self.assertIsNone(weekly.weekly_publication_count(root, '2026-09-20'))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
