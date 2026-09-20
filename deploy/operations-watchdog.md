@@ -66,12 +66,22 @@ Kakao message to the chat agent; uncertain writes must not be repeated.
 ## Verification (2026-09-20)
 
 - Python compile and `git diff --check`: PASS.
-- Whole repository: 715 tests run, 709 passed, 6 existing skips; no failed tests.
-- New watchdog: 22 tests passed; stdlib `trace` line coverage 93% (217 executable
+- Whole repository: 718 tests run, 712 passed, 6 existing skips; no failed tests.
+- New watchdog: 25 tests passed; stdlib `trace` line coverage 93% (228 executable
   lines). This is changed-module line coverage, not branch or whole-repository coverage.
 - Type checker/linter: not run; pyright/ruff are not installed or configured here.
   Compilation and diff checking do not replace those checks.
 - Security/diff review: fixed owned-site probe, owned publication URL validation,
   no raw exception/credential output, no external command from logs/model text,
   persisted attempt limits, shared lock, unknown deliveries not retried, no WP writes.
-- Server deployment/live evidence: pending below; mocked recovery is not a real outage.
+- Server: 38 watchdog/notification tests passed; systemd unit verification passed.
+- Actual service executed twice at about09:22–09:23 KST, exit0 both times. It found
+  post777's existing uncertain notification and did not retry it. A separate new
+  operations warning returned `sent`; the second execution preserved the exact
+  state hash, with no second send. No automatic repair was needed/claimed in these
+  live runs; recovery fault cases above remain mock-based tests.
+- Public post777 body SHA256 and modified_gmt unchanged before/after. Watchdog
+  reports WordPress writes0 and has no WordPress write path.
+- Timer enabled, next09:35 KST; installed service/timer SHA256 matched tracked files.
+- Live private records: `output/operations-watchdog/latest.json`, `state.json` and
+  `journalctl -u huntlab-operations-watchdog.service`. This is not long-term validation.
