@@ -126,6 +126,14 @@ class ScheduleSafetyTests(unittest.TestCase):
             self.assertEqual(scheduler.main(),1)
         run.assert_not_called()
 
+    def test_known_busy_lock_defers_without_publishing(self):
+        lock=Mock();lock.acquire.side_effect=scheduler.deep.PipelineError('Daily Pipeline lock is already held')
+        output=io.StringIO()
+        with patch.object(scheduler.deep,'PipelineLock',return_value=lock), patch.object(scheduler,'schedule_one') as run, contextlib.redirect_stdout(output):
+            self.assertEqual(scheduler.main(),0)
+        self.assertEqual(json.loads(output.getvalue())['status'],'deferred')
+        run.assert_not_called()
+
 
 class FillSafetyTests(unittest.TestCase):
     def test_stops_immediately_on_schedule_failure(self):

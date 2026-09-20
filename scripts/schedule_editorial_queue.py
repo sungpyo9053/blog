@@ -117,7 +117,13 @@ def schedule_one():
 def main():
     lock = deep.PipelineLock(deep.LOCK)
     try:
-        lock.acquire()
+        try:
+            lock.acquire()
+        except deep.PipelineError as exc:
+            if str(exc).startswith('Daily Pipeline'):
+                print(json.dumps({'status': 'deferred', 'reason': 'pipeline_busy', 'wordpress_write_count': 0}))
+                return 0
+            raise
         result = schedule_one()
         print(json.dumps(result, ensure_ascii=False))
         return 0
