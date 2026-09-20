@@ -47,9 +47,10 @@ class OperationsWatchdogTests(unittest.TestCase):
 
     def execute(self, apply=True):
         module = importlib.import_module('scripts.operations_watchdog')
-        return module.run_watchdog(self.root, self.now, apply=apply, recover=self.recover,
-                                  notify=self.notify, sender=self.sender,
-                                  health=self.health, active=self.active, confirm=self.confirm)
+        with patch.object(module, 'confirm_publication', self.confirm, create=True):
+            return module.run_watchdog(self.root, self.now, apply=apply, recover=self.recover,
+                                      notify=self.notify, sender=self.sender,
+                                      health=self.health, active=self.active)
 
     def test_dry_run_does_not_recover_notify_or_persist(self):
         self.failed_publication()
