@@ -1,0 +1,64 @@
+{
+  "checked_at": "2026-09-20T18:02:33.903802+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"정상적인 0.1초 진행\", \"actual\": 0.09999999999999964}, {\"name\": \"2배속 재생에서 실제 0.1초 동안 진행한 ROS 시간\", \"actual\": 0.2}, {\"name\": \"시뮬레이션 일시정지\", \"actual\": 0.0}, {\"name\": \"로그 재생의 3초 역방향 점프\", \"actual\": -3.0}, {\"name\": \"실시간 배율 1에서 지연 기반 단순 오차\", \"actual\": 0.02}, {\"name\": \"실시간 배율 2에서 지연 기반 단순 오차\", \"actual\": 0.04}, {\"name\": \"정지 중 ROSTime 기반 timeout 누적\", \"actual\": 0.0}, {\"name\": \"같은 구간의 steady clock 기반 실제 경과\", \"actual\": 5.0}]\n",
+  "cases": [
+    {
+      "name": "정상적인 0.1초 진행",
+      "expression": "10.1-10.0",
+      "expected": 0.1,
+      "actual": 0.09999999999999964
+    },
+    {
+      "name": "2배속 재생에서 실제 0.1초 동안 진행한 ROS 시간",
+      "expression": "0.1*2",
+      "expected": 0.2,
+      "actual": 0.2
+    },
+    {
+      "name": "시뮬레이션 일시정지",
+      "expression": "12.0-12.0",
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "name": "로그 재생의 3초 역방향 점프",
+      "expression": "9.0-12.0",
+      "expected": -3,
+      "actual": -3.0
+    },
+    {
+      "name": "실시간 배율 1에서 지연 기반 단순 오차",
+      "expression": "0.02*1",
+      "expected": 0.02,
+      "actual": 0.02
+    },
+    {
+      "name": "실시간 배율 2에서 지연 기반 단순 오차",
+      "expression": "0.02*2",
+      "expected": 0.04,
+      "actual": 0.04
+    },
+    {
+      "name": "정지 중 ROSTime 기반 timeout 누적",
+      "expression": "30.0-30.0",
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "name": "같은 구간의 steady clock 기반 실제 경과",
+      "expression": "105.0-100.0",
+      "expected": 5,
+      "actual": 5.0
+    }
+  ],
+  "teaching_context": {
+    "description": "모든 시각과 경과시간의 단위는 초(s)다. 각 사례는 단순 교육용 시간 산술이며 ROS 노드나 로봇을 실행한 결과가 아니다. 경과시간은 ‘새 타임스탬프-이전 타임스탬프’로 계산한다고 가정한다. 정상 진행, 2배속 재생, 정지, 3초 역방향 점프를 골라 같은 식이 양수·0·음수가 되는 경계를 비교한다. 또한 시간원 변경 통지가 실제 네트워크 지연 0.02초 뒤 도착하고, 설계 문서가 설명한 비례 관계만 단순화해 시간 부정확성을 ‘지연×real time factor’로 계산한다. 마지막 두 사례는 시뮬레이션 시간이 멈춘 동안 ROSTime 기반 timeout과 실제로 계속 흐르는 steady clock 기반 timeout이 어떻게 갈리는지 보여준다.",
+    "conclusion": "계산상 정상 0.1초 진행은 양수, 정지는 0, 역방향 점프는 -3초다. 2배속에서는 같은 0.02초 통신 지연의 단순화된 시간 오차가 0.04초로 커진다. 따라서 시뮬레이션 단계·로그 재생과 함께 움직여야 하는 주기는 ROSTime으로 표현할 수 있지만, 주변장치가 실제로 응답하지 않은 시간을 재는 timeout은 SteadyTime으로 격리해야 한다. 독자는 다음 행동으로 자신의 타이머 표에 ‘시뮬레이션 정지 시 함께 멈춰야 하는가’와 ‘역점프 시 어떤 상태를 비울 것인가’ 두 열을 추가한다.",
+    "limitations": "이 예제는 시간 값의 뺄셈과 문서에 나온 지연 비례 관계만 설명한다. /clock 발행 주기, 운영체제 스케줄링, DDS 지연 분포, 실제 controller update 주기, 로봇 운동이나 안전 성능은 모델링하지 않는다. 계산된 0.04초는 측정값이나 보장된 ROS 오차가 아니며, 실제 정확도는 통신과 애플리케이션 조건에 따라 달라진다. 또한 모든 음수 차이를 같은 방식으로 복구할 수 있다고 결론 내릴 수 없으므로, 누적기·필터·제어기별 초기화 정책과 ROS 2의 시간 점프 콜백 동작은 별도로 검증해야 한다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
