@@ -30,6 +30,7 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.sender = Mock()
         self.health = Mock(return_value=True)
         self.active = Mock(return_value=False)
+        self.confirm = Mock(return_value=True)
         self.save('output/kakao-reports/2026-09-20-07.json', {'status': 'sent'})
 
     def save(self, path, data):
@@ -48,7 +49,7 @@ class OperationsWatchdogTests(unittest.TestCase):
         module = importlib.import_module('scripts.operations_watchdog')
         return module.run_watchdog(self.root, self.now, apply=apply, recover=self.recover,
                                   notify=self.notify, sender=self.sender,
-                                  health=self.health, active=self.active)
+                                  health=self.health, active=self.active, confirm=self.confirm)
 
     def test_dry_run_does_not_recover_notify_or_persist(self):
         self.failed_publication()
@@ -210,6 +211,20 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.failed_publication()
         self.save(str((self.directory/'public-audit-recovery.json').relative_to(self.root)), {'failed': False})
         self.assertTrue(any(x['reason'] == 'record_invalid' for x in self.execute()['issues']))
+        self.notify.assert_not_called()
+
+    def test_no_historical_notification_backfill(self):
+        old_id = '20260915T183332Z-older'
+        old = self.root/'output/evidence-deep-article-runs'/old_id
+        old.mkdir()
+        (old/'result.json').write_text(json.dumps({**self.verified, 'run_id': old_id, 'kst_date': '2026-09-16'}))
+        self.assertEqual(self.execute()['issues'], [])
+        self.notify.assert_not_called()
+
+    def test_notification_requires_fresh_public_confirmation(self):
+        self.save(str((self.directory/'result.json').relative_to(self.root)), self.verified)
+        self.confirm.return_value = False
+        self.assertTrue(self.execute()['issues'])
         self.notify.assert_not_called()
 
 
