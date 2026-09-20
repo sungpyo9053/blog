@@ -137,7 +137,8 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
     result['checks'] = {'editorial_collection': collection}
     if collection['status'] != 'fresh':
         issue('editorial_collection', 'news_collection_' + collection['status'])
-    busy = active(DEEP) or active('huntlab-editorial-prepare.service')
+    busy = (active(DEEP) or active('huntlab-editorial-prepare.service')
+            or active('huntlab-editorial-fill.service') or active('huntlab-editorial-schedule.service'))
     today_runs = []
     preparation_runs = []
     for run in sorted((root/'output/evidence-deep-article-runs').glob('*')):

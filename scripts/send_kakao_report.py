@@ -136,6 +136,16 @@ def deep_status(root, day, is_active=False):
             return '실패: 글 저장 후 공개 내용 확인 단계', ''
         return '실패: 글 작성·검수 단계(원인 확인 필요)', ''
     state = latest.get('deep_article')
+    if state == 'wordpress_schedule_managed':
+        try:
+            from scripts.editorial_queue import rows as queue_rows
+            scheduled = [row for row in queue_rows(root) if row['status'] == 'scheduled']
+            due = [row for row in scheduled if row.get('scheduled_at', '').startswith(day)]
+            if due:
+                return '예약 글 공개 확인 대기', ''
+            return f'WordPress 예약 {len(scheduled)}편 / 오늘 공개 기록 없음', ''
+        except (ValueError, OSError, KeyError):
+            return '예약 상태 조회 오류', ''
     if state == 'published':
         audit = latest.get('public_audit') or {}
         publication = latest.get('publication') or {}

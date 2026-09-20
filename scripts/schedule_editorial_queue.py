@@ -56,6 +56,8 @@ def schedule_one():
                     or post.get('date_gmt') != receipt.get('date_gmt')):
                 raise ValueError('scheduled_post_changed')
             if post.get('status') == 'publish':
+                receipt = {**receipt, 'status': 'published', 'confirmed_publication': True,
+                           'url': post.get('link')}
                 audit = queue.audit_queued_public(receipt, row['candidate'])
                 run_id = deep.make_run_id()
                 observed = deep.OUTPUT / run_id
@@ -66,7 +68,7 @@ def schedule_one():
                           'publication': receipt, 'public_audit': audit,
                           'candidate': row['candidate'], 'queue_id': row['queue_id']}
                 deep.write_json_new(observed / 'result.json', result)
-                row.update(status='published', observed_published_at=now.isoformat())
+                row.update(status='published', publication=receipt, observed_published_at=now.isoformat())
                 queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)
                 deep.notify_publication(result)
             elif post.get('status') != 'future':

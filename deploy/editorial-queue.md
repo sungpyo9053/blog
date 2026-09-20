@@ -1,5 +1,22 @@
 # Reviewed editorial queue
 
+Superseding 2026-09-20 user correction: `wordpress_schedule=true` uses native
+WordPress `future` posts, not filesystem-only reservations. The approved backlog
+target is seven. `schedule_editorial_queue.py` owns the lane lock, checks fresh
+publish/draft/future inventory, sources and independent release review, then
+stores a verified draft and schedules the same ID for a free next-day 10:00 KST
+slot within seven days. Unknown mutations remain blocked for reconciliation.
+Install the schedule service/timer on the runner and wordpress-future service/
+timer on the WordPress host. The latter executes only due publish_future_post
+events each minute as www-data; expected granularity is 0–1 minute plus runtime.
+The old 10:00 runner does not publish in native scheduling mode.
+`fill_editorial_schedule.py` is a bounded one-shot refill of up to seven attempts,
+stopping on failure/no candidate; it is not proof of seven actual reservations.
+Actual post IDs and dates must be read back. Post-publication verification and
+notification run separately. Existing 02:00/14:00 preparation remains available.
+
+The following describes the legacy filesystem-only mode:
+
 Preparation: 02:00 and 14:00 KST, one candidate per run, target 3 queued articles,
 hard maximum 7. No WordPress writes during preparation. This is a server-side
 reviewed queue, not WordPress future posts. Expiry is 7 days from final review and
