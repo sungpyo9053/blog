@@ -12,6 +12,26 @@ from scripts import editorial_queue as queue
 
 
 class EditorialQueueTests(unittest.TestCase):
+    def test_backticks_are_url_delimiters_in_inline_and_fenced_code(self):
+        url='https://example.test/source'
+        for text in (f'`{url}`', f'```text\n{url}\n```', f'```{url}```', f'[{url}]({url})'):
+            with self.subTest(text=text):
+                self.assertEqual(queue.source_urls(text,{}),[url])
+        self.assertEqual(queue.source_urls(f'`{url}#L1` [{url}]({url}#section)',{}),[url])
+
+    def test_backtick_line_anchor_is_valid_and_html_escaped_path_still_decodes(self):
+        raw='https://raw.githubusercontent.com/o/r/main/a&amp;b.py'
+        counter=Mock(return_value=10)
+        queue.validate_source_line_anchors(f'`{raw}#L1-L10` ```{raw}#L2```',line_counter=counter)
+        counter.assert_called_once_with('https://raw.githubusercontent.com/o/r/main/a&b.py')
+
+    def test_backtick_extraction_keeps_source_limit_and_private_url_validation(self):
+        with self.assertRaisesRegex(ValueError,'source_set_invalid'):
+            queue.source_urls(' '.join(f'`https://example.test/{i}`' for i in range(41)),{})
+        self.assertEqual(queue.source_urls('`https://127.0.0.1/private`',{}),['https://127.0.0.1/private'])
+        with patch.object(queue.socket,'getaddrinfo',return_value=[(None,None,None,None,('127.0.0.1',443))]), self.assertRaisesRegex(ValueError,'private_address'):
+            queue.safe_url(queue.source_urls('`https://127.0.0.1/private`',{})[0])
+
     def test_line_anchor_ranges_use_raw_source_and_preserve_manifest_url_policy(self):
         base='https://github.com/owner/repo/blob/'+'a'*40+'/src/example.py'
         counter=Mock(return_value=10)

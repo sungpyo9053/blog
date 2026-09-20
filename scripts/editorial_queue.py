@@ -149,7 +149,7 @@ def context_for(prepared, repo):
 
 
 def source_urls(text,candidate):
-    urls=set(re.findall(r'https://[^\s<>\)\]"\']+',text))
+    urls=set(re.findall(r'https://[^\s<>\)\]"\'`]+',text))
     urls.update(candidate.get('evidence',{}).get('public_urls',[]))
     urls=sorted({url.split('#',1)[0] for url in urls if urlparse(url).hostname!='huntlab.app'})
     if not urls or len(urls)>40:
@@ -179,7 +179,7 @@ def source_line_count(url):
 
 def validate_source_line_anchors(text, *, line_counter=source_line_count):
     counts = {}
-    for url in sorted(set(re.findall(r'https://[^\s<>\)\]"\']+', text))):
+    for url in sorted(set(re.findall(r'https://[^\s<>\)\]"\'`]+', text))):
         parsed = urlparse(html.unescape(url))
         if parsed.hostname not in {'github.com','raw.githubusercontent.com'} or not parsed.fragment.startswith('L'):
             continue
