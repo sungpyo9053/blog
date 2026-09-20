@@ -167,7 +167,8 @@ def freeze_sources(path, *, candidate, destination, fetch=source_digest):
         reference=contract.get(name)
         if reference and by_url.get(reference['public_url'])!=reference['sha256']:
             raise ValueError('queue_pinned_evidence_mismatch')
-    payload={'checked_at':clock().isoformat(),'sources':sources,'mode':'before_independent_final_review'}
+    payload={'checked_at':clock().isoformat(),'sources':sources,'mode':'before_independent_final_review',
+             'digest_method':'scripts.editorial_queue.source_digest: text/html is UTF-8 visible text excluding script/style/nav/header/footer with whitespace collapsed; other resources use raw bytes. Pinned GitHub blob URLs resolve to raw.githubusercontent.com.'}
     save(Path(destination),payload,new=True)
     repo=Path(__file__).resolve().parents[1]
     queue_inventory=[{'queue_id':row['queue_id'],'candidate':row['candidate'],

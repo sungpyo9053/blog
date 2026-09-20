@@ -75,6 +75,24 @@ class PrepareOnly(unittest.TestCase):
         with patch.object(p,'validate_publish_contract',side_effect=p.PipelineError('HOLD')):
             with self.assertRaises(p.PipelineError):self.freeze()
 
+    def test_preparation_repair_preserves_rejection_and_refreezes_before_review(self):
+        (self.directory/'planner-context.json').write_text('{}')
+        (self.directory/'physical-ai-quality-review.json').write_text('old-rejected')
+        events=[]
+        def stage(*args, **kwargs):
+            events.append(args[1].name)
+            if args[1].name == 'Reviewer Agent':
+                self.assertFalse((self.directory/'physical-ai-quality-review.json').exists())
+        with patch.object(p,'read_review_decision',return_value='REJECTED'), \
+             patch.object(p,'review_repair_stages',return_value=[p.Stage('Writer Agent',None,''),p.Stage('Reviewer Agent',None,'')]), \
+             patch.object(p,'run_stage',side_effect=stage), patch.object(p,'validate_stage_artifacts'), \
+             patch('scripts.editorial_queue.freeze_sources',side_effect=lambda *a,**k: events.append('freeze')):
+            p.run_review_repair_cycle('codex',self.context,logging.getLogger('test'),timeout_seconds=1,prepare_only=True)
+            self.assertEqual(events,['Writer Agent','freeze','Reviewer Agent'])
+            self.assertEqual((self.directory/'review-before-repair/final.md').read_text(),'final.md')
+            with self.assertRaises(FileExistsError):
+                p.run_review_repair_cycle('codex',self.context,logging.getLogger('test'),timeout_seconds=1,prepare_only=True)
+
     def test_frozen_resume_does_not_rewrite_context(self):
         self.freeze()
         with patch('scripts.editorial_epoch.reject_legacy_run'),patch.object(p,'write_planner_context') as write,patch.object(p,'run_stage') as stage:

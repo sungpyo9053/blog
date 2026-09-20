@@ -1288,10 +1288,21 @@ def run_review_repair_cycle(
     logger: logging.Logger,
     *,
     timeout_seconds: int,
+    prepare_only: bool = False,
 ) -> None:
     """Run one bounded repair cycle without weakening Reviewer approval."""
     if read_review_decision(context) != "REJECTED":
         return
+    if prepare_only:
+        # Preserve the rejected article and evidence. A second rejection is not
+        # silently retried, and no previous approval may become a new approval.
+        archive = context.directory / 'review-before-repair'
+        archive.mkdir(exist_ok=False)
+        for source in context.directory.iterdir():
+            if source.is_file():
+                shutil.copy2(source, archive / source.name)
+        if (context.directory / 'images').is_dir():
+            shutil.copytree(context.directory / 'images', archive / 'images')
     logger.info(
         "topic=%r run_id=%s topic_id=%s event=review_repair_start attempt=1",
         context.title,
@@ -1299,6 +1310,21 @@ def run_review_repair_cycle(
         context.topic_id,
     )
     for stage in review_repair_stages(context, attempt=1):
+        if prepare_only and stage.name == 'Reviewer Agent':
+            from scripts.editorial_queue import freeze_sources
+            # The original baseline remains in the rejection archive. The new
+            # evidence is frozen before a fresh independent review, never after.
+            for name in ('source-baseline.json', 'queue-inventory.json', 'physical-ai-quality-review.json'):
+                existing = context.directory / name
+                if existing.exists():
+                    existing.rename(archive / ('pre-rereview-' + name))
+            plan = json.loads((context.directory / 'planner-context.json').read_text())
+            freeze_sources(context.directory / 'final.md', candidate=plan.get('evidence_candidate', {}),
+                           destination=context.directory / 'source-baseline.json')
+            stage = Stage(stage.name, stage.agent_file, stage.prompt +
+                          '\n독립 재검수: review-before-repair의 거절본과 수정본, 새 source-baseline.json 원문, '
+                          'queue-inventory.json 전체 및 최신 editorial-inventory.json을 직접 비교하세요. '
+                          '점수를 맞추기 위한 승인은 금지이며 미해결 사항은 REJECTED로 남기세요.')
         run_stage(
             codex,
             stage,
@@ -2588,6 +2614,7 @@ def run_topic_pipeline(
             stage = Stage(stage.name, stage.agent_file, stage.prompt +
                           "\n준비 큐용 독립 검수: source-baseline.json의 현재 확인 시각과 URL별 해시를 직접 확인하고 "
                           "원문을 다시 방문하여 현재 본문의 주장과 대조하세요. 이 파일을 최종 승인 근거에 명시하세요. "
+                          "해시 재검증에는 scripts.editorial_queue.source_digest(URL)을 사용하세요. HTML은 정규화 본문 해시이므로 원시 응답 바이트 해시와 직접 비교하지 마세요. "
                           "queue-inventory.json의 다른 대기 글 전체 본문을 읽고 검색 의도 중복을 검토하세요. "
                           "자기 자신의 candidate_id만 제외하고 다른 후보와 고유 결론을 비교하세요. "
                           "과거 실험일과 현재 원문 확인일을 혼동하지 마세요. WordPress/미디어 업로드는 금지입니다.")
@@ -2641,6 +2668,9 @@ def run_topic_pipeline(
         if stage.name == "Publisher Agent":
             with publish_lock:
                 if prepare_only:
+                    if read_review_decision(context) == "REJECTED":
+                        run_review_repair_cycle(codex, context, logger,
+                                               timeout_seconds=timeout_seconds, prepare_only=True)
                     if read_review_decision(context) != "APPROVED":
                         raise ContentQualityRejection("prepared_review_not_approved")
                 else:
