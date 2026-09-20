@@ -5,11 +5,41 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from scripts import discover_physical_ai as d
 
 
 class ArithmeticTests(unittest.TestCase):
+    def test_cli_uses_strict_response_schema_and_preserves_no_candidate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary); (root/'agents').mkdir()
+            (root/'agents/physical-discovery-researcher.md').write_text('Return JSON')
+            def execute(command, **kwargs):
+                schema=json.loads(Path(command[command.index('--output-schema')+1]).read_text())
+                self.assertFalse(schema['additionalProperties'])
+                self.assertEqual(set(schema['required']),{'status','reason','candidate'})
+                self.assertIn({'type':'null'},schema['properties']['candidate']['anyOf'])
+                Path(command[command.index('--output-last-message')+1]).write_text(json.dumps({'status':'no_candidate','reason':'no evidence','candidate':None}))
+                return SimpleNamespace(returncode=0,stdout='',stderr='')
+            with patch.object(d.subprocess,'run',side_effect=execute):
+                result=d.invoke_agent(root,'researcher',{},root)
+            self.assertEqual(result['status'],'no_candidate')
+
+    def test_invalid_json_has_safe_diagnostic_not_provider_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary); (root/'agents').mkdir()
+            (root/'agents/physical-discovery-researcher.md').write_text('Return JSON')
+            def execute(command, **kwargs):
+                Path(command[command.index('--output-last-message')+1]).write_text('non-json-provider-output')
+                return SimpleNamespace(returncode=0,stdout='',stderr='')
+            with patch.object(d.subprocess,'run',side_effect=execute):
+                with self.assertRaisesRegex(d.DiscoveryError,'^model_output_invalid_json$'):
+                    d.invoke_agent(root,'researcher',{},root)
+            text=(root/'researcher-format-error.json').read_text()
+            self.assertNotIn('non-json-provider-output',text)
+            self.assertEqual(json.loads(text)['wordpress_writes'],0)
+
     def test_allowed(self):
         self.assertEqual(d.arithmetic('(-2 + 5) * 8 / 4'), 6)
 

@@ -127,6 +127,22 @@ def fetch_https(url, allowed_hosts):
         raw_socket.close()
 
 
+def output_schema(role):
+    def obj(properties):
+        return {'type': 'object', 'properties': properties, 'required': list(properties), 'additionalProperties': False}
+    string = {'type': 'string'}
+    if role == 'reviewer':
+        return obj({'verdict': {'type':'string','enum':['APPROVED','HOLD']}, 'reason': string,
+                    **{key: {'type':'boolean'} for key in ('primary_sources_verified','worked_example_verified','public_evidence_verified','secret_safe')}})
+    need(role == 'researcher', 'unknown_model_role')
+    example = obj({'description':string, 'conclusion':string, 'limitations':string,
+                   'cases': {'type':'array','items':obj({'name':string,'expression':string,'expected':{'type':'number'}})}})
+    candidate = obj({**{key:string for key in ('title','slug','reader_question','target_reader','learning_outcome','unique_takeaway')},
+                     'source_ids':{'type':'array','items':string}, 'example':example})
+    return obj({'status':{'type':'string','enum':['candidate','no_candidate']}, 'reason':string,
+                'candidate':{'anyOf':[candidate,{'type':'null'}]}})
+
+
 def invoke_agent(repo, role, payload, directory):
     need(not contains_secret(json.dumps(payload, ensure_ascii=False)), 'unsafe_model_input')
     prompt = (repo / f'agents/physical-discovery-{role}.md').read_text()
@@ -136,9 +152,11 @@ def invoke_agent(repo, role, payload, directory):
     environment = {key: os.environ[key] for key in ('HOME', 'CODEX_HOME', 'PATH', 'LANG', 'LC_ALL') if key in os.environ}
     with tempfile.TemporaryDirectory(prefix='huntlab-discovery-') as temporary:
         output = Path(temporary) / 'answer.json'
+        schema = Path(temporary) / 'schema.json'
+        schema.write_text(json.dumps(output_schema(role)))
         command = ['codex', '--ask-for-approval', 'never', '--sandbox', 'read-only', 'exec',
                    '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
-                   '--output-last-message', str(output), '--cd', temporary, '-']
+                   '--output-schema', str(schema), '--output-last-message', str(output), '--cd', temporary, '-']
         for setting in ('features.shell_tool=false', 'features.apps=false', 'features.hooks=false',
                         'features.multi_agent=false', 'features.memories=false', 'features.remote_plugin=false',
                         'web_search="disabled"', 'tools.view_image=false'):
@@ -151,7 +169,17 @@ def invoke_agent(repo, role, payload, directory):
                  'model_usage_limit')
             raise DiscoveryError('model_execution_failed')
         need(output.stat().st_size < 100_000, 'model_output_too_large')
-        answer = parse_json(output.read_text())
+        raw_answer = output.read_text()
+        need(not contains_secret(raw_answer), 'unsafe_model_output')
+        try:
+            answer = parse_json(raw_answer)
+        except json.JSONDecodeError as error:
+            # Keep only safe parser diagnostics, never arbitrary provider output.
+            _save_exclusive(directory / f'{role}-format-error.json', {
+                'role':role, 'reason':'model_output_invalid_json',
+                'line':error.lineno, 'column':error.colno, 'characters':len(raw_answer),
+                'response_sha256':digest(raw_answer.encode()), 'wordpress_writes':0})
+            raise DiscoveryError('model_output_invalid_json') from None
     need(not contains_secret(json.dumps(answer, ensure_ascii=False)), 'unsafe_model_output')
     _save_exclusive(directory / f'{role}.json', answer)
     return answer
