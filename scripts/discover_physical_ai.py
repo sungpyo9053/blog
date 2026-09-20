@@ -20,7 +20,6 @@ import sys
 import tempfile
 import uuid
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
@@ -189,13 +188,26 @@ def compact_inventory(inventory, query=''):
     rows = inventory['posts']
     metadata = [{key: row.get(key, '') for key in ('post_id', 'status', 'title', 'slug', 'excerpt')} for row in rows]
     for row in metadata: row['excerpt'] = str(row['excerpt'])[:400]
-    terms = set(re.findall(r'[\w가-힣]{2,}', query.casefold()))
-    ranked = sorted(rows, key=lambda row: (sum(term in (row['title'] + ' ' + row['content']).casefold() for term in terms)
-                                          + SequenceMatcher(None, query, row['title']).ratio()), reverse=True)
-    related = [{'post_id': row['post_id'], 'title': row['title'], 'content': row['content'],
-                'selection_reason': 'keyword_overlap_and_title_similarity'} for row in ranked[:8]] if query else []
-    return {'inspected_post_count': len(rows), 'all_post_metadata': metadata,
-            'related_full_bodies': related, 'scope': 'full_inventory_mechanical_comparison_plus_related_body_review'}
+    terms = set(re.findall(r'[\w가-힣]{3,}', query.casefold())) - {'피지컬', '로봇', '어떻게', '무엇인가', '설명', '기초'}
+    # Both proposal and review need the existing lessons, including scheduled
+    # lessons. A top-eight lexical ranking could hide even the introductory
+    # feedback lesson when a proposal uses different terminology.
+    domain = re.compile(r'피지컬|로봇|센서|제어|좌표|동역학|운동학|이동평균|강화학습|'
+                        r'physical[- _]?ai|robot|\bros(?:2)?\b|tf2|sensor|control|'
+                        r'coordinate|odometr|kinematic|dynamics|reinforcement|moving[- _]?average', re.I)
+    related = []
+    for row in rows:
+        identity = str(row.get('title', '')) + ' ' + str(row.get('slug', ''))
+        domain_match = bool(domain.search(identity))
+        query_match = bool(terms) and any(term in identity.casefold() for term in terms)
+        if domain_match or query_match:
+            related.append({'post_id': row['post_id'], 'title': row['title'], 'content': row['content'],
+                            'selection_reason': 'editorial_domain_full_body' if domain_match else 'candidate_query_full_body'})
+    result = {'inspected_post_count': len(rows), 'all_post_metadata': metadata,
+              'related_full_bodies': related, 'scope': 'full_inventory_mechanical_comparison_plus_related_body_review'}
+    # Never silently drop or truncate relevant articles to satisfy the budget.
+    need(len(json.dumps(result, ensure_ascii=False).encode()) < 210_000, 'relevant_inventory_too_large')
+    return result
 
 
 def validate_candidate(answer, source_ids):
@@ -291,13 +303,12 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
                 parser = PageText(); parser.feed(raw.decode('utf-8'))
                 text = '\n'.join(parser.parts).strip() or raw.decode('utf-8')
                 # UTF-8 byte limit, not a count of Korean characters.
-                excerpt = text.encode()[:80_000].decode('utf-8', errors='ignore')
+                excerpt = text.encode()[:12_000].decode('utf-8', errors='ignore')
                 need(bool(excerpt) and not contains_secret(excerpt), 'unsafe_source_text')
                 sources.append({**row, 'checked_at': now.isoformat(), 'text': excerpt,
-                                'text_truncated': len(text.encode()) > 80_000, 'response_sha256': digest(raw)})
+                                'text_truncated': len(text.encode()) > 12_000, 'response_sha256': digest(raw)})
             except Exception:
                 failures.append(row.get('id', 'invalid'))
-            if len(sources) == 2: break
         need(bool(sources), 'all_primary_sources_failed')
         need(len({row['id'] for row in sources}) == len(sources), 'duplicate_source_id')
         author_id, reviewer_id = 'discovery-writer-' + uuid.uuid4().hex, 'discovery-reviewer-' + uuid.uuid4().hex

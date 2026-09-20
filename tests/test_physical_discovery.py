@@ -11,6 +11,28 @@ from scripts import discover_physical_ai as d
 
 
 class ArithmeticTests(unittest.TestCase):
+    def test_reviewer_and_nonnull_candidate_schema_contract(self):
+        review=d.output_schema('reviewer')
+        self.assertEqual(set(review['required']),{'verdict','reason','primary_sources_verified','worked_example_verified','public_evidence_verified','secret_safe'})
+        self.assertFalse(review['additionalProperties'])
+        candidate=d.output_schema('researcher')['properties']['candidate']['anyOf'][0]
+        self.assertEqual(set(candidate['required']),{'title','slug','reader_question','target_reader','learning_outcome','unique_takeaway','source_ids','example'})
+        self.assertFalse(candidate['additionalProperties'])
+        case=candidate['properties']['example']['properties']['cases']['items']
+        self.assertEqual(set(case['required']),{'name','expression','expected'})
+        self.assertEqual(case['properties']['expected'],{'type':'number'})
+
+    def test_all_domain_bodies_included_without_query_or_top_eight_cutoff(self):
+        posts=[{'post_id':i,'status':'future' if i==12 else 'draft','title':f'로봇 독립 학습 {i}','slug':f'lesson-{i}','content':'전체 본문 '+str(i)} for i in range(1,13)]
+        for query in ('','다른 질문'):
+            result=d.compact_inventory({'posts':posts},query)
+            self.assertEqual(len(result['related_full_bodies']),12)
+            self.assertEqual(result['related_full_bodies'][-1]['content'],posts[-1]['content'])
+
+    def test_relevant_body_budget_fails_without_silent_truncation(self):
+        with self.assertRaisesRegex(d.DiscoveryError,'relevant_inventory_too_large'):
+            d.compact_inventory({'posts':[{'post_id':1,'title':'ROS example','slug':'ros-example','content':'x'*210000}]})
+
     def test_cli_uses_strict_response_schema_and_preserves_no_candidate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary); (root/'agents').mkdir()
@@ -106,6 +128,20 @@ class DiscoveryTests(unittest.TestCase):
     def test_no_candidate_no_git(self):
         result = self.run_it(agent=lambda *args: {'status': 'no_candidate', 'reason': '근거 부족', 'candidate': None})
         self.assertEqual(result['status'], 'no_candidate'); self.assertFalse(self.publishes)
+
+    def test_all_eight_sources_supplied_but_bounded_and_truncation_disclosed(self):
+        self.config['primary_sources']=[{'id':f's{i}','url':f'https://docs.example.org/{i}','publisher':'Official','claim_scope':'control'} for i in range(8)]
+        self.write_config();received=[]
+        def agent(repo,role,payload,directory):
+            received.append(payload)
+            return {'status':'no_candidate','reason':'synthetic insufficient evidence','candidate':None}
+        result=self.run_it(agent=agent,fetch=lambda *args: ('가'*10000).encode())
+        sources=received[0]['sources']
+        self.assertEqual(len(sources),8)
+        self.assertTrue(all(s['text_truncated'] for s in sources))
+        self.assertTrue(all(len(s['text'].encode())<=12000 for s in sources))
+        self.assertLess(len(json.dumps(received[0],ensure_ascii=False).encode()),350000)
+        self.assertEqual(result['status'],'no_candidate');self.assertFalse(self.publishes)
 
     def test_ready_two_commits_host_bound(self):
         with patch.object(d, 'load_epoch', return_value=None), patch.object(d, 'evaluate_foundation', return_value={'candidate_id': 'foundation-example'}) as final:
