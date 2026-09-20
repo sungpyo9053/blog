@@ -228,6 +228,17 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.assertTrue(self.execute()['issues'])
         self.notify.assert_not_called()
 
+    def test_fresh_confirmation_is_bound_to_saved_publication(self):
+        module = importlib.import_module('scripts.operations_watchdog')
+        path = str((self.directory/'publication.json').relative_to(self.root))
+        self.save(path, {'publication': self.publication, 'candidate': {}})
+        with patch.object(module, 'audit_public', return_value=self.verified['public_audit']) as audit:
+            self.assertTrue(module.confirm_publication(self.directory, self.verified))
+            audit.assert_called_once_with(self.publication, {})
+            self.save(path, {'publication': {'post_id': 999}, 'candidate': {}})
+            self.assertFalse(module.confirm_publication(self.directory, self.verified))
+            self.assertEqual(audit.call_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

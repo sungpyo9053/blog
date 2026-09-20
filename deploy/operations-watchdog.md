@@ -14,8 +14,9 @@ The watchdog's own nonzero service exit and journal expose monitor failures.
 
 - Confirmed WordPress publication + failed public audit: retry only the existing
   read-only public audit, at most three watchdog attempts per run.
-- Verified publication with no notification receipt or `not_sent`: invoke the
-  existing deduplicating notifier, at most three watchdog attempts per post.
+- Verified publication from the last 24 hours with no notification receipt or
+  `not_sent`: confirm public evidence again, then invoke the existing deduplicating
+  notifier, at most three watchdog attempts per post. No historical notification backfill.
 - Save state before attempting recovery; preserve original failure records.
 - Send a new operations incident summary to the approved Kakao self-chat, deduplicated
   by incident set and capped at two summaries per KST day. Do not retry an uncertain
@@ -54,6 +55,8 @@ Kakao message to the chat agent; uncertain writes must not be repeated.
 - `324710f`: the same 16 tests GREEN; bounded recovery implementation.
 - `8fc3376`: expanded 22 tests, one RED: a dry-run incorrectly hid a missing real run.
 - `d903fd7`: 22 tests GREEN; dry-run records excluded from scheduled-run evidence.
+- `ee0e2cb`: two behavioral RED cases after server preview exposed historical
+  notification backfill; `59e6dae`: 24 tests GREEN with age and fresh-public guards.
 - Command: `.venv/bin/python -m unittest tests.test_operations_watchdog -q`.
 - Tests cover dry-run side effects, unknown writes, retry limits, active jobs, external
   URL rejection, invalid records/recovery, alert uncertainty, missing schedules,
