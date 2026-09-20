@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (250 / 1000 * 0.4)
+assert math.isclose(value, 0.1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '250 mm/s를 변환한 0.4초 이동거리(m)', "actual": value})
+value = (250 * 0.4)
+assert math.isclose(value, 100, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '250을 m/s로 오해한 0.4초 이동거리(m)', "actual": value})
+value = (100 / 0.1)
+assert math.isclose(value, 1000, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": 'mm/s 단위 누락의 거리 오차 배율', "actual": value})
+value = (80 / 100 * 0.5)
+assert math.isclose(value, 0.4, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '80 cm/s를 변환한 0.5초 이동거리(m)', "actual": value})
+value = (80 * 0.5)
+assert math.isclose(value, 40, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '80을 m/s로 오해한 0.5초 이동거리(m)', "actual": value})
+value = (0.25 * 0.4)
+assert math.isclose(value, 0.1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '이미 0.25 m/s인 입력의 0.4초 이동거리(m)', "actual": value})
+value = (0.25 / 1000 * 0.4)
+assert math.isclose(value, 0.0001, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": 'SI 입력에 mm 변환을 중복 적용한 거리(m)', "actual": value})
+print(json.dumps(results, ensure_ascii=False))

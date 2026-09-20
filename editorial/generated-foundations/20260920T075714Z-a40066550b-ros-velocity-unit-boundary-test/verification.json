@@ -1,0 +1,58 @@
+{
+  "checked_at": "2026-09-20T16:57:18.030724+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"250 mm/s를 변환한 0.4초 이동거리(m)\", \"actual\": 0.1}, {\"name\": \"250을 m/s로 오해한 0.4초 이동거리(m)\", \"actual\": 100.0}, {\"name\": \"mm/s 단위 누락의 거리 오차 배율\", \"actual\": 1000.0}, {\"name\": \"80 cm/s를 변환한 0.5초 이동거리(m)\", \"actual\": 0.4}, {\"name\": \"80을 m/s로 오해한 0.5초 이동거리(m)\", \"actual\": 40.0}, {\"name\": \"이미 0.25 m/s인 입력의 0.4초 이동거리(m)\", \"actual\": 0.1}, {\"name\": \"SI 입력에 mm 변환을 중복 적용한 거리(m)\", \"actual\": 0.0001}]\n",
+  "cases": [
+    {
+      "name": "250 mm/s를 변환한 0.4초 이동거리(m)",
+      "expression": "250 / 1000 * 0.4",
+      "expected": 0.1,
+      "actual": 0.1
+    },
+    {
+      "name": "250을 m/s로 오해한 0.4초 이동거리(m)",
+      "expression": "250 * 0.4",
+      "expected": 100,
+      "actual": 100.0
+    },
+    {
+      "name": "mm/s 단위 누락의 거리 오차 배율",
+      "expression": "100 / 0.1",
+      "expected": 1000,
+      "actual": 1000.0
+    },
+    {
+      "name": "80 cm/s를 변환한 0.5초 이동거리(m)",
+      "expression": "80 / 100 * 0.5",
+      "expected": 0.4,
+      "actual": 0.4
+    },
+    {
+      "name": "80을 m/s로 오해한 0.5초 이동거리(m)",
+      "expression": "80 * 0.5",
+      "expected": 40,
+      "actual": 40.0
+    },
+    {
+      "name": "이미 0.25 m/s인 입력의 0.4초 이동거리(m)",
+      "expression": "0.25 * 0.4",
+      "expected": 0.1,
+      "actual": 0.1
+    },
+    {
+      "name": "SI 입력에 mm 변환을 중복 적용한 거리(m)",
+      "expression": "0.25 / 1000 * 0.4",
+      "expected": 0.0001,
+      "actual": 0.0001
+    }
+  ],
+  "teaching_context": {
+    "description": "직선 속도가 제어 주기 동안 일정하고 이동거리=속도×시간이라고 가정하는 제한된 산술 모형이다. ROS 관례에 맞춘 길이는 m, 시간은 s이므로 속도는 m/s로 계산한다. 250 mm/s와 80 cm/s는 서로 다른 장치 단위가 만드는 1000배·100배 오류를 비교하려고 골랐고, 이미 0.25 m/s인 입력은 변환을 중복 적용하는 반대쪽 경계 오류를 확인하려고 넣었다.",
+    "conclusion": "250 mm/s 입력의 올바른 0.4초 이동거리는 0.1 m지만 단위를 생략하면 100 m가 되어 1000배 커진다. 독자는 장치 명세에 원래 단위를 기록하고 입력 어댑터에서 m/s로 한 번만 변환한 다음, 250 mm/s와 이미 SI인 0.25 m/s가 모두 0.1 m를 내는 두 대조 사례를 자동 테스트로 추가해야 한다.",
+    "limitations": "이 계산은 일정한 속도와 정확한 0.4초 또는 0.5초 주기를 가정한 단위 검사용 교육 모형일 뿐 로봇 벤치마크가 아니다. 실제 이동거리, 바퀴 미끄럼, 가감속, 센서 보정, 통신 지연, 메시지별 단위 계약이나 하드웨어 동작은 판정할 수 없다. ROS의 SI 관례에도 정당하고 문서화된 예외가 있을 수 있으므로 특정 드라이버가 실제로 mm/s를 출력한다고 추정해서도 안 된다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
