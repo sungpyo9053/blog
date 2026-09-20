@@ -23,7 +23,7 @@ function huntlab_category_tabs_items() {
 
 	$items = array();
 	$items[] = array( 'label' => '처음 시작하기', 'url' => home_url( '/#learning-path' ), 'slug' => 'start', 'meta' => '기초부터' );
-	$items[] = array( 'label' => '피지컬 AI 글', 'url' => home_url( '/#physical-articles' ), 'slug' => 'physical', 'meta' => '원리와 실습' );
+	$items[] = array( 'label' => '최근 공개한 글', 'url' => home_url( '/#physical-articles' ), 'slug' => 'physical', 'meta' => '피지컬 AI' );
 	$items[] = array( 'label' => '운영 아카이브', 'url' => home_url( '/#operations-archive' ), 'slug' => 'library', 'meta' => '이전 기록' );
 	$items[] = array(
 		'label' => '기술 브리핑',

@@ -90,8 +90,47 @@ class PhysicalAIUIRuntimeTests(unittest.TestCase):
         return json.loads(result.stdout)
 
     def test_php_syntax(self):
-        for path in (PLUGIN / "physical-home.php", PLUGIN / "reader-tools.php", PLUGIN / "huntlab-warm-editorial.php"):
+        for path in (PLUGIN / "physical-home.php", PLUGIN / "physical-learning.php", PLUGIN / "reader-tools.php", PLUGIN / "huntlab-warm-editorial.php"):
             subprocess.run([*PHP_COMMAND, "-l", str(path)], check=True, capture_output=True, text=True)
+
+    def learning(self, scenario):
+        result = subprocess.run([*PHP_COMMAND, str(ROOT / "tests/fixtures/physical-learning-harness.php"),
+                                 str(PLUGIN / "physical-learning.php"), scenario],
+                                check=True, capture_output=True, text=True)
+        self.assertEqual(result.stderr, "")
+        return json.loads(result.stdout)
+
+    def test_learning_links_only_real_public_unprotected_category_posts(self):
+        result = self.learning("normal")
+        self.assertEqual(len(result["starts"]), 4)
+        self.assertIn("post-773/", result["html"])
+        self.assertIn("post-771/", result["html"])
+        self.assertIn("&lt;unsafe&gt;", result["html"])
+        self.assertNotIn("<unsafe>", result["html"])
+        for scenario in ("missing", "draft", "password", "wrong-category"):
+            result = self.learning(scenario)
+            self.assertNotIn("physical-ai-principles", result["starts"])
+            self.assertNotIn("post-773/", result["html"])
+
+    def test_learning_never_changes_briefing_feed_rest_or_secondary_content(self):
+        for scenario in ("briefing", "feed", "rest", "outside-loop", "secondary", "legacy"):
+            self.assertEqual(self.learning(scenario)["html"], "ORIGINAL")
+
+    def test_new_physical_post_gets_learning_entry_not_fake_sequence(self):
+        html = self.learning("new-post")["html"]
+        self.assertTrue(html.startswith("ORIGINAL"))
+        self.assertIn("/#learning-path", html)
+        self.assertNotIn("다음 학습", html)
+        self.assertNotIn("이전 학습", html)
+
+    def test_home_starting_links_do_not_replace_dynamic_latest_query(self):
+        result = self.render("published-starts")
+        self.assertEqual(result["html"].count('class="huntlab-starting-post"'), 4)
+        self.assertIn("최근 공개한 글", result["html"])
+        self.assertIn("&lt;script&gt;", result["html"])
+        self.assertEqual(len(result["queries"]), 1)
+        self.assertEqual(result["queries"][0]["posts_per_page"], 12)
+        self.assertNotIn("post__in", result["queries"][0])
 
     def test_missing_categories_never_query_all_posts(self):
         for scenario in ("absent", "missing-selected"):

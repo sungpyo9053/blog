@@ -1,6 +1,8 @@
 <?php
 /** Physical AI learning entry. Never imply unpublished lessons are available. */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
+require_once __DIR__ . '/physical-learning.php';
+$starting_posts = huntlab_physical_starting_posts();
 get_header();
 $tracks = array(
  'physical-ai-basics' => array( '피지컬 AI 기초', '용어와 큰 그림', '처음 만나는 개념부터, 다음 글을 이해할 바탕까지.' ),
@@ -28,11 +30,11 @@ $lessons = $query_ids ? new WP_Query( array( 'post_type' => 'post', 'post_status
  <?php else : ?>
  <header><p><a href="<?php echo esc_url( home_url( '/' ) ); ?>">HuntLab</a> / 학습 주제</p><h1><?php echo esc_html( $tracks[ $selected ][0] ?? single_cat_title( '', false ) ); ?></h1><p><?php echo esc_html( $tracks[ $selected ][2] ?? '' ); ?></p></header>
  <?php endif; ?>
- <section id="learning-path" aria-labelledby="learning-heading"><div class="huntlab-section-heading"><p>LEARNING PATH</p><h2 id="learning-heading">기초부터, 한 단계씩.</h2><p>순서는 학습 안내입니다. 아직 공개되지 않은 과정은 준비 중으로 표시합니다.</p></div><div class="huntlab-learning-grid">
+ <section id="learning-path" aria-labelledby="learning-heading"><div class="huntlab-section-heading"><p>LEARNING PATH</p><h2 id="learning-heading">기초부터, 한 단계씩.</h2><p>처음이라면 01부터 읽어보세요. 익숙한 주제는 건너뛰어도 좋습니다.</p></div><div class="huntlab-learning-grid">
  <?php $step = 0; foreach ( $tracks as $slug => $track ) : ++$step; $term = $terms[ $slug ] ?? null; ?>
-  <article><span class="huntlab-step">0<?php echo (int) $step; ?></span><p><?php echo esc_html( $track[0] ); ?></p><h3><?php echo esc_html( $track[1] ); ?></h3><p><?php echo esc_html( $track[2] ); ?></p><?php if ( $term && $term->count > 0 ) : ?><a href="<?php echo esc_url( get_category_link( $term->term_id ) ); ?>"><?php echo (int) $term->count; ?>편 읽기 →</a><?php else : ?><span class="huntlab-track-pending">첫 글 준비 중</span><?php endif; ?></article>
+  <article><span class="huntlab-step">0<?php echo (int) $step; ?></span><p><?php echo esc_html( $track[0] ); ?></p><h3><?php echo esc_html( $track[1] ); ?></h3><p><?php echo esc_html( $track[2] ); ?></p><?php if ( isset( $starting_posts[ $slug ] ) ) : ?><a class="huntlab-starting-post" href="<?php echo esc_url( get_permalink( $starting_posts[ $slug ] ) ); ?>">입문 글: <?php echo esc_html( get_the_title( $starting_posts[ $slug ] ) ); ?> →</a><?php endif; ?><?php if ( $term && $term->count > 0 ) : ?><a href="<?php echo esc_url( get_category_link( $term->term_id ) ); ?>"><?php echo (int) $term->count; ?>편 읽기 →</a><?php else : ?><span class="huntlab-track-pending">첫 글 준비 중</span><?php endif; ?></article>
  <?php endforeach; ?></div></section>
- <section id="physical-articles" aria-labelledby="physical-articles-heading"><div class="huntlab-section-heading"><p>READ &amp; BUILD</p><h2 id="physical-articles-heading">이해에서 실습으로</h2></div><div class="huntlab-note-grid">
+ <section id="physical-articles" aria-labelledby="physical-articles-heading"><div class="huntlab-section-heading"><p>RECENT ARTICLES</p><h2 id="physical-articles-heading">최근 공개한 글</h2><p>위의 입문 순서와 별개로, 새로 공개한 글부터 모았습니다.</p></div><div class="huntlab-note-grid">
  <?php if ( $lessons && $lessons->have_posts() ) : foreach ( $lessons->posts as $entry ) : ?>
   <article class="huntlab-note-card"><p class="huntlab-eyebrow"><?php echo esc_html( get_the_date( 'Y.m.d', $entry ) ); ?> · 약 <?php echo (int) hunt_news_reading_minutes( $entry ); ?>분</p><h3><a href="<?php echo esc_url( get_permalink( $entry ) ); ?>"><?php echo esc_html( get_the_title( $entry ) ); ?></a></h3><p><?php echo esc_html( wp_strip_all_tags( get_the_excerpt( $entry ) ) ); ?></p></article>
  <?php endforeach; else : ?>

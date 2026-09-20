@@ -3,6 +3,9 @@
 define( 'ABSPATH', __DIR__ );
 $scenario = $argv[2];
 $queries = array();
+function add_filter( ...$args ) {}
+function get_post( $id ) { return $GLOBALS['scenario'] === 'published-starts' ? (object) array( 'ID' => $id, 'post_type' => 'post', 'post_status' => 'publish', 'post_password' => '' ) : null; }
+function has_category( $slug, $post ) { return true; }
 function get_header() {}
 function get_footer() {}
 function is_category() { return in_array( $GLOBALS['scenario'], array( 'selected', 'missing-selected' ), true ); }

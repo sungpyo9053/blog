@@ -1,6 +1,7 @@
 <?php
 /** Reader-facing diagnostics and a server-rendered library entry point. */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
+require_once __DIR__ . '/physical-learning.php';
 
 function huntlab_library_template( $template ) {
 	if ( is_front_page() || is_category( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ) ) ) {
@@ -74,7 +75,7 @@ add_action( 'wp_footer', 'huntlab_reader_footer', 30 );
 /** Keep desktop and hamburger navigation aligned with the actual reading paths. */
 function huntlab_reader_menu( $items, $args ) {
 	if ( ! in_array( $args->theme_location ?? '', array( 'primary', 'mobile' ), true ) ) { return $items; }
-	$links = array( array( '처음 시작하기', '/#learning-path' ), array( '피지컬 AI 글', '/#physical-articles' ), array( '운영 아카이브', '/#operations-archive' ), array( '소개·문의', '/about/' ) );
+	$links = array( array( '처음 시작하기', '/#learning-path' ), array( '최근 공개한 글', '/#physical-articles' ), array( '운영 아카이브', '/#operations-archive' ), array( '사이트 소개', '/about/' ) );
 	$updated = array();
 	foreach ( array_slice( array_values( $items ), 0, 4 ) as $index => $item ) {
 		$item = clone $item;
