@@ -50,11 +50,15 @@ This reduces interruptions, not the need for OAuth interaction, account actions,
 or manual authorization for unsupported repair. Kakao outages cannot be reported
 through a separate channel because none is available.
 
-Low-touch verification: 731 tests run, 725 passed, 6 pre-existing skips. The focused
-reporting/watchdog/weekly suite has80 passing tests. New regression cases prove
+Low-touch verification: 732 tests run, 726 passed, 6 pre-existing skips. The focused
+reporting/watchdog/weekly suite has 81 passing tests. New regression cases prove
 healthy suppression, unknown-receipt preservation, pre-send runtime failure,
 three-check escalation, cross-day deduplication, live-status recheck without
 overwriting original report records, and weekly receipt deduplication.
+
+In weekly routine mode, historical uncertain individual-post notification receipts
+remain unchanged and visible in watchdog issues, but do not trigger operator alerts.
+They are never resent. Uncertain publication writes still require immediate escalation.
 
 ## Not automatic
 

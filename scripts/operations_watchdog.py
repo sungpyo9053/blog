@@ -22,7 +22,7 @@ if str(ROOT) not in sys.path:
 from scripts.publication_notification import _save, _verified, notify_publication
 from scripts.run_daily_pipeline import PipelineError, PipelineLock
 from scripts.run_evidence_deep_article import audit_public, read_reconciliation, resume_public_audit
-from scripts.send_kakao_report import send, briefing_status, deep_status, routine_status
+from scripts.send_kakao_report import send, briefing_status, deep_status, routine_status, quiet_mode
 from scripts.weekly_editorial_updates import _NoRedirect
 
 KST = ZoneInfo('Asia/Seoul')
@@ -238,6 +238,8 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
             old = previous.get(key, {})
             observation = {'count': old.get('count', 0)+1, 'opened_at': old.get('opened_at', now.isoformat())}
             observations[key] = observation
+            if item['reason'] == 'notification_unknown' and quiet_mode(root):
+                continue  # Individual post alerts are retired; preserve ambiguity without a new task.
             if observation['count'] >= 3 or item['reason'] == 'publication_unknown':
                 actionable.append({**item, 'opened_at': observation['opened_at']})
         state['observations'] = observations

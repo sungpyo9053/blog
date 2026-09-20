@@ -238,6 +238,17 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.save('output/kakao-reports/2026-09-20-07.json', {'status':'suppressed_healthy'})
         self.assertEqual(self.execute()['issues'], [])
 
+    def test_retired_individual_notification_does_not_interrupt_weekly_mode(self):
+        self.save('config/operations-notifications.json', {'schema_version':1,'routine_reports':'weekly'})
+        self.save(str((self.directory/'result.json').relative_to(self.root)), self.verified)
+        self.save('output/kakao-publications/post-777.json', {'status':'delivery_unconfirmed'})
+        for _ in range(4):
+            result = self.execute()
+        self.assertEqual(result['issues'][0]['reason'], 'notification_unknown')
+        self.assertEqual(result['action_required'], [])
+        self.sender.assert_not_called()
+        self.notify.assert_not_called()
+
     def test_transient_daily_check_is_rechecked_without_touching_original(self):
         from scripts import operations_watchdog as watchdog
         relative = 'output/kakao-reports/2026-09-20-07.json'
