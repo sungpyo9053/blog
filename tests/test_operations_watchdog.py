@@ -49,6 +49,13 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.recover.assert_not_called()
         self.notify.assert_not_called()
 
+    def test_enabled_queue_detects_missing_preparation(self):
+        self.save('config/editorial-queue.json',{'enabled':True})
+        self.save(str((self.directory/'result.json').relative_to(self.root)),
+                  {'failed':False,'deep_article':'no_publishable_topic','wordpress_write_count':0})
+        result=self.execute()
+        self.assertIn('preparation_run_missing',[row['reason'] for row in result['issues']])
+
     def test_stale_collector_is_detected_without_publishing_or_retrying_collection(self):
         self.save_collection('2026-09-05T04:00:00+09:00')
         self.save(str((self.directory/'result.json').relative_to(self.root)),

@@ -139,6 +139,7 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
         issue('editorial_collection', 'news_collection_' + collection['status'])
     busy = active(DEEP) or active('huntlab-editorial-prepare.service')
     today_runs = []
+    preparation_runs = []
     for run in sorted((root/'output/evidence-deep-article-runs').glob('*')):
         if not run.is_dir() or run.is_symlink() or not re.fullmatch(r'\d{8}T\d{6}Z-[a-zA-Z0-9_-]+', run.name):
             continue
@@ -154,6 +155,8 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                     issue(run.name, 'run_incomplete')
                 continue
             record = read(run/'result.json')
+            if record.get('run_kind') == 'preparation':
+                preparation_runs.append(stamp)
             if stamp.date() == now.date() and record.get('run_kind') != 'preparation' and record.get('deep_article') not in {'ready_not_published','prepared','queue_target_reached','outside_publication_window'}:
                 today_runs.append(run.name)
             receipt_path = run/'publication.json'
@@ -223,6 +226,11 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
 
     if now.hour >= 12 and not today_runs and not busy:
         issue(day, 'deep_run_missing')
+    queue_config = root/'config/editorial-queue.json'
+    if queue_config.exists() and read(queue_config).get('enabled') is True and not busy and now.hour >= 3:
+        preparation_due = now.replace(hour=14 if now.hour >= 15 else 2, minute=0, second=0, microsecond=0)
+        if not any(stamp >= preparation_due for stamp in preparation_runs):
+            issue(preparation_due.isoformat(), 'preparation_run_missing')
     sunday = now.date() - timedelta(days=(now.weekday()+1) % 7)
     due = datetime.combine(sunday, datetime.min.time(), KST).replace(hour=21)
     if sunday.isoformat() >= '2026-09-20' and now >= due and not active(WEEKLY):
@@ -293,6 +301,7 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                     'report_missing': '정기 보고 누락', 'report_delivery_unknown': '정기 보고의 카톡 도착 확인 불가',
                     'scheduled_check_failed': '정기 점검에서 오류 확인',
                     'queued_article_needs_review': '예약 대기 글의 출처·중복 재검수 필요',
+                    'preparation_run_missing': '예약 원고 준비 작업 누락',
                     'news_collection_stale': '뉴스 수집 갱신 지연(오래된 자료 발행 차단)',
                     'news_collection_missing': '뉴스 수집 기록 없음(발행 전 확인 필요)',
                     'news_collection_invalid': '뉴스 수집 기록 검증 실패(발행 전 확인 필요)'}
