@@ -40,6 +40,15 @@ class OperationsWatchdogTests(unittest.TestCase):
             'contract_version': 'editorial-source-cache.v1',
             'checked_at': checked_at, 'rows': [{'url':'https://example.org/news'}]})
 
+    def test_queue_hold_is_reported_without_retrying_publication(self):
+        self.save(str((self.directory/'result.json').relative_to(self.root)),
+                  {'failed':False,'deep_article':'no_publishable_topic','wordpress_write_count':0,
+                   'held':[{'queue_id':'fixture','reason':'queue_source_changed'}]})
+        result=self.execute()
+        self.assertIn({'key':self.run_id,'reason':'queued_article_needs_review'},result['issues'])
+        self.recover.assert_not_called()
+        self.notify.assert_not_called()
+
     def test_stale_collector_is_detected_without_publishing_or_retrying_collection(self):
         self.save_collection('2026-09-05T04:00:00+09:00')
         self.save(str((self.directory/'result.json').relative_to(self.root)),

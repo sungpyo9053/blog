@@ -137,7 +137,7 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
     result['checks'] = {'editorial_collection': collection}
     if collection['status'] != 'fresh':
         issue('editorial_collection', 'news_collection_' + collection['status'])
-    busy = active(DEEP)
+    busy = active(DEEP) or active('huntlab-editorial-prepare.service')
     today_runs = []
     for run in sorted((root/'output/evidence-deep-article-runs').glob('*')):
         if not run.is_dir() or run.is_symlink() or not re.fullmatch(r'\d{8}T\d{6}Z-[a-zA-Z0-9_-]+', run.name):
@@ -154,7 +154,7 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                     issue(run.name, 'run_incomplete')
                 continue
             record = read(run/'result.json')
-            if stamp.date() == now.date() and record.get('deep_article') != 'ready_not_published':
+            if stamp.date() == now.date() and record.get('run_kind') != 'preparation' and record.get('deep_article') not in {'ready_not_published','prepared','queue_target_reached','outside_publication_window'}:
                 today_runs.append(run.name)
             receipt_path = run/'publication.json'
             recovery_path = run/'public-audit-recovery.json'
@@ -192,6 +192,8 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                 issue(run.name, 'publication_unknown' if record.get('wordpress_write_count') == 'unknown'
                       else 'pipeline_needs_repair')
                 continue
+            if record.get('held'):
+                issue(run.name, 'queued_article_needs_review')
             if record.get('deep_article') != 'published':
                 continue  # No topic / limit / quality HOLD is never retried as a failure.
             if not publication_identity(record, run.name, stamp.date().isoformat()) or not _verified(record):
@@ -290,6 +292,7 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                     'weekly_needs_repair': '주간 점검 오류', 'analytics_incomplete': '통계 연결 확인 필요',
                     'report_missing': '정기 보고 누락', 'report_delivery_unknown': '정기 보고의 카톡 도착 확인 불가',
                     'scheduled_check_failed': '정기 점검에서 오류 확인',
+                    'queued_article_needs_review': '예약 대기 글의 출처·중복 재검수 필요',
                     'news_collection_stale': '뉴스 수집 갱신 지연(오래된 자료 발행 차단)',
                     'news_collection_missing': '뉴스 수집 기록 없음(발행 전 확인 필요)',
                     'news_collection_invalid': '뉴스 수집 기록 검증 실패(발행 전 확인 필요)'}

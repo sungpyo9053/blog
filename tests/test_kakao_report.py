@@ -10,6 +10,20 @@ from scripts.send_kakao_report import deep_status, message_for, run_day, send
 
 
 class KakaoReportTests(unittest.TestCase):
+    def test_preparation_is_not_reported_as_daily_publication(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); run=root/'output/evidence-deep-article-runs/20260920T050000Z-prepare'
+            run.mkdir(parents=True)
+            (run/'result.json').write_text(json.dumps({'run_kind':'preparation','deep_article':'prepared','failed':False}))
+            self.assertIn('실행 결과 없음',deep_status(root,'2026-09-20')[0])
+
+    def test_held_queue_is_not_reported_as_no_candidate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); run=root/'output/evidence-deep-article-runs/20260920T010000Z-release'
+            run.mkdir(parents=True)
+            (run/'result.json').write_text(json.dumps({'deep_article':'no_publishable_topic','held':[{'queue_id':'one'}],'failed':False}))
+            self.assertIn('대기 원고 1건 재검수 필요',deep_status(root,'2026-09-20')[0])
+
     def test_transport_checks_runtime_before_attempting_send(self):
         with patch('scripts.send_kakao_report.subprocess.run', return_value=Mock(returncode=1, stdout='', stderr='private')) as run:
             with self.assertRaises(RuntimeError):
