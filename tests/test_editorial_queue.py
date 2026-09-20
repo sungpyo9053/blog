@@ -1,0 +1,194 @@
+"""Queue safety contract tests: fixtures are synthetic, no network or WP writes."""
+import json
+import logging
+import tempfile
+import unittest
+from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from scripts import editorial_queue as queue
+
+
+class EditorialQueueTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repo = Path(temporary.name)
+        self.now = datetime(2026, 9, 20, 10, 0, tzinfo=queue.KST)
+        self.publisher = Mock(return_value={'post_id': 999, 'url': 'https://example.test/post', 'content_verified': True})
+        self.auditor = Mock(return_value={'passed': True})
+        self.reviewer = Mock(return_value={'verdict': 'APPROVED'})
+        network = patch.object(queue.requests, 'get', side_effect=AssertionError('network forbidden'))
+        network.start(); self.addCleanup(network.stop)
+
+    def row(self, ident='synthetic', status='queued'):
+        row = {'schema_version': 1, 'queue_id': ident, 'status': status,
+               'prepared_at': self.now.isoformat(), 'candidate': {'candidate_id': ident},
+               'prepared': {}, 'sources': [{'url': 'https://example.test/source', 'sha256': 'old'}]}
+        queue.directory(self.repo).mkdir(parents=True, exist_ok=True)
+        queue.save(queue.directory(self.repo)/f'{ident}.json', row, new=True)
+        return row
+
+    def release(self, *, apply=True, now=None, run='run', count=0, failure=None):
+        with patch('scripts.run_evidence_deep_article.published_today', return_value=count), \
+             patch.object(queue, 'preflight', side_effect=failure, return_value=SimpleNamespace()):
+            return queue.release(run_id=run, inventory_path=self.repo/'inventory', apply=apply,
+                                 repo=self.repo, output_root=self.repo/'runs', logger=logging.getLogger(__name__),
+                                 now=now or self.now, publisher=self.publisher, auditor=self.auditor, reviewer=self.reviewer)
+
+    def progress(self):
+        return json.loads((self.repo/'runs/run/progress.json').read_text())
+
+    def test_outside_ten_does_not_call_publisher(self):
+        self.row()
+        result = self.release(now=self.now.replace(hour=9))
+        self.assertEqual(result['deep_article'], 'outside_publication_window')
+        self.publisher.assert_not_called()
+
+    def test_empty_queue_does_not_call_publisher(self):
+        self.assertEqual(self.release()['deep_article'], 'no_publishable_topic')
+        self.publisher.assert_not_called()
+
+    def test_daily_limit_does_not_call_publisher(self):
+        self.row()
+        self.assertEqual(self.release(count=1)['deep_article'], 'daily_limit_reached')
+        self.publisher.assert_not_called()
+
+    def test_preflight_failure_holds_without_publisher(self):
+        self.row()
+        self.assertEqual(self.release(failure=ValueError('queue_source_changed'))['deep_article'], 'no_publishable_topic')
+        self.assertEqual(queue.rows(self.repo)[0]['status'], 'held')
+        self.publisher.assert_not_called()
+
+    def test_independent_release_review_hold_never_calls_publisher(self):
+        self.row()
+        self.reviewer.side_effect = ValueError('synthetic HOLD')
+        self.assertEqual(self.release()['deep_article'], 'no_publishable_topic')
+        self.assertEqual(queue.rows(self.repo)[0]['status'], 'held')
+        self.publisher.assert_not_called()
+
+    def test_dry_runs_never_change_queue_rows_even_on_hold(self):
+        self.row()
+        path = queue.directory(self.repo)/'synthetic.json'
+        before = path.read_bytes()
+        self.assertEqual(self.release(apply=False)['deep_article'], 'ready_not_published')
+        self.release(apply=False, run='hold', failure=ValueError('HOLD'))
+        self.assertEqual(path.read_bytes(), before)
+        self.publisher.assert_not_called()
+        self.assertEqual(self.progress()['wordpress_write_count'], 0)
+
+    def test_publisher_timeout_keeps_unknown_barrier_and_blocks_next_call(self):
+        self.row()
+        self.publisher.side_effect = TimeoutError('synthetic response loss')
+        with self.assertRaises(TimeoutError):
+            self.release()
+        self.assertEqual(self.progress()['wordpress_write_count'], 'unknown')
+        self.assertEqual(queue.rows(self.repo)[0]['status'], 'publishing')
+        with self.assertRaisesRegex(ValueError, 'reconciliation'):
+            self.release(run='retry')
+        self.publisher.assert_called_once()
+        self.auditor.assert_not_called()
+
+    def test_confirmed_post_missing_url_still_consumes_one(self):
+        self.row()
+        self.publisher.return_value = {'post_id': 999, 'content_verified': True}
+        with self.assertRaises(ValueError):
+            self.release()
+        self.assertEqual(self.progress()['wordpress_write_count'], 1)
+        self.publisher.assert_called_once()
+        self.auditor.assert_not_called()
+
+    def test_audit_failure_does_not_unconsume_publication(self):
+        self.row()
+        self.auditor.side_effect = ValueError('synthetic public audit failure')
+        with self.assertRaises(ValueError):
+            self.release()
+        self.assertEqual(self.progress()['wordpress_write_count'], 1)
+        self.assertEqual(queue.rows(self.repo)[0]['status'], 'published')
+        self.assertEqual(json.loads((self.repo/'runs/run/publication.json').read_text())['wordpress_write_count'], 1)
+        self.publisher.assert_called_once()
+
+    def test_malformed_state_fails_closed(self):
+        row = self.row()
+        for change in ({'schema_version': 3}, {'status': 'approved-ish'}, {'queue_id': 'different'}):
+            with self.subTest(change=change):
+                queue.save(queue.directory(self.repo)/'synthetic.json', {**row, **change})
+                with self.assertRaises(ValueError):
+                    queue.rows(self.repo)
+        self.publisher.assert_not_called()
+
+    def test_preparation_target_three_and_unresolved_barrier(self):
+        self.assertTrue(queue.preparation_allowed(self.repo))
+        for i in range(3):
+            self.row(str(i))
+        self.assertFalse(queue.preparation_allowed(self.repo))
+        self.assertEqual(queue.reserved_candidate_ids(self.repo), {'0', '1', '2'})
+
+    def test_preparation_blocks_unresolved_even_below_target(self):
+        self.row(status='publishing')
+        self.assertFalse(queue.preparation_allowed(self.repo))
+
+    def test_enqueue_hard_cap_seven_before_artifact_or_fetch(self):
+        for i in range(7):
+            self.row(str(i))
+        fetch = Mock()
+        with self.assertRaisesRegex(ValueError, 'capacity'):
+            queue.enqueue({'candidate_id': 'new'}, {}, repo=self.repo, fetch=fetch)
+        fetch.assert_not_called()
+
+    def test_enqueue_duplicate_candidate_including_held(self):
+        self.row(status='held')
+        with self.assertRaisesRegex(ValueError, 'already_reserved'):
+            queue.enqueue({'candidate_id': 'synthetic'}, {}, repo=self.repo)
+
+    def test_source_changed_preflight_rejects_before_inventory_gate(self):
+        row = self.row()
+        article = self.repo/'output/article'; article.mkdir()
+        (article/'physical-ai-quality-review.json').write_text(json.dumps({'reviewed_at': self.now.isoformat()}))
+        with patch.object(queue, 'context_for', return_value=SimpleNamespace(directory=article)), \
+             patch('scripts.run_daily_pipeline.validate_prepared_artifacts'), \
+             patch('scripts.run_daily_pipeline.validate_publish_contract'), \
+             patch('scripts.editorial_gate.enforce_prepublication') as gate:
+            with self.assertRaisesRegex(ValueError, 'source_changed'):
+                queue.preflight(row, repo=self.repo, inventory_path=self.repo/'inventory', now=self.now, fetch=Mock(return_value='new'))
+        gate.assert_not_called()
+        self.publisher.assert_not_called()
+
+    def test_freeze_deduplicates_fragments_excludes_internal_and_checks_pinned_hash(self):
+        doc = SimpleNamespace(markdown='[one](https://example.test/source#a) [two](https://example.test/source#b) [home](https://huntlab.app/start)')
+        candidate = {'foundation_contract': {'worked_example': {'public_url': 'https://example.test/source', 'sha256': 'expected'}}}
+        fetch = Mock(return_value='expected')
+        with patch('publisher.frontmatter.load_document', return_value=doc), patch.object(queue, 'rows', return_value=[]):
+            payload = queue.freeze_sources(self.repo/'publish.md', candidate=candidate, destination=self.repo/'baseline.json', fetch=fetch)
+            self.assertEqual(payload['mode'], 'before_independent_final_review')
+            self.assertEqual(payload['sources'], [{'url': 'https://example.test/source', 'sha256': 'expected'}])
+            fetch.assert_called_once()
+            with self.assertRaisesRegex(ValueError, 'pinned_evidence_mismatch'):
+                queue.freeze_sources(self.repo/'publish.md', candidate=candidate, destination=self.repo/'bad.json', fetch=Mock(return_value='changed'))
+        self.assertFalse((self.repo/'bad.json').exists())
+
+    def test_enqueue_requires_exact_source_set_hash_and_before_review_baseline(self):
+        article = self.repo/'output/article'; article.mkdir(parents=True)
+        doc = SimpleNamespace(markdown='[source](https://example.test/source)', metadata={})
+        baseline = {'checked_at': self.now.isoformat(), 'sources': [{'url': 'https://example.test/source', 'sha256': 'expected'}]}
+        (article/'physical-ai-quality-review.json').write_text(json.dumps({'reviewed_at': self.now.isoformat()}))
+        for mutation, digest, reason in (
+            ({'sources': []}, 'expected', 'sources_changed_after_review'),
+            ({'checked_at': self.now.replace(hour=11).isoformat()}, 'expected', 'not_independently_reviewed'),
+            ({}, 'changed', 'source_changed'),
+        ):
+            with self.subTest(reason=reason):
+                (article/'source-baseline.json').write_text(json.dumps({**baseline, **mutation}))
+                with patch.object(queue, 'context_for', return_value=SimpleNamespace(directory=article)), \
+                     patch('publisher.frontmatter.load_document', return_value=doc), \
+                     patch('scripts.run_daily_pipeline.validate_prepared_artifacts'), \
+                     patch.object(queue, 'check_queue_overlap'):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        queue.enqueue({'candidate_id': 'fixture'}, {}, repo=self.repo, now=self.now, fetch=Mock(return_value=digest))
+                self.assertEqual(queue.rows(self.repo), [])
+
+
+if __name__ == '__main__':
+    unittest.main()

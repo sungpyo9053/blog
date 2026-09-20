@@ -14,6 +14,12 @@ from scripts.run_daily_pipeline import PipelineLock
 class EvidenceDeepArticleTests(unittest.TestCase):
     logger = logging.getLogger("evidence-deep-test")
 
+    def setUp(self):
+        # These cases exercise the legacy direct lane regardless of live config.
+        queue = patch('scripts.editorial_queue.enabled', return_value=False)
+        queue.start()
+        self.addCleanup(queue.stop)
+
     def test_preflight_failure_before_any_progress_records_zero_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

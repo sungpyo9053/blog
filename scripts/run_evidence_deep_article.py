@@ -150,6 +150,9 @@ def resume_public_audit(run_id: str, *, output_root: Path = OUTPUT,
     receipt = json.loads((run_dir / "publication.json").read_text(encoding="utf-8"))
     if receipt.get("wordpress_write_count") != 1:
         raise PipelineError("No confirmed publication receipt to audit")
+    if receipt.get("queue_id") and public_auditor is None:
+        from scripts.editorial_queue import audit_queued_public
+        public_auditor = audit_queued_public
     audit = (public_auditor or audit_public)(receipt["publication"], receipt["candidate"])
     result = {key: value for key, value in receipt.items() if key != "candidate"}
     result.update(failed=False, deep_article="published", public_audit=audit)
@@ -250,12 +253,17 @@ def candidate_plan(candidate: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_selected_candidate(candidate: Mapping[str, Any], run_id: str, logger: logging.Logger) -> dict[str, Any]:
+def run_selected_candidate(candidate: Mapping[str, Any], run_id: str, logger: logging.Logger, *, prepare_only: bool = False) -> dict[str, Any]:
     plan = candidate_plan(candidate)
     plan["inventory_path"] = candidate.get("_inventory_path", str(MINER_ROOT / "inventory-latest.json"))
     context = make_topic_context(run_id, plan["title"], category=plan["category"], tags=tuple(plan["tags"]), reason=plan["reason"], research_focus=plan["research_focus"], content_type=plan["content_type"])
     context.directory.parent.mkdir(parents=True, exist_ok=False)
-    result = run_topic_pipeline(resolve_codex(), context, plan, logger, timeout_seconds=3600, resume=False, publish_lock=threading.Lock(), humanize_lock=threading.Lock())
+    options = {"prepare_only": True} if prepare_only else {}
+    result = run_topic_pipeline(resolve_codex(), context, plan, logger, timeout_seconds=3600, resume=False, publish_lock=threading.Lock(), humanize_lock=threading.Lock(), **options)
+    if prepare_only:
+        if result.get("status") != "prepared" or result.get("wordpress_write_count") != 0 or result.get("post_id") is not None:
+            raise PipelineError("invalid_preparation_result")
+        return result
     if result.get("post_id") is None: raise PipelineError("Publisher did not return post_id")
     return result
 
@@ -299,10 +307,14 @@ def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dic
     return {"url":url,"http_status":status,"title_present":title_ok,"evidence_links_present":evidence_ok,"evidence_link_audit":evidence_audit,"checked_at":datetime.now(UTC).isoformat()}
 
 
-def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Callable[[Mapping[str, Any], str, logging.Logger], dict[str, Any]] = run_selected_candidate, public_auditor: Callable[[Mapping[str, Any], Mapping[str, Any]], dict[str, Any]] = audit_public, output_root: Path = OUTPUT, miner_root: Path = MINER_ROOT, repo: Path = ROOT, logger: logging.Logger | None = None) -> dict[str, Any]:
+def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Callable[..., dict[str, Any]] = run_selected_candidate, public_auditor: Callable[[Mapping[str, Any], Mapping[str, Any]], dict[str, Any]] = audit_public, output_root: Path = OUTPUT, miner_root: Path = MINER_ROOT, repo: Path = ROOT, logger: logging.Logger | None = None, prepare_only: bool = False) -> dict[str, Any]:
     now = datetime.now(KST); day = now.date().isoformat(); run_dir = output_root / run_id
     reject_legacy_run(run_id, output_root, repo)
     epoch = load_epoch(output_root, repo)
+    reserved = set()
+    if prepare_only:
+        from scripts import editorial_queue
+        reserved = editorial_queue.reserved_candidate_ids(repo)
     run_dir.mkdir(parents=True, exist_ok=False)
     progress_path = run_dir / "progress.json"
     write_progress(progress_path, stage="pre_mining", wordpress_write_count=0)
@@ -333,16 +345,19 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
         payload["candidates"] = choose_candidates(accepted)
         payload["ready_count"] = len(payload["candidates"])
     payload["epoch_rejections"] = epoch_rejections
+    # Filter before deciding whether fresh supply is necessary, including held
+    # and already consumed queue entries: they must not be prepared twice.
+    payload["candidates"] = [row for row in payload["candidates"] if row["candidate_id"] not in reserved]
     foundations, foundation_rejections = load_foundation_candidates(
         repo=repo, inventory_path=inventory_path, seal=epoch,
         consumed_ids=consumed_foundation_ids(output_root), now=now)
-    accepted_foundations = [row for row in foundations if candidate_in_editorial_scope(row)]
+    accepted_foundations = [row for row in foundations if candidate_in_editorial_scope(row) and row["candidate_id"] not in reserved]
     discovery = {"status": "not_needed"}
     eligible_existing = payload["candidates"] or accepted_foundations
     if not eligible_existing and discovery_enabled(repo):
         if not apply:
             discovery = {"status": "dry_run_not_executed"}
-        elif published_today(output_root, day, repo=repo) >= DAILY_LIMIT:
+        elif not prepare_only and published_today(output_root, day, repo=repo) >= DAILY_LIMIT:
             discovery = {"status": "daily_limit_reached"}
         else:
             write_progress(progress_path, stage="discovery_started", wordpress_write_count=0)
@@ -353,8 +368,9 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
             foundations, foundation_rejections = load_foundation_candidates(
                 repo=repo, inventory_path=inventory_path, seal=epoch,
                 consumed_ids=consumed_foundation_ids(output_root), now=datetime.now(KST))
-            accepted_foundations = [row for row in foundations if candidate_in_editorial_scope(row)]
-            if discovery["status"] == "ready" and not accepted_foundations:
+            accepted_foundations = [row for row in foundations if candidate_in_editorial_scope(row) and row["candidate_id"] not in reserved]
+            if discovery["status"] == "ready" and not accepted_foundations and not any(
+                    candidate_in_editorial_scope(row) and row["candidate_id"] in reserved for row in foundations):
                 raise PipelineError("discovery_candidate_contract_rejected")
             write_progress(progress_path, stage="discovery_completed", wordpress_write_count=0)
     payload["scope_rejections"].extend(row["candidate_id"] for row in foundations if not candidate_in_editorial_scope(row))
@@ -377,6 +393,9 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
     if discovery["status"] == "daily_limit_reached":
         return {**base, "deep_article": "daily_limit_reached"}
     if not payload["candidates"]:
+        if prepare_only:
+            advance_checkpoint()
+            return {**base,"deep_article":"no_publishable_topic"}
         try:
             published_today(output_root, day, repo=repo)
         except PipelineError:
@@ -386,7 +405,7 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
             return {**base,"deep_article":"no_publishable_topic","reconciliation_required":True,"checkpoint_advanced":False}
         advance_checkpoint()
         return {**base,"deep_article":"no_publishable_topic"}
-    if published_today(output_root, day, repo=repo) >= DAILY_LIMIT:
+    if not prepare_only and published_today(output_root, day, repo=repo) >= DAILY_LIMIT:
         return {**base,"deep_article":"daily_limit_reached"}
     candidate = payload["candidates"][0]
     # A public audit cannot match a link absent from the approved source set.
@@ -396,10 +415,20 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
         raise PipelineError("Candidate public sources cannot satisfy the publication audit")
     if not apply:
         return {**base,"deep_article":"ready_not_published","candidate_id":candidate["candidate_id"]}
-    if candidate.get("candidate_origin") == "foundation_concept" and not foundation_activation_ready(repo):
+    if not prepare_only and candidate.get("candidate_origin") == "foundation_concept" and not foundation_activation_ready(repo):
         return {**base,"deep_article":"foundation_activation_required","candidate_id":candidate["candidate_id"]}
     write_json_new(run_dir / "selected-candidate.json", {
         "candidate_id": candidate["candidate_id"], "candidate_origin": candidate.get("candidate_origin", "project_event")})
+    if prepare_only:
+        write_progress(progress_path, stage="preparation_started", wordpress_write_count=0)
+        prepared = topic_runner({**candidate, "_inventory_path": str(inventory_path.resolve())}, run_id,
+                                logger or configure_logger(now.date()), prepare_only=True)
+        if prepared.get("status") != "prepared" or prepared.get("wordpress_write_count") != 0 or prepared.get("post_id") is not None:
+            raise PipelineError("invalid_preparation_result")
+        queued = editorial_queue.enqueue(candidate, prepared, repo=repo, now=datetime.now(KST))
+        write_progress(progress_path, stage="preparation_enqueued", wordpress_write_count=0)
+        advance_checkpoint()
+        return {**base, "deep_article": "prepared", "candidate_id": candidate["candidate_id"], "queue": queued}
     write_progress(progress_path, stage="publisher_started", wordpress_write_count="unknown")
     published = topic_runner({**candidate, "_inventory_path": str(inventory_path.resolve())}, run_id, logger or configure_logger(now.date()))
     write_progress(progress_path, stage="publisher_completed", wordpress_write_count=1)
@@ -417,9 +446,9 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
 
 
 def main() -> int:
-    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--apply",action="store_true"); parser.add_argument("--dry-run",action="store_true"); parser.add_argument("--run-id",default=""); parser.add_argument("--inventory",type=Path); parser.add_argument("--resume-public-audit", action="store_true"); args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--apply",action="store_true"); parser.add_argument("--dry-run",action="store_true"); parser.add_argument("--run-id",default=""); parser.add_argument("--inventory",type=Path); parser.add_argument("--resume-public-audit", action="store_true"); parser.add_argument("--prepare-only", action="store_true"); args=parser.parse_args()
     if args.apply and args.dry_run: parser.error("choose --apply or --dry-run")
-    if args.resume_public_audit and (not args.run_id or args.apply or args.dry_run):
+    if args.resume_public_audit and (not args.run_id or args.apply or args.dry_run or args.prepare_only):
         parser.error("--resume-public-audit requires --run-id and cannot publish")
     run_id=args.run_id or make_run_id(); lock=PipelineLock(LOCK)
     owns_run = False
@@ -434,9 +463,28 @@ def main() -> int:
         # A rejected contender/resume must not fabricate unknown write state or
         # append a failure to another execution's immutable history.
         owns_run = not (OUTPUT / run_id).exists()
-        result=execute(run_id=run_id,inventory_path=inventory,apply=args.apply)
+        from scripts import editorial_queue
+        queue_enabled = editorial_queue.enabled(ROOT)
+        if args.prepare_only:
+            if not queue_enabled:
+                raise PipelineError("editorial_queue_disabled")
+            if not editorial_queue.preparation_allowed(ROOT):
+                (OUTPUT / run_id).mkdir(parents=True, exist_ok=False)
+                write_progress(OUTPUT / run_id / "progress.json", stage="queue_target_reached", wordpress_write_count=0)
+                result = {"run_id": run_id, "kst_date": datetime.now(KST).date().isoformat(),
+                          "failed": False, "deep_article": "queue_target_reached", "wordpress_write_count": 0}
+            else:
+                result = execute(run_id=run_id, inventory_path=inventory, apply=args.apply, prepare_only=True)
+        elif queue_enabled:
+            result = editorial_queue.release(run_id=run_id, inventory_path=inventory, apply=args.apply,
+                                             repo=ROOT, output_root=OUTPUT, logger=configure_logger(datetime.now(KST).date()))
+        else:
+            result=execute(run_id=run_id,inventory_path=inventory,apply=args.apply)
+        if args.prepare_only:
+            result["run_kind"] = "preparation"
         write_json_new(OUTPUT/run_id/"result.json",result)
-        notify_publication(result)
+        if not args.prepare_only:
+            notify_publication(result)
         print(json.dumps(result,ensure_ascii=False)); return 0
     except Exception as exc:
         progress_path=OUTPUT/run_id/"progress.json"
@@ -450,8 +498,10 @@ def main() -> int:
             write_count = 0
         except Exception:
             progress = {}
-            write_count="unknown" if args.apply and owns_run else 0
+            write_count="unknown" if args.apply and owns_run and not args.prepare_only else 0
         failure={"run_id":run_id,"kst_date":datetime.now(KST).date().isoformat(),"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
+        if args.prepare_only:
+            failure["run_kind"] = "preparation"
         if progress.get("stage") == "discovery_started":
             failure.update(reason="discovery_failed", failure_stage="candidate_supply")
         if owns_run:

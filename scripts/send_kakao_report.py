@@ -79,6 +79,8 @@ def deep_status(root, day, is_active=False):
             continue
         try:
             row = json.loads(path.read_text())
+            if row.get('run_kind') == 'preparation' or row.get('deep_article') in {'prepared','queue_target_reached','outside_publication_window'}:
+                continue
             recovery_path = directory/'public-audit-recovery.json'
             if recovery_path.is_file():
                 recovery = json.loads(recovery_path.read_text())
@@ -144,6 +146,8 @@ def deep_status(root, day, is_active=False):
                 and url.startswith('https://huntlab.app/')):
             return '발행 1건(공개 확인 완료)', url
     if state == 'no_publishable_topic':
+        if latest.get('held'):
+            return f"미발행: 대기 원고 {len(latest['held'])}건 재검수 필요", ''
         if latest.get('reconciliation_required'):
             return '미발행: READY 0건 / 과거 발행 결과 대조 필요', ''
         if (latest.get('discovery') or {}).get('status') == 'no_candidate':

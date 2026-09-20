@@ -21,7 +21,7 @@ import threading
 import urllib.parse
 import urllib.request
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -2338,6 +2338,181 @@ def run_planner_with_contract_retry(
         ) from exc
 
 
+def validate_prepared_artifacts(context: TopicContext) -> dict[str, Any]:
+    """Read a frozen preparation receipt; never repair or regenerate artifacts."""
+    receipt_path = context.directory / "prepared-result.json"
+    assert_owned_path(context, receipt_path)
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise PipelineError("prepared_receipt_invalid") from exc
+    expected = {"status": "prepared", "run_id": context.run_id,
+                "topic_id": context.topic_id, "source_id": context.source_id}
+    if not isinstance(receipt, dict) or any(receipt.get(k) != v for k, v in expected.items()):
+        raise PipelineError("prepared_identity_mismatch")
+    expected_context = asdict(context)
+    expected_context["directory"] = str(context.directory)
+    expected_context["tags"] = list(context.tags)
+    if receipt.get("context") != expected_context or receipt.get("directory") != str(context.directory):
+        raise PipelineError("prepared_context_mismatch")
+    artifacts = receipt.get("artifacts")
+    required = {"publish.md", "review.md", "final.md", "final.html", "research.md", "planner-context.json", "images/thumbnail.png", "source-baseline.json", "queue-inventory.json"}
+    if context.category in PHYSICAL_AI_CATEGORIES:
+        required.add("physical-ai-quality-review.json")
+    if not isinstance(artifacts, dict) or not required.issubset(artifacts):
+        raise PipelineError("prepared_artifact_manifest_incomplete")
+    for relative, digest in artifacts.items():
+        if not isinstance(relative, str) or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise PipelineError("prepared_artifact_path_invalid")
+        path = context.directory / relative
+        assert_owned_path(context, path)
+        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise PipelineError("prepared_artifact_changed")
+    if validate_publish_contract(context) != receipt.get("publish_sha256"):
+        raise PipelineError("prepared_publish_hash_mismatch")
+    return receipt
+
+
+def persist_prepared_result(context: TopicContext, digest: str) -> dict[str, Any]:
+    """Freeze content/review/images, but not inventory: inventory must be refreshed."""
+    receipt_path = context.directory / "prepared-result.json"
+    assert_owned_path(context, receipt_path)
+    if receipt_path.exists():
+        return validate_prepared_artifacts(context)
+    if validate_publish_contract(context) != digest:
+        raise PipelineError("prepared_publish_hash_mismatch")
+    names = ["publish.md", "review.md", "final.md", "final.html", "research.md", "planner-context.json", "source-baseline.json", "queue-inventory.json"]
+    if context.category in PHYSICAL_AI_CATEGORIES:
+        names.append("physical-ai-quality-review.json")
+    for optional in ("content-quality-review.md", "recent-style-context.json"):
+        if (context.directory / optional).is_file():
+            names.append(optional)
+    names.extend(str(path.relative_to(context.directory)) for path in sorted((context.directory / "images").rglob("*")) if path.is_file())
+    if "images/thumbnail.png" not in names:
+        raise PipelineError("prepared_thumbnail_missing")
+    artifacts = {}
+    for name in names:
+        path = context.directory / name
+        assert_owned_path(context, path)
+        if path.is_symlink() or not path.is_file():
+            raise PipelineError("prepared_artifact_invalid")
+        artifacts[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    serialized_context = asdict(context)
+    serialized_context["directory"] = str(context.directory)
+    serialized_context["tags"] = list(context.tags)
+    receipt = {"schema_version": 1, "status": "prepared", "run_id": context.run_id,
+               "topic_id": context.topic_id, "source_id": context.source_id,
+               "context": serialized_context, "directory": str(context.directory),
+               "prepared_at": datetime.now(UTC).isoformat(), "publish_sha256": digest,
+               "publish_path": str(context.directory / "publish.md"), "artifacts": artifacts,
+               "wordpress_write_count": 0, "publication_requires_fresh_recheck": True}
+    with receipt_path.open("x", encoding="utf-8") as handle:
+        json.dump(receipt, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    return validate_prepared_artifacts(context)
+
+
+def publish_prepared_topic(
+    context: TopicContext, logger: logging.Logger, *, inventory_path: Path,
+) -> dict[str, Any]:
+    """Publish frozen reviewed artifacts only. Caller owns queue/day-limit lock.
+
+    No Writer/Assembler/Reviewer or repair calls. An uncertain Publisher attempt
+    requires manual reconciliation; invoking this function again cannot retry it.
+    """
+    # Queue's cross-process lock is required; exclusive attempt creation below
+    # also prevents two callers from crossing the write boundary for this item.
+    with threading.Lock():
+        validate_prepared_artifacts(context)
+        from scripts.editorial_epoch import reject_legacy_run, reject_retired_publication
+        reject_legacy_run(context.run_id, PROJECT_ROOT / "output/evidence-deep-article-runs", PROJECT_ROOT)
+        reject_retired_publication(load_document(context.directory / "publish.md").metadata,
+                                   PROJECT_ROOT / "output/evidence-deep-article-runs", PROJECT_ROOT)
+        from scripts.editorial_gate import enforce_prepublication
+        enforce_prepublication(context.directory / "publish.md", inventory_path)
+        result_path = context.directory / "prepared-publication-result.json"
+        assert_owned_path(context, result_path)
+        if result_path.is_file():
+            return json.loads(result_path.read_text(encoding="utf-8"))
+        if has_successful_publish(context):
+            return read_publish_result(context)
+        marker = context.directory / "prepared-publisher-attempt.json"
+        assert_owned_path(context, marker)
+        try:
+            with marker.open("x", encoding="utf-8") as handle:
+                json.dump({"status": "attempted", "attempted_at": datetime.now(UTC).isoformat()}, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except FileExistsError as exc:
+            raise PipelineError("prepared_publication_requires_reconciliation") from exc
+        from publisher.service import DraftPublisher
+        class CapturingClient:
+            def __init__(self, delegate):
+                self.delegate = delegate
+                self.expected_html = None
+                self.confirmed = None
+
+            def __getattr__(self, name):
+                return getattr(self.delegate, name)
+
+            def create_post(self, payload, *, status):
+                self.expected_html = payload.get("content")
+                self.confirmed = self.delegate.create_post(payload, status=status)
+                return self.confirmed
+
+            def update_post(self, post_id, payload, *, status):
+                self.expected_html = payload.get("content")
+                self.confirmed = self.delegate.update_post(post_id, payload, status=status)
+                return self.confirmed
+
+        client = CapturingClient(WordPressClient(WordPressConfig.from_environment(PROJECT_ROOT / ".env"), max_retries=0))
+        identity = {"run_id": context.run_id, "topic_id": context.topic_id,
+                    "source_id": context.source_id, "title": context.title,
+                    "category": context.category}
+        try:
+            result = DraftPublisher(client, audit_log=context.directory / "publisher-audit.jsonl").publish_file(
+                context.directory / "publish.md", reviewer_approved=True,
+                review_path=context.directory / "review.md", expected_identity=identity)
+        except Exception as exc:
+            if not isinstance(client.confirmed, dict) or not client.confirmed.get("id"):
+                raise PipelineError("prepared_publisher_failed_requires_reconciliation") from exc
+            result = None
+        confirmed = client.confirmed
+        if not isinstance(confirmed, dict) or type(confirmed.get("id")) is not int or confirmed["id"] <= 0:
+            raise PipelineError("prepared_publisher_failed_requires_reconciliation")
+        publication = {"status": "audit_failed", "post_id": confirmed["id"],
+                       "url": confirmed.get("link"), "content_verified": False,
+                       "confirmed_publication": confirmed.get("status") == "publish",
+                       "expected_html_sha256": hashlib.sha256(client.expected_html.encode()).hexdigest() if isinstance(client.expected_html, str) else None,
+                       "run_id": context.run_id, "topic_id": context.topic_id, "topic": context.title}
+        try:
+            post = client.get_post(confirmed["id"])
+            if post.get("status") == "publish":
+                publication["confirmed_publication"] = True
+            raw = post.get("content", {}).get("raw")
+            featured = post.get("featured_media")
+            if (not isinstance(client.expected_html, str) or raw != client.expected_html
+                    or type(featured) is not int or featured <= 0 or post.get("status") != "publish"):
+                raise PipelineError("prepared_stored_body_or_media_mismatch")
+            media = client.request("GET", f"media/{featured}?context=edit", expected=(200,))
+            if media.get("id") != featured or not media.get("alt_text") or not media.get("source_url"):
+                raise PipelineError("prepared_featured_media_invalid")
+            if result is None or result.status != "Success" or not result.published_url:
+                raise PipelineError("prepared_publisher_audit_failed")
+            publication.update(status="published", url=result.published_url, content_verified=True,
+                               image_count=1 + len(result.publish_summary.get("body_media_ids", []) or []))
+        except Exception:
+            publication["audit_failure"] = "prepared_readback_audit_failed"
+        receipt_path = context.directory / "prepared-publication-result.json"
+        with receipt_path.open("x", encoding="utf-8") as handle:
+            json.dump(publication, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        return publication
+
+
 def run_topic_pipeline(
     codex: str,
     context: TopicContext,
@@ -2348,6 +2523,7 @@ def run_topic_pipeline(
     resume: bool,
     publish_lock: threading.Lock,
     humanize_lock: threading.Lock,
+    prepare_only: bool = False,
 ) -> dict[str, Any]:
     """Prepare one isolated topic; serialize shared state and WordPress writes."""
     from scripts.editorial_epoch import reject_legacy_run
@@ -2359,6 +2535,12 @@ def run_topic_pipeline(
             context.directory.mkdir(parents=False, exist_ok=False)
     else:
         context.directory.mkdir(parents=False, exist_ok=False)
+    if prepare_only and (context.directory / "publisher-audit.jsonl").exists():
+        raise PipelineError("prepare_only_existing_publication_audit")
+    if resume and (context.directory / "prepared-result.json").exists():
+        if not prepare_only:
+            raise PipelineError("prepared_artifacts_require_explicit_publish_prepared_topic")
+        return validate_prepared_artifacts(context)
     if resume and has_successful_publish(context):
         publish_result = read_publish_result(context)
         logger.info(
@@ -2391,6 +2573,20 @@ def run_topic_pipeline(
         recent_style_context_path,
     )
     for stage in topic_stages(context):
+        if prepare_only and stage.name == "Reviewer Agent":
+            baseline_path = context.directory / "source-baseline.json"
+            assert_owned_path(context, baseline_path)
+            if not baseline_path.exists():
+                from scripts.editorial_queue import freeze_sources
+                freeze_sources(context.directory / "final.md",
+                               candidate=plan.get("evidence_candidate", {}),
+                               destination=baseline_path)
+            stage = Stage(stage.name, stage.agent_file, stage.prompt +
+                          "\n준비 큐용 독립 검수: source-baseline.json의 현재 확인 시각과 URL별 해시를 직접 확인하고 "
+                          "원문을 다시 방문하여 현재 본문의 주장과 대조하세요. 이 파일을 최종 승인 근거에 명시하세요. "
+                          "queue-inventory.json의 다른 대기 글 전체 본문을 읽고 검색 의도 중복을 검토하세요. "
+                          "자기 자신의 candidate_id만 제외하고 다른 후보와 고유 결론을 비교하세요. "
+                          "과거 실험일과 현재 원문 확인일을 혼동하지 마세요. WordPress/미디어 업로드는 금지입니다.")
         if resume:
             required = {
                 "Research Agent": (context.directory / "research.md",),
@@ -2420,6 +2616,10 @@ def run_topic_pipeline(
             can_skip = required and all(path.is_file() for path in required)
             if stage.name == "Reviewer Agent" and not reviewer_approved:
                 can_skip = False
+            if prepare_only and stage.name == "Reviewer Agent":
+                # A legacy approval may predate the baseline. The prepared
+                # receipt fast path above is the only approved reviewer skip.
+                can_skip = False
             if stage.name == "Publisher Agent":
                 can_skip = has_successful_publish(context)
             if can_skip:
@@ -2436,12 +2636,16 @@ def run_topic_pipeline(
                 continue
         if stage.name == "Publisher Agent":
             with publish_lock:
-                run_review_repair_cycle(
-                    codex,
-                    context,
-                    logger,
-                    timeout_seconds=timeout_seconds,
-                )
+                if prepare_only:
+                    if read_review_decision(context) != "APPROVED":
+                        raise ContentQualityRejection("prepared_review_not_approved")
+                else:
+                    run_review_repair_cycle(
+                        codex,
+                        context,
+                        logger,
+                        timeout_seconds=timeout_seconds,
+                    )
                 digest = validate_publish_contract(context)
                 from scripts.editorial_epoch import reject_retired_publication
                 reject_retired_publication(load_document(context.directory / "publish.md").metadata,
@@ -2462,6 +2666,10 @@ def run_topic_pipeline(
                     digest,
                     context.directory / "publish.md",
                 )
+                if prepare_only:
+                    result = persist_prepared_result(context, digest)
+                    logger.info("topic=%r event=prepared publish_sha256=%s wordpress_write_count=0", context.title, digest)
+                    return result
                 run_stage(
                     codex,
                     stage,
