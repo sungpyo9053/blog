@@ -188,7 +188,14 @@ def compact_inventory(inventory, query=''):
     rows = inventory['posts']
     metadata = [{key: row.get(key, '') for key in ('post_id', 'status', 'title', 'slug', 'excerpt')} for row in rows]
     for row in metadata: row['excerpt'] = str(row['excerpt'])[:400]
-    terms = set(re.findall(r'[\w가-힣]{3,}', query.casefold())) - {'피지컬', '로봇', '어떻게', '무엇인가', '설명', '기초'}
+    terms = set(re.findall(r'[\w가-힣]{3,}', query.casefold())) - {
+        '피지컬', '로봇', '어떻게', '무엇인가', '설명', '기초', '계산하기', '확인하기',
+    }
+    def matches(term, identity):
+        # ROS must not match cROSs-validation or pROSecutor in legacy slugs.
+        if re.fullmatch(r'[a-z0-9_]+', term):
+            return bool(re.search(r'(?<![a-z0-9_])' + re.escape(term) + r'(?![a-z0-9_])', identity))
+        return term in identity
     # Both proposal and review need the existing lessons, including scheduled
     # lessons. A top-eight lexical ranking could hide even the introductory
     # feedback lesson when a proposal uses different terminology.
@@ -199,12 +206,18 @@ def compact_inventory(inventory, query=''):
     for row in rows:
         identity = str(row.get('title', '')) + ' ' + str(row.get('slug', ''))
         domain_match = bool(domain.search(identity))
-        query_match = bool(terms) and any(term in identity.casefold() for term in terms)
+        # One generic shared word is not evidence of the same reader intent.
+        # Keep every domain lesson regardless; additional legacy articles need
+        # two distinct query anchors. No top-N cut or body truncation follows.
+        query_match = sum(matches(term, identity.casefold()) for term in terms) >= 2
         if domain_match or query_match:
             related.append({'post_id': row['post_id'], 'title': row['title'], 'content': row['content'],
                             'selection_reason': 'editorial_domain_full_body' if domain_match else 'candidate_query_full_body'})
     result = {'inspected_post_count': len(rows), 'all_post_metadata': metadata,
-              'related_full_bodies': related, 'scope': 'full_inventory_mechanical_comparison_plus_related_body_review'}
+              'related_full_bodies': related, 'scope': 'full_inventory_mechanical_comparison_plus_related_body_review',
+              'body_selection_policy': 'all_domain_titles_slugs_plus_two_distinct_query_anchors',
+              'unselected_body_count': len(rows) - len(related),
+              'semantic_relevance_exhaustive': False}
     # Never silently drop or truncate relevant articles to satisfy the budget.
     need(len(json.dumps(result, ensure_ascii=False).encode()) < 210_000, 'relevant_inventory_too_large')
     return result

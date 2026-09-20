@@ -33,6 +33,17 @@ class ArithmeticTests(unittest.TestCase):
         with self.assertRaisesRegex(d.DiscoveryError,'relevant_inventory_too_large'):
             d.compact_inventory({'posts':[{'post_id':1,'title':'ROS example','slug':'ros-example','content':'x'*210000}]})
 
+    def test_qos_query_does_not_expand_on_generic_word_or_ros_substring(self):
+        posts=[{'post_id':i,'title':title,'slug':slug,'content':'x'*15000} for i,title,slug in (
+            (1,'ROS 2와 tf2','ros-frames'),(2,'로봇 시뮬레이션 에너지','robot-energy'),
+            (3,'미래 시계열 검증','cross-validation'),(4,'특검법','prosecutor-law'),
+            (5,'메시지 순서 설계','message-order'),(6,'가격 계산하기','price-compute'),
+            (7,'reliability durability 비교','policy-compatibility'))]
+        result=d.compact_inventory({'posts':posts},'ROS 2 메시지 형식이 같을 때 QoS reliability durability 계산하기')
+        self.assertEqual([r['post_id'] for r in result['related_full_bodies']],[1,2,7])
+        self.assertEqual(result['unselected_body_count'],4)
+        self.assertFalse(result['semantic_relevance_exhaustive'])
+
     def test_cli_uses_strict_response_schema_and_preserves_no_candidate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary); (root/'agents').mkdir()
