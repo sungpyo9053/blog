@@ -94,18 +94,15 @@ def invoke_agent(root, role, payload, directory):
     if len(prompt.encode('utf-8')) > 400_000:
         raise ValueError('model_input_too_large')
     # No WP/Google/MCP environment variables or workspace config are inherited.
-    env = {key: os.environ[key] for key in ('HOME', 'CODEX_HOME', 'PATH', 'LANG', 'LC_ALL') if key in os.environ}
+    from scripts.editorial_runtime import agent_environment, agent_runtime, build_json_command, collect_json_output
+    env = agent_environment()
     with tempfile.TemporaryDirectory(prefix='huntlab-weekly-') as temporary:
         output = Path(temporary) / 'answer.json'
-        command = ['codex', '--ask-for-approval', 'never', '--sandbox', 'read-only',
-                   'exec', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
-                   '--output-last-message', str(output), '--cd', temporary, '-']
-        for setting in ('features.shell_tool=false', 'features.apps=false', 'features.hooks=false',
-                        'features.multi_agent=false', 'features.memories=false',
-                        'features.remote_plugin=false', 'web_search="disabled"', 'tools.view_image=false'):
-            command[1:1] = ['-c', setting]
+        executable = os.environ.get('HUNTLAB_AGENT_BIN') or agent_runtime()
+        command = build_json_command(executable, workdir=temporary, output=output, apply_model=False)
         process = subprocess.run(command, input=prompt, env=env, capture_output=True,
                                  text=True, timeout=900, cwd=temporary)
+        collect_json_output(process, output)
         if process.returncode or not output.exists():
             raise RuntimeError('agent_execution_failed')
         result = parse_json(output.read_text())

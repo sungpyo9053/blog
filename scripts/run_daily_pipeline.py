@@ -314,32 +314,19 @@ def configure_logger(run_date: date) -> logging.Logger:
 
 
 def resolve_codex() -> str:
-    executable = os.environ.get("CODEX_BIN") or shutil.which("codex")
-    if not executable:
+    """Resolve the selected agent CLI (HUNTLAB_AGENT_RUNTIME: codex|claude)."""
+    from scripts.editorial_runtime import resolve_agent_executable
+    try:
+        return resolve_agent_executable()
+    except (FileNotFoundError, ValueError) as exc:
         raise PipelineError(
-            "Codex CLI를 찾을 수 없습니다. CODEX_BIN을 설정하세요."
-        )
-    return executable
+            f"에이전트 CLI를 찾을 수 없습니다({exc}). HUNTLAB_AGENT_BIN을 설정하세요."
+        ) from exc
 
 
 def build_codex_command(codex: str, prompt: str) -> list[str]:
-    from scripts.editorial_runtime import codex_model_arguments
-    return [
-        codex,
-        *codex_model_arguments(),
-        "--ask-for-approval",
-        "never",
-        "--sandbox",
-        "danger-full-access",
-        "--search",
-        "exec",
-        "--ephemeral",
-        "--color",
-        "never",
-        "--cd",
-        str(PROJECT_ROOT),
-        prompt,
-    ]
+    from scripts.editorial_runtime import build_stage_command
+    return build_stage_command(codex, prompt, PROJECT_ROOT)
 
 
 def redact_log_text(value: str) -> str:
