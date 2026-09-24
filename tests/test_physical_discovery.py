@@ -31,7 +31,7 @@ class ArithmeticTests(unittest.TestCase):
 
     def test_relevant_body_budget_fails_without_silent_truncation(self):
         with self.assertRaisesRegex(d.DiscoveryError,'relevant_inventory_too_large'):
-            d.compact_inventory({'posts':[{'post_id':1,'title':'ROS example','slug':'ros-example','content':'x'*240000}]})
+            d.compact_inventory({'posts':[{'post_id':1,'title':'ROS example','slug':'ros-example','content':'x'*d.INVENTORY_BUDGET_BYTES}]})
 
     def test_metadata_omits_summary_without_transforming_selected_raw_body(self):
         raw='<table><tr><td>A</td><td>0.25</td></tr></table><pre> x = 1\n  y = 2</pre><a href="https://example.test/">근거</a>'
@@ -256,7 +256,7 @@ class DiscoveryTests(unittest.TestCase):
         (self.root/'agents/physical-discovery-researcher.md').write_text('JSON only')
         with patch.object(d.subprocess, 'run') as process:
             with self.assertRaisesRegex(d.DiscoveryError, '^model_input_too_large$'):
-                d.invoke_agent(self.root, 'researcher', {'data': '가'*120000}, self.root)
+                d.invoke_agent(self.root, 'researcher', {'data': '가'*(d.PROMPT_BUDGET_BYTES // 3 + 1)}, self.root)
             process.assert_not_called()
 
     def test_git_has_only_explicit_paths_no_other_staged(self):
