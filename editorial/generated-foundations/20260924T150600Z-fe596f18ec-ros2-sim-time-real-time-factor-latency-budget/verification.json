@@ -1,0 +1,70 @@
+{
+  "checked_at": "2026-09-25T00:06:16.635819+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"현실 속도(RTF 1)에서 5 ms 지연의 시뮬레이션 시간 오차(초)\", \"actual\": 0.005}, {\"name\": \"10배속(RTF 10)에서 같은 지연의 시뮬레이션 시간 오차(초)\", \"actual\": 0.05}, {\"name\": \"느린 시뮬레이션(RTF 0.5)에서 같은 지연의 시뮬레이션 시간 오차(초)\", \"actual\": 0.0025}, {\"name\": \"2 m/s 로봇, RTF 1에서 위치 오차(m)\", \"actual\": 0.01}, {\"name\": \"2 m/s 로봇, RTF 10에서 위치 오차(m)\", \"actual\": 0.1}, {\"name\": \"허용 오차 0.02초, 지연 0.005초일 때 최대 RTF\", \"actual\": 4.0}, {\"name\": \"RTF 10, /clock 100 Hz일 때 한 틱의 시뮬레이션 시간 간격(초)\", \"actual\": 0.1}, {\"name\": \"RTF 10, /clock 1000 Hz일 때 한 틱의 시뮬레이션 시간 간격(초)\", \"actual\": 0.01}, {\"name\": \"반례: RTF 10에서 /clock을 1000 Hz로 올려도 남는 지연 항과 틱 항의 합(초)\", \"actual\": 0.060000000000000005}]\n",
+  "cases": [
+    {
+      "name": "현실 속도(RTF 1)에서 5 ms 지연의 시뮬레이션 시간 오차(초)",
+      "expression": "0.005 * 1",
+      "expected": 0.005,
+      "actual": 0.005
+    },
+    {
+      "name": "10배속(RTF 10)에서 같은 지연의 시뮬레이션 시간 오차(초)",
+      "expression": "0.005 * 10",
+      "expected": 0.05,
+      "actual": 0.05
+    },
+    {
+      "name": "느린 시뮬레이션(RTF 0.5)에서 같은 지연의 시뮬레이션 시간 오차(초)",
+      "expression": "0.005 * 0.5",
+      "expected": 0.0025,
+      "actual": 0.0025
+    },
+    {
+      "name": "2 m/s 로봇, RTF 1에서 위치 오차(m)",
+      "expression": "2 * 0.005 * 1",
+      "expected": 0.01,
+      "actual": 0.01
+    },
+    {
+      "name": "2 m/s 로봇, RTF 10에서 위치 오차(m)",
+      "expression": "2 * 0.005 * 10",
+      "expected": 0.1,
+      "actual": 0.1
+    },
+    {
+      "name": "허용 오차 0.02초, 지연 0.005초일 때 최대 RTF",
+      "expression": "0.02 / 0.005",
+      "expected": 4,
+      "actual": 4.0
+    },
+    {
+      "name": "RTF 10, /clock 100 Hz일 때 한 틱의 시뮬레이션 시간 간격(초)",
+      "expression": "10 / 100",
+      "expected": 0.1,
+      "actual": 0.1
+    },
+    {
+      "name": "RTF 10, /clock 1000 Hz일 때 한 틱의 시뮬레이션 시간 간격(초)",
+      "expression": "10 / 1000",
+      "expected": 0.01,
+      "actual": 0.01
+    },
+    {
+      "name": "반례: RTF 10에서 /clock을 1000 Hz로 올려도 남는 지연 항과 틱 항의 합(초)",
+      "expression": "0.005 * 10 + 10 / 1000",
+      "expected": 0.06,
+      "actual": 0.060000000000000005
+    }
+  ],
+  "teaching_context": {
+    "description": "통신 지연을 실제 시간 0.005초(5 ms)로 고정한 교육용 산술 모델이다. ros-clock 문서는 부정확성이 지연과 real time factor에 '비례한다'고만 말한다. 여기서는 비례계수를 1로 가정해 '시뮬레이션 시간 오차(초) ≈ 지연(실제 초) × real time factor'로 둔다. 위치 오차(m)는 이 값에 로봇 속도(m/s)를 곱해 구한다. /clock 틱 간격(시뮬레이션 초)은 real time factor ÷ /clock 발행 빈도(실제 Hz)다. 입력값은 이렇게 골랐다. 배속 1은 현실 속도 기준선이고, 10은 빠른 반복 시험, 0.5는 느린 정밀 시뮬레이션이다. 속도 2 m/s는 오차를 위치로 옮겨 보는 용도다. 100 Hz와 1000 Hz는 발행 빈도만 바꿨을 때의 반례를 보여 준다. 허용 오차 0.02초는 최대 배속을 역산하는 경계 사례다.",
+    "conclusion": "지연이 같아도 real time factor가 10이면 시뮬레이션 시간 오차는 0.005초에서 0.05초로 커진다. 2 m/s로 움직이는 로봇이라면 위치 차이가 0.01 m에서 0.1 m로 벌어진다. /clock을 100 Hz에서 1000 Hz로 올리면 틱 간격 항은 0.1초에서 0.01초로 줄어든다. 하지만 지연 항 0.05초는 그대로 남아 합계가 0.06초다. 이 모델에서는 이 경우 지연 항이 오차를 지배한다. 오차 0.02초를 지키려면 지연 0.005초에서 배속을 4 이하로 두어야 한다. 이것이 문서가 '정확한 타임스탬프가 필요하면 real time factor를 늦추라'고 한 이유를 숫자로 보여 준다. 독자는 두 항을 각각 계산해 큰 쪽을 먼저 줄이면 된다.",
+    "limitations": "ros-clock 문서는 비례 관계만 밝히고 계수나 정확한 공식은 주지 않는다. 비례계수 1, 지연을 고정값으로 둔 것, 두 항을 단순히 더한 것은 모두 교육용 가정이다. 지연 흔들림(jitter), DDS/QoS 설정, 노드별 콜백 처리 시간, 시뮬레이터 내부 스텝 크기, 보간이나 예측 알고리즘은 반영하지 않았다. 문서가 설명하는 기본 time source는 틱 사이를 보간하지 않는다. 계산된 0.1 m는 산술 결과일 뿐 실제 로봇이나 시뮬레이터에서 측정한 위치 오차가 아니다. ROS 노드, 시뮬레이터, 실물 로봇을 실행하지 않았으므로 특정 배포판의 동작이나 안전한 배속 설정을 보장하지 않는다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
