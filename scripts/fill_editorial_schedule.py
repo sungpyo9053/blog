@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Bounded refill: at most seven preparations.
 
-A Reviewer rejection (ContentQualityRejection) only drops that candidate and
-the refill moves on to the next one; any other failure (model limit, budget,
-source, WordPress) still stops immediately.
+A content rejection of one candidate (Reviewer ContentQualityRejection, or the
+deterministic editorial gate) only drops that candidate and the refill moves on
+to the next one; any other failure (model limit, budget, source, WordPress)
+still stops immediately.
 """
 import json
 import subprocess
@@ -22,14 +23,16 @@ def run_ids():
 
 
 def rejected_by_reviewer(new_runs):
-    """True only when exactly one new run recorded a Reviewer rejection."""
+    """True only when exactly one new run recorded a content rejection of its candidate."""
     if len(new_runs) != 1:
         return False
     try:
         result = json.loads((RUNS / next(iter(new_runs)) / 'result.json').read_text())
     except (OSError, ValueError):
         return False
-    return result.get('error_type') == 'ContentQualityRejection' and result.get('wordpress_write_count') == 0
+    content_rejection = (result.get('error_type') == 'ContentQualityRejection'
+                         or result.get('reason') == 'editorial_gate_rejected')
+    return content_rejection and result.get('wordpress_write_count') == 0
 
 
 def main():

@@ -512,6 +512,11 @@ def main() -> int:
         failure={"run_id":run_id,"kst_date":datetime.now(KST).date().isoformat(),"failed":True,"deep_article":"failed","error_type":type(exc).__name__,"wordpress_write_count":write_count}
         if isinstance(exc, SourceCheckError):
             failure.update(exc.diagnostic)
+        if isinstance(exc, ValueError) and str(exc).startswith("editorial gate: "):
+            # Gate failure codes are constant identifiers, safe to record.
+            failure.update(reason="editorial_gate_rejected",
+                           gate_failures=[code for code in str(exc)[len("editorial gate: "):].split(", ")
+                                          if re.fullmatch(r"[a-z0-9_]+", code)])
         if args.prepare_only:
             failure["run_kind"] = "preparation"
         if progress.get("stage") == "discovery_started":

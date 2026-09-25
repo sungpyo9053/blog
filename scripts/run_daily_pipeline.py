@@ -1092,6 +1092,14 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "existing_post_id와 문자열 slug로 정확히 넣고, 기존 글 제목과 slug가 모두 "
                 "일치하지 않으면 REJECT하세요. "
                 "현재 research.md와 기존 공개 글 목록에 관련 내부 링크 후보가 없으면 그 사실을 기록하고 억지로 링크를 만들지 마세요. "
+                f"{str(topic_dir / 'editorial-inventory.json')!r}이 있으면 APPROVED를 적기 전에 발행 직전과 같은 "
+                "결정적 게이트를 직접 실행하세요: "
+                f"{str(PROJECT_ROOT / '.venv/bin/python')!r} -c \"from pathlib import Path; "
+                "from scripts.editorial_gate import enforce_prepublication; "
+                f"enforce_prepublication(Path({str(topic_dir / 'publish.md')!r}), "
+                f"Path({str(topic_dir / 'editorial-inventory.json')!r}))\" "
+                "이 명령이 실패하면 출력된 실패 코드(예: unresolved_shell_path_placeholder)를 반려 사유에 그대로 "
+                "적고 REJECTED로 판정하세요. 게이트 실패를 승인으로 덮지 마세요. "
                 "REJECTED이면 0이 아닌 종료 상태로 끝내세요."
             ),
         ),

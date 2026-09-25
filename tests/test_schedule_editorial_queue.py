@@ -146,13 +146,13 @@ class FillSafetyTests(unittest.TestCase):
             self.assertEqual(filler.main(),2)
         self.assertEqual(run.call_count,2)
 
-    def _run_writer(self, runs, error_type):
+    def _run_writer(self, runs, error_type, **extra):
         def run(command, cwd):
             if '--prepare-only' in command:
                 directory = runs / f'20260925T00000{len(list(runs.iterdir()))}Z-x'
                 directory.mkdir()
                 (directory / 'result.json').write_text(json.dumps(
-                    {'failed': True, 'error_type': error_type, 'wordpress_write_count': 0}))
+                    {'failed': True, 'error_type': error_type, 'wordpress_write_count': 0, **extra}))
                 return SimpleNamespace(returncode=1)
             return SimpleNamespace(returncode=0)
         return run
@@ -167,6 +167,25 @@ class FillSafetyTests(unittest.TestCase):
                 self.assertEqual(filler.main(), 0)
         preparations = [c for c in run.call_args_list if '--prepare-only' in c.args[0]]
         self.assertEqual(len(preparations), 7)
+
+    def test_editorial_gate_rejection_moves_to_next_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runs = Path(directory)
+            writer = self._run_writer(runs, 'ValueError', reason='editorial_gate_rejected')
+            with patch.object(filler, 'RUNS', runs), patch.object(filler.subprocess, 'run', side_effect=writer) as run, \
+                    patch.object(queue, 'preparation_allowed', return_value=True), patch.object(queue, 'rows', return_value=[]), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(filler.main(), 0)
+        self.assertEqual(len([c for c in run.call_args_list if '--prepare-only' in c.args[0]]), 7)
+
+    def test_other_value_error_still_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runs = Path(directory)
+            with patch.object(filler, 'RUNS', runs), \
+                    patch.object(filler.subprocess, 'run', side_effect=self._run_writer(runs, 'ValueError')) as run, \
+                    patch.object(queue, 'preparation_allowed', return_value=True), patch.object(queue, 'rows', return_value=[]):
+                self.assertEqual(filler.main(), 1)
+        self.assertEqual(run.call_count, 2)
 
     def test_non_review_failure_still_stops(self):
         with tempfile.TemporaryDirectory() as directory:
