@@ -221,7 +221,11 @@ def foundation_activation_ready(repo):
 
 
 def consumed_foundation_ids(output_root):
-    """Confirmed writes consume even when the later public audit/receipt failed."""
+    """Confirmed writes consume even when the later public audit/receipt failed.
+
+    A content rejection also consumes the candidate: otherwise the refill picks
+    the same rejected candidate again on every attempt.
+    """
     consumed = set()
     for directory in output_root.iterdir() if output_root.exists() else ():
         selected = directory / 'selected-candidate.json'
@@ -231,6 +235,8 @@ def consumed_foundation_ids(output_root):
         records = [load_json(directory / name) for name in ('progress.json', 'result.json', 'publication.json')
                    if (directory / name).is_file()]
         if candidate.get('candidate_origin') == 'foundation_concept' and any(
-                type(row.get('wordpress_write_count')) is int and row['wordpress_write_count'] == 1 for row in records):
+                (type(row.get('wordpress_write_count')) is int and row['wordpress_write_count'] == 1)
+                or row.get('error_type') == 'ContentQualityRejection'
+                or row.get('reason') == 'editorial_gate_rejected' for row in records):
             consumed.add(candidate['candidate_id'])
     return consumed

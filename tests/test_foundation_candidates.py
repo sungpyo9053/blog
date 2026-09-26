@@ -133,3 +133,11 @@ class FoundationCandidateTests(unittest.TestCase):
         self.assertEqual(consumed_foundation_ids(root), set())
         (run / 'progress.json').write_text('{"wordpress_write_count":1}')
         self.assertEqual(consumed_foundation_ids(root), {'foundation-one'})
+
+    def test_content_rejection_consumes_candidate_so_refill_moves_on(self):
+        root = self.repo / 'runs'; run = root / 'rejected'; run.mkdir(parents=True)
+        (run / 'selected-candidate.json').write_text(json.dumps({'candidate_origin': 'foundation_concept', 'candidate_id': 'foundation-two'}))
+        (run / 'result.json').write_text('{"failed":true,"error_type":"ModelUsageLimit","wordpress_write_count":0}')
+        self.assertEqual(consumed_foundation_ids(root), set())
+        (run / 'result.json').write_text('{"failed":true,"error_type":"ContentQualityRejection","wordpress_write_count":0}')
+        self.assertEqual(consumed_foundation_ids(root), {'foundation-two'})
