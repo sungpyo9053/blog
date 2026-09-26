@@ -1,0 +1,64 @@
+{
+  "checked_at": "2026-09-26T23:12:38.082230+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"카메라 발행 주기(ms): 1000 / 20 Hz\", \"actual\": 50.0}, {\"name\": \"상태 토픽 발행 주기(ms): 1000 / 5 Hz\", \"actual\": 200.0}, {\"name\": \"Automatic, 카메라만 멈춤: lease 500 − 같은 노드 상태 토픽의 갱신 간격 200 → 양수라 이벤트 없음\", \"actual\": 300.0}, {\"name\": \"Automatic, 노드 전체가 1초 멈춤: lease 500 − 1000 → 음수라 Liveliness lost 조건\", \"actual\": -500}, {\"name\": \"Manual by topic, 카메라 정상: lease 500 − 카메라 자신의 알림 간격 50\", \"actual\": 450.0}, {\"name\": \"Manual by topic, 카메라만 1초 멈춤: 상태 토픽과 무관하게 lease 500 − 1000 → 음수\", \"actual\": -500}, {\"name\": \"경계 사례: Automatic에서 상태 토픽이 2 Hz로 느려진 채 카메라가 멈춤 → 여유 0, 원문은 같은 값의 판정을 정하지 않음\", \"actual\": 0.0}, {\"name\": \"lease duration 호환성: 구독자 요청 300 − 발행자 제공 500 → 음수이면 표의 y < x 행에 해당해 비호환\", \"actual\": -200}]\n",
+  "cases": [
+    {
+      "name": "카메라 발행 주기(ms): 1000 / 20 Hz",
+      "expression": "1000 / 20",
+      "expected": 50,
+      "actual": 50.0
+    },
+    {
+      "name": "상태 토픽 발행 주기(ms): 1000 / 5 Hz",
+      "expression": "1000 / 5",
+      "expected": 200,
+      "actual": 200.0
+    },
+    {
+      "name": "Automatic, 카메라만 멈춤: lease 500 − 같은 노드 상태 토픽의 갱신 간격 200 → 양수라 이벤트 없음",
+      "expression": "500 - 1000 / 5",
+      "expected": 300,
+      "actual": 300.0
+    },
+    {
+      "name": "Automatic, 노드 전체가 1초 멈춤: lease 500 − 1000 → 음수라 Liveliness lost 조건",
+      "expression": "500 - 1000",
+      "expected": -500,
+      "actual": -500
+    },
+    {
+      "name": "Manual by topic, 카메라 정상: lease 500 − 카메라 자신의 알림 간격 50",
+      "expression": "500 - 1000 / 20",
+      "expected": 450,
+      "actual": 450.0
+    },
+    {
+      "name": "Manual by topic, 카메라만 1초 멈춤: 상태 토픽과 무관하게 lease 500 − 1000 → 음수",
+      "expression": "500 - 1000",
+      "expected": -500,
+      "actual": -500
+    },
+    {
+      "name": "경계 사례: Automatic에서 상태 토픽이 2 Hz로 느려진 채 카메라가 멈춤 → 여유 0, 원문은 같은 값의 판정을 정하지 않음",
+      "expression": "500 - 1000 / 2",
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "name": "lease duration 호환성: 구독자 요청 300 − 발행자 제공 500 → 음수이면 표의 y < x 행에 해당해 비호환",
+      "expression": "300 - 500",
+      "expected": -200,
+      "actual": -200
+    }
+  ],
+  "teaching_context": {
+    "description": "ros-qos 원문의 정의를 뺄셈으로 옮긴 교육용 산술 모델입니다. 한 노드에 카메라 발행자(20 Hz)와 상태 발행자(5 Hz)가 있고, 발행자 QoS의 lease duration은 500 ms입니다. 단위는 모두 실제 시간 ms입니다. 여유는 'lease duration − 가장 긴 갱신 간격'으로 정의하고, 음수이면 원문이 말하는 '발행자가 lease duration 안에 살아 있음을 알리지 못한' 상황, 즉 Liveliness lost 조건으로 읽습니다. Automatic에서는 원문에 따라 노드의 어떤 발행자든 메시지를 발행하면 모든 발행자의 lease가 갱신되므로, 노드 전체 발행 사이의 가장 긴 간격을 넣습니다. Manual by topic에서는 해당 발행자가 직접 살아 있음을 알린 간격만 넣습니다. 이 모델에서는 카메라 드라이버가 촬영에 성공할 때마다, 즉 50 ms마다 알린다고 가정합니다. 입력값은 다음 기준으로 골랐습니다. 20 Hz와 5 Hz는 두 모드의 결과가 갈리도록 고른 값이고, 1초 정지는 lease 500 ms보다 분명히 긴 정지입니다. 2 Hz는 여유가 정확히 0이 되는 경계 사례이고, 구독자 요청 300 ms는 lease duration 호환성 표의 '구독자 y < 발행자 x → 비호환' 행을 확인하기 위한 값입니다. 발행 간격은 일정하고 통신 지연은 없다고 가정합니다.",
+    "conclusion": "같은 카메라 정지(1초)라도 Automatic에서는 상태 토픽이 200 ms마다 lease를 갱신해 여유가 +300 ms로 남습니다. Manual by topic에서는 여유가 −500 ms가 되어 Liveliness lost 조건에 해당합니다. Automatic이 음수가 되는 경우는 노드 전체가 멈췄을 때뿐입니다. 따라서 Automatic liveliness는 '노드가 통째로 죽었는가'를 보는 도구입니다. '이 토픽의 발행자가 멈췄는가'를 알고 싶다면 Manual by topic을 검토해야 합니다. 이때 원문의 liveliness 호환성 표에 따르면 Automatic 발행자와 Manual by topic 구독자는 비호환이므로, 구독자에서만 Manual by topic을 요청하면 연결 자체가 되지 않습니다. lease duration도 구독자 요청이 발행자 제공보다 짧으면(300 − 500 = −200) 비호환입니다. 독자가 할 일은 두 가지입니다. 감시할 토픽마다 '같은 노드의 다른 발행이 이 lease를 갱신하는가'를 적어 보고, 발행자 QoS부터 Manual by topic과 lease duration을 정한 뒤 구독자 요청을 그 이상으로 맞추는 것입니다.",
+    "limitations": "이 계산은 제공된 ROS 2 QoS 문서(Rolling 판, 발췌 원문이 QoS 이벤트 절 중간에서 잘림)의 정의만 뺄셈으로 옮긴 교육용 모델입니다. ROS 2 노드, DDS·RMW, 실제 카메라를 실행하지 않았습니다. 원문으로 확인할 수 없는 것은 다음과 같습니다. 첫째, Manual by topic에서 메시지 발행 자체가 살아 있음 알림으로 인정되는지(이 예제는 드라이버가 명시적으로 알린다고 가정했습니다). 둘째, 시스템이 lease를 확인하는 주기와 이벤트가 나는 정확한 시점·횟수. 셋째, 여유가 정확히 0일 때의 판정. 넷째, RMW 구현(Fast DDS, Cyclone DDS, rmw_zenoh 등)별 실제 동작과 Automatic이 메시지 발행 외의 내부 신호로도 갱신되는지 여부. 다섯째, 통신 지연·지터·시계 기준. 문서가 정한 ROS 2 liveliness 규칙과 같은 정책을 모든 배포판이나 미들웨어가 똑같이 구현한다고 가정해서는 안 됩니다. 또한 liveliness 이벤트는 통신 계층의 진단 신호일 뿐이므로, 실물 로봇에서 센서 정지 시 멈추게 하는 안전장치(워치독, 비상정지)를 대신할 수 없습니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
