@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-ros2-sim-time-zero-uninitialized-first-dt-spike",
+  "title": "ROS 2 use_sim_time 노드가 /clock을 받기 전 시각 0을 저장하면 첫 dt는 몇 초가 될까: 음수 검사를 통과하는 첫 주기 스파이크 계산하기",
+  "slug": "ros2-sim-time-zero-uninitialized-first-dt-spike",
+  "reader_question": "use_sim_time을 켠 노드가 /clock 메시지를 받기 전에 now()로 '이전 시각'을 저장하면 그 값은 0이다. 첫 콜백에서 dt·이동거리·속도 추정·timeout 판정은 각각 얼마나 틀어지는가? 그리고 앞선 글에서 만든 dt &lt; 0 검사는 왜 이 오류를 잡지 못하는가?",
+  "target_reader": "ROS 2 시뮬레이션이나 rosbag 재생에서 use_sim_time을 켜고 타이머 콜백 안에서 dt를 직접 계산하는 입문 개발자. 초 단위 뺄셈·곱셈·나눗셈을 할 수 있고 /clock 토픽과 ROS 시간(ROSTime)이 무엇인지 들어 본 정도면 된다.",
+  "learning_outcome": "독자는 /clock을 받기 전 ROS 시간이 0이라는 공식 설계 문서의 규칙을 첫 dt 계산에 대입할 수 있다. 첫 시뮬레이션 시각이 125초이고 정상 주기가 0.5초일 때 첫 dt가 125초로 250배 부풀고, 0.5 m/s 적분 거리가 62.5 m로 튀고, 위치 차분 속도는 0.002 m/s로 거의 0이 되며, 2초 timeout은 123초나 남기고 잘못 발동한다는 것을 직접 계산한다. 그 결과를 근거로 '이전 시각이 0이면 첫 샘플을 기준점으로만 저장하고 계산을 건너뛴다'는 가드를 자기 노드에 추가할지 판단하고, 그 가드를 확인하는 단위 테스트 입력(0→125, 125→125.5)을 정할 수 있다.",
+  "unique_takeaway": "시간 역점프는 음수 dt로 드러나지만 초기화되지 않은 시각 0은 매우 큰 양수 dt로 드러난다. 그래서 역점프를 막으려고 넣은 dt &lt; 0 검사를 그대로 통과하며, 부호 검사와 별도로 '이전 시각 또는 현재 시각이 0인가'를 따로 확인해야 한다. 이 가드에는 비용이 있다. 시뮬레이터가 실제로 0초에서 시작하면 유효한 첫 샘플 하나가 버려진다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/design/gh-pages/articles/130_ros_time.md",
+      "publisher": "ROS 2 Design",
+      "claim_scope": "Clock abstractions, simulation time and differences from wall time",
+      "checked_at": "2026-09-27T00:41:57.827981+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20260926T154151Z-b46330ad42-ros2-sim-time-zero-uninitialized-first-dt-spike/example.py",
+    "sha256": "d31cc741f36c9200fb90a20d3ea030e454cb7fdf91256ebad5cc5250aa323c85",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/48437d1eff105cd8ffd572ef5b2dc14f8b60ae91/editorial/generated-foundations/20260926T154151Z-b46330ad42-ros2-sim-time-zero-uninitialized-first-dt-spike/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20260926T154151Z-b46330ad42-ros2-sim-time-zero-uninitialized-first-dt-spike/verification.json",
+    "sha256": "39469e9964f4fcd3c919a4119fa58b93a3c9f28bd923422451998a950bccc05d",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/48437d1eff105cd8ffd572ef5b2dc14f8b60ae91/editorial/generated-foundations/20260926T154151Z-b46330ad42-ros2-sim-time-zero-uninitialized-first-dt-spike/verification.json"
+  },
+  "author_id": "discovery-writer-a6c7db391d0740afa365bd2fc9bea5d5"
+}
