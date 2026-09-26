@@ -1,0 +1,70 @@
+{
+  "checked_at": "2026-09-27T01:25:42.019842+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"Automatic: 노드 전체 기준 마지막 발행(진단 4500 ms)부터 판정 시각까지의 경과 시간(ms)\", \"actual\": 500}, {\"name\": \"Automatic: lease 1000 ms에서 남은 여유(ms). 양수이므로 카메라가 멈췄어도 살아 있는 것으로 판정됩니다\", \"actual\": 500}, {\"name\": \"Manual by topic: 카메라가 마지막으로 생존을 알린 2000 ms부터 경과한 시간(ms)\", \"actual\": 3000}, {\"name\": \"Manual by topic: lease 1000 ms에서 남은 여유(ms). 음수이므로 liveliness를 잃는 조건입니다\", \"actual\": -2000}, {\"name\": \"Manual by topic에서 liveliness를 잃는 것으로 판정될 수 있는 가장 이른 시각(ms): 마지막 알림 + lease\", \"actual\": 3000}, {\"name\": \"카메라가 멈춘 2000~5000 ms 동안 Automatic 판정을 계속 갱신해 준 진단 발행 횟수\", \"actual\": 6.0}, {\"name\": \"lease 1000 ms 안에 들어가는 카메라 발행 주기(50 ms)의 개수\", \"actual\": 20.0}, {\"name\": \"경계 반례: lease 40 ms를 50 ms 주기 publisher에 걸면 정상 발행 사이에도 여유가 음수입니다(ms)\", \"actual\": -10}, {\"name\": \"호환성 반례: publisher는 lease 1000 ms를 제공하고 subscription은 500 ms를 요청할 때 (요청 − 제공)(ms). 음수이므로 문서 표상 비호환입니다\", \"actual\": -500}]\n",
+  "cases": [
+    {
+      "name": "Automatic: 노드 전체 기준 마지막 발행(진단 4500 ms)부터 판정 시각까지의 경과 시간(ms)",
+      "expression": "5000 - 4500",
+      "expected": 500,
+      "actual": 500
+    },
+    {
+      "name": "Automatic: lease 1000 ms에서 남은 여유(ms). 양수이므로 카메라가 멈췄어도 살아 있는 것으로 판정됩니다",
+      "expression": "1000 - (5000 - 4500)",
+      "expected": 500,
+      "actual": 500
+    },
+    {
+      "name": "Manual by topic: 카메라가 마지막으로 생존을 알린 2000 ms부터 경과한 시간(ms)",
+      "expression": "5000 - 2000",
+      "expected": 3000,
+      "actual": 3000
+    },
+    {
+      "name": "Manual by topic: lease 1000 ms에서 남은 여유(ms). 음수이므로 liveliness를 잃는 조건입니다",
+      "expression": "1000 - (5000 - 2000)",
+      "expected": -2000,
+      "actual": -2000
+    },
+    {
+      "name": "Manual by topic에서 liveliness를 잃는 것으로 판정될 수 있는 가장 이른 시각(ms): 마지막 알림 + lease",
+      "expression": "2000 + 1000",
+      "expected": 3000,
+      "actual": 3000
+    },
+    {
+      "name": "카메라가 멈춘 2000~5000 ms 동안 Automatic 판정을 계속 갱신해 준 진단 발행 횟수",
+      "expression": "(5000 - 2000) / 500",
+      "expected": 6,
+      "actual": 6.0
+    },
+    {
+      "name": "lease 1000 ms 안에 들어가는 카메라 발행 주기(50 ms)의 개수",
+      "expression": "1000 / 50",
+      "expected": 20,
+      "actual": 20.0
+    },
+    {
+      "name": "경계 반례: lease 40 ms를 50 ms 주기 publisher에 걸면 정상 발행 사이에도 여유가 음수입니다(ms)",
+      "expression": "40 - 50",
+      "expected": -10,
+      "actual": -10
+    },
+    {
+      "name": "호환성 반례: publisher는 lease 1000 ms를 제공하고 subscription은 500 ms를 요청할 때 (요청 − 제공)(ms). 음수이므로 문서 표상 비호환입니다",
+      "expression": "500 - 1000",
+      "expected": -500,
+      "actual": -500
+    }
+  ],
+  "teaching_context": {
+    "description": "설명용 가상 상황입니다. 카메라 publisher와 진단 publisher가 한 노드에 함께 있습니다. 시각은 모두 노드 시작부터 잰 밀리초(ms)이고, 소수 오차를 피하려고 정수 ms로 계산합니다. 카메라는 20 Hz, 즉 50 ms마다 발행하다가 2000 ms 시점에 멈췄습니다. 진단 토픽은 500 ms마다 계속 발행해 마지막 발행이 4500 ms입니다. 판정 시각은 5000 ms, lease duration은 1000 ms입니다. Manual by topic에서는 카메라 publisher가 발행할 때마다 생존을 직접 알린다고 가정합니다. 이 가정은 실제 API 동작이 아니라 설명을 위한 것입니다. 입력값은 Automatic과 Manual by topic의 판정이 서로 다른 부호로 갈리도록 골랐습니다. lease가 발행 주기보다 짧은 경계 사례와, subscription이 더 짧은 lease를 요청하는 호환성 반례도 넣었습니다. 여유(lease − 경과)가 0 이상이면 이 모델에서 살아 있는 것으로, 음수이면 liveliness를 잃는 조건으로 읽습니다.",
+    "conclusion": "같은 멈춤 상황에서도 Automatic의 여유는 +500 ms로 계속 살아 있다고 판정됩니다. Manual by topic의 여유는 −2000 ms이고, 3000 ms 시점부터 liveliness를 잃는 조건이 됩니다. 차이는 경과 시간을 재는 기준점이 '노드의 아무 publisher'인지 '이 publisher'인지에서 나옵니다. 따라서 토픽 하나의 정지를 liveliness로 감시하려면 publisher 쪽에서 Manual by topic을 제공하고 실제로 생존을 알려야 합니다. publisher가 Automatic인 상태에서 subscription만 Manual by topic으로 바꾸면 문서의 호환성 표에 따라 연결 자체가 만들어지지 않습니다. lease duration은 발행 주기보다 충분히 길게 잡아야 합니다. 1000 ms lease는 50 ms 주기의 20배이고, 40 ms lease는 주기보다 짧아서 정상 동작 중에도 음수 여유가 나옵니다. subscription이 더 빨리 감지하려고 제공값보다 짧은 lease를 요청하면(500 − 1000 = −500) 역시 비호환입니다. 독자는 자기 노드에서 감시 대상 publisher의 liveliness 종류, 발행 주기, lease를 적고 이 두 가지 뺄셈으로 여유를 계산한 다음 설정을 바꿀 쪽을 고르면 됩니다.",
+    "limitations": "근거는 ROS 2 QoS 문서(Rolling 판)의 정의, 호환성 표, 이벤트 설명뿐입니다. ROS 2 노드, DDS나 다른 RMW, 실제 카메라나 시뮬레이터는 실행하지 않았습니다. Manual by topic에서 일반 발행이 생존 알림으로 쳐지는지, 명시적인 assert 호출만 인정되는지는 가정으로 두었습니다. 문서는 publisher API 호출로 수동 알림을 한다고만 설명하므로 RMW 구현마다 확인해야 합니다. 여유가 음수가 된 순간 Liveliness lost나 Liveliness changed 이벤트가 정확히 언제, 몇 번 발생하는지, 여유가 정확히 0인 경계를 어떻게 처리하는지도 이 계산으로는 알 수 없습니다. 네트워크 지연, 발행 주기의 흔들림(지터), 실행기(executor)의 처리 지연은 모델에 넣지 않았습니다. 특정 배포판의 기본값이나 rmw_zenoh 같은 비DDS 구현의 지원 여부도 확인하지 않았습니다. 이 판정은 통신 계층의 생존 신호일 뿐이며, 센서 데이터가 올바른지나 실물 로봇을 멈추는 안전장치가 제대로 동작하는지는 보장하지 않습니다. 비상정지와 워치독은 별도로 설계하고 검증해야 합니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
