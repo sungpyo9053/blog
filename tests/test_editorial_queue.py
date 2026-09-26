@@ -12,6 +12,18 @@ from scripts import editorial_queue as queue
 
 
 class EditorialQueueTests(unittest.TestCase):
+    def test_public_audit_accepts_wptexturize_double_prime_after_digit(self):
+        import hashlib
+        raw='<p>기본값 1.0"으로 둔다</p>'
+        published={'post_id':1,'url':'https://example.test/p','expected_html_sha256':hashlib.sha256(raw.encode()).hexdigest()}
+        client=Mock(); client.get_post.return_value={'content':{'raw':raw}}
+        page=Mock(text='<p>기본값 1.0&#8243;으로 둔다</p>')
+        with patch('scripts.run_evidence_deep_article.audit_public',return_value={}), \
+             patch('publisher.wordpress.WordPressClient',return_value=client), \
+             patch('publisher.config.WordPressConfig.from_environment'), \
+             patch.object(queue.requests,'get',return_value=page):
+            self.assertTrue(queue.audit_queued_public(published,{})['approved_body_blocks_present'])
+
     def test_backticks_are_url_delimiters_in_inline_and_fenced_code(self):
         url='https://example.test/source'
         for text in (f'`{url}`', f'```text\n{url}\n```', f'```{url}```', f'[{url}]({url})'):

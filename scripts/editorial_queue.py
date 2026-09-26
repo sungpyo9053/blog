@@ -326,7 +326,7 @@ def audit_queued_public(published, candidate):
     def plain(text):
         parser=SourceText(); parser.feed(text)
         value=html.unescape(' '.join(parser.parts))
-        return re.sub(r'\s+','',value).translate(str.maketrans({'“':'"','”':'"','‘':"'",'’':"'",'–':'-','—':'-'}))
+        return re.sub(r'\s+','',value).translate(str.maketrans({'“':'"','”':'"','″':'"','‘':"'",'’':"'",'′':"'",'–':'-','—':'-'}))
     public = plain(response.text)
     blocks=re.findall(r'<(?:p|pre|h[2-6])\b[^>]*>(.*?)</(?:p|pre|h[2-6])>',raw,re.S|re.I)
     if not blocks or any(plain(block) not in public for block in blocks if plain(block)):
