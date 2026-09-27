@@ -102,5 +102,10 @@ def collect_json_output(result, output):
     if not isinstance(envelope, dict) or envelope.get('is_error'):
         return
     answer = envelope.get('structured_output')
-    Path(output).write_text(json.dumps(answer, ensure_ascii=False) if answer is not None
-                            else str(envelope.get('result', '')))
+    if answer is not None:
+        Path(output).write_text(json.dumps(answer, ensure_ascii=False))
+        return
+    # Without --json-schema Claude may wrap the JSON in a ```json fence; Codex never does.
+    text = str(envelope.get('result', '')).strip()
+    fenced = re.fullmatch(r'```(?:json)?\s*\n(.*?)\n?```', text, flags=re.S)
+    Path(output).write_text(fenced.group(1) if fenced else text)

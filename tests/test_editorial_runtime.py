@@ -69,6 +69,9 @@ class RuntimeTests(unittest.TestCase):
             collect_json_output(SimpleNamespace(returncode=0, stdout=json.dumps({'is_error': True})), output)
             collect_json_output(SimpleNamespace(returncode=1, stdout=''), output)
             self.assertFalse(output.exists())
+            fenced = SimpleNamespace(returncode=0, stdout=json.dumps({'result': '```json\n{"verdict": "HOLD"}\n```'}))
+            collect_json_output(fenced, output)
+            self.assertEqual(json.loads(output.read_text()), {'verdict': 'HOLD'})
 
     def test_claude_environment_carries_only_claude_credentials(self):
         env = {'HUNTLAB_AGENT_RUNTIME': 'claude', 'HOME': '/h', 'CLAUDE_CODE_OAUTH_TOKEN': 't',
