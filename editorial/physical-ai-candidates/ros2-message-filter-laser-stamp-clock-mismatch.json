@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-ros2-message-filter-laser-stamp-clock-mismatch",
+  "title": "'Message Filter dropping message: frame laser' 로그가 뜰 때: 레이저 타임스탬프와 tf 시각이 다른 시계에서 왔는지 뺄셈으로 확인하기",
+  "slug": "ros2-message-filter-laser-stamp-clock-mismatch",
+  "reader_question": "Robotics Stack Exchange 질문 'Message Filter dropping message: frame 'laser' at time'(https://robotics.stackexchange.com/questions/103632/message-filter-dropping-message-frame-laser-at-time)을 쉽게 풀면 이렇습니다. 레이저 메시지도 들어오고 tf도 발행되는데, 메시지 필터가 계속 'dropping message: frame laser at time ...'을 찍으며 스캔을 버립니다. 로그에 찍힌 시각과 tf 시각을 비교해서 원인 범위를 어떻게 좁힐 수 있을까요?",
+  "target_reader": "ROS 2에서 라이다, tf2, 시뮬레이터나 bag 재생을 처음 함께 쓰는 입문자입니다. 토픽과 header.stamp가 무엇인지는 압니다. 다만 use_sim_time이 노드마다 따로 설정되고, 그래서 노드마다 시계 기준이 다를 수 있다는 점은 아직 실감하지 못했습니다.",
+  "learning_outcome": "독자는 드롭 로그에 찍힌 레이저 스탬프에서 tf 버퍼의 최신 시각을 빼고, 결과를 세 경우로 나눌 수 있습니다. 첫째, 0.25초처럼 1초 미만의 작은 차이는 같은 시계에서 생긴 정상 범위입니다. 둘째, 절댓값이 수십억 초 규모인 차이는 한쪽 노드에만 use_sim_time이 켜져 SystemTime과 /clock 시각이 섞였다는 신호이고, 부호가 어느 쪽 노드인지 알려 줍니다. 셋째, 레이저 스탬프가 정확히 0이고 차이가 시뮬레이션 시각 전체만큼의 음수(예: 0 − 125.25 = −125.25초)라면 레이저 노드가 /clock을 받기 전의 미초기화 시각 0으로 스탬프를 찍은 것입니다. 이렇게 나눈 뒤 레이저 드라이버, tf 발행 노드, 메시지 필터를 쓰는 노드의 use_sim_time 설정을 하나씩 대조하는 것을 다음 행동으로 정할 수 있습니다.",
+  "unique_takeaway": "스탬프 숫자가 크다고 그것만으로 오류는 아닙니다. 두 노드가 모두 시스템 시계를 쓰면 1790000000.5와 1790000000.25의 차이는 0.25초로 정상입니다. 판단 기준은 두 시각이 같은 시계에서 왔는지입니다. tf2는 시간 버퍼에 쌓인 변환을 요청한 시각으로 조회합니다. 따라서 이 글의 추론은 이렇습니다. 레이저 스탬프가 다른 시계 기준이라 버퍼에 쌓인 tf 시각과 수십억 초 떨어져 있다면, 그 시각의 변환은 조회되지 않을 가능성이 큽니다. 이 경우에는 버퍼나 대기 시간을 키우기 전에 노드마다 use_sim_time이 같은지부터 맞춰야 합니다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/ros2_documentation/rolling/source/ROS-Framework/interfaces/About-Tf2/About-Tf2.rst",
+      "publisher": "ROS 2 Documentation",
+      "claim_scope": "Time-dependent coordinate-frame relationships and transformations",
+      "checked_at": "2026-10-03T18:36:11.683248+09:00"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/ros2/design/gh-pages/articles/130_ros_time.md",
+      "publisher": "ROS 2 Design",
+      "claim_scope": "Clock abstractions, simulation time and differences from wall time",
+      "checked_at": "2026-10-03T18:36:11.683248+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261003T093609Z-e6c3abf79f-ros2-message-filter-laser-stamp-clock-mismatch/example.py",
+    "sha256": "2e1801e709bc7abe9eda6ffc5086b2272eac5adc249a3d279f5b8004097e459b",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/4e5bf6bd3a03d01d609c6501fb8db29abd7182d3/editorial/generated-foundations/20261003T093609Z-e6c3abf79f-ros2-message-filter-laser-stamp-clock-mismatch/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261003T093609Z-e6c3abf79f-ros2-message-filter-laser-stamp-clock-mismatch/verification.json",
+    "sha256": "e0f9531137cc9c0d96aaa53df5e01be1c74606858b0eee09300e72cdccf042c3",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/4e5bf6bd3a03d01d609c6501fb8db29abd7182d3/editorial/generated-foundations/20261003T093609Z-e6c3abf79f-ros2-message-filter-laser-stamp-clock-mismatch/verification.json"
+  },
+  "author_id": "discovery-writer-1c3a26af1dbe4dd4a9f026fb0d7d5380"
+}
