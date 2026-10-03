@@ -991,7 +991,10 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "Build Log라면 기존 작업 기록에서 evidence_origin, work_trigger, actual_sequence, "
                 "friction_or_surprise, decision_log, unfinished_edge를 확인해 `## 작업 기록`에 "
                 "남기세요. 글을 위해 새로 만든 테스트뿐이면 existing_work_record로 꾸미지 마세요. "
-                f"다른 주제를 조사하지 말고 산출물을 "
+                + ("같은 질문으로 검색되는 상위 글(한국어·영어 합쳐 3개 이상)을 직접 읽고 "
+                   "`## 경쟁 글 대비 차별점`에 각 URL, 그 글이 다루는 것, 빠졌거나 틀린 것, 이 글이 실측으로 더할 "
+                   "것을 적으세요. 더할 것이 없으면 INSUFFICIENT로 판정하세요. " if experiment_on else "")
+                + f"다른 주제를 조사하지 말고 산출물을 "
                 f"{str(topic_dir / 'research.md')!r}에 저장하세요. 문서 상단에 "
                 "`- status: READY` 또는 `- status: INSUFFICIENT`를 정확히 하나 "
                 "기록하고, 핵심 공식 원문이나 완료 조건이 부족하면 반드시 "
@@ -1406,6 +1409,11 @@ def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
             )
     if stage_name == "Research Agent" and context.content_type == "build_log_operations":
         validate_build_log_research_contract(context)
+    if stage_name == "Research Agent" and context.category in PHYSICAL_AI_CATEGORIES:
+        research = (context.directory / "research.md").read_text(encoding="utf-8")
+        gap = re.search(r"(?ms)^## 경쟁 글 대비 차별점\s*$\n(.*?)(?=^##\s|\Z)", research)
+        if gap is None or len(re.findall(r"https?://", gap.group(1))) < 3:
+            raise ContentQualityRejection(f"{context.topic_id}: 경쟁 글 3개 이상과의 차별점 기록 없음")
     if stage_name == "Experiment Agent":
         from scripts.experiment_runner import ExperimentFailed, run_experiment
         try:
