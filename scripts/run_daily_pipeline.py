@@ -964,11 +964,15 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         )
     experiment_dir = topic_dir / "experiment"
     experiment_on = context.category in PHYSICAL_AI_CATEGORIES
+    experiment_slug = experiment_slug_for(context) if experiment_on else None
     experiment_writer = (
         f"실측 입력: {str(experiment_dir / 'plan.md')!r}와 하네스가 실제로 5회 실행한 "
-        f"{str(experiment_dir / 'results.json')!r}. 글은 이 실측에서 출발하세요. 첫 문단은 실험하며 실제로 "
-        "막힌 지점이나 예상과 달랐던 결과로 여세요(plan.md의 시행착오·예측과 results.json 비교). "
-        "계산(예측)과 실측을 나란히 보여 주는 부분을 <!-- measured:start -->와 <!-- measured:end --> "
+        f"{str(experiment_dir / 'results.json')!r}. 첫 문단은 독자의 질문·문제로 여세요(실험 경위 보고로 시작하지 "
+        "마세요). '예상과 달랐다'는 results.json이 plan.md의 예측과 실제로 다를 때만 쓰고, 예측대로 나왔다면 "
+        "그렇다고 담담히 쓰세요. 놀라움이나 극적인 경위를 지어내면 정직성 검사에서 떨어집니다. "
+        + (f"재현 스크립트와 실행별 원본 출력은 https://github.com/sungpyo9053/blog/tree/main/experiments/{experiment_slug} "
+           "에 공개돼 있으니 본문 측정 절에 이 링크를 넣으세요. " if experiment_slug else "")
+        + "계산(예측)과 실측을 나란히 보여 주는 부분을 <!-- measured:start -->와 <!-- measured:end --> "
         "주석 사이에 넣으세요. 이 구간의 소수·세 자리 이상 숫자는 results.json·experiment.py에 실제로 있는 값만 쓰고, "
         "측정하지 않은 권장값을 만들지 마세요. 해석과 측정은 구분해 적고, 측정 환경(이미지·RMW·버전·반복 횟수)과 "
         "한계를 밝히세요. 원본 출력 몇 줄을 코드 블록으로 그대로 인용하세요. "
@@ -1403,6 +1407,16 @@ def run_review_repair_cycle(
         )
 
 
+def experiment_slug_for(context: TopicContext) -> str | None:
+    """Article slug from planner-context.json (foundation candidates carry it); None if absent."""
+    try:
+        plan = json.loads((context.directory / "planner-context.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    slug = (plan.get("evidence_candidate") or {}).get("slug") or (plan.get("foundation_contract") or {}).get("slug")
+    return slug if isinstance(slug, str) and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) else None
+
+
 def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
     required: dict[str, tuple[Path, ...]] = {
         "Research Agent": (context.directory / "research.md",),
@@ -1445,6 +1459,13 @@ def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
             run_experiment(context.directory)
         except ExperimentFailed as exc:
             raise ContentQualityRejection(f"{context.topic_id}: 실측 실패 — {exc}") from exc
+        slug = experiment_slug_for(context)
+        if slug:  # Public before writing, so the article and its review can point at real code.
+            try:
+                from scripts.experiment_runner import publish_to_repo
+                publish_to_repo(context.directory, slug, PROJECT_ROOT)
+            except Exception as exc:  # Publication is a bonus; never block the article.
+                logging.getLogger("huntlab.daily").warning("experiment_publish_failed error=%s", type(exc).__name__)
     results = context.directory / "experiment/results.json"
     # Checked right after assembly (cheap, before the costly review) and again on the reviewed publish.md.
     gated = {"Assembler Agent": "final.md", "Reviewer Agent": "publish.md"}
