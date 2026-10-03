@@ -295,6 +295,24 @@ class DiscoveryTests(unittest.TestCase):
                        'commit', '--only', '-m', 'Test', '--', *paths), commands)
         self.assertFalse(any('-a' in row or '--all' in row for row in commands))
 
+    def test_git_unchanged_path_is_not_a_scope_mismatch(self):
+        paths = ['experiments/x/README.md', 'experiments/x/results.json']
+        commands = []
+        def command(repo, *args):
+            commands.append(args)
+            if args == ('branch', '--show-current'): return 'main'
+            if args[:2] == ('remote', 'get-url'): return self.config['expected_git_origin']
+            if args[:2] == ('ls-remote', 'origin'): return ('b'*40 if len([x for x in commands if x[:2] == ('ls-remote','origin')]) == 1 else 'a'*40) + '\trefs/heads/main'
+            if args == ('rev-parse', 'HEAD'): return 'a'*40 if any('commit' in row for row in commands) else 'b'*40
+            if args[0] == 'diff-tree': return paths[1]
+            return ''
+        with patch.object(d, 'git_command', side_effect=command):
+            self.assertEqual(d.publish_files(self.root, paths, self.config, 'Test'), 'a'*40)
+        with patch.object(d, 'git_command', side_effect=lambda repo, *a: 'experiments/other' if a[0] == 'diff-tree' else command(repo, *a)):
+            commands.clear()
+            with self.assertRaisesRegex(d.DiscoveryError, '^git_commit_scope_mismatch$'):
+                d.publish_files(self.root, paths, self.config, 'Test')
+
     def test_git_wrong_branch_no_add(self):
         with patch.object(d, 'git_command', return_value='other') as command:
             with self.assertRaisesRegex(d.DiscoveryError, '^git_not_main$'):

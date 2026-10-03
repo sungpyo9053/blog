@@ -303,7 +303,8 @@ def publish_files(repo, paths, config, message):
                 'commit', '--only', '-m', message, '--', *paths)
     revision = git_command(repo, 'rev-parse', 'HEAD')
     changed = set(git_command(repo, 'diff-tree', '--no-commit-id', '--name-only', '-r', revision).splitlines())
-    need(changed == set(paths), 'git_commit_scope_mismatch')
+    # Unchanged files (e.g. an identical README) are simply absent from the commit.
+    need(changed and changed <= set(paths), 'git_commit_scope_mismatch')
     git_command(repo, '-c', 'core.hooksPath=/dev/null', 'push', 'origin', 'HEAD:refs/heads/main')
     need(git_command(repo, 'ls-remote', 'origin', 'refs/heads/main').split()[0] == revision, 'git_push_unconfirmed')
     return revision
