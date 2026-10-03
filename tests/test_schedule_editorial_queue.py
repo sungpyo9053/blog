@@ -162,21 +162,24 @@ class FillSafetyTests(unittest.TestCase):
             runs = Path(directory)
             with patch.object(filler, 'RUNS', runs), \
                     patch.object(filler.subprocess, 'run', side_effect=self._run_writer(runs, 'ContentQualityRejection')) as run, \
+                    patch.object(filler, 'notify'), \
                     patch.object(queue, 'preparation_allowed', return_value=True), patch.object(queue, 'rows', return_value=[]), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(filler.main(), 0)
         preparations = [c for c in run.call_args_list if '--prepare-only' in c.args[0]]
-        self.assertEqual(len(preparations), 7)
+        self.assertEqual(len(preparations), filler.MAX_CONSECUTIVE_REJECTIONS)
 
     def test_editorial_gate_rejection_moves_to_next_candidate(self):
         with tempfile.TemporaryDirectory() as directory:
             runs = Path(directory)
             writer = self._run_writer(runs, 'ValueError', reason='editorial_gate_rejected')
             with patch.object(filler, 'RUNS', runs), patch.object(filler.subprocess, 'run', side_effect=writer) as run, \
+                    patch.object(filler, 'notify'), \
                     patch.object(queue, 'preparation_allowed', return_value=True), patch.object(queue, 'rows', return_value=[]), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(filler.main(), 0)
-        self.assertEqual(len([c for c in run.call_args_list if '--prepare-only' in c.args[0]]), 7)
+        self.assertEqual(len([c for c in run.call_args_list if '--prepare-only' in c.args[0]]),
+                         filler.MAX_CONSECUTIVE_REJECTIONS)
 
     def test_other_value_error_still_stops(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -203,6 +206,18 @@ class FillSafetyTests(unittest.TestCase):
             self.assertEqual(filler.main(),0)
         preparations=[c for c in run.call_args_list if '--prepare-only' in c.args[0]]
         self.assertEqual(len(preparations),7)
+
+    def test_two_consecutive_rejections_stop_and_notify(self):
+        calls=[]
+        def run(args,**kw):
+            calls.append(args[1])
+            return SimpleNamespace(returncode=1 if 'run_evidence_deep_article' in args[1] else 0)
+        with patch.object(filler.subprocess,'run',side_effect=run),patch.object(queue,'preparation_allowed',return_value=True),\
+                patch.object(queue,'rows',return_value=[]),patch.object(filler,'rejected_by_reviewer',return_value=True),\
+                patch.object(filler,'notify') as notify,contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(filler.main(),0)
+        self.assertEqual(sum('run_evidence_deep_article' in c for c in calls),2)
+        notify.assert_called_once()
 
     def test_no_new_approved_row_stops_refill(self):
         with patch.object(filler.subprocess,'run',return_value=SimpleNamespace(returncode=0)) as run, patch.object(queue,'preparation_allowed',return_value=True),patch.object(queue,'rows',return_value=[]),contextlib.redirect_stdout(io.StringIO()):

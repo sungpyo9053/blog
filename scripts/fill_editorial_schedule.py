@@ -35,7 +35,22 @@ def rejected_by_reviewer(new_runs):
     return content_rejection and result.get('wordpress_write_count') == 0
 
 
+MAX_CONSECUTIVE_REJECTIONS = 2
+
+
+def notify(text):
+    try:
+        import os
+        from scripts.send_kakao_report import send
+        send(text, os.environ.get('MCPORTER_BIN', 'mcporter'))
+    except Exception:
+        pass
+
+
 def main():
+    # Each rejected candidate burns a full research+experiment+write cycle; two in a row means
+    # something systematic is wrong, so stop and let a human look instead of spending all night.
+    rejections = 0
     for _ in range(7):
         scheduled = subprocess.run([sys.executable, str(ROOT/'scripts/schedule_editorial_queue.py')], cwd=ROOT)
         if scheduled.returncode:
@@ -48,9 +63,15 @@ def main():
         prepared = subprocess.run([sys.executable, str(ROOT/'scripts/run_evidence_deep_article.py'), '--apply', '--prepare-only'], cwd=ROOT)
         if prepared.returncode:
             if rejected_by_reviewer(run_ids() - runs_before):
+                rejections += 1
+                if rejections >= MAX_CONSECUTIVE_REJECTIONS:
+                    print('consecutive_rejections_stop')
+                    notify(f'[HuntLab 채우기 중단] 연속 {rejections}편 리뷰 탈락. 토큰 낭비 방지로 멈춤, 원인 확인 필요.')
+                    return 0
                 print('reviewer_rejected_next_candidate')
                 continue
             return prepared.returncode
+        rejections = 0
         if len(queue.rows(ROOT)) <= before:
             print('no_new_approved_article')
             return 0
