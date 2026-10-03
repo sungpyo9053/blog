@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """평균 100 Hz 토픽이 15 ms deadline QoS를 지키는지 실제 ROS 2 이벤트로 확인한다.
 
-시나리오 세 개를 한 프로세스에서 차례로 실행한다.
-  uniform : 10 ms 간격으로 발행, 발행자·구독자 deadline 15 ms
-  jitter  : 8,8,8,8,25,8,8,9,9,9 ms 간격(합 100 ms)을 반복, deadline 15 ms
+시나리오 네 개를 한 프로세스에서 차례로 실행한다. 모든 간격 패턴은 합이 100 ms(평균 100 Hz)다.
+  uniform : 10 ms 간격, 발행자·구독자 deadline 15 ms
+  jitter  : 8,8,8,8,25,8,8,9,9,9 ms 간격 반복, deadline 15 ms
+  long    : 7,7,7,7,37,7,7,7,7,7 ms 간격 반복, deadline 15 ms
+            (긴 간격이 deadline의 2배를 넘을 때 miss가 몇 번 세지는지 본다)
   widened : jitter 간격 그대로, 발행자 deadline 30 ms
             구독자 A는 15 ms 요청(비호환 예상), 구독자 B는 30 ms 요청(호환 예상)
-측정값(실제 발행 간격, 수신 간격, QoS 이벤트 횟수, 수신 개수)은 실행 중에 재서
-시나리오마다 JSON 한 줄로 출력한다.
+측정값(실제 발행 간격, 수신 간격, QoS 이벤트 횟수와 그 이벤트가 난 간격, 수신 개수)은
+실행 중에 재서 시나리오마다 JSON 한 줄로 출력한다.
 """
+import bisect
 import json
 import statistics
 import threading
 import time
+from collections import Counter
 
 import rclpy
 from rclpy.duration import Duration
@@ -24,8 +28,10 @@ from std_msgs.msg import UInt32
 
 UNIFORM = [10] * 10
 JITTER = [8, 8, 8, 8, 25, 8, 8, 9, 9, 9]
+LONG = [7, 7, 7, 7, 37, 7, 7, 7, 7, 7]
 CYCLES = 50          # 한 시나리오 = 50주기 x 10간격 = 500간격(약 5초)
 MATCH_TIMEOUT = 5.0
+TAIL_S = 0.3         # 마지막 발행 뒤 관찰 구간
 
 
 def qos(deadline_ms):
@@ -48,15 +54,11 @@ class EventLog:
     def incompatible(self, info):
         with self.lock:
             self.events.append((time.monotonic_ns(), info.total_count_change, info.total_count))
-            self.policy = str(info.last_policy_kind)
+            self.policy = str(info.last_policy_kind).rsplit(".", 1)[-1]
 
-    def count_between(self, start_ns, end_ns):
+    def snapshot(self):
         with self.lock:
-            return sum(c for t, c, _ in self.events if start_ns <= t <= end_ns)
-
-    def count_after(self, t_ns):
-        with self.lock:
-            return sum(c for t, c, _ in self.events if t > t_ns)
+            return list(self.events)
 
     def total(self):
         with self.lock:
@@ -67,17 +69,46 @@ def interval_stats(stamps_ns, deadline_ms):
     """ros2 topic hz와 같은 방식(mean, 1/mean, min, max, 모표준편차)으로 간격을 요약한다."""
     gaps = [(b - a) / 1e6 for a, b in zip(stamps_ns, stamps_ns[1:])]
     if not gaps:
-        return {"intervals": 0}
+        return {"n": 0}
     mean = sum(gaps) / len(gaps)
     return {
-        "intervals": len(gaps),
+        "n": len(gaps),
         "mean_ms": round(mean, 3),
-        "average_rate_hz": round(1000.0 / mean, 3),
+        "rate_hz": round(1000.0 / mean, 3),
         "min_ms": round(min(gaps), 3),
         "max_ms": round(max(gaps), 3),
-        "std_dev_ms": round(statistics.pstdev(gaps), 3),
-        "gaps_over_deadline": sum(g > deadline_ms for g in gaps),
-        "p99_ms": round(sorted(gaps)[int(len(gaps) * 0.99) - 1], 3),
+        "std_ms": round(statistics.pstdev(gaps), 3),
+        "over_deadline": sum(g > deadline_ms for g in gaps),
+    }
+
+
+def miss_summary(log, pub_stamps, deadline_ms):
+    """deadline missed 이벤트를 발행 간격에 배정해 센다.
+
+    이벤트 콜백 시각이 발행 i와 i+1 사이면 간격 i에서 난 것으로 본다. 첫 발행 전과
+    마지막 발행 뒤의 이벤트는 판정에서 빼고 따로 센다(메시지가 끊긴 뒤에는 계속 나는 것이 정상).
+    """
+    first, last = pub_stamps[0], pub_stamps[-1]
+    per_gap = Counter()
+    before = after = during = 0
+    for t, change, _ in log.snapshot():
+        if t < first:
+            before += change
+        elif t > last:
+            after += change
+        else:
+            during += change
+            per_gap[bisect.bisect_right(pub_stamps, t) - 1] += change
+    gaps = [(b - a) / 1e6 for a, b in zip(pub_stamps, pub_stamps[1:])]
+    over = [i for i, g in enumerate(gaps) if g > deadline_ms]
+    return {
+        "during_run": during,
+        "before_first_publish": before,
+        "after_last_publish": after,
+        "gaps_over_deadline": len(over),
+        # 발행 간격이 deadline을 넘은 간격 하나당 miss 수의 분포 {miss 수: 간격 수}
+        "per_over_gap_hist": dict(sorted(Counter(per_gap[i] for i in over).items())),
+        "in_gaps_within_deadline": sum(c for i, c in per_gap.items() if gaps[i] <= deadline_ms),
     }
 
 
@@ -146,50 +177,44 @@ def run_scenario(executor, name, pattern, pub_deadline_ms, sub_deadlines):
         seq += 1
         pub.publish(UInt32(data=seq))
         pub_stamps.append(time.monotonic_ns())
-    first_ns, last_ns = pub_stamps[0], pub_stamps[-1]
-    time.sleep(0.3)   # 마지막 메시지 수신과 이벤트 콜백 전달을 기다린다.
-    after_ns = time.monotonic_ns()
+    time.sleep(TAIL_S)   # 마지막 메시지 수신과 이벤트 콜백 전달을 기다린다.
 
-    planned = gaps
     record = {
         "scenario": name,
         "rmw": get_rmw_implementation_identifier(),
         "pattern_ms": pattern,
-        "cycles": CYCLES,
         "planned": {
-            "intervals": len(planned),
-            "mean_ms": round(sum(planned) / len(planned), 3),
-            "average_rate_hz": round(1000.0 / (sum(planned) / len(planned)), 3),
-            "max_ms": max(planned),
-            "gaps_over_pub_deadline": sum(g > pub_deadline_ms for g in planned),
+            "n": len(gaps),
+            "mean_ms": round(sum(gaps) / len(gaps), 3),
+            "rate_hz": round(1000.0 / (sum(gaps) / len(gaps)), 3),
+            "max_ms": max(gaps),
+            "over_pub_deadline": sum(g > pub_deadline_ms for g in gaps),
         },
-        "discovery_matched": matched,
+        "matched": matched,
         "discovery_s": round(discovery_s, 3),
-        "publisher": {
-            "offered_deadline_ms": pub_deadline_ms,
+        "pub": {
+            "deadline_ms": pub_deadline_ms,
             "published": len(pub_stamps),
-            "matched_subscriptions": pub.get_subscription_count(),
-            "publish_intervals": interval_stats(pub_stamps, pub_deadline_ms),
-            "offered_deadline_missed_during_run": offered_missed.count_between(first_ns, last_ns),
-            "offered_deadline_missed_after_last_publish": offered_missed.count_after(last_ns),
-            "offered_incompatible_qos_total": offered_incompat.total(),
-            "offered_incompatible_policy": offered_incompat.policy,
+            "subs_matched": pub.get_subscription_count(),
+            "intervals": interval_stats(pub_stamps, pub_deadline_ms),
+            "offered_missed": miss_summary(offered_missed, pub_stamps, pub_deadline_ms),
+            "incompatible_total": offered_incompat.total(),
+            "incompatible_policy": offered_incompat.policy,
         },
-        "subscribers": [],
+        "subs": [],
     }
     for r in receivers:
-        record["subscribers"].append({
+        record["subs"].append({
             "name": r.name,
-            "requested_deadline_ms": r.deadline_ms,
+            "deadline_ms": r.deadline_ms,
             "received": len(r.stamps),
-            "lost": (len(pub_stamps) - len(set(r.seqs))),
-            "receive_intervals": interval_stats(r.stamps, r.deadline_ms),
-            "requested_deadline_missed_during_run": r.missed.count_between(first_ns, last_ns),
-            "requested_deadline_missed_after_last_publish": r.missed.count_after(last_ns),
-            "requested_incompatible_qos_total": r.incompat.total(),
-            "requested_incompatible_policy": r.incompat.policy,
+            "lost": len(pub_stamps) - len(set(r.seqs)),
+            "intervals": interval_stats(r.stamps, r.deadline_ms),
+            # 구독자 miss도 발행 간격 기준으로 배정한다(같은 프로세스·같은 monotonic 시계).
+            "requested_missed": miss_summary(r.missed, pub_stamps, r.deadline_ms),
+            "incompatible_total": r.incompat.total(),
+            "incompatible_policy": r.incompat.policy,
         })
-    record["observation_end_after_last_publish_ms"] = round((after_ns - last_ns) / 1e6, 1)
 
     executor.remove_node(pub_node)
     executor.remove_node(sub_node)
@@ -208,10 +233,11 @@ def main():
         for name, pattern, pub_deadline, subs in [
             ("uniform", UNIFORM, 15, [("req15", 15)]),
             ("jitter", JITTER, 15, [("req15", 15)]),
+            ("long", LONG, 15, [("req15", 15)]),
             ("widened", JITTER, 30, [("req15", 15), ("req30", 30)]),
         ]:
             print(json.dumps(run_scenario(executor, name, pattern, pub_deadline, subs),
-                             ensure_ascii=False), flush=True)
+                             ensure_ascii=False, separators=(",", ":")), flush=True)
         print(json.dumps({"summary": "done", "elapsed_s": round(time.monotonic() - started, 2)}),
               flush=True)
     finally:
