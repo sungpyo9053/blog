@@ -221,7 +221,9 @@ def notify_result(result, directory, sender=send):
     count = weekly_publication_count(ROOT, result['week'])
     publication_summary = f'자동 발행 기록 {count}편' if count is not None else '발행 집계 확인 필요'
     ad = result.get('ad_revenue_4w')
-    revenue = f"광고 4주: {ad['revenue']} / 조회 {int(ad['page_views'])} / RPM {ad['rpm']}\n" if ad else ''
+    # 4-week window ~ one month; goal set by the owner on 2026-10-03.
+    revenue = (f"광고 4주: ${ad['revenue']} (목표 $200의 {round(ad['revenue'] / 200 * 100, 1)}%) / 조회 "
+               f"{int(ad['page_views'])} / RPM {ad['rpm']}\n") if ad else ''
     rs = result.get('reader_signals')
     if rs:
         revenue += (f"실측 {rs['measured']['posts']}편 참여율 {rs['measured']['engagement_rate']} vs 기타 "
