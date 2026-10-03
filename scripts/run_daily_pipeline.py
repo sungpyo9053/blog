@@ -979,7 +979,11 @@ def topic_stages(context: TopicContext) -> list[Stage]:
     ) if experiment_on else ""
     if experiment_on:
         common += ("<!-- measured:start -->·<!-- measured:end --> 주석과 그 사이의 숫자·로그는 어느 단계에서도 "
-                   "지우거나 바꾸지 마세요. ")
+                   "지우거나 바꾸지 마세요. 실측 숫자의 유일한 근거는 하네스가 쓴 experiment/results.json"
+                   "(script_sha256 포함)입니다. research.md에는 실행 결과·실행 시각·결과 해시를 적지 마세요. 검수는 본문 "
+                   "measured 구간을 최신 results.json과 대조하고, research.md의 이전 실행 기록과 다르다는 이유로 "
+                   "반려하지 않습니다. 재작업으로 실험이 다시 실행되면 본문 measured 구간을 새 results.json에 맞춰 "
+                   "갱신하는 것이 정상입니다. ")
     stages = [
         Stage(
             "Research Agent",
