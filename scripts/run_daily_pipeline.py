@@ -976,7 +976,9 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         "주석 사이에 넣으세요. 이 구간의 소수·세 자리 이상 숫자는 results.json·experiment.py에 실제로 있는 값만 쓰고, "
         "측정하지 않은 권장값을 만들지 마세요. 해석과 측정은 구분해 적고, 측정 환경(이미지·RMW·버전·반복 횟수)과 "
         "한계를 밝히세요. 원본 출력 몇 줄을 코드 블록으로 그대로 인용하세요. "
-        "실측이 주제 제목의 전제를 뒤집거나 좁혔다면 제목을 실측 결과에 맞게 고치세요(독자 질문·slug는 유지). "
+        # The title is a publish/queue contract (validate_publish_contract, audit_public); never retitle.
+        "제목은 바꾸지 마세요(발행 계약과 공개 감사가 정확히 같은 제목을 요구합니다). 실측이 제목의 전제를 뒤집거나 "
+        "좁혔다면 첫 두 문단에서 그 사실을 분명히 밝히세요. "
         "도입의 경위(왜 그 실험을 했고 무엇이 막혔는지)는 plan.md 시행착오 기록에 있는 사실 그대로 쓰고, 동기나 "
         "순서를 극적으로 각색하지 마세요. "
         "검수는 guides/physical-ai-quality.md의 20개 항목(합계 99점 이상, 항목17은 5점)과 naturalness 검사"
@@ -1137,10 +1139,8 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "추가하세요. images/thumbnail.png가 존재하므로 featured_image는 "
                 "'./images/thumbnail.png', featured_image_alt는 대표 이미지 내용을 "
                 "설명하는 구체적인 문장으로 반드시 설정하세요. "
-                + (f"Frontmatter title은 원칙적으로 {topic!r}입니다. 단, 실측이 이 제목의 전제를 뒤집거나 좁혔다면 Writer가 "
-                   "실측 결과에 맞게 고친 제목을 허용합니다(같은 독자 질문·slug 유지, 원래 주제와 바꾼 이유를 review.md에 기록). "
-                   "실측과 무관한 제목 변경은 허용하지 않습니다. 그리고 "
-                   if experiment_on else f"Frontmatter title은 {topic!r}와 정확히 일치해야 하고, ")
+                + f"Frontmatter title은 {topic!r}와 정확히 일치해야 하고(실측이 전제를 뒤집었으면 제목이 아니라 "
+                "도입에서 밝혔는지 보세요), "
                 + f"run_id는 {context.run_id!r}, topic_id는 {context.topic_id!r}, "
                 f"source_id는 {context.source_id!r}, category는 "
                 f"{context.category!r}, tags는 {list(context.tags)!r}, "
