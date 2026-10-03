@@ -1,0 +1,70 @@
+{
+  "checked_at": "2026-10-03T17:39:12.808521+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"20 Hz 카메라의 발행 주기, 곧 정상 동작 중 노드 전체의 최대 발행 공백(ms)\", \"actual\": 50.0}, {\"name\": \"lease 호환성: 구독자 요청 2000 − 발행자 제공 2000 (0 이상이면 호환)\", \"actual\": 0}, {\"name\": \"lease 비호환 반례: 구독자 요청 1000 − 발행자 제공 2000 (음수면 연결 없음)\", \"actual\": -1000}, {\"name\": \"정상 동작 반례: lease 800 − 카메라 주기 50 (양수면 카메라가 도는 동안 잃음으로 판정되지 않음)\", \"actual\": 750}, {\"name\": \"카메라만 멈춤: lease 2000 − 진단 주기 1000 (양수면 노드가 계속 살아 있음으로 판정되어 고장이 가려짐)\", \"actual\": 1000}, {\"name\": \"카메라 마지막 프레임 10000 ms 뒤 deadline missed 판정 시각(ms)\", \"actual\": 10100}, {\"name\": \"노드 전체가 10000 ms에 멈췄을 때 liveliness 잃음 판정 시각(ms)\", \"actual\": 12000}, {\"name\": \"노드 전체 소실을 감지할 때 liveliness가 deadline보다 늦는 배수\", \"actual\": 20.0}, {\"name\": \"고장 상태 경계: 카메라가 멈춘 뒤 lease 800 − 진단 주기 1000 (음수면 남은 진단 발행 사이에 잃음 조건에 해당)\", \"actual\": -200}]\n",
+  "cases": [
+    {
+      "name": "20 Hz 카메라의 발행 주기, 곧 정상 동작 중 노드 전체의 최대 발행 공백(ms)",
+      "expression": "1000 / 20",
+      "expected": 50,
+      "actual": 50.0
+    },
+    {
+      "name": "lease 호환성: 구독자 요청 2000 − 발행자 제공 2000 (0 이상이면 호환)",
+      "expression": "2000 - 2000",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "lease 비호환 반례: 구독자 요청 1000 − 발행자 제공 2000 (음수면 연결 없음)",
+      "expression": "1000 - 2000",
+      "expected": -1000,
+      "actual": -1000
+    },
+    {
+      "name": "정상 동작 반례: lease 800 − 카메라 주기 50 (양수면 카메라가 도는 동안 잃음으로 판정되지 않음)",
+      "expression": "800 - 50",
+      "expected": 750,
+      "actual": 750
+    },
+    {
+      "name": "카메라만 멈춤: lease 2000 − 진단 주기 1000 (양수면 노드가 계속 살아 있음으로 판정되어 고장이 가려짐)",
+      "expression": "2000 - 1000",
+      "expected": 1000,
+      "actual": 1000
+    },
+    {
+      "name": "카메라 마지막 프레임 10000 ms 뒤 deadline missed 판정 시각(ms)",
+      "expression": "10000 + 100",
+      "expected": 10100,
+      "actual": 10100
+    },
+    {
+      "name": "노드 전체가 10000 ms에 멈췄을 때 liveliness 잃음 판정 시각(ms)",
+      "expression": "10000 + 2000",
+      "expected": 12000,
+      "actual": 12000
+    },
+    {
+      "name": "노드 전체 소실을 감지할 때 liveliness가 deadline보다 늦는 배수",
+      "expression": "2000 / 100",
+      "expected": 20,
+      "actual": 20.0
+    },
+    {
+      "name": "고장 상태 경계: 카메라가 멈춘 뒤 lease 800 − 진단 주기 1000 (음수면 남은 진단 발행 사이에 잃음 조건에 해당)",
+      "expression": "800 - 1000",
+      "expected": -200,
+      "actual": -200
+    }
+  ],
+  "teaching_context": {
+    "description": "설명용으로 정한 가상 센서 노드 하나를 두고 시각을 계산한다. 이 노드는 20 Hz 카메라 발행자와 1 Hz 진단 발행자를 함께 가진다. 카메라 발행자에는 deadline 100 ms를 걸고, 노드의 liveliness는 automatic에 lease duration 2000 ms로 둔다. 시간 단위는 모두 ms이며, 마지막 메시지 시각은 10000 ms로 둔다. 20 Hz와 1 Hz는 주기를 정수 ms로 떨어지게 하려고 골랐다. 호환성은 공식 표의 규칙(구독자 요청 y가 발행자 제공 x 이상이면 호환)을 뺄셈 부호로 옮겨 판정한다. 공식 문서의 automatic 정의에 따라 노드 안 어느 발행자의 발행이든 모든 발행자를 갱신한다고 보고, 'lease − 노드 전체 발행 공백'이 양수면 잃음 조건에 해당하지 않는다고 읽는다. 정상 동작에서 노드 전체의 공백은 카메라 주기 50 ms다. 카메라만 멈춘 고장 상태에서는 공백이 진단 주기 1000 ms가 된다. lease 800 ms 사례 두 개는 같은 값이 정상 동작과 고장 상태에서 어떻게 달리 판정되는지 비교하려고 넣었다. deadline 판정의 상세 규칙은 기존 글 822에서 가져와 쓴다.",
+    "conclusion": "카메라 토픽만 멈추는 고장은 deadline이 마지막 프레임에서 100 ms 뒤에 알린다. automatic liveliness는 같은 노드의 진단 발행자가 lease보다 짧은 간격으로 계속 나가므로 이 고장을 알리지 않는다. 노드 전체가 죽으면 두 이벤트가 모두 오지만, 이 설정에서 liveliness는 deadline보다 20배 늦다. lease duration을 고를 기준은 가장 느린 발행자의 주기가 아니라 정상 동작 중 노드 전체가 침묵하는 가장 긴 공백이다. 카메라가 도는 동안에는 lease 800 ms도 750 ms의 여유가 남는다. lease 800 ms가 −200이 되는 것은 카메라가 이미 멈춘 뒤의 일이고, 그때 생기는 liveliness 판정도 노드 소실과 구분되지 않는 부수 효과일 뿐 카메라 정지를 감지하는 수단이 아니다. 구독자 요청이 발행자 제공보다 짧으면 연결 자체가 맺어지지 않는다. 따라서 센서 데이터가 계속 흐르는지는 그 토픽의 deadline으로, 프로세스가 살아 있는지는 liveliness로 감시한다. 독자는 먼저 자기 노드에서 정상 동작 중 아무것도 발행되지 않는 가장 긴 공백과 센서 주기를 적고, 위의 뺄셈 두 개부터 해 보면 된다.",
+    "limitations": "이 계산은 발행 간격이 정확히 일정하고 통신 지연·지터가 0이라고 가정한 산술이며, ROS 2 노드나 DDS를 실행해 이벤트 발생 시각을 잰 결과가 아니다. liveliness 갱신은 공급된 공식 문서의 automatic 정의, 즉 노드의 발행자 하나가 발행하면 모든 발행자가 lease duration만큼 살아 있다는 설명만 근거로 했다. RMW나 DDS 구현이 데이터 발행 외의 방법으로 liveliness를 유지하는지, 배포판별로 실제 동작이 어떤지는 확인하지 않았다. 판정 시각이 lease나 deadline과 정확히 같을 때의 경계 동작, liveliness 잃음과 회복(liveliness changed) 이벤트가 몇 번 반복되는지, manual by topic 방식에서 직접 assert하는 API 사용법, rmw_zenoh 같은 비DDS 미들웨어에서의 지원 여부도 이 예제로는 알 수 없다. 공식 표에서 확인되는 것은 발행자 automatic·구독자 manual by topic 조합과 발행자 lease default·구독자 lease 지정 조합이 비호환이라는 점까지다. 이 이벤트들을 실물 로봇의 정지·안전 장치로 대신 쓰면 안 되며, 비상정지와 워치독은 별도로 설계해야 한다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
