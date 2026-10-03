@@ -359,55 +359,68 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
                          'example': {'description': 'string', 'cases': [{'name': 'string', 'expression': 'numeric expression', 'expected': 'JSON number'}],
                                      'conclusion': 'string', 'limitations': 'string'}}},
                    'verification_scope': 'bounded_arithmetic_only_no_hardware_or_library_execution'}
-        answer = agent(repo, 'researcher', payload, directory)
-        validated = validate_candidate(answer, {row['id'] for row in sources})
-        if validated is None:
-            result = {'status': 'no_candidate', 'reason': 'researcher_no_candidate', 'wordpress_writes': 0}
-            _save_exclusive(receipt, result)
-            return result
-        candidate, cases = validated
-        need(not contains_secret(json.dumps(candidate, ensure_ascii=False)), 'unsafe_candidate')
-        event = Event('foundation'); event.title = candidate['title']; event.slug = candidate['slug']
-        event.subjects = [candidate['reader_question']]; event.unique_takeaway = candidate['unique_takeaway']
-        event.reader_action = candidate['learning_outcome']
-        if existing_overlap(event, inventory['posts'])['result'] != 'none':
-            result = {'status': 'no_candidate', 'reason': 'candidate_duplicate', 'wordpress_writes': 0}
-            _save_exclusive(receipt, result)
-            return result
-        # Code contains only host-written statements, JSON string literals and
-        # arithmetic expressions already walked by the allowlist AST evaluator.
-        code = '"""Purpose-built arithmetic checks; not robot or simulator execution."""\nimport math\nimport json\nresults = []\n'
-        for case in cases:
-            code += f'value = ({case["expression"]})\nassert math.isclose(value, {case["expected"]!r}, rel_tol=1e-9, abs_tol=1e-9)\n'
-            code += f'results.append({{"name": {case["name"]!r}, "actual": value}})\n'
-        code += 'print(json.dumps(results, ensure_ascii=False))\n'
-        with tempfile.TemporaryDirectory(prefix='huntlab-arithmetic-') as temp:
-            script = Path(temp) / 'example.py'; script.write_text(code)
-            execution = subprocess.run([sys.executable, '-I', str(script)], capture_output=True, text=True, timeout=10)
-        need(execution.returncode == 0, 'generated_example_failed')
-        verification = {'checked_at': now.isoformat(), 'python': sys.version.split()[0],
-                        'command': 'python3 -I example.py', 'exit_code': execution.returncode,
-                        'stdout': execution.stdout, 'cases': cases,
-                        'teaching_context': {key: candidate['example'][key] for key in ('description', 'conclusion', 'limitations')},
-                        'teaching_context_origin': 'researcher explanation independently reviewed; not measured hardware facts',
-                        'scope': 'purpose_built_arithmetic_not_robot_or_simulator_execution'}
-        need(inspect_article(code, inventory, now=now)['passed'], 'example_editorial_rejected')
-        review_payload = {**payload, 'candidate': candidate, 'candidate_sha256': digest(encode(candidate)),
-                          'reviewer_id': reviewer_id,
-                          'output_schema': {'verdict': 'APPROVED|HOLD', 'reason': 'string', 'primary_sources_verified': 'boolean',
-                                            'worked_example_verified': 'boolean', 'public_evidence_verified': 'boolean', 'secret_safe': 'boolean'},
-                          'verification': verification, 'example_python': code,
-                          'inventory': compact_inventory(inventory, candidate['title'] + ' ' + candidate['reader_question']),
-                          'public_evidence_scope': 'official_sources_accessed; generated_artifact_access_will_be_verified_after_publication'}
-        review = agent(repo, 'reviewer', review_payload, directory)
-        review_fields = {'verdict', 'reason', 'primary_sources_verified', 'worked_example_verified', 'public_evidence_verified', 'secret_safe'}
-        need(isinstance(review, dict) and set(review) == review_fields, 'review_schema')
-        need(review['verdict'] in ('APPROVED', 'HOLD') and isinstance(review['reason'], str) and review['reason'].strip()
-             and all(type(review[key]) is bool for key in review_fields - {'verdict', 'reason'}), 'review_schema')
-        if review['verdict'] == 'HOLD':
-            result = {'status': 'no_candidate', 'reason': 'independent_review_hold', 'wordpress_writes': 0}
-            _save_exclusive(receipt, result)
-            return result
+        round_dir = directory
+        for attempt in range(2):
+            answer = agent(repo, 'researcher', payload, round_dir)
+            validated = validate_candidate(answer, {row['id'] for row in sources})
+            if validated is None:
+                result = {'status': 'no_candidate', 'reason': 'researcher_no_candidate', 'wordpress_writes': 0}
+                _save_exclusive(receipt, result)
+                return result
+            candidate, cases = validated
+            need(not contains_secret(json.dumps(candidate, ensure_ascii=False)), 'unsafe_candidate')
+            event = Event('foundation'); event.title = candidate['title']; event.slug = candidate['slug']
+            event.subjects = [candidate['reader_question']]; event.unique_takeaway = candidate['unique_takeaway']
+            event.reader_action = candidate['learning_outcome']
+            if existing_overlap(event, inventory['posts'])['result'] != 'none':
+                result = {'status': 'no_candidate', 'reason': 'candidate_duplicate', 'wordpress_writes': 0}
+                _save_exclusive(receipt, result)
+                return result
+            # Code contains only host-written statements, JSON string literals and
+            # arithmetic expressions already walked by the allowlist AST evaluator.
+            code = '"""Purpose-built arithmetic checks; not robot or simulator execution."""\nimport math\nimport json\nresults = []\n'
+            for case in cases:
+                code += f'value = ({case["expression"]})\nassert math.isclose(value, {case["expected"]!r}, rel_tol=1e-9, abs_tol=1e-9)\n'
+                code += f'results.append({{"name": {case["name"]!r}, "actual": value}})\n'
+            code += 'print(json.dumps(results, ensure_ascii=False))\n'
+            with tempfile.TemporaryDirectory(prefix='huntlab-arithmetic-') as temp:
+                script = Path(temp) / 'example.py'; script.write_text(code)
+                execution = subprocess.run([sys.executable, '-I', str(script)], capture_output=True, text=True, timeout=10)
+            need(execution.returncode == 0, 'generated_example_failed')
+            verification = {'checked_at': now.isoformat(), 'python': sys.version.split()[0],
+                            'command': 'python3 -I example.py', 'exit_code': execution.returncode,
+                            'stdout': execution.stdout, 'cases': cases,
+                            'teaching_context': {key: candidate['example'][key] for key in ('description', 'conclusion', 'limitations')},
+                            'teaching_context_origin': 'researcher explanation independently reviewed; not measured hardware facts',
+                            'scope': 'purpose_built_arithmetic_not_robot_or_simulator_execution'}
+            need(inspect_article(code, inventory, now=now)['passed'], 'example_editorial_rejected')
+            review_payload = {**payload, 'candidate': candidate, 'candidate_sha256': digest(encode(candidate)),
+                              'reviewer_id': reviewer_id,
+                              'output_schema': {'verdict': 'APPROVED|HOLD', 'reason': 'string', 'primary_sources_verified': 'boolean',
+                                                'worked_example_verified': 'boolean', 'public_evidence_verified': 'boolean', 'secret_safe': 'boolean'},
+                              'verification': verification, 'example_python': code,
+                              'inventory': compact_inventory(inventory, candidate['title'] + ' ' + candidate['reader_question']),
+                              'public_evidence_scope': 'official_sources_accessed; generated_artifact_access_will_be_verified_after_publication'}
+            review = agent(repo, 'reviewer', review_payload, round_dir)
+            review_fields = {'verdict', 'reason', 'primary_sources_verified', 'worked_example_verified', 'public_evidence_verified', 'secret_safe'}
+            need(isinstance(review, dict) and set(review) == review_fields, 'review_schema')
+            need(review['verdict'] in ('APPROVED', 'HOLD') and isinstance(review['reason'], str) and review['reason'].strip()
+                 and all(type(review[key]) is bool for key in review_fields - {'verdict', 'reason'}), 'review_schema')
+            if review['verdict'] == 'HOLD' and attempt == 0:
+                # One revision: the researcher sees the independent reviewer's reasons and fixes them
+                # (or gives up). The bar is unchanged; only a first-draft sourcing slip is recoverable.
+                payload = {**payload, 'revision_request': {
+                    'previous_candidate': candidate, 'independent_review_hold': review['reason'],
+                    'instruction': 'Fix every issue the independent reviewer raised using only the supplied sources, '
+                                   'keeping the same real reader question if it is still valid; otherwise no_candidate.'}}
+                round_dir = directory / 'revision-1'
+                round_dir.mkdir()
+                continue
+            if review['verdict'] == 'HOLD':
+                result = {'status': 'no_candidate', 'reason': 'independent_review_hold', 'wordpress_writes': 0}
+                _save_exclusive(receipt, result)
+                return result
+            break
         need(all(review[key] is True for key in review_fields - {'verdict', 'reason'}), 'review_not_approved')
         identifier = f'foundation-{candidate["slug"]}'
         manifest_path = repo / 'editorial/physical-ai-candidates' / f'{candidate["slug"]}.json'

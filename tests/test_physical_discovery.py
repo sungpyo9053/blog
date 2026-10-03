@@ -196,6 +196,23 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(result['reason'], 'independent_review_hold')
         self.assertFalse(self.publishes)
 
+    def test_hold_gets_one_revision_with_reviewer_reasons(self):
+        verdicts = [dict(self.approval, verdict='HOLD', reason='source says X, not Y'), dict(self.approval)]
+        def agent(repo, role, payload, directory):
+            self.calls.append((role, payload))
+            if role == 'researcher':
+                return {'status': 'candidate', 'reason': '새 질문', 'candidate': self.candidate}
+            return verdicts.pop(0)
+        try:  # Post-approval git provenance needs a real repository; this test covers the revision loop.
+            result = self.run_it(agent=agent)
+        except d.DiscoveryError:
+            result = {}
+        roles = [role for role, _ in self.calls]
+        self.assertEqual(roles[:4], ['researcher', 'reviewer', 'researcher', 'reviewer'])
+        self.assertEqual(self.calls[2][1]['revision_request']['independent_review_hold'], 'source says X, not Y')
+        self.assertNotEqual(result.get('reason'), 'independent_review_hold')
+        self.assertTrue((self.root / 'output/physical-discovery').exists())
+
     def test_malicious_code_never_executes(self):
         self.candidate['example']['cases'][0]['expression'] = '__import__("os").system("echo bad")'
         with patch.object(d.subprocess, 'run') as execution:
