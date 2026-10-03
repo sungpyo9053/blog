@@ -80,6 +80,20 @@ class ExperimentRunnerTests(unittest.TestCase):
         self.assertEqual(signals["other"]["engagement_rate"], 0.4)
         self.assertEqual((signals["feedback_up"], signals["feedback_down"]), (3, 1))
 
+    def test_competitor_report_and_kakao_fit_200_chars(self):
+        from scripts.experiment_runner import competitor_kakao, competitor_report
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "research.md").write_text(
+                "# R\n## 경쟁 글 대비 차별점\n1. https://velog.io/a\n   - 이 글이 더할 것: 포화 구간 실측 " + "가" * 200
+                + "\n2. https://www.wikipedia.org/b\n## 다음\n")
+            report = competitor_report(Path(root))
+            message = competitor_kakao("제목" * 30, "my-slug", report)
+            self.assertLessEqual(len(message), 200)
+            self.assertIn("velog.io", message)
+            self.assertTrue(message.endswith("experiments/my-slug/competitors.md"))
+        with tempfile.TemporaryDirectory() as root:
+            self.assertIsNone(competitor_report(Path(root)))
+
 
 if __name__ == "__main__":
     unittest.main()

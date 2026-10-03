@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import argparse, hashlib, json, logging, re, sys, threading, urllib.request
+import argparse, hashlib, json, logging, os, re, sys, threading, urllib.request
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -434,6 +434,16 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
                 publish_to_repo(Path(topic_dir), candidate["slug"], repo)
         except Exception as exc:
             (logger or configure_logger(now.date())).warning("experiment_publish_failed error=%s", type(exc).__name__)
+        try:  # Owner asked for a competitor comparison with every prepared article.
+            from scripts.experiment_runner import competitor_kakao, competitor_report
+            from scripts.send_kakao_report import send as kakao_send
+            topic_dir = (prepared.get("context") or {}).get("directory")
+            report = competitor_report(Path(topic_dir)) if topic_dir else None
+            if report:
+                kakao_send(competitor_kakao(candidate.get("title_seed") or candidate["slug"], candidate["slug"], report),
+                           os.environ.get("MCPORTER_BIN", "mcporter"))
+        except Exception as exc:
+            (logger or configure_logger(now.date())).warning("competitor_report_failed error=%s", type(exc).__name__)
         try:  # English edition is optional; a failure never affects the Korean article.
             from scripts.english_edition import write_english
             topic_dir = (prepared.get("context") or {}).get("directory")

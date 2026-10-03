@@ -96,6 +96,25 @@ def check_measured_section(article: str, topic_dir: Path) -> list[str]:
     return [f"unmeasured_number:{n}" for n in unknown]
 
 
+def competitor_report(topic_dir: Path) -> str | None:
+    """The research '## 경쟁 글 대비 차별점' section, or None when the research has none."""
+    research = Path(topic_dir) / "research.md"
+    if not research.is_file():
+        return None
+    found = re.search(r"(?ms)^## 경쟁 글 대비 차별점\s*$\n(.*?)(?=^##\s|\Z)", research.read_text(encoding="utf-8"))
+    return found.group(1).strip() if found else None
+
+
+def competitor_kakao(title: str, slug: str, report: str) -> str:
+    """<=200 chars: compared hosts, the first thing only we add, and the full report link."""
+    hosts = list(dict.fromkeys(re.findall(r"https?://(?:www\.)?([^/\s)]+)", report)))[:4]
+    adds = re.findall(r"이 글이 더할 것\s*[:：]\s*(.+)", report)
+    link = f"github.com/sungpyo9053/blog/blob/main/experiments/{slug}/competitors.md"
+    head = f"[HuntLab 새 글·경쟁비교] {title[:30]}\n경쟁 {len(hosts)}곳: {', '.join(h[:18] for h in hosts)}\n우리만: "
+    room = 200 - len(head) - len(link) - 1
+    return head + (adds[0] if adds else "기록 없음")[:max(room, 0)] + "\n" + link
+
+
 def publish_to_repo(topic_dir: Path, slug: str, repo: Path, publish=None) -> str | None:
     """Mirror a finished experiment into the public repo under experiments/<slug>/ and push it."""
     source = Path(topic_dir) / "experiment"
@@ -105,6 +124,9 @@ def publish_to_repo(topic_dir: Path, slug: str, repo: Path, publish=None) -> str
     target.mkdir(parents=True, exist_ok=True)
     for name in ("experiment.py", "plan.md", "results.json"):
         (target / name).write_bytes((source / name).read_bytes())
+    report = competitor_report(topic_dir)
+    if report:
+        (target / "competitors.md").write_text(f"# 경쟁 글 대비 차별점: {slug}\n\n{report}\n", encoding="utf-8")
     (target / "README.md").write_text(
         f"# {slug}\n\n글: https://huntlab.app/{slug}/\n\n`results.json`은 하네스가 {IMAGE} 컨테이너"
         f"(네트워크 없음)에서 {RUNS}회 실행한 원본 출력과 환경 기록이다.\n\n## 재현\n\n```bash\n"
@@ -113,7 +135,8 @@ def publish_to_repo(topic_dir: Path, slug: str, repo: Path, publish=None) -> str
     if publish is None:
         from scripts.discover_physical_ai import publish_files as publish
     config = json.loads((Path(repo) / "config/physical-ai-discovery.json").read_text())
-    paths = [f"experiments/{slug}/{name}" for name in ("experiment.py", "plan.md", "results.json", "README.md")]
+    names = ["experiment.py", "plan.md", "results.json", "README.md"] + (["competitors.md"] if report else [])
+    paths = [f"experiments/{slug}/{name}" for name in names]
     return publish(Path(repo), paths, config, f"Add measured experiment {slug}")
 
 
