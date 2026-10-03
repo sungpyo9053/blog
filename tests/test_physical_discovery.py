@@ -349,3 +349,15 @@ class DiscoveryTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class ReaderQuestionsTests(unittest.TestCase):
+    def test_gzip_api_json_becomes_lines_most_viewed_first(self):
+        import gzip as _gzip
+        from scripts.discover_physical_ai import reader_questions_text
+        raw = _gzip.compress(json.dumps({'items': [
+            {'view_count': 10, 'score': 1, 'is_answered': False, 'title': 'a &amp; b', 'link': 'https://x/1'},
+            {'view_count': 99, 'score': 4, 'is_answered': True, 'title': 'top', 'link': 'https://x/2'}]}).encode())
+        lines = reader_questions_text(raw).splitlines()
+        self.assertTrue(lines[0].startswith('99 views') and lines[0].endswith('https://x/2'))
+        self.assertIn('a & b', lines[1])

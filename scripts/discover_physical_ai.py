@@ -8,6 +8,8 @@ import ast
 import hashlib
 import http.client
 import ipaddress
+import gzip
+import html
 import json
 import math
 import os
@@ -104,12 +106,15 @@ class PageText(HTMLParser):
         if not self.hidden: self.parts.append(data)
 
 
-def fetch_https(url, allowed_hosts):
-    """Pin a public DNS answer into the TLS socket. Never follow redirects."""
+def fetch_https(url, allowed_hosts, allow_query=False):
+    """Pin a public DNS answer into the TLS socket. Never follow redirects.
+
+    allow_query is only for exact URLs fixed in the trusted config (the reader-question API).
+    """
     parsed = urlsplit(url)
     need(parsed.scheme == 'https' and parsed.hostname in allowed_hosts
          and parsed.port in (None, 443) and not parsed.username and not parsed.password
-         and not parsed.query and not parsed.fragment, 'source_url_not_allowed')
+         and (allow_query or not parsed.query) and not parsed.fragment, 'source_url_not_allowed')
     addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
     need(bool(addresses) and all(ipaddress.ip_address(item[4][0]).is_global for item in addresses),
          'nonpublic_source_address')
@@ -118,7 +123,7 @@ def fetch_https(url, allowed_hosts):
     raw_socket = socket.create_connection((address, 443), timeout=30)
     try:
         connection.sock = ssl.create_default_context().wrap_socket(raw_socket, server_hostname=parsed.hostname)
-        connection.request('GET', parsed.path or '/', headers={'User-Agent': 'HuntLab-Evidence/1.0', 'Accept-Encoding': 'identity'})
+        connection.request('GET', (parsed.path or '/') + ('?' + parsed.query if parsed.query else ''), headers={'User-Agent': 'HuntLab-Evidence/1.0', 'Accept-Encoding': 'identity'})
         response = connection.getresponse()
         need(response.status == 200, 'source_http_not_200')
         content = response.read(2_000_001)
@@ -127,6 +132,15 @@ def fetch_https(url, allowed_hosts):
     finally:
         connection.close()
         raw_socket.close()
+
+
+def reader_questions_text(raw):
+    """Stack Exchange API JSON (gzip) -> one line per question, most viewed first."""
+    data = json.loads(gzip.decompress(raw) if raw[:2] == b'\x1f\x8b' else raw)
+    items = sorted(data.get('items', []), key=lambda item: -item.get('view_count', 0))
+    return '\n'.join(f"{item.get('view_count', 0)} views | score {item.get('score', 0)} | "
+                     f"answered {item.get('is_answered')} | {html.unescape(item.get('title', ''))} | {item.get('link', '')}"
+                     for item in items)
 
 
 def output_schema(role):
@@ -317,9 +331,14 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
         for row in rows:
             need(isinstance(row, dict) and set(row) == {'id', 'url', 'publisher', 'claim_scope'}, 'source_row_invalid')
             try:
-                raw = fetch(row['url'], config['allowed_primary_hosts'])
-                parser = PageText(); parser.feed(raw.decode('utf-8'))
-                text = '\n'.join(parser.parts).strip() or raw.decode('utf-8')
+                questions = row['claim_scope'].startswith('reader_questions_only')
+                raw = fetch(row['url'], config['allowed_primary_hosts'], allow_query=True) if questions \
+                    else fetch(row['url'], config['allowed_primary_hosts'])
+                if questions:
+                    text = reader_questions_text(raw)
+                else:
+                    parser = PageText(); parser.feed(raw.decode('utf-8'))
+                    text = '\n'.join(parser.parts).strip() or raw.decode('utf-8')
                 # UTF-8 byte limit, not a count of Korean characters.
                 excerpt = text.encode()[:12_000].decode('utf-8', errors='ignore')
                 need(bool(excerpt) and not contains_secret(excerpt), 'unsafe_source_text')
