@@ -962,6 +962,22 @@ def topic_stages(context: TopicContext) -> list[Stage]:
             "검색 의도·결론·실행 방법 관점에서 비교하고 검토한 글 수와 충돌 ID를 review.md에 기록하세요. "
             "후보 승인과 최종 글 승인은 다르며, 새로운 구현 사고를 만들어 근거를 채우지 마세요. "
         )
+    experiment_dir = topic_dir / "experiment"
+    experiment_on = context.category in PHYSICAL_AI_CATEGORIES
+    experiment_writer = (
+        f"실측 입력: {str(experiment_dir / 'plan.md')!r}와 하네스가 실제로 5회 실행한 "
+        f"{str(experiment_dir / 'results.json')!r}. 글은 이 실측에서 출발하세요. 첫 문단은 실험하며 실제로 "
+        "막힌 지점이나 예상과 달랐던 결과로 여세요(plan.md의 시행착오·예측과 results.json 비교). "
+        "계산(예측)과 실측을 나란히 보여 주는 부분을 <!-- measured:start -->와 <!-- measured:end --> "
+        "주석 사이에 넣으세요. 이 구간의 소수·세 자리 이상 숫자는 results.json·experiment.py에 실제로 있는 값만 쓰고, "
+        "측정하지 않은 권장값을 만들지 마세요. 해석과 측정은 구분해 적고, 측정 환경(이미지·RMW·버전·반복 횟수)과 "
+        "한계를 밝히세요. 원본 출력 몇 줄을 코드 블록으로 그대로 인용하세요. "
+        "제목은 '질문: ~로 ~하기' 공식을 쓰지 말고, 구성은 실험 결과에 맞게 정하세요(요약→선수지식→소제목 나열 "
+        "같은 고정 틀 금지). 결론 예고 문장('결론은 하나다' 등)과 '~다'만 연달아 쓰는 리듬을 피하세요. "
+    ) if experiment_on else ""
+    if experiment_on:
+        common += ("<!-- measured:start -->·<!-- measured:end --> 주석과 그 사이의 숫자·로그는 어느 단계에서도 "
+                   "지우거나 바꾸지 마세요. ")
     stages = [
         Stage(
             "Research Agent",
@@ -982,12 +998,29 @@ def topic_stages(context: TopicContext) -> list[Stage]:
                 "INSUFFICIENT로 판정하세요."
             ),
         ),
+        *([Stage(
+            "Experiment Agent",
+            None,
+            (
+                common
+                + f"입력은 {str(topic_dir / 'research.md')!r}입니다. 이 글의 핵심 질문을 실제로 확인할 ROS 2 Jazzy "
+                "실험 하나를 설계하세요. ros-base 이미지에 있는 rclpy·tf2_ros·std_msgs 등만 쓰고, 네트워크 없이 "
+                "한 번 실행이 60초 안에 끝나야 합니다. 측정값은 실행 중에 재서 JSON 줄로 출력하세요. 결과 숫자를 "
+                "코드에 미리 적어 출력하는 것은 금지입니다. "
+                f"스크립트는 {str(experiment_dir / 'experiment.py')!r}, 계획은 {str(experiment_dir / 'plan.md')!r}에 "
+                "저장하세요. plan.md에는 질문, research.md 기준 예측값, 무엇을 어떻게 재는지, 시행착오(시험 실행에서 "
+                "실제로 실패하거나 고친 점, 없으면 없음)를 적으세요. 시험 실행은 "
+                f"{str(PROJECT_ROOT / '.venv/bin/python')!r} -m scripts.experiment_runner {str(topic_dir)!r} --try "
+                "로만 하세요(직접 docker를 부르지 마세요). 정식 5회 실행은 하네스가 합니다."
+            ),
+        )] if experiment_on else []),
         Stage(
             "Writer Agent",
             PROJECT_ROOT / "agents/writer.md",
             (
                 common
                 + content_guidance
+                + experiment_writer
                 + f"입력은 {str(topic_dir / 'research.md')!r} 하나입니다. "
                 f"문체 중복 확인용 입력은 {str(recent_style_context)!r}입니다. 이 파일은 "
                 "최근 글의 도입·H2·마무리·structure_mode 비교에만 사용하고 사실, 경험, "
@@ -1373,6 +1406,19 @@ def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
             )
     if stage_name == "Research Agent" and context.content_type == "build_log_operations":
         validate_build_log_research_contract(context)
+    if stage_name == "Experiment Agent":
+        from scripts.experiment_runner import ExperimentFailed, run_experiment
+        try:
+            run_experiment(context.directory)
+        except ExperimentFailed as exc:
+            raise ContentQualityRejection(f"{context.topic_id}: 실측 실패 — {exc}") from exc
+    results = context.directory / "experiment/results.json"
+    if stage_name == "Reviewer Agent" and results.is_file():
+        from scripts.experiment_runner import check_measured_section
+        problems = check_measured_section((context.directory / "publish.md").read_text(encoding="utf-8"),
+                                          context.directory)
+        if problems:
+            raise ContentQualityRejection(f"{context.topic_id}: 실측 게이트 — {', '.join(problems[:5])}")
 
 
 def validate_research_readiness(context: TopicContext) -> None:
