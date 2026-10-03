@@ -1,0 +1,76 @@
+{
+  "checked_at": "2026-10-04T08:02:00.410150+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"전체 작업공간 클린 빌드를 하나씩 처리한 합계(초): 의존 10개×30초 + 내 패키지 2개×20초\", \"actual\": 340}, {\"name\": \"내 패키지 2개만 둔 overlay의 클린 빌드 합계(초)\", \"actual\": 40}, {\"name\": \"클린 빌드 합계 기준 전체 대비 overlay 배율\", \"actual\": 8.5}, {\"name\": \"상한 가정: 하루 10번 모두 클린 빌드할 때 overlay로 줄어드는 합계(분)\", \"actual\": 50.0}, {\"name\": \"COLCON_IGNORE로 의존 패키지 3개를 뺀 클린 빌드 합계(초)\", \"actual\": 250}, {\"name\": \"COLCON_IGNORE 3개가 하나씩 처리하는 합계에서 덜어내는 몫(초)\", \"actual\": 90}, {\"name\": \"--symlink-install 없이 ament_python 패키지 A의 Python 파일만 고쳤을 때 반영을 위해 다시 빌드하는 시간(초)\", \"actual\": 20}, {\"name\": \"--symlink-install로 설치한 A에서 Python 파일만 고쳤을 때 반영을 위해 다시 빌드하는 시간(초)\", \"actual\": 0}, {\"name\": \"테스트 비중 25% 가정에서 ament_cmake 패키지 B를 -DBUILD_TESTING=0으로 빌드한 시간(초)\", \"actual\": 15.0}, {\"name\": \"overlay에서 A는 symlink로 처리하고 B만 테스트 없이 다시 빌드할 때의 합계(초)\", \"actual\": 15.0}]\n",
+  "cases": [
+    {
+      "name": "전체 작업공간 클린 빌드를 하나씩 처리한 합계(초): 의존 10개×30초 + 내 패키지 2개×20초",
+      "expression": "10 * 30 + 2 * 20",
+      "expected": 340,
+      "actual": 340
+    },
+    {
+      "name": "내 패키지 2개만 둔 overlay의 클린 빌드 합계(초)",
+      "expression": "2 * 20",
+      "expected": 40,
+      "actual": 40
+    },
+    {
+      "name": "클린 빌드 합계 기준 전체 대비 overlay 배율",
+      "expression": "(10 * 30 + 2 * 20) / (2 * 20)",
+      "expected": 8.5,
+      "actual": 8.5
+    },
+    {
+      "name": "상한 가정: 하루 10번 모두 클린 빌드할 때 overlay로 줄어드는 합계(분)",
+      "expression": "(10 * 340 - 10 * 40) / 60",
+      "expected": 50,
+      "actual": 50.0
+    },
+    {
+      "name": "COLCON_IGNORE로 의존 패키지 3개를 뺀 클린 빌드 합계(초)",
+      "expression": "340 - 3 * 30",
+      "expected": 250,
+      "actual": 250
+    },
+    {
+      "name": "COLCON_IGNORE 3개가 하나씩 처리하는 합계에서 덜어내는 몫(초)",
+      "expression": "3 * 30",
+      "expected": 90,
+      "actual": 90
+    },
+    {
+      "name": "--symlink-install 없이 ament_python 패키지 A의 Python 파일만 고쳤을 때 반영을 위해 다시 빌드하는 시간(초)",
+      "expression": "1 * 20",
+      "expected": 20,
+      "actual": 20
+    },
+    {
+      "name": "--symlink-install로 설치한 A에서 Python 파일만 고쳤을 때 반영을 위해 다시 빌드하는 시간(초)",
+      "expression": "0",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "테스트 비중 25% 가정에서 ament_cmake 패키지 B를 -DBUILD_TESTING=0으로 빌드한 시간(초)",
+      "expression": "20 * (1 - 0.25)",
+      "expected": 15,
+      "actual": 15.0
+    },
+    {
+      "name": "overlay에서 A는 symlink로 처리하고 B만 테스트 없이 다시 빌드할 때의 합계(초)",
+      "expression": "0 + 20 * (1 - 0.25)",
+      "expected": 15,
+      "actual": 15.0
+    }
+  ],
+  "teaching_context": {
+    "description": "설명을 위해 정한 가상 작업공간이다. 거의 고치지 않는 의존 패키지 10개가 있고 각각 클린 빌드에 30초가 걸린다. 직접 고치는 내 패키지는 2개로, A는 ament_python, B는 ament_cmake이며 각각 20초가 걸린다. 모든 합계는 'build·install을 지운 클린 빌드를 --executor sequential로 패키지마다 하나씩 처리할 때의 시간 합계(초)'로 정의한다. 공식 튜토리얼은 --executor sequential을 병렬 대신 패키지를 하나씩 빌드하는 옵션으로 소개하므로, 이 합계는 그 모드의 이상화된 소요 시간이다. 먼저 전체 작업공간과, 내 패키지 2개만 둔 overlay의 클린 빌드 합계를 비교한다. 하루 10번 클린 빌드한다고 가정한 상한 절감도 계산한다. 다음으로 COLCON_IGNORE로 의존 패키지 3개를 제외했을 때 합계에서 빠지는 몫을 구한다. 이어서 A의 Python 파일만 고쳤을 때 --symlink-install이 있을 때와 없을 때 변경을 반영하려고 다시 빌드해야 하는 시간을 비교한다. 마지막으로 B에서 테스트 구성·빌드가 패키지 시간의 25%라고 가정하고 -DBUILD_TESTING=0을 적용한다. 30초, 20초, 25%는 측정값이 아니라 각 수단이 덜어내는 몫을 갈라 보이려고 고른 입력이다.",
+    "conclusion": "이 모델에서 클린 빌드 합계를 가장 크게 줄인 수단은 고치는 패키지만 overlay로 분리하는 것이었다. 합계가 340초에서 40초로 줄어 8.5배 차이가 났고, 매번 클린 빌드한다는 상한 가정에서는 하루 50분이 줄어든다. 공식 튜토리얼이 소수 패키지를 반복할 때 overlay를 권하는 이유를 숫자로 보여 주는 결과다. COLCON_IGNORE로 의존 패키지 3개를 빼면 하나씩 처리하는 합계에서 90초가 빠진다. ament_python 패키지의 Python 파일만 고친다면 --symlink-install로 다시 빌드할 필요가 사라진다. -DBUILD_TESTING=0은 CMake 패키지 B에만 적용되며, 이 가정에서는 20초가 15초로 줄었다. 세 수단을 함께 쓰면 반복 1회의 합계는 15초다. 따라서 독자는 다음 순서를 택할 수 있다. 1) 고치는 패키지를 overlay로 분리하고, 2) Python 반복에는 --symlink-install을 쓰고, 3) CMake 패키지의 테스트 생략과 COLCON_IGNORE 제외는 실제 시간을 잰 뒤 판단한다.",
+    "limitations": "모든 시간은 가정값이며 실제 colcon이나 CMake 빌드를 돌려 측정한 결과가 아니다. 합계는 build·install을 지운 클린 빌드를 --executor sequential로 하나씩 처리하는 경우의 이상화된 값이다. 변경이 없는 패키지를 CMake·colcon이 증분 처리할 때 드는 실제 시간은 반영하지 않았으므로 절감량은 상한으로만 읽어야 한다. 공식 튜토리얼의 --executor sequential 팁은 기본 동작이 병렬이라는 점을 함의하지만, 기본 작업자 수와 스케줄링 방식은 이 자료에 없다. 그래서 기본 병렬 빌드에서 패키지를 빼거나 overlay로 나눌 때 실제 대기 시간이 얼마나 줄어드는지는 이 계산으로 말할 수 없다. 테스트 비중 25%는 임의로 정한 값이다. -DBUILD_TESTING=0은 튜토리얼이 CMake 패키지 대상으로 소개한 옵션이므로 ament_python 패키지에 대한 효과는 다루지 않는다. --symlink-install의 0초는 Python 같은 비컴파일 파일만 고친 경우다. C++ 소스나 package.xml, 설치 대상 목록을 바꾸면 다시 빌드해야 한다. 이 계산만으로 colcon이 catkin보다 느린 원인을 단정할 수 없다. 원인은 각자 환경에서 패키지별 빌드 시간을 기본 설정과 --executor sequential로 나누어 기록해 비교해야 한다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
