@@ -71,3 +71,10 @@ add_filter(
     },
     5
 );
+
+// English byline for the pen name (Korean pages show 훈트 via huntlab-reader-loop, priority 30).
+$huntlab_en_byline = static function ( $name ) {
+    return ( ! is_admin() && is_singular( 'hunt_en' ) ) ? 'Hunt' : $name;
+};
+add_filter( 'the_author', $huntlab_en_byline, 40 );
+add_filter( 'get_the_author_display_name', $huntlab_en_byline, 40 );
