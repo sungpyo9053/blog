@@ -73,6 +73,19 @@ class ExperimentRunnerTests(unittest.TestCase):
             self.assertIn(digest or "ros:jazzy-ros-base", readme)
             self.assertEqual(calls[0][1][0], "experiments/my-slug/experiment.py")
 
+    def test_publish_skips_when_already_committed(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as repo:
+            run_experiment(topic(root), executor=executor())
+            (Path(repo) / "config").mkdir()
+            (Path(repo) / "config/physical-ai-discovery.json").write_text("{}")
+            publish_to_repo(Path(root), "s", Path(repo), publish=lambda *a: "rev")
+            git = lambda *a: subprocess.run(["git", "-C", repo, *a], check=True, capture_output=True)
+            git("init", "-q"); git("add", "."); git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x")
+            calls = []
+            self.assertIsNone(publish_to_repo(Path(root), "s", Path(repo), publish=lambda *a: calls.append(a)))
+            self.assertEqual(calls, [])
+
     def test_reader_signals_split_measured_and_other(self):
         from scripts.run_weekly_editorial import reader_signals
         ga4 = {"periods": {"current": {"pages": [{"page": "/a/", "sessions": 10, "engagedSessions": 8},

@@ -138,11 +138,17 @@ def publish_to_repo(topic_dir: Path, slug: str, repo: Path, publish=None) -> str
         f"(네트워크 없음)에서 {RUNS}회 실행한 원본 출력과 환경 기록이다.\n\n## 재현\n\n```bash\n"
         f"docker run --rm --network none --cpus 1 --memory 1g -v \"$PWD\":/work {_pinned_image(source)} \\\n"
         "  bash -c \"source /opt/ros/jazzy/setup.bash && python3 /work/experiment.py\"\n```\n")
+    names = ["experiment.py", "plan.md", "results.json", "README.md"] + (["competitors.md"] if report else [])
+    paths = [f"experiments/{slug}/{name}" for name in names]
+    # Already published during the Experiment stage: committing identical bytes would fail.
+    if subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--", f"experiments/{slug}"],
+                      capture_output=True, text=True).stdout.strip() == "" and \
+            subprocess.run(["git", "-C", str(repo), "ls-files", "--error-unmatch", paths[0]],
+                           capture_output=True).returncode == 0:
+        return None
     if publish is None:
         from scripts.discover_physical_ai import publish_files as publish
     config = json.loads((Path(repo) / "config/physical-ai-discovery.json").read_text())
-    names = ["experiment.py", "plan.md", "results.json", "README.md"] + (["competitors.md"] if report else [])
-    paths = [f"experiments/{slug}/{name}" for name in names]
     return publish(Path(repo), paths, config, f"Add measured experiment {slug}")
 
 
