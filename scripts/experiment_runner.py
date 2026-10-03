@@ -78,7 +78,10 @@ def _normalize(token: str) -> str:
 def allowed_numbers(topic_dir: Path) -> set[str]:
     directory = Path(topic_dir) / "experiment"
     record = json.loads((directory / "results.json").read_text())
-    corpus = (directory / "experiment.py").read_text() + json.dumps(record, ensure_ascii=False)
+    # plan.md holds the predictions written before the run; those are declared, not invented.
+    plan = directory / "plan.md"
+    corpus = (directory / "experiment.py").read_text() + json.dumps(record, ensure_ascii=False) + (
+        plan.read_text() if plan.is_file() else "")
     return {_normalize(n) for n in NUMBER.findall(corpus)}
 
 

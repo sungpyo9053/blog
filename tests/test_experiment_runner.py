@@ -55,6 +55,8 @@ class ExperimentRunnerTests(unittest.TestCase):
             bad = "<!-- measured:start -->지연은 0.055초<!-- measured:end -->"
             self.assertEqual(check_measured_section(bad, Path(root)), ["unmeasured_number:0.055"])
             self.assertEqual(check_measured_section("본문만", Path(root)), ["measured_section_missing"])
+            (Path(root) / "experiment/plan.md").write_text("예측: 0.055초")
+            self.assertEqual(check_measured_section(bad, Path(root)), [])
 
     def test_publish_mirrors_experiment_into_repo(self):
         with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as repo:
