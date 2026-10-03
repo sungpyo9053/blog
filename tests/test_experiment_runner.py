@@ -67,6 +67,10 @@ class ExperimentRunnerTests(unittest.TestCase):
             publish_to_repo(Path(root), "my-slug", Path(repo), publish=lambda *a: calls.append(a) or "rev")
             self.assertTrue((Path(repo) / "experiments/my-slug/results.json").is_file())
             self.assertIn("https://huntlab.app/my-slug/", (Path(repo) / "experiments/my-slug/README.md").read_text())
+            readme = (Path(repo) / "experiments/my-slug/README.md").read_text()
+            self.assertIn("--cpus 1 --memory 1g", readme)
+            digest = json.loads((Path(root) / "experiment/results.json").read_text())["environment"]["image_digest"]
+            self.assertIn(digest or "ros:jazzy-ros-base", readme)
             self.assertEqual(calls[0][1][0], "experiments/my-slug/experiment.py")
 
     def test_reader_signals_split_measured_and_other(self):

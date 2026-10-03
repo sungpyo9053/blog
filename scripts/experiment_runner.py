@@ -115,6 +115,12 @@ def competitor_kakao(title: str, slug: str, report: str) -> str:
     return head + (adds[0] if adds else "기록 없음")[:max(room, 0)] + "\n" + link
 
 
+def _pinned_image(directory: Path) -> str:
+    """The exact image digest the harness ran, so readers reproduce the same environment."""
+    record = json.loads((directory / "results.json").read_text())
+    return record.get("environment", {}).get("image_digest") or IMAGE
+
+
 def publish_to_repo(topic_dir: Path, slug: str, repo: Path, publish=None) -> str | None:
     """Mirror a finished experiment into the public repo under experiments/<slug>/ and push it."""
     source = Path(topic_dir) / "experiment"
@@ -130,7 +136,7 @@ def publish_to_repo(topic_dir: Path, slug: str, repo: Path, publish=None) -> str
     (target / "README.md").write_text(
         f"# {slug}\n\n글: https://huntlab.app/{slug}/\n\n`results.json`은 하네스가 {IMAGE} 컨테이너"
         f"(네트워크 없음)에서 {RUNS}회 실행한 원본 출력과 환경 기록이다.\n\n## 재현\n\n```bash\n"
-        f"docker run --rm --network none -v \"$PWD\":/work {IMAGE} \\\n"
+        f"docker run --rm --network none --cpus 1 --memory 1g -v \"$PWD\":/work {_pinned_image(source)} \\\n"
         "  bash -c \"source /opt/ros/jazzy/setup.bash && python3 /work/experiment.py\"\n```\n")
     if publish is None:
         from scripts.discover_physical_ai import publish_files as publish

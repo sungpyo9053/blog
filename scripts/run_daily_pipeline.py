@@ -986,6 +986,11 @@ def topic_stages(context: TopicContext) -> list[Stage]:
         "같은 고정 틀 금지). 결론 예고 문장('결론은 하나다' 등)과 '~다'만 연달아 쓰는 리듬을 피하세요. "
         "본문과 코드 블록의 모든 URL은 파일까지 포함한 전체 주소로 쓰세요. 디렉터리 주소나 RAW=처럼 변수로 "
         "쪼갠 주소는 발행 전 링크 재확인에서 404로 실패합니다. "
+        "독자 재현용 docker 명령은 results.json environment.image_digest의 고정 이미지와 하네스 조건 "
+        "그대로 `docker run --rm --network none --cpus 1 --memory 1g -v \"$PWD\":/work <image_digest> bash -c "
+        "\"source /opt/ros/jazzy/setup.bash && python3 /work/experiment.py\"` 형태로 쓰세요(움직이는 태그 금지). "
+        "DDS·executor·monotonic 시계처럼 독자가 모를 수 있는 기술 용어는 첫 등장 문장에서 쉬운 한국어 뜻과 영문을 "
+        "한 구절로 밝히세요. "
     ) if experiment_on else ""
     if experiment_on:
         common += ("<!-- measured:start -->·<!-- measured:end --> 주석과 그 사이의 숫자·로그는 어느 단계에서도 "
