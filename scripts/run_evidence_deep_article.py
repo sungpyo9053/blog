@@ -434,6 +434,14 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
                 publish_to_repo(Path(topic_dir), candidate["slug"], repo)
         except Exception as exc:
             (logger or configure_logger(now.date())).warning("experiment_publish_failed error=%s", type(exc).__name__)
+        try:  # English edition is optional; a failure never affects the Korean article.
+            from scripts.english_edition import write_english
+            topic_dir = (prepared.get("context") or {}).get("directory")
+            if topic_dir:
+                write_english(Path(topic_dir), candidate["slug"], logger or configure_logger(now.date()))
+        except Exception as exc:
+            (logger or configure_logger(now.date())).warning("english_edition_failed error=%s detail=%s",
+                                                              type(exc).__name__, str(exc)[:120])
         write_progress(progress_path, stage="preparation_enqueued", wordpress_write_count=0)
         advance_checkpoint()
         return {**base, "deep_article": "prepared", "candidate_id": candidate["candidate_id"], "queue": queued}

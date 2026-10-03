@@ -110,6 +110,14 @@ def schedule_one():
         raise ValueError('scheduled_post_date_mismatch')
     row.update(status='scheduled')
     queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)
+    try:  # Same slot for the English edition; Korean scheduling is already complete.
+        from scripts.english_edition import schedule_english
+        english_id = schedule_english(Path(context.directory), result['post_id'], slot, client)
+        if english_id:
+            row['english'] = {'post_id': english_id, 'scheduled_at': slot.isoformat()}
+            queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)
+    except Exception as exc:
+        configure_logger(now.date()).warning('english_schedule_failed error=%s', type(exc).__name__)
     return {'status': 'scheduled', 'wordpress_write_count': 1,
             'post_id': result['post_id'], 'scheduled_at': slot.isoformat(), 'queue_id': row['queue_id']}
 
