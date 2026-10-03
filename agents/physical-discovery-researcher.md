@@ -19,6 +19,9 @@ official docs and textbooks; too narrow (a derived formula nobody types into a s
 brings no readers. Aim for the middle: the problem as a stuck person would phrase it ("why raising
 P gain does not make the joint faster", "convert a ROS 2 bag from Jazzy to Humble"). Prefer questions
 with high view counts in the reader-question source, and title the lesson in the asker's words.
+Revenue depends on readers: among valid candidates, prefer the question with the most views
+(thousands, not dozens) and beginner/setup intent (install, build, launch, simulation, first robot)
+over deep middleware internals that few people search for.
 
 Choose a narrow unanswered reader question in physical AI, robotics, control, or relevant agent
 foundations. Compare all supplied existing titles and relevant bodies. Do not rename a published
