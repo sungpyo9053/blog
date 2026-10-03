@@ -30,7 +30,9 @@ SECRET_PATTERNS = (
     re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
     re.compile(r"(?i)\b(?:password|passwd|token|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+"),
     re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b"),
-    re.compile(r"(?<![0-9A-Za-z])(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}(?![0-9A-Za-z])"),
+    # Korean mobile numbers start with 01x or carry +82; a bare 1xxxxxxxxx is usually a nanosecond
+    # duration (100000000 ns = 0.1 s) or a Unix timestamp in ROS content.
+    re.compile(r"(?<![0-9A-Za-z])(?:\+?82[- ]?1|01)[016789][- ]?\d{3,4}[- ]?\d{4}(?![0-9A-Za-z])"),
     re.compile(r"/(?:Users|home)/[^/\s]+/"),
 )
 
@@ -45,6 +47,13 @@ def redact_text(value: str) -> str:
         value = pattern.sub("[REDACTED]", value)
     value = re.sub(r"(?i)([?&](?:token|key|password|secret|signature)=)[^&#\s]+", r"\1[REDACTED]", value)
     return re.sub(r"(https?://)[^/@\s:]+:[^/@\s]+@", r"\1[REDACTED]@", value)
+
+def secret_pattern_index(value: str):
+    """Index of the first matching SECRET_PATTERNS entry (for diagnostics; never the matched text)."""
+    if "-----BEGIN " in value and "PRIVATE KEY-----" in value:
+        return 0
+    return next((i for i, p in enumerate(SECRET_PATTERNS[1:], 1) if p.search(value)), None)
+
 
 def contains_secret(value: str) -> bool:
     return ("-----BEGIN " in value and "PRIVATE KEY-----" in value) or any(p.search(value) for p in SECRET_PATTERNS[1:])

@@ -193,7 +193,12 @@ def invoke_agent(repo, role, payload, directory):
                 'line':error.lineno, 'column':error.colno, 'characters':len(raw_answer),
                 'response_sha256':digest(raw_answer.encode()), 'wordpress_writes':0})
             raise DiscoveryError('model_output_invalid_json') from None
-    need(not contains_secret(json.dumps(answer, ensure_ascii=False)), 'unsafe_model_output')
+    dumped = json.dumps(answer, ensure_ascii=False)
+    if contains_secret(dumped):
+        from scripts.evidence_topic_miner import secret_pattern_index
+        _save_exclusive(directory / f'{role}-unsafe-output.json',
+                        {'role': role, 'pattern_index': secret_pattern_index(dumped), 'wordpress_writes': 0})
+    need(not contains_secret(dumped), 'unsafe_model_output')
     _save_exclusive(directory / f'{role}.json', answer)
     return answer
 
