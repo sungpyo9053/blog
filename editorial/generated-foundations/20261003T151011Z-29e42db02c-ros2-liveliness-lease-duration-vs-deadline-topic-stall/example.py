@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (1000 / 20)
+assert math.isclose(value, 50, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '20 Hz 카메라의 발행 주기(ms)', "actual": value})
+value = (150 - 200)
+assert math.isclose(value, -50, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '구독자 요청 lease 150, 발행자 제공 lease 200: 음수라 비호환이고 연결되지 않음', "actual": value})
+value = (300 - 200)
+assert math.isclose(value, 100, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '구독자 요청 lease 300, 발행자 제공 lease 200: 양수라 호환', "actual": value})
+value = (200 - 200)
+assert math.isclose(value, 0, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '경계: 요청 lease와 제공 lease가 같음(0은 호환표의 y = x 행)', "actual": value})
+value = (100 / 50)
+assert math.isclose(value, 2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '구독자 deadline 100 ms가 덮는 카메라 프레임 간격 수(메시지 없이 이 간격을 넘기면 Requested deadline missed 조건)', "actual": value})
+value = (1000 / 1)
+assert math.isclose(value, 1000, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '1 Hz 진단 토픽의 발행 주기(ms)', "actual": value})
+value = (2000 - 1000)
+assert math.isclose(value, 1000, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '반례: 카메라는 멈췄지만 같은 노드의 진단 발행 간격이 lease 2000 ms 안에 들어감(여유가 양수면 문서 정의상 노드의 모든 publisher가 계속 살아 있는 것으로 간주)', "actual": value})
+print(json.dumps(results, ensure_ascii=False))

@@ -1,0 +1,58 @@
+{
+  "checked_at": "2026-10-04T00:10:13.625398+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"20 Hz 카메라의 발행 주기(ms)\", \"actual\": 50.0}, {\"name\": \"구독자 요청 lease 150, 발행자 제공 lease 200: 음수라 비호환이고 연결되지 않음\", \"actual\": -50}, {\"name\": \"구독자 요청 lease 300, 발행자 제공 lease 200: 양수라 호환\", \"actual\": 100}, {\"name\": \"경계: 요청 lease와 제공 lease가 같음(0은 호환표의 y = x 행)\", \"actual\": 0}, {\"name\": \"구독자 deadline 100 ms가 덮는 카메라 프레임 간격 수(메시지 없이 이 간격을 넘기면 Requested deadline missed 조건)\", \"actual\": 2.0}, {\"name\": \"1 Hz 진단 토픽의 발행 주기(ms)\", \"actual\": 1000.0}, {\"name\": \"반례: 카메라는 멈췄지만 같은 노드의 진단 발행 간격이 lease 2000 ms 안에 들어감(여유가 양수면 문서 정의상 노드의 모든 publisher가 계속 살아 있는 것으로 간주)\", \"actual\": 1000}]\n",
+  "cases": [
+    {
+      "name": "20 Hz 카메라의 발행 주기(ms)",
+      "expression": "1000 / 20",
+      "expected": 50,
+      "actual": 50.0
+    },
+    {
+      "name": "구독자 요청 lease 150, 발행자 제공 lease 200: 음수라 비호환이고 연결되지 않음",
+      "expression": "150 - 200",
+      "expected": -50,
+      "actual": -50
+    },
+    {
+      "name": "구독자 요청 lease 300, 발행자 제공 lease 200: 양수라 호환",
+      "expression": "300 - 200",
+      "expected": 100,
+      "actual": 100
+    },
+    {
+      "name": "경계: 요청 lease와 제공 lease가 같음(0은 호환표의 y = x 행)",
+      "expression": "200 - 200",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "구독자 deadline 100 ms가 덮는 카메라 프레임 간격 수(메시지 없이 이 간격을 넘기면 Requested deadline missed 조건)",
+      "expression": "100 / 50",
+      "expected": 2,
+      "actual": 2.0
+    },
+    {
+      "name": "1 Hz 진단 토픽의 발행 주기(ms)",
+      "expression": "1000 / 1",
+      "expected": 1000,
+      "actual": 1000.0
+    },
+    {
+      "name": "반례: 카메라는 멈췄지만 같은 노드의 진단 발행 간격이 lease 2000 ms 안에 들어감(여유가 양수면 문서 정의상 노드의 모든 publisher가 계속 살아 있는 것으로 간주)",
+      "expression": "2000 - 1000",
+      "expected": 1000,
+      "actual": 1000
+    }
+  ],
+  "teaching_context": {
+    "description": "설명용 구성입니다. 센서 드라이버 노드가 카메라 토픽을 20 Hz로 발행하고, 같은 노드가 진단 토픽을 1 Hz로 발행한다고 가정합니다. 단위는 모두 ms이며 발행 주기는 흔들림 없이 일정하다고 봅니다. 연결 판정에는 ROS 2 QoS 문서의 lease duration 호환성 표를 씁니다. 발행자가 x를 제공할 때 구독자 요청 y가 y ≥ x이면 호환, y < x이면 비호환입니다. deadline 쪽은 문서 정의('연속 메시지 사이의 예상 최대 시간', '구독자가 기대 기간 안에 메시지를 받지 못하면 Requested deadline missed')를 그대로 씁니다. liveliness 쪽은 Automatic 정의('노드의 어느 publisher든 발행하면 모든 publisher를 lease duration만큼 살아 있는 것으로 간주')만 씁니다. 입력값은 정확한 정수가 나오도록 골랐습니다. 이 수치로 보이려는 것은 세 가지입니다. lease 호환성 부호(음수·양수·0 경계), deadline 100 ms 요청이 카메라 몇 프레임 분량인지, 그리고 진단 토픽 발행이 문서 정의상 lease 안에서 갱신을 이어 가는 반례입니다. liveliness가 몇 ms 뒤에 만료를 알려 주는지는 계산하지 않습니다.",
+    "conclusion": "lease duration은 호환성에서 deadline과 같은 방향으로 판정합니다. 요청 − 제공이 0 이상이면 연결되고(+100, 0), 음수면 연결되지 않습니다(−50). 토픽 하나가 멈췄는지에 대해서는 두 정책이 답하는 질문이 다릅니다. 카메라 토픽에 deadline 100 ms를 요청하면, 문서 정의상 카메라 프레임 두 간격 동안 메시지가 없을 때 그 구독자에서 Requested deadline missed 조건이 됩니다. 반면 Automatic liveliness는 문서 정의상 같은 노드의 진단 토픽이 1000 ms마다 발행하는 것만으로 lease 2000 ms 안에서 갱신이 이어집니다(여유 +1000 ms). 그래서 카메라만 멈춘 동안에는 liveliness가 그 정지를 알려 주지 않습니다. 실무 판단은 이렇습니다. 센서 토픽마다 deadline을 걸고 Requested deadline missed 이벤트로 토픽 정지를 감시하고, liveliness는 노드 생존 감시용으로 따로 씁니다. 구독자 요청 lease는 제공 lease 이상으로 맞춥니다. publisher가 하나뿐인 노드에서 발행이 멈췄을 때 liveliness가 언제 만료를 알리는지는 이 계산의 결론이 아니며, 사용하는 RMW에서 측정해 확인할 질문으로 남깁니다.",
+    "limitations": "모든 수치는 공급된 ROS 2 QoS 문서의 정의와 호환성 표를 산술로 옮긴 교육용 모델입니다. ROS 2 노드나 DDS, 실제 센서를 실행해 얻은 값이 아닙니다. 문서는 Automatic liveliness를 '노드의 publisher가 발행하면 갱신된다'는 한 줄로만 요약하며, 미들웨어 수준에서 무엇이 liveliness를 알리는지는 밝히지 않습니다. 그래서 멈췄지만 프로세스는 살아 있는 publisher가 lease 경과 뒤 실제로 Liveliness changed나 liveliness lost로 이어지는지, 몇 ms 뒤인지는 이 계산이 답하지 않습니다(Fast DDS 기본값을 포함해 측정이 필요합니다). lease를 발행 주기보다 짧게 잡으면 어떻게 되는지도 같은 이유로 판정하지 않았습니다. 토픽 정지를 liveliness가 알려 주지 못한다는 결론은 두 해석 모두에서 같은 방향이지만, 이것도 실행으로 확인한 것은 아닙니다. Manual by topic에서 생존을 직접 알리는 API 호출 패턴, 이벤트 발생 횟수, 설정값과 실제 간격이 정확히 같은 경계의 판정, 지터·네트워크 지연·executor 처리 시간, RMW별 차이는 계산에 넣지 않았습니다. 근거는 Rolling 문서이므로 배포판마다 다를 수 있습니다. 실물 로봇에서 deadline이나 liveliness 이벤트는 진단 신호일 뿐이며, 센서가 끊겼을 때 로봇을 멈추는 워치독과 하드웨어 비상정지를 대신하지 않습니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
