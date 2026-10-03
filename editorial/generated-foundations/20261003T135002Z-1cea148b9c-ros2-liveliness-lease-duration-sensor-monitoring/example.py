@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (1 / 10)
+assert math.isclose(value, 0.1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '10 Hz 카메라의 발행 주기(s)', "actual": value})
+value = (0.5 / 0.1)
+assert math.isclose(value, 5, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '카메라 단독, lease 0.5 s 안에 들어가는 카메라 주기 수', "actual": value})
+value = (0.5 - 1 / 100)
+assert math.isclose(value, 0.49, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '같은 노드에 100 Hz IMU가 있을 때 lease 0.5 s 대비 IMU 발행 간격의 여유(s): 양수라 카메라가 멈춰도 automatic liveliness는 유지', "actual": value})
+value = (0.1 - 0.1)
+assert math.isclose(value, 0, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '경계: lease가 카메라 주기와 같을 때의 여유(s)', "actual": value})
+value = (0.05 - 0.1)
+assert math.isclose(value, -0.05, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": 'lease 0.05 s가 카메라 주기보다 짧을 때의 여유(s): 음수라 카메라 단독 노드는 매 주기 liveliness를 잃는 조건', "actual": value})
+value = (0.3 - 0.5)
+assert math.isclose(value, -0.2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '구독자 요청 lease 0.3 s − 발행자 제공 lease 0.5 s: 음수라 비호환, 연결 없음', "actual": value})
+value = (1.0 - 0.5)
+assert math.isclose(value, 0.5, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '구독자 요청 lease 1.0 s − 발행자 제공 lease 0.5 s: 양수라 호환', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
