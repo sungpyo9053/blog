@@ -123,7 +123,8 @@ def _gsc(session, windows):
             "sufficiency_rule": "heuristic_only: >=100 impressions in each period; not statistical significance"}
 
 
-GA_METRICS = ("screenPageViews", "sessions", "engagedSessions")
+# totalAdRevenue stays 0 until AdSense is linked to this GA4 property.
+GA_METRICS = ("screenPageViews", "sessions", "engagedSessions", "totalAdRevenue")
 
 
 def _ga_numbers(row):

@@ -203,7 +203,9 @@ def notify_result(result, directory, sender=send):
     detail = str(change.get('reason') or (proposals[0].get('title') if proposals else '') or '제안 없음')
     count = weekly_publication_count(ROOT, result['week'])
     publication_summary = f'자동 발행 기록 {count}편' if count is not None else '발행 집계 확인 필요'
-    message = (f"[HuntLab 주간 {result['week']}] {status}\n{publication_summary}\n개선 글: {update.get('post_id', '-')}\n"
+    ad = result.get('ad_revenue_4w')
+    revenue = f"광고 4주: {ad['revenue']} / 조회 {int(ad['page_views'])} / RPM {ad['rpm']}\n" if ad else ''
+    message = (f"[HuntLab 주간 {result['week']}] {status}\n{revenue}{publication_summary}\n개선 글: {update.get('post_id', '-')}\n"
                f"{reason[:35]}\n{'개선' if change else '연구 제안'}: {detail[:55]}\n후보 {len(proposals)}건 / 지표 {result.get('metrics_status', '미확인')}\n"
                f"4주 평가: {result.get('assessment', '미실행')}")[:200]
     marker = {'status': 'attempting', 'message': message}
@@ -260,6 +262,11 @@ def run(root=ROOT, *, now=None, apply=False, notify=False, client=None,
             complete = all(sources.get(key, {}).get('status') == 'COMPLETE' for key in ('search_console', 'ga4'))
             sufficient = complete and all(sources[key].get('comparison_sufficient') is True for key in ('search_console', 'ga4'))
             result['metrics_status'] = 'COMPLETE' if complete else 'INCOMPLETE'
+            ga_now = sources.get('ga4', {}).get('periods', {}).get('current', {}).get('totals', {})
+            if 'totalAdRevenue' in ga_now:
+                views = ga_now.get('screenPageViews') or 0
+                result['ad_revenue_4w'] = {'revenue': round(ga_now['totalAdRevenue'], 2), 'page_views': views,
+                                           'rpm': round(ga_now['totalAdRevenue'] / views * 1000, 2) if views else None}
             result['metric_sources'] = {key: {'status': sources.get(key, {}).get('status', 'INCOMPLETE'),
                 'comparison_sufficient': sources.get(key, {}).get('comparison_sufficient', False)}
                 for key in ('search_console', 'ga4')}

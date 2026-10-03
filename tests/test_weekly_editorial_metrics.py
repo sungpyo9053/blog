@@ -20,7 +20,7 @@ def gsc_row(page=False):
 
 
 def ga_response(page=False):
-    row = {"metricValues": [{"value": "100"}, {"value": "30"}, {"value": "20"}]}
+    row = {"metricValues": [{"value": "100"}, {"value": "30"}, {"value": "20"}, {"value": "0.5"}]}
     if page:
         row["dimensionValues"] = [{"value": "/example/"}]
     return {"metadata": {"timeZone": "Asia/Seoul"}, "rowCount": 1, "rows": [row]}
