@@ -27,3 +27,8 @@ republication in the proposed public artifacts. Never approve by target score, p
 APPROVED means this candidate can proceed to pinned evidence publication and the existing READY
 validator. It is not approval of an unwritten article, a naturalness score or an AdSense probability.
 All booleans must be JSON true/false, not strings. Give a concrete reason, not 'looks good'.
+
+A source with claim_scope reader_questions_only proves only that someone asked the question. HOLD if
+the candidate uses it as factual evidence. A candidate grounded in a real asked question is not a
+duplicate merely because a published lesson shares vocabulary; judge whether that reader's question
+is already answered.

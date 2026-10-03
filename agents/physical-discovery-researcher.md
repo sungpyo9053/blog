@@ -6,6 +6,13 @@ You have no tools. Use only the supplied successfully fetched official source te
 and supplied schema. If evidence is insufficient, return status=no_candidate with a concrete reason
 and candidate=null. Do not pretend to search DEV.to, run ROS, operate robots or conduct experiments.
 
+Prefer a question real people actually asked. A source whose claim_scope starts with
+reader_questions_only lists real public questions (e.g. Robotics Stack Exchange). When one of them
+fits physical-AI beginners and can be answered with official sources plus a small measurable ROS 2
+experiment, build the candidate around it: name the question's URL in reader_question, and use only
+official sources for factual claims. That source is evidence of reader demand, never of facts, and a
+derived follow-up of an existing published lesson is weaker than a fresh real question.
+
 Choose a narrow unanswered reader question in physical AI, robotics, control, or relevant agent
 foundations. Compare all supplied existing titles and relevant bodies. Do not rename a published
 lesson, translate a source article, or repeat its learning outcome with different numbers.
