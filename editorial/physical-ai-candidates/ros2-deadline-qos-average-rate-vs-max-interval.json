@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-ros2-deadline-qos-average-rate-vs-max-interval",
+  "title": "ROS 2는 왜 '실시간'이라고 할까: 평균 100 Hz로 발행하는 센서 토픽도 deadline QoS를 놓치는 이유를 최대 간격으로 계산하기",
+  "slug": "ros2-deadline-qos-average-rate-vs-max-interval",
+  "reader_question": "Robotics Stack Exchange 질문 'Why does ROS2 claim to be \"real time\"?'(https://robotics.stackexchange.com/questions/22252/why-does-ros2-claim-to-be-real-time, 조회 2944)을 입문자가 막히는 지점에 맞춰 바꿔 쓰면 이렇다. ROS 2 QoS 문서는 real-time 시스템에서 마감을 맞추려면 알맞은 QoS 프로필이 필요하다고 말한다. 그렇다면 내 센서 토픽이 평균 100 Hz로 발행되면 15 ms deadline을 걸어도 마감을 지킨다고 볼 수 있을까? 평균 주기만으로 판정해도 될까?",
+  "target_reader": "ROS 2 센서·제어 노드에 deadline QoS를 처음 걸어 보려는 입문자. 기존 글 822에서 deadline이 '연속 메시지 사이의 예상 최대 시간'이고 제공·요청 호환성이 있다는 것은 배웠다. 하지만 실제 발행 간격이 매번 같지 않다는 점은 아직 계산해 본 적이 없다. 그래서 `ros2 topic hz`류의 평균 빈도만 보고 deadline 값을 고르려는 사람이다. 'real time factor'와 'real-time computing'을 헷갈린다면 기존 글 814를 먼저 읽는다고 가정한다.",
+  "learning_outcome": "ROS 2 문서에서 '실시간'이 두 뜻으로 쓰인다는 점을 한 문장으로 구분할 수 있다. ros-clock 설계 문서의 'real time'은 시간이 실제로 흐르는 속도이고, 결정적인 마감을 다루는 real-time computing과는 관계가 없다. 마감과 연결되는 쪽은 QoS 문서가 말하는 real-time 컴퓨팅 시스템과 deadline 정책이다. 발행 간격 기록이 주어지면 평균 주기와 평균 빈도, 간격마다의 'deadline − 간격' 여유를 계산할 수 있다. 그리고 평균이 같아도 최대 간격 하나 때문에 여유가 음수가 될 수 있음을 보일 수 있다. 제공 deadline을 최대 간격보다 길게 늘리면, ros-qos 호환성 표의 'y < x' 행에 따라 더 짧은 deadline을 요청하던 구독자가 연결되지 않는다는 결과도 계산할 수 있다. 바로 해 볼 일은 두 가지다. 자기 토픽의 발행 간격을 기록해 평균 대신 최댓값을 deadline 후보와 비교한다. deadline을 바꾸기 전에는 그 토픽을 구독하는 노드들의 요청 deadline도 함께 확인한다.",
+  "unique_takeaway": "deadline QoS의 판정은 평균 주기가 아니라 가장 긴 한 간격이 정한다. 발행 간격 10개의 평균이 10 ms(100 Hz)로 같은 두 기록이 있다고 하자. 모든 간격이 10 ms면 15 ms deadline에서 여유가 +5 ms 남는다. 같은 평균이라도 한 간격이 25 ms면 여유가 −10 ms가 된다. 이것을 고치려고 제공 deadline을 30 ms로 늘리면 최대 간격은 통과한다. 하지만 15 ms를 요청하던 구독자는 요청 15 − 제공 30 = −15로 비호환이 되어 아예 연결되지 않는다. 822는 주기가 일정하다는 가정 아래 '제공 − 주기'만 계산했다. 이 글은 그 가정을 풀었을 때 무엇으로 판정해야 하는지(최대 간격), 그리고 deadline을 늘리는 해결책에 어떤 대가(구독자 호환성)가 따르는지를 추가한다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/ros2_documentation/rolling/source/ROS-Framework/interfaces/topics/About-Quality-of-Service-Settings.rst",
+      "publisher": "ROS 2 Documentation",
+      "claim_scope": "QoS policies and compatibility; rolling document, no measured delivery guarantees",
+      "checked_at": "2026-10-03T20:43:10.864899+09:00"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/ros2/design/gh-pages/articles/130_ros_time.md",
+      "publisher": "ROS 2 Design",
+      "claim_scope": "Clock abstractions, simulation time and differences from wall time",
+      "checked_at": "2026-10-03T20:43:10.864899+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261003T114308Z-584e953e7b-ros2-deadline-qos-average-rate-vs-max-interval/example.py",
+    "sha256": "09c4086b8fff737dd0f94b4ee9082b5f5360d89dd472dede5b7d09cd7e9ad4d3",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/e1f59d65ab27375aef5f5e73b5b3f60788a2a622/editorial/generated-foundations/20261003T114308Z-584e953e7b-ros2-deadline-qos-average-rate-vs-max-interval/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261003T114308Z-584e953e7b-ros2-deadline-qos-average-rate-vs-max-interval/verification.json",
+    "sha256": "eb8d1308894e077ad49511392a7ad20aa74fe3a0cce36cacf39dbe5f2752e84f",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/e1f59d65ab27375aef5f5e73b5b3f60788a2a622/editorial/generated-foundations/20261003T114308Z-584e953e7b-ros2-deadline-qos-average-rate-vs-max-interval/verification.json"
+  },
+  "author_id": "discovery-writer-7ab2dd4a80b84285a9d5b09fddcf14a6"
+}
