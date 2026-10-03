@@ -7,10 +7,9 @@ Type=oneshot
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/html
-# WP-CLI errors if the named hook does not exist. Empty schedules are a
-# successful skip; database/CLI lookup failures are not hidden as empty.
-ExecCondition=/bin/sh -c 'count=$$(/usr/local/bin/wp --path=/var/www/html cron event list --hook=publish_future_post --format=count) || exit 255; case "$$count" in ""|*[!0-9]*) exit 255;; esac; test "$$count" -gt 0'
-ExecStart=/usr/local/bin/wp --path=/var/www/html cron event run publish_future_post --due-now
+# Scans due future posts directly; lost publish_future_post cron events left
+# posts 822/845 unpublished (2026-09-28, 2026-10-03).
+ExecStart=/usr/local/bin/wp --path=/var/www/html eval-file /usr/local/lib/huntlab/publish-due-future.php
 TimeoutStartSec=120
 NoNewPrivileges=true
 PrivateTmp=true
