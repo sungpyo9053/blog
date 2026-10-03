@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (125.5 - 125.25)
+assert math.isclose(value, 0.25, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '정상: 레이저와 tf가 모두 /clock을 따를 때 스탬프 차이(s)', "actual": value})
+value = (1790000000 - 125.25)
+assert math.isclose(value, 1789999874.75, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '레이저 노드만 use_sim_time이 꺼져 시스템 시계로 스탬프를 찍을 때의 차이(s)', "actual": value})
+value = (125.5 - 1790000000)
+assert math.isclose(value, -1789999874.5, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '반대로 tf 발행 노드만 use_sim_time이 꺼졌을 때의 차이(s)', "actual": value})
+value = (0 - 125.25)
+assert math.isclose(value, -125.25, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '레이저 노드가 /clock을 받기 전 0 시각으로 스탬프를 찍었을 때의 차이(s): 시뮬레이션 시각 전체만큼의 음수', "actual": value})
+value = (1789999874.75 / 0.25)
+assert math.isclose(value, 7159999499, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '시계가 섞인 차이가 정상 차이의 몇 배인지', "actual": value})
+value = (0.5 * 0.25)
+assert math.isclose(value, 0.125, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '정상 차이 0.25 s 동안 0.5 m/s로 움직인 로봇의 위치 변화(m)', "actual": value})
+value = (1790000000.5 - 1790000000.25)
+assert math.isclose(value, 0.25, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '반례: 두 노드 모두 시스템 시계를 쓰면 큰 숫자끼리 빼도 정상 차이(s)', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
