@@ -1,0 +1,64 @@
+{
+  "checked_at": "2026-10-03T22:32:40.934680+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"10 Hz 레이저의 발행 주기(ms)\", \"actual\": 100.0}, {\"name\": \"lease 500 ms 안에 들어가는 레이저 발행 주기 수\", \"actual\": 5.0}, {\"name\": \"구독자 요청 lease 1000 ms − publisher 제공 500 ms (0 이상이면 호환)\", \"actual\": 500}, {\"name\": \"구독자 요청 lease 250 ms − publisher 제공 500 ms (음수면 비호환, 연결 없음)\", \"actual\": -250}, {\"name\": \"automatic 모드: lease 500 ms − 같은 노드 100 Hz IMU의 갱신 간격 (양수면 레이저 정지가 가려짐)\", \"actual\": 490.0}, {\"name\": \"manual by topic 최악 감지 시간 500 ms − deadline 150 ms 감지 시간\", \"actual\": 350}, {\"name\": \"경계 반례(레이저가 노드의 유일한 publisher, automatic 모드): lease 80 ms − 발행 주기 100 ms (음수면 정상 발행 중에도 매 주기 lease가 끊김)\", \"actual\": -20}, {\"name\": \"lease를 발행 주기 3개로 잡을 때의 값(ms)\", \"actual\": 300}]\n",
+  "cases": [
+    {
+      "name": "10 Hz 레이저의 발행 주기(ms)",
+      "expression": "1000 / 10",
+      "expected": 100,
+      "actual": 100.0
+    },
+    {
+      "name": "lease 500 ms 안에 들어가는 레이저 발행 주기 수",
+      "expression": "500 / 100",
+      "expected": 5,
+      "actual": 5.0
+    },
+    {
+      "name": "구독자 요청 lease 1000 ms − publisher 제공 500 ms (0 이상이면 호환)",
+      "expression": "1000 - 500",
+      "expected": 500,
+      "actual": 500
+    },
+    {
+      "name": "구독자 요청 lease 250 ms − publisher 제공 500 ms (음수면 비호환, 연결 없음)",
+      "expression": "250 - 500",
+      "expected": -250,
+      "actual": -250
+    },
+    {
+      "name": "automatic 모드: lease 500 ms − 같은 노드 100 Hz IMU의 갱신 간격 (양수면 레이저 정지가 가려짐)",
+      "expression": "500 - 1000 / 100",
+      "expected": 490,
+      "actual": 490.0
+    },
+    {
+      "name": "manual by topic 최악 감지 시간 500 ms − deadline 150 ms 감지 시간",
+      "expression": "500 - 150",
+      "expected": 350,
+      "actual": 350
+    },
+    {
+      "name": "경계 반례(레이저가 노드의 유일한 publisher, automatic 모드): lease 80 ms − 발행 주기 100 ms (음수면 정상 발행 중에도 매 주기 lease가 끊김)",
+      "expression": "80 - 100",
+      "expected": -20,
+      "actual": -20
+    },
+    {
+      "name": "lease를 발행 주기 3개로 잡을 때의 값(ms)",
+      "expression": "3 * 100",
+      "expected": 300,
+      "actual": 300
+    }
+  ],
+  "teaching_context": {
+    "description": "설명을 위해 센서 드라이버 노드 하나가 레이저 스캔(10 Hz)과 IMU(100 Hz)를 함께 발행한다고 가정한다. 부동소수점 오차가 생기지 않도록 시간 단위는 모두 밀리초(ms) 정수로 맞췄다. 사례마다 ROS 2 QoS 문서의 규칙 하나가 드러나도록 입력을 골랐다. ① 빈도를 주기로 바꾸기. ② lease 안에 들어가는 발행 주기 수. ③·④ lease duration 호환성 표의 y>x(호환)와 y<x(비호환). ⑤ automatic 모드에서 같은 노드의 IMU가 liveliness를 갱신해 주는 여유. ⑥ manual by topic의 최악 감지 시간을 deadline 150 ms와 비교하기(deadline 자체는 기존 lesson 822가 다룬다). ⑦ lease가 발행 주기보다 짧은 경계 반례로, 레이저가 그 노드의 유일한 publisher이고 automatic 모드라고 가정한다. ⑧ lease를 주기의 3배로 잡는 설정 예. 호환성은 '구독자 요청 − publisher 제공'이 0 이상이면 호환, 음수면 비호환으로 읽는다. manual by topic 사례는 드라이버가 발행 주기마다 publisher API로 생존을 한 번씩만 알린다고 가정한다.",
+    "conclusion": "구독자가 요청하는 lease duration이 publisher가 제공하는 값 이상이어야 연결된다(③·④). 호환성 표에 따르면 publisher에 lease를 지정하지 않고 구독자만 지정해도 비호환이다. lease는 발행 주기보다 넉넉하게, 주기의 정수배 이상으로 잡는다. 그래야 정상 발행 중에 liveliness가 끊기지 않는다(②·⑦·⑧). 다만 ⑦의 끊김은 레이저가 그 노드의 유일한 publisher일 때만 생긴다. 같은 노드의 다른 publisher가 발행하고 있으면 automatic 모드에서는 lease가 계속 갱신된다. 가장 중요한 결과는 ⑤다. automatic 모드는 노드가 통째로 죽는 경우는 잡지만, 같은 노드의 다른 publisher가 살아 있는 동안 레이저 토픽 하나만 멈춘 경우는 놓칠 수 있다. 토픽 단위 정지를 감지하려면 레이저 publisher를 manual by topic으로 둔다. 호환성 표에서 manual by topic publisher는 automatic 구독자와도, manual by topic 구독자와도 호환된다. 비호환은 automatic publisher와 manual by topic 구독자의 조합뿐이므로, 바꿔야 하는 쪽은 구독자가 아니라 publisher다. 토픽 정지를 manual by topic보다 짧은 시간에 감지하고 싶다면 기존 deadline lesson(822)의 방법과 비교할 수 있다(⑥). 독자는 먼저 자기 드라이버 노드에 publisher가 몇 개인지 확인한다.",
+    "limitations": "모든 수치는 발행 간격이 흔들리지 않고 지연도 없다고 둔 산술 모델의 결과다. ROS 2 노드, DDS·RMW, 실제 센서를 실행해 이벤트 발생 시각이나 횟수를 잰 값이 아니다. 공식 문서는 automatic 모드의 갱신 규칙과 manual by topic의 '수동 assert'를 문장으로만 정의한다. 따라서 다음 세 가지는 이 자료로 알 수 없다. 메시지 발행 자체가 manual by topic의 assert로 세어지는지, RMW 구현마다 liveliness를 실제로 지원하는지, lease와 경과 시간이 정확히 같을 때 이벤트가 나는지. 사용하는 RMW의 문서를 읽고 직접 실행해 확인해야 한다. liveliness와 deadline 이벤트는 통신 계층의 진단 신호이고, 센서 값이 정상인지는 알려 주지 않는다. 실물 로봇의 정지 판단이나 비상정지를 대신할 수 없다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
