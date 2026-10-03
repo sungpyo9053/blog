@@ -116,6 +116,20 @@ def source_digest(url):
     match = re.fullmatch(r'https://github.com/([^/]+)/([^/]+)/blob/([0-9a-f]{40})/(.+)',url)
     if match:
         url='https://raw.githubusercontent.com/'+'/'.join(match.groups())
+    # Issue/PR pages change with every comment or reaction; the cited claim is the opening post.
+    thread = re.fullmatch(r'https://github\.com/([^/]+)/([^/]+)/(?:issues|pull)/(\d+)/?', url)
+    if thread:
+        api = 'https://api.github.com/repos/{}/{}/issues/{}'.format(*thread.groups())
+        safe_url(api)
+        response = requests.get(api, timeout=(5,20), allow_redirects=False,
+                                headers={'User-Agent':'HuntLab-EditorialRecheck/1.0','Accept':'application/vnd.github+json'})
+        if response.status_code != 200:
+            raise SourceCheckError('source_recheck_http_error', url, status=response.status_code)
+        issue = response.json()
+        data = (str(issue.get('title') or '') + '\n' + str(issue.get('body') or '')).strip().encode()
+        if not data:
+            raise SourceCheckError('source_empty', url)
+        return hashlib.sha256(data).hexdigest()
     safe_url(url)
     with requests.get(url, timeout=(5,20), stream=True, allow_redirects=False,
                       headers={'User-Agent':'HuntLab-EditorialRecheck/1.0'}) as response:
