@@ -65,3 +65,28 @@ $huntlab_pen_name = static function ( $name ) {
 };
 add_filter( 'the_author', $huntlab_pen_name, 30 );
 add_filter( 'get_the_author_display_name', $huntlab_pen_name, 30 );
+
+// Home banner: today's published article, or the next scheduled slot (time only; title stays hidden).
+add_action(
+    'wp_body_open',
+    static function (): void {
+        if ( ! is_front_page() ) {
+            return;
+        }
+        $today = wp_date( 'Y-m-d' );
+        $posts = get_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'numberposts' => 1,
+            'date_query' => [ [ 'after' => $today . ' 00:00:00', 'inclusive' => true ] ] ] );
+        if ( $posts ) {
+            $text = sprintf( '오늘 공개 · %s · <a href="%s">%s</a>', esc_html( wp_date( 'n월 j일' ) ),
+                esc_url( get_permalink( $posts[0] ) ), esc_html( get_the_title( $posts[0] ) ) );
+        } else {
+            $next = get_posts( [ 'post_type' => 'post', 'post_status' => 'future', 'numberposts' => 1,
+                'orderby' => 'date', 'order' => 'ASC' ] );
+            $text = '오늘 공개된 글이 없습니다' . ( $next ? ' · 다음 공개 ' .
+                esc_html( wp_date( 'n월 j일 H:i', get_post_timestamp( $next[0] ) ) ) : '' );
+        }
+        echo '<div class="huntlab-today" style="padding:8px 16px;text-align:center;font-size:14px;border-bottom:1px solid rgba(127,127,127,.25)">'
+            . $text . '</div>';
+    },
+    1
+);
