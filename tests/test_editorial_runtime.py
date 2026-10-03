@@ -6,8 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from scripts.editorial_runtime import (agent_environment, agent_runtime, build_json_command,
-                                       codex_model_arguments, collect_json_output)
+from scripts.editorial_runtime import (agent_environment, agent_runtime, alert_quota_exhausted, build_json_command,
+                                       build_stage_command, codex_model_arguments, collect_json_output)
 from scripts.run_daily_pipeline import build_codex_command
 
 
@@ -78,6 +78,24 @@ class RuntimeTests(unittest.TestCase):
                'CODEX_HOME': '/c', 'WORDPRESS_APP_PASSWORD': 'x'}
         with patch.dict(os.environ, env, clear=True):
             self.assertEqual(agent_environment(), {'HOME': '/h', 'CLAUDE_CODE_OAUTH_TOKEN': 't'})
+
+    def test_light_stage_uses_light_model_only_when_configured(self):
+        env = {'HUNTLAB_AGENT_RUNTIME': 'claude', 'HUNTLAB_CLAUDE_MODEL': 'claude-opus-5-5', 'HUNTLAB_CLAUDE_EFFORT': 'high'}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertIn('claude-opus-5-5', build_stage_command('claude', 'p', '/r', 'Image Maker Agent'))
+        with patch.dict(os.environ, {**env, 'HUNTLAB_CLAUDE_LIGHT_MODEL': 'claude-sonnet-5', 'HUNTLAB_CLAUDE_LIGHT_EFFORT': 'medium'}, clear=True):
+            light = build_stage_command('claude', 'p', '/r', 'Image Maker Agent')
+            self.assertEqual(light[1:5], ['--model', 'claude-sonnet-5', '--effort', 'medium'])
+            self.assertIn('claude-opus-5-5', build_stage_command('claude', 'p', '/r', 'Reviewer Agent'))
+
+    def test_quota_alert_sends_once_per_day(self):
+        sent = []
+        with tempfile.TemporaryDirectory() as root:
+            out = "You've hit your weekly limit · resets 11am (Asia/Seoul)"
+            self.assertTrue(alert_quota_exhausted(out, root, lambda m, e: sent.append(m)))
+            self.assertFalse(alert_quota_exhausted(out, root, lambda m, e: sent.append(m)))
+            self.assertFalse(alert_quota_exhausted('ordinary failure', root, lambda m, e: sent.append(m)))
+        self.assertEqual(len(sent), 1)
 
     def test_invalid_runtime_fails_before_call(self):
         with patch.dict(os.environ, {'HUNTLAB_AGENT_RUNTIME': 'gpt'}, clear=True), self.assertRaises(ValueError):

@@ -51,16 +51,43 @@ def codex_model_arguments():
                             lambda effort: ['-c', f'model_reasoning_effort="{effort}"'])
 
 
-def claude_model_arguments():
-    return _model_arguments('HUNTLAB_CLAUDE_MODEL', 'HUNTLAB_CLAUDE_EFFORT',
+# Mechanical stages (no editorial judgment) may run on a cheaper model to save quota.
+LIGHT_STAGES = frozenset({'Image Maker Agent', 'Assembler Agent', 'Humanize Experiment Agent'})
+
+
+def claude_model_arguments(light=False):
+    prefix = 'HUNTLAB_CLAUDE_LIGHT' if light and os.environ.get('HUNTLAB_CLAUDE_LIGHT_MODEL', '').strip() else 'HUNTLAB_CLAUDE'
+    return _model_arguments(prefix + '_MODEL', prefix + '_EFFORT',
                             {'low', 'medium', 'high', 'xhigh', 'max'},
                             lambda effort: ['--effort', effort])
 
 
-def build_stage_command(executable, prompt, project_root):
+def alert_quota_exhausted(output, root, sender=None):
+    """Kakao once per day when the agent CLI reports a usage limit; never raises."""
+    line = next((l for l in output.splitlines() if re.search(r'hit your .*limit', l, re.I)), None)
+    if not line:
+        return False
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        marker = Path(root) / 'output' / 'agent-quota' / (datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat() + '.sent')
+        if marker.exists():
+            return False
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(line)
+        if sender is None:
+            from scripts.send_kakao_report import send as sender
+        sender(f'[HuntLab 경고] AI 사용량 한도 소진 — 글 준비·브리핑 중단\n{line.strip()[:120]}',
+               os.environ.get('MCPORTER_BIN', 'mcporter'))
+        return True
+    except Exception:
+        return False
+
+
+def build_stage_command(executable, prompt, project_root, stage_name=''):
     """Full-access, web-enabled, non-interactive stage run; the prompt is the last argument."""
     if agent_runtime() == 'claude':
-        return [executable, *claude_model_arguments(), '--print', '--permission-mode', 'bypassPermissions',
+        return [executable, *claude_model_arguments(light=stage_name in LIGHT_STAGES), '--print', '--permission-mode', 'bypassPermissions',
                 '--no-session-persistence', '--output-format', 'text', prompt]
     return [executable, *codex_model_arguments(), '--ask-for-approval', 'never', '--sandbox', 'danger-full-access',
             '--search', 'exec', '--ephemeral', '--color', 'never', '--cd', str(project_root), prompt]

@@ -324,9 +324,9 @@ def resolve_codex() -> str:
         ) from exc
 
 
-def build_codex_command(codex: str, prompt: str) -> list[str]:
+def build_codex_command(codex: str, prompt: str, stage_name: str = "") -> list[str]:
     from scripts.editorial_runtime import build_stage_command
-    return build_stage_command(codex, prompt, PROJECT_ROOT)
+    return build_stage_command(codex, prompt, PROJECT_ROOT, stage_name)
 
 
 def redact_log_text(value: str) -> str:
@@ -369,7 +369,7 @@ def run_stage(
 ) -> str:
     started = time.monotonic()
     logger.info("topic=%r agent=%s event=start", topic, stage.name)
-    command = build_codex_command(codex, stage_instruction(stage))
+    command = build_codex_command(codex, stage_instruction(stage), stage.name)
     child_env = os.environ.copy()
     child_env.update(
         {
@@ -431,6 +431,8 @@ def run_stage(
             elapsed,
             result.returncode,
         )
+        from scripts.editorial_runtime import alert_quota_exhausted
+        alert_quota_exhausted(result.stdout or "", PROJECT_ROOT)
         raise PipelineError(
             f"{stage.name} 실패(exit_code={result.returncode})"
         )
@@ -1800,7 +1802,7 @@ def validate_dry_run(
             context.topic_id,
         )
         for stage in topic_stages(context):
-            command = build_codex_command(codex, stage_instruction(stage))
+            command = build_codex_command(codex, stage_instruction(stage), stage.name)
             logger.info(
                 "dry_run topic=%r agent=%s event=command command=%s",
                 topic,
