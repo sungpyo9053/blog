@@ -1,0 +1,64 @@
+{
+  "checked_at": "2026-10-03T16:07:34.917367+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"Automatic: heartbeat 마지막 발행 3.0 s + lease 1.0 s = 노드 전체 publisher의 생존 만료 시각(s)\", \"actual\": 4.0}, {\"name\": \"판정 시점 3.75 s에 카메라 토픽이 조용했던 시간(s): lease 1.0 s보다 길다\", \"actual\": 1.75}, {\"name\": \"Automatic: 3.75 s 시점에 만료까지 남은 여유(s). 양수라서 카메라 publisher도 살아 있음으로 판정\", \"actual\": 0.25}, {\"name\": \"Manual by topic: 카메라 마지막 assert 2.0 s + lease 1.0 s 이후로 3.75 s 시점까지 지난 시간(s). 양수라서 liveliness lost 조건\", \"actual\": 0.75}, {\"name\": \"lease 호환성: 구독자 요청 0.5 s − 발행자 제공 1.0 s. 음수라서 연결 없음\", \"actual\": -0.5}, {\"name\": \"lease 호환성: 구독자 요청 2.0 s − 발행자 제공 1.0 s. 양수라서 호환\", \"actual\": 1.0}, {\"name\": \"10 Hz 카메라 publisher에 lease 0.5 s를 걸 때 발행 주기 대비 여유(s)\", \"actual\": 0.4}, {\"name\": \"1 Hz heartbeat에 lease 1.0 s를 걸 때 여유(s): 0이라 경계에 걸림\", \"actual\": 0.0}]\n",
+  "cases": [
+    {
+      "name": "Automatic: heartbeat 마지막 발행 3.0 s + lease 1.0 s = 노드 전체 publisher의 생존 만료 시각(s)",
+      "expression": "3.0 + 1.0",
+      "expected": 4,
+      "actual": 4.0
+    },
+    {
+      "name": "판정 시점 3.75 s에 카메라 토픽이 조용했던 시간(s): lease 1.0 s보다 길다",
+      "expression": "3.75 - 2.0",
+      "expected": 1.75,
+      "actual": 1.75
+    },
+    {
+      "name": "Automatic: 3.75 s 시점에 만료까지 남은 여유(s). 양수라서 카메라 publisher도 살아 있음으로 판정",
+      "expression": "(3.0 + 1.0) - 3.75",
+      "expected": 0.25,
+      "actual": 0.25
+    },
+    {
+      "name": "Manual by topic: 카메라 마지막 assert 2.0 s + lease 1.0 s 이후로 3.75 s 시점까지 지난 시간(s). 양수라서 liveliness lost 조건",
+      "expression": "3.75 - (2.0 + 1.0)",
+      "expected": 0.75,
+      "actual": 0.75
+    },
+    {
+      "name": "lease 호환성: 구독자 요청 0.5 s − 발행자 제공 1.0 s. 음수라서 연결 없음",
+      "expression": "0.5 - 1.0",
+      "expected": -0.5,
+      "actual": -0.5
+    },
+    {
+      "name": "lease 호환성: 구독자 요청 2.0 s − 발행자 제공 1.0 s. 양수라서 호환",
+      "expression": "2.0 - 1.0",
+      "expected": 1,
+      "actual": 1.0
+    },
+    {
+      "name": "10 Hz 카메라 publisher에 lease 0.5 s를 걸 때 발행 주기 대비 여유(s)",
+      "expression": "0.5 - 1 / 10",
+      "expected": 0.4,
+      "actual": 0.4
+    },
+    {
+      "name": "1 Hz heartbeat에 lease 1.0 s를 걸 때 여유(s): 0이라 경계에 걸림",
+      "expression": "1.0 - 1 / 1",
+      "expected": 0,
+      "actual": 0.0
+    }
+  ],
+  "teaching_context": {
+    "description": "설명을 위해 가정한 시나리오다. 카메라 드라이버 노드에 publisher가 두 개 있다. 10 Hz 이미지 토픽과 1 Hz heartbeat 토픽이다. 이미지 토픽은 t=2.0 s에 마지막으로 발행한 뒤 멈췄고, heartbeat는 t=3.0 s에도 발행했다. lease duration은 1.0 s, 판정 시점은 t=3.75 s다. 모든 시각과 시간의 단위는 초(s)다. 발행 간격은 흔들림이 없고 통신 지연은 0이라고 가정한다. Manual by topic에서는 카메라 publisher가 마지막으로 assert한 시각을 2.0 s로 둔다. 입력값은 이진 부동소수점으로 정확히 표현되는 수로 골랐다. 이유는 두 가지다. 하나는 '침묵 시간이 lease보다 긴데도 살아 있다'는 반례가 분명히 드러나게 하려는 것이고, 다른 하나는 만료까지의 여유가 양수인지 음수인지로 판정이 갈리게 하려는 것이다. 사례 1~3은 Automatic 판정, 사례 4는 같은 시점의 Manual by topic 판정이다. 사례 5~6은 lease duration 호환성을 '요청 − 제공'의 부호로 판정하고, 사례 7~8은 발행 주기와 lease 사이의 여유를 계산한다.",
+    "conclusion": "사례 1~3에서는 카메라 토픽이 lease보다 긴 1.75 s 동안 조용했다. 그런데도 같은 노드의 heartbeat가 3.0 s에 발행했기 때문에 Automatic liveliness의 만료 시각은 4.0 s로 늦춰지고, 3.75 s 시점에는 0.25 s 여유가 남아 살아 있음으로 판정된다. 같은 시점을 Manual by topic으로 계산한 사례 4는 만료를 0.75 s 넘겨 liveliness lost 조건에 해당한다. 따라서 Automatic liveliness는 '노드 프로세스가 아직 무언가를 발행하는가'를 볼 뿐 '이 센서 토픽이 계속 나오는가'를 보장하지 않는다. 토픽 단위 감시가 목적이라면 Manual by topic이나 deadline QoS를 검토해야 한다. 사례 5~6처럼 구독자의 lease 요청은 발행자 제공값 이상이어야 연결된다. 사례 7~8은 lease를 발행 주기보다 넉넉하게 잡아야 하며, 주기와 같게 두면 경계에 선다는 점을 보여 준다. 독자의 다음 행동은 세 가지다. 자기 센서 노드의 publisher가 몇 개인지 세고, 둘 이상이면 Automatic만 믿지 않으며, 구독자 lease를 발행자 값 이상으로 맞춘다.",
+    "limitations": "이 계산은 공식 QoS 문서의 정의와 호환성 표를 덧셈과 뺄셈으로 옮긴 교육용 산술이다. ROS 2 노드, DDS, RMW, 카메라, 로봇을 실행하지 않았다. 판정 시각이 정확히 만료 시각과 같을 때 이벤트가 발생하는지, Liveliness lost나 changed 이벤트가 몇 번 어떤 간격으로 오는지는 문서에 정의돼 있지 않아 계산하지 않았다. 문서는 Manual by topic의 assert를 'publisher API 호출'로만 설명하므로, 일반 메시지 발행이 assert로 간주되는지는 이 계산이 가정하지 않았고 확인이 필요하다. 발행 간격의 지터, 네트워크 지연, executor 처리 시간, 시뮬레이션 시간과 벽시계 중 어느 쪽으로 lease를 재는지도 다루지 않았다. lease 기본값('default'는 보통 무한대로 해석됨)과 명시값이 섞인 조합은 숫자 식으로 표현하지 않았다. RMW 구현(예: DDS 계열이 아닌 미들웨어)에 따라 liveliness 지원 여부가 다를 수 있다. liveliness 판정을 실물 로봇의 비상정지나 안전 기능으로 쓸 수 있다는 근거도 되지 않는다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
