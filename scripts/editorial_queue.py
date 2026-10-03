@@ -5,6 +5,7 @@ import hashlib
 import ipaddress
 import json
 import re
+import time
 import socket
 import html
 from html.parser import HTMLParser
@@ -119,6 +120,15 @@ def source_digest(url):
     # Issue/PR pages change with every comment or reaction; the cited claim is the opening post.
     thread = re.fullmatch(r'https://github\.com/([^/]+)/([^/]+)/(?:issues|pull)/(\d+)/?', url)
     if thread:
+        # Unauthenticated GitHub API allows 60 calls/hour and the scheduler rechecks every 5 minutes.
+        cache_path = Path(__file__).resolve().parents[1] / 'output/source-digest-cache.json'
+        try:
+            cache = json.loads(cache_path.read_text())
+        except (OSError, ValueError):
+            cache = {}
+        hit = cache.get(url)
+        if hit and time.time() - hit['at'] < 12 * 3600:
+            return hit['sha256']
         api = 'https://api.github.com/repos/{}/{}/issues/{}'.format(*thread.groups())
         safe_url(api)
         response = requests.get(api, timeout=(5,20), allow_redirects=False,
@@ -129,7 +139,11 @@ def source_digest(url):
         data = (str(issue.get('title') or '') + '\n' + str(issue.get('body') or '')).strip().encode()
         if not data:
             raise SourceCheckError('source_empty', url)
-        return hashlib.sha256(data).hexdigest()
+        digest = hashlib.sha256(data).hexdigest()
+        cache[url] = {'sha256': digest, 'at': time.time()}
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(cache))
+        return digest
     safe_url(url)
     with requests.get(url, timeout=(5,20), stream=True, allow_redirects=False,
                       headers={'User-Agent':'HuntLab-EditorialRecheck/1.0'}) as response:
