@@ -176,7 +176,7 @@ def context_for(prepared, repo):
     return TopicContext(**values)
 
 
-OWN_EXPERIMENTS = re.compile(r'https://github\.com/sungpyo9053/blog/(?:tree|blob)/[^/]+/experiments/')
+OWN_EXPERIMENTS = re.compile(r'https://github\.com/sungpyo9053/blog(?:\.git/?$|/?$|/(?:tree|blob)/[^/]+/experiments/)')
 
 
 def is_self_link(url):

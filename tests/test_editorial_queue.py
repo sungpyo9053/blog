@@ -288,3 +288,13 @@ class EditorialQueueTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SelfLinkTests(unittest.TestCase):
+    def test_own_repo_clone_and_experiments_are_self_links(self):
+        for url in ('https://github.com/sungpyo9053/blog.git', 'https://github.com/sungpyo9053/blog',
+                    'https://github.com/sungpyo9053/blog/tree/main/experiments/x'):
+            self.assertTrue(queue.is_self_link(url), url)
+        self.assertFalse(queue.is_self_link(
+            'https://github.com/sungpyo9053/blog/blob/abc/editorial/generated-foundations/x/example.py'))
+        self.assertFalse(queue.is_self_link('https://github.com/sungpyo9053/blog-other'))
