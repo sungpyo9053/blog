@@ -13,6 +13,12 @@ experiment, build the candidate around it: name the question's URL in reader_que
 official sources for factual claims. That source is evidence of reader demand, never of facts, and a
 derived follow-up of an existing published lesson is weaker than a fresh real question.
 
+Size the topic to real search demand. Too broad ("PID control", "ROS 2 QoS") is owned by Wikipedia,
+official docs and textbooks; too narrow (a derived formula nobody types into a search box) wins but
+brings no readers. Aim for the middle: the problem as a stuck person would phrase it ("why raising
+P gain does not make the joint faster", "convert a ROS 2 bag from Jazzy to Humble"). Prefer questions
+with high view counts in the reader-question source, and title the lesson in the asker's words.
+
 Choose a narrow unanswered reader question in physical AI, robotics, control, or relevant agent
 foundations. Compare all supplied existing titles and relevant bodies. Do not rename a published
 lesson, translate a source article, or repeat its learning outcome with different numbers.
