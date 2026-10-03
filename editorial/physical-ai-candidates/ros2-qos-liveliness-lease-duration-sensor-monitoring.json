@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-ros2-qos-liveliness-lease-duration-sensor-monitoring",
+  "title": "ROS 2에서 센서 노드가 살아 있는지 어떻게 감시할까: liveliness Automatic이 멈춘 카메라 토픽을 놓치는 이유와 lease duration 계산",
+  "slug": "ros2-qos-liveliness-lease-duration-sensor-monitoring",
+  "reader_question": "Robotics Stack Exchange의 질문 'How to monitor sensor reliability in ROS2?'(https://robotics.stackexchange.com/questions/112988/how-to-monitor-sensor-reliability-in-ros2, 답변 없음)에서 출발한다. 카메라 드라이버 노드의 이미지 토픽이 멈췄는데 같은 노드의 다른 publisher는 계속 발행한다. 이때 QoS liveliness를 걸어 두면 구독자가 센서가 죽은 것을 알아챌 수 있을까? lease duration은 몇 초로 잡아야 하고, 구독자 쪽에는 어떤 값을 넣어야 연결이 끊기지 않을까?",
+  "target_reader": "ROS 2의 토픽, publisher, subscription을 알고 reliability·durability QoS 호환성을 한 번 다뤄 본 입문자. 센서 드라이버가 멈췄을 때 이를 감지하는 모니터링 노드를 처음 설계하는 사람이 대상이며, 초 단위 덧셈과 뺄셈만 할 수 있으면 된다.",
+  "learning_outcome": "마지막 발행 시각 또는 assert 시각에 lease duration을 더해 liveliness 만료 시각을 계산하고, 특정 시점에 publisher가 살아 있다고 판정되는지 말할 수 있다. 같은 시나리오를 Automatic과 Manual by topic으로 각각 계산해 결과가 왜 갈리는지 설명할 수 있다. '구독자 요청 lease − 발행자 제공 lease'의 부호로 연결 가능 여부를 판정하고, 발행 주기와 lease 사이의 여유를 계산해 lease 값을 고를 수 있다. 여기에 더해, 자기 센서 노드에 publisher가 둘 이상 있는지 확인하고 Automatic, Manual by topic, deadline 중 무엇으로 감시할지 정하는 행동 기준을 얻는다.",
+  "unique_takeaway": "Automatic liveliness는 토픽이 아니라 노드 단위로 판정한다. 공식 문서에 따르면 노드의 publisher 중 하나라도 발행하면 그 노드의 모든 publisher가 lease duration만큼 더 살아 있는 것으로 간주된다. 예제에서는 카메라 토픽이 2.0초에 멈췄지만 heartbeat가 3.0초에 발행되고 lease가 1.0초다. 그래서 3.75초 시점에는 카메라가 1.75초째 조용한데도 만료까지 0.25초가 남아 '살아 있음'으로 판정된다. 같은 조건을 Manual by topic으로 계산하면 카메라 publisher의 마지막 assert(2.0초) 기준으로 이미 0.75초가 지나 liveliness lost 조건에 해당한다. 토픽 하나의 침묵을 잡으려면 Automatic이 아니라 Manual by topic이나 deadline을 써야 한다. lease duration을 고를 때는 구독자 요청값이 발행자 제공값보다 짧으면(요청 − 제공 < 0) 연결되지 않는다는 점도 함께 따져야 한다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/ros2_documentation/rolling/source/ROS-Framework/interfaces/topics/About-Quality-of-Service-Settings.rst",
+      "publisher": "ROS 2 Documentation",
+      "claim_scope": "QoS policies and compatibility; rolling document, no measured delivery guarantees",
+      "checked_at": "2026-10-03T16:07:34.917367+09:00"
+    },
+    {
+      "url": "https://api.stackexchange.com/2.3/questions?order=desc&sort=votes&tagged=ros2&site=robotics&pagesize=50",
+      "publisher": "Robotics Stack Exchange",
+      "claim_scope": "reader_questions_only: real questions people asked; never a factual source",
+      "checked_at": "2026-10-03T16:07:34.917367+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261003T070732Z-eb990e05f7-ros2-qos-liveliness-lease-duration-sensor-monitoring/example.py",
+    "sha256": "171046f530e05079c5ed79823913229ecc529feae5a1c17d8f195b193205e5d4",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/c8e419fc32cf279431625961daacd27296ffe42d/editorial/generated-foundations/20261003T070732Z-eb990e05f7-ros2-qos-liveliness-lease-duration-sensor-monitoring/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261003T070732Z-eb990e05f7-ros2-qos-liveliness-lease-duration-sensor-monitoring/verification.json",
+    "sha256": "bbfc53b97a071824e2c5176f82798d517a4e9c669ee10dac77ae0902135370e6",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/c8e419fc32cf279431625961daacd27296ffe42d/editorial/generated-foundations/20261003T070732Z-eb990e05f7-ros2-qos-liveliness-lease-duration-sensor-monitoring/verification.json"
+  },
+  "author_id": "discovery-writer-dada2ffadb5840f0bdc9382108509569"
+}
