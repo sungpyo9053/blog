@@ -21,7 +21,11 @@ ARTIFACT_PATTERNS = ("logs/*.log", "logs/*.jsonl", "output/runs/**/publisher-aud
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S),
     re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"), re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
-    re.compile(r"\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}\b", re.I),
+    # "basic tutorials" in ROS docs is prose: Basic needs a digit or '=', Bearer stays strict,
+    # and anything after an Authorization header is treated as a credential.
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(r"\b[Bb]asic\s+(?=[A-Za-z0-9._~+/=-]*[0-9=])[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(r"(?i)\bauthorization\s*:\s*\S+"),
     re.compile(r"(?i)\b(?:Cookie|Set-Cookie)\s*:\s*[^\r\n]+"),
     re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
     re.compile(r"(?i)\b(?:password|passwd|token|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+"),
