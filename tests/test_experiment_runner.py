@@ -110,3 +110,10 @@ class PublisherTitleTests(unittest.TestCase):
         stored = {"raw": title, "rendered": "&#8216;Message Filter dropping message&#8217; 로그"}
         self.assertEqual(_normalized(_plain_text(stored)), _normalized(title))
         self.assertEqual(_plain_text({"rendered": "x"}), "x")
+
+
+class CategoryTests(unittest.TestCase):
+    def test_tool_names_with_korean_particles_map_to_frameworks(self):
+        from scripts.run_evidence_deep_article import candidate_category
+        for title in ("RViz2에서 TF가 안 보일 때", "Gazebo에서 모델이 안 보일 때", "colcon build가 실패할 때"):
+            self.assertEqual(candidate_category({"title_seed": title, "problem": ""}), "프레임워크·라이브러리", title)

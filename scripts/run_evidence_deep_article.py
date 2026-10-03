@@ -165,7 +165,7 @@ def resume_public_audit(run_id: str, *, output_root: Path = OUTPUT,
 
 PHYSICAL_AI_TOOLS = re.compile(
     r"\b(?:mujoco|pybullet|gazebo|lerobot|ros[ -]?2|isaac(?:\s+(?:sim|lab))?|"
-    r"openvla|robosuite|robot\s+operating\s+system)\b", re.I)
+    r"openvla|robosuite|colcon|nav2|rviz2?|moveit2?|robot\s+operating\s+system)(?![A-Za-z0-9])", re.I)  # Korean particles follow directly ("RViz2에서")
 PHYSICAL_AI_SUBJECTS = re.compile(
     r"피지컬\s*AI|로봇|물리\s*시뮬레이션|체화\s*(?:AI|인공지능)|"
     r"\b(?:physical\s+ai|embodied\s+(?:ai|intelligence)|robot(?:s|ics)?|"
