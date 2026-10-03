@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import copy
 import json
+from dataclasses import replace
 import logging
 import os
 import inspect
@@ -1753,6 +1754,14 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertTrue(all("review.md" in stage.prompt for stage in stages))
         self.assertTrue(all("실제 원문" in stage.prompt for stage in stages))
         self.assertNotIn("Publisher Agent", [stage.name for stage in stages])
+
+    def test_measured_repair_reuses_research_and_experiment(self):
+        context = make_topic_context("run-repair-physical", "실측 보정")
+        context = replace(context, category="피지컬 AI 기초")
+        names = [stage.name for stage in review_repair_stages(context, attempt=1)]
+        self.assertNotIn("Research Agent", names)
+        self.assertNotIn("Experiment Agent", names)
+        self.assertIn("Writer Agent", names)
 
     def test_publish_contract_reports_explicit_reviewer_rejection(self):
         with tempfile.TemporaryDirectory() as temporary:

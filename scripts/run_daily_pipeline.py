@@ -1319,7 +1319,10 @@ def review_repair_stages(
         # The repair Writer edits the already-selected draft. Re-running the
         # humanizer would either be ignored by this repair loop or apply style
         # twice, so only the content and review agents participate here.
-        if stage.name not in {"Humanize Experiment Agent", "Publisher Agent"}
+        # The measured experiment is never re-run (re-measuring changes the numbers the article cites),
+        # and for measured Physical AI articles research is reused too: a full redo doubles token cost.
+        if stage.name not in {"Humanize Experiment Agent", "Publisher Agent", "Experiment Agent"}
+        and not (stage.name == "Research Agent" and context.category in PHYSICAL_AI_CATEGORIES)
     ]
 
 
@@ -1427,9 +1430,11 @@ def validate_stage_artifacts(context: TopicContext, stage_name: str) -> None:
         except ExperimentFailed as exc:
             raise ContentQualityRejection(f"{context.topic_id}: 실측 실패 — {exc}") from exc
     results = context.directory / "experiment/results.json"
-    if stage_name == "Reviewer Agent" and results.is_file():
+    # Checked right after assembly (cheap, before the costly review) and again on the reviewed publish.md.
+    gated = {"Assembler Agent": "final.md", "Reviewer Agent": "publish.md"}
+    if stage_name in gated and results.is_file():
         from scripts.experiment_runner import check_measured_section
-        problems = check_measured_section((context.directory / "publish.md").read_text(encoding="utf-8"),
+        problems = check_measured_section((context.directory / gated[stage_name]).read_text(encoding="utf-8"),
                                           context.directory)
         if problems:
             raise ContentQualityRejection(f"{context.topic_id}: 실측 게이트 — {', '.join(problems[:5])}")
