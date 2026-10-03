@@ -57,14 +57,14 @@ class WeeklyMetricsTests(unittest.TestCase):
             calls.append((url, body))
             return successful_query(session, url, body)
         self.collect(query)
-        self.assertEqual(len(calls), 8)
+        self.assertEqual(len(calls), 9)  # 8 traffic queries + 1 reader-feedback query
         for url, body in calls:
             self.assertNotIn("query", body.get("dimensions", []))
             if "webmasters" in url:
                 self.assertEqual(body["dataState"], "final")
                 self.assertIn("huntlab", body["dimensionFilterGroups"][0]["filters"][0]["expression"])
             else:
-                self.assertEqual(body["dimensionFilter"]["filter"]["stringFilter"]["value"], "huntlab.app")
+                self.assertIn('"value": "huntlab.app"', json.dumps(body["dimensionFilter"]))
 
     def test_failure_independent_redacted_not_zero(self):
         def query(session, url, body):

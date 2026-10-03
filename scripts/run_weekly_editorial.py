@@ -158,6 +158,23 @@ def inventory_summary(inventory):
         'comparison_scope': 'Discovery summary only. Full bodies remain in private inventory and mandatory Publisher duplicate checks; not proof of independent semantic duplicate review.'}
 
 
+def reader_signals(ga4, posts):
+    """Measured (실측) posts vs other physical posts: engagement rate and 👍/👎 in the current window."""
+    pages = {row['page']: row for row in ga4.get('periods', {}).get('current', {}).get('pages', [])}
+    groups = {'measured': [0.0, 0.0, 0], 'other': [0.0, 0.0, 0]}
+    for post in posts:
+        content = post.get('content', '')
+        key = 'measured' if ('measured:start' in content or 'id="measured-' in content) else 'other'
+        path = '/' + post.get('slug', '').strip('/') + '/'
+        row = pages.get(path, {})
+        groups[key][0] += row.get('sessions', 0)
+        groups[key][1] += row.get('engagedSessions', 0)
+        groups[key][2] += 1
+    feedback = ga4.get('feedback', {})
+    return {key: {'posts': n, 'sessions': s, 'engagement_rate': round(e / s, 2) if s else None}
+            for key, (s, e, n) in groups.items()} | {'feedback_up': feedback.get('up'), 'feedback_down': feedback.get('down')}
+
+
 def validate_plan(plan):
     if not isinstance(plan, dict) or set(plan) != {'summary', 'proposals', 'action'} or not isinstance(plan['summary'], str):
         raise ValueError('invalid_plan')
@@ -205,6 +222,10 @@ def notify_result(result, directory, sender=send):
     publication_summary = f'자동 발행 기록 {count}편' if count is not None else '발행 집계 확인 필요'
     ad = result.get('ad_revenue_4w')
     revenue = f"광고 4주: {ad['revenue']} / 조회 {int(ad['page_views'])} / RPM {ad['rpm']}\n" if ad else ''
+    rs = result.get('reader_signals')
+    if rs:
+        revenue += (f"실측 {rs['measured']['posts']}편 참여율 {rs['measured']['engagement_rate']} vs 기타 "
+                    f"{rs['other']['engagement_rate']} · 👍{rs['feedback_up']} 👎{rs['feedback_down']}\n")
     message = (f"[HuntLab 주간 {result['week']}] {status}\n{revenue}{publication_summary}\n개선 글: {update.get('post_id', '-')}\n"
                f"{reason[:35]}\n{'개선' if change else '연구 제안'}: {detail[:55]}\n후보 {len(proposals)}건 / 지표 {result.get('metrics_status', '미확인')}\n"
                f"4주 평가: {result.get('assessment', '미실행')}")[:200]
@@ -274,6 +295,7 @@ def run(root=ROOT, *, now=None, apply=False, notify=False, client=None,
             result['physical_ai_effect'] = 'NOT_EVALUATED: site totals include legacy articles; publication cohort and dates must be established'
             result['assessment'] = 'DUE_SUFFICIENT_FOR_REVIEW' if due and sufficient else ('DEFERRED_INSUFFICIENT_DATA' if due else 'NOT_DUE')
             all_posts = eligible_posts(client, inventory)
+            result['reader_signals'] = reader_signals(sources.get('ga4', {}), all_posts)
             posts = all_posts[:10]
             result['eligible_published_count'] = len(all_posts)
             result['model_target_count'] = len(posts)

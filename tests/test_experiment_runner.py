@@ -67,6 +67,17 @@ class ExperimentRunnerTests(unittest.TestCase):
             self.assertIn("https://huntlab.app/my-slug/", (Path(repo) / "experiments/my-slug/README.md").read_text())
             self.assertEqual(calls[0][1][0], "experiments/my-slug/experiment.py")
 
+    def test_reader_signals_split_measured_and_other(self):
+        from scripts.run_weekly_editorial import reader_signals
+        ga4 = {"periods": {"current": {"pages": [{"page": "/a/", "sessions": 10, "engagedSessions": 8},
+                                                  {"page": "/b/", "sessions": 10, "engagedSessions": 4}]}},
+               "feedback": {"up": 3, "down": 1}}
+        posts = [{"slug": "a", "content": '<h2 id="measured-x">'}, {"slug": "b", "content": "plain"}]
+        signals = reader_signals(ga4, posts)
+        self.assertEqual(signals["measured"]["engagement_rate"], 0.8)
+        self.assertEqual(signals["other"]["engagement_rate"], 0.4)
+        self.assertEqual((signals["feedback_up"], signals["feedback_down"]), (3, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

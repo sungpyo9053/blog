@@ -207,6 +207,26 @@ def _ga_metadata(data, timezones):
     timezones.add(zone)
 
 
+def _ga4_feedback(session, windows):
+    """Reader 👍/👎 clicks (GA4 events feedback_up/feedback_down) per page in the current window."""
+    url = "https://analyticsdata.googleapis.com/v1beta/properties/" + os.environ["GA4_PROPERTY_ID"] + ":runReport"
+    window = windows["current"]
+    data = _query(session, url, {"dateRanges": [{"startDate": window["start"], "endDate": window["end"]}],
+                                 "dimensions": [{"name": "eventName"}, {"name": "pagePath"}],
+                                 "metrics": [{"name": "eventCount"}], "limit": 1000,
+                                 "dimensionFilter": {"andGroup": {"expressions": [
+                                     {"filter": {"fieldName": "eventName", "inListFilter": {
+                                         "values": ["feedback_up", "feedback_down"]}}},
+                                     {"filter": {"fieldName": "hostName", "stringFilter": {
+                                         "matchType": "EXACT", "value": HOST, "caseSensitive": False}}}]}}})
+    pages = {}
+    for row in data.get("rows", []):
+        event, page = (value.get("value") for value in row["dimensionValues"])
+        pages.setdefault(page, {"up": 0, "down": 0})["up" if event == "feedback_up" else "down"] += int(
+            _number(row["metricValues"][0].get("value")))
+    return {"up": sum(p["up"] for p in pages.values()), "down": sum(p["down"] for p in pages.values()), "pages": pages}
+
+
 def collect_metrics(now: datetime, root: Path) -> dict:
     """Collect fresh API responses independently. Errors never become zero traffic."""
     if now.tzinfo is None or now.utcoffset() is None:
@@ -228,6 +248,11 @@ def collect_metrics(now: datetime, root: Path) -> dict:
         try:
             session = _session()
             result["sources"][name] = {"status": "COMPLETE", **collector(session, windows)}
+            if name == "ga4":
+                try:
+                    result["sources"]["ga4"]["feedback"] = _ga4_feedback(session, windows)
+                except Exception as exc:  # Feedback is optional; never fail traffic collection.
+                    result["sources"]["ga4"]["feedback"] = {"status": "UNAVAILABLE", "error_type": type(exc).__name__}
         except Exception as exc:
             result["sources"][name] = {"status": "INCOMPLETE", "error_type": type(exc).__name__, "periods": {}}
         finally:
