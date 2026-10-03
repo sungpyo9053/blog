@@ -368,6 +368,9 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
                 _save_exclusive(receipt, result)
                 return result
             candidate, cases = validated
+            # Reader-question feeds prove demand, not facts: fail before the costly review if no official source.
+            need(any(row['id'] in candidate['source_ids'] and not row['claim_scope'].startswith('reader_questions_only')
+                     for row in sources), 'candidate_needs_official_source')
             need(not contains_secret(json.dumps(candidate, ensure_ascii=False)), 'unsafe_candidate')
             event = Event('foundation'); event.title = candidate['title']; event.slug = candidate['slug']
             event.subjects = [candidate['reader_question']]; event.unique_takeaway = candidate['unique_takeaway']
@@ -449,7 +452,8 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
         manifest = {'schema_version': 1, 'candidate_id': identifier,
                     **{key: candidate[key] for key in ('title', 'slug', 'reader_question', 'target_reader', 'learning_outcome', 'unique_takeaway')},
                     'primary_sources': [{key: source[key] for key in ('url', 'publisher', 'claim_scope', 'checked_at')}
-                                        for source in sources if source['id'] in candidate['source_ids']],
+                                        for source in sources if source['id'] in candidate['source_ids']
+                                        and not source['claim_scope'].startswith('reader_questions_only')],
                     'worked_example': reference('example.py'), 'verification': reference('verification.json'), 'author_id': author_id}
         manifest_bytes = encode(manifest)
         sealed_review = {'schema_version': 1, 'manifest_sha256': digest(manifest_bytes),

@@ -10,7 +10,8 @@ Prefer a question real people actually asked. A source whose claim_scope starts 
 reader_questions_only lists real public questions (e.g. Robotics Stack Exchange). When one of them
 fits physical-AI beginners and can be answered with official sources plus a small measurable ROS 2
 experiment, build the candidate around it: name the question's URL in reader_question, and use only
-official sources for factual claims. That source is evidence of reader demand, never of facts, and a
+official sources for factual claims. source_ids must include at least one official source; the
+question feed id may be added but never alone. That source is evidence of reader demand, never of facts, and a
 derived follow-up of an existing published lesson is weaker than a fresh real question.
 
 Size the topic to real search demand. Too broad ("PID control", "ROS 2 QoS") is owned by Wikipedia,
