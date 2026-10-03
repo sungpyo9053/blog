@@ -148,10 +148,18 @@ def context_for(prepared, repo):
     return TopicContext(**values)
 
 
+OWN_EXPERIMENTS = re.compile(r'https://github\.com/sungpyo9053/blog/(?:tree|blob)/[^/]+/experiments/')
+
+
+def is_self_link(url):
+    """Our own site and our own reproduction code are not external sources (main moves with every commit)."""
+    return urlparse(url).hostname == 'huntlab.app' or bool(OWN_EXPERIMENTS.match(url))
+
+
 def source_urls(text,candidate):
     urls=set(re.findall(r'https://[^\s<>\)\]"\'`]+',text))
     urls.update(candidate.get('evidence',{}).get('public_urls',[]))
-    urls=sorted({url.split('#',1)[0] for url in urls if urlparse(url).hostname!='huntlab.app'})
+    urls=sorted({url.split('#',1)[0] for url in urls if not is_self_link(url)})
     if not urls or len(urls)>40:
         raise ValueError('queue_source_set_invalid')
     return urls
@@ -302,6 +310,8 @@ def preflight(row, *, repo, inventory_path, now, fetch=source_digest, line_count
     if not row.get('sources') or not isinstance(row['sources'],list):
         raise ValueError('queue_sources_missing')
     for source in row['sources']:
+        if is_self_link(source['url']):
+            continue
         if fetch(source['url']) != source['sha256']:
             raise ValueError('queue_source_changed')
     validate_source_line_anchors((context.directory/'publish.md').read_text(), line_counter=line_counter)
