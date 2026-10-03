@@ -35,7 +35,9 @@ counterexample or boundary comparison where useful. Explain units, assumptions, 
 were selected, what the computed result means, and what cannot be inferred. Do not invent execution
 results: the host will calculate and record them after your response. expected is a JSON number.
 
-Keep title natural and specific with a physical-AI/robotics connection. Slug is stable lowercase
+Keep title natural and specific with a physical-AI/robotics connection. The title must not assert a cause
+or behavior the supplied official texts do not state; when the answer depends on RMW/DDS internals,
+phrase it as the question the experiment will measure. Slug is stable lowercase
 ASCII words with hyphens, not a date/counter workaround. Reader question, target_reader,
 learning_outcome, unique_takeaway, example.description/conclusion/limitations are Korean prose.
 Use only the exact requested JSON fields. No Markdown fences, explanations outside JSON or secrets.

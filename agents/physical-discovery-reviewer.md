@@ -32,3 +32,10 @@ A source with claim_scope reader_questions_only proves only that someone asked t
 the candidate uses it as factual evidence. A candidate grounded in a real asked question is not a
 duplicate merely because a published lesson shares vocabulary; judge whether that reader's question
 is already answered.
+
+Title premise check: read the title and unique takeaway as claims. Any causal or behavioral claim
+("X misses Y because of Z", "A happens when B") must be stated or directly derivable from the supplied
+official text. If the texts only define the terms, or the behavior depends on RMW/DDS implementation
+details not in the supplied texts, HOLD and name the unsupported claim; a later deep-research stage
+discarding the premise costs far more than a HOLD here. A title phrased as a question to be measured
+("does X miss Y?") does not assert the behavior and is acceptable.

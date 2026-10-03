@@ -1763,6 +1763,26 @@ class DailyPipelineIsolationTests(unittest.TestCase):
         self.assertNotIn("Experiment Agent", names)
         self.assertIn("Writer Agent", names)
 
+    def test_near_miss_gets_exactly_one_extra_repair(self):
+        import scripts.run_daily_pipeline as pipeline
+        for score, expected in ((98, 3), (91, 2)):
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary) / "run" / "topic"
+                directory.mkdir(parents=True)
+                context = TopicContext(title="실측", run_id="run", topic_id="topic", directory=directory,
+                                       category="피지컬 AI 기초", tags=("ROS 2",))
+                (directory / "review.md").write_text("- status: `REJECTED`\n", encoding="utf-8")
+                (directory / "content-quality-review.md").write_text(f"합계: {score}/100. 99 미만\n", encoding="utf-8")
+                attempts = []
+                def stage(codex, stage, logger, **kwargs):
+                    if stage.name == "Writer Agent":
+                        attempts.append(stage.prompt)
+                with patch.object(pipeline, "run_stage", side_effect=stage), \
+                        patch.object(pipeline, "validate_stage_artifacts"):
+                    pipeline.run_review_repair_cycle("codex", context, logging.getLogger("t"), timeout_seconds=1)
+                self.assertEqual(len(attempts), expected, score)
+                self.assertIn(f"보정 시도 {expected}/{expected}", attempts[-1])
+
     def test_publish_contract_reports_explicit_reviewer_rejection(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "run-rejected" / "topic-rejected"

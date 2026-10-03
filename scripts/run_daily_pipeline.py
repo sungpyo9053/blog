@@ -1318,12 +1318,13 @@ def review_repair_stages(
     context: TopicContext,
     *,
     attempt: int,
+    total: int | None = None,
 ) -> list[Stage]:
     """Reuse the existing content agents for one bounded Reviewer repair pass."""
     review_path = context.directory / "review.md"
+    total = total or (2 if context.category in PHYSICAL_AI_CATEGORIES else MAX_REVIEW_REPAIR_ATTEMPTS)
     repair_note = (
-        f"\n\n이 단계는 Reviewer 거절 후 보정 시도 {attempt}/"
-        f"{2 if context.category in PHYSICAL_AI_CATEGORIES else MAX_REVIEW_REPAIR_ATTEMPTS}입니다. 이전 검토 결과 "
+        f"\n\n이 단계는 Reviewer 거절 후 보정 시도 {attempt}/{total}입니다. 이전 검토 결과 "
         f"{str(review_path)!r}를 읽고 현재 Agent의 기존 책임 범위 안에서 거절 "
         "사유를 직접 해결하세요. 통과한 사실과 근거는 보존하고, 검증하지 않은 "
         "내용을 만들거나 Reviewer 기준을 우회하지 마세요. 명령·fixture·입력·출력·"
@@ -1356,7 +1357,9 @@ def run_review_repair_cycle(
     # Measured articles repair from the Writer on (research and experiment reused), so a second
     # pass is cheaper than discarding the topic; other articles keep the single pass.
     attempts = 2 if context.category in PHYSICAL_AI_CATEGORIES else MAX_REVIEW_REPAIR_ATTEMPTS
-    for attempt in range(1, attempts + 1):
+    attempt = 0
+    while attempt < attempts:
+        attempt += 1
         if read_review_decision(context) != "REJECTED":
             return
         archive_name = 'review-before-repair' if attempt == 1 else f'review-before-repair-{attempt}'
@@ -1377,7 +1380,7 @@ def run_review_repair_cycle(
             context.topic_id,
             attempt,
         )
-        for stage in review_repair_stages(context, attempt=attempt):
+        for stage in review_repair_stages(context, attempt=attempt, total=attempts):
             if prepare_only and stage.name == 'Reviewer Agent':
                 from scripts.editorial_queue import freeze_sources
                 # The original baseline remains in the rejection archive. The new
@@ -1410,6 +1413,26 @@ def run_review_repair_cycle(
             attempt,
             read_review_decision(context) or "UNKNOWN",
         )
+        # A near miss (97-98) already has an exact fix list; one more pass is far cheaper than
+        # discarding the researched, measured article. Never more than one extra pass.
+        score = near_miss_score(context)
+        if (attempt == attempts and attempts == 2 and context.category in PHYSICAL_AI_CATEGORIES
+                and read_review_decision(context) == "REJECTED" and score is not None and score >= NEAR_MISS_MIN):
+            attempts += 1
+            logger.info("topic=%r run_id=%s topic_id=%s event=near_miss_extra_attempt score=%d",
+                        context.title, context.run_id, context.topic_id, score)
+
+
+NEAR_MISS_MIN = 97
+
+
+def near_miss_score(context: TopicContext) -> int | None:
+    """Last '합계: N/100' the Reviewer wrote in content-quality-review.md, or None."""
+    path = context.directory / "content-quality-review.md"
+    if not path.is_file():
+        return None
+    found = re.findall(r"합계[^0-9\n]{0,12}(\d{1,3})\s*/\s*100", path.read_text(encoding="utf-8"))
+    return int(found[-1]) if found else None
 
 
 def experiment_slug_for(context: TopicContext) -> str | None:
