@@ -427,6 +427,13 @@ def execute(*, run_id: str, inventory_path: Path, apply: bool, topic_runner: Cal
         if prepared.get("status") != "prepared" or prepared.get("wordpress_write_count") != 0 or prepared.get("post_id") is not None:
             raise PipelineError("invalid_preparation_result")
         queued = editorial_queue.enqueue(candidate, prepared, repo=repo, now=datetime.now(KST))
+        try:  # Public reproduction code is a bonus; it must never block a reviewed article.
+            from scripts.experiment_runner import publish_to_repo
+            topic_dir = (prepared.get("context") or {}).get("directory")
+            if topic_dir:
+                publish_to_repo(Path(topic_dir), candidate["slug"], repo)
+        except Exception as exc:
+            (logger or configure_logger(now.date())).warning("experiment_publish_failed error=%s", type(exc).__name__)
         write_progress(progress_path, stage="preparation_enqueued", wordpress_write_count=0)
         advance_checkpoint()
         return {**base, "deep_article": "prepared", "candidate_id": candidate["candidate_id"], "queue": queued}

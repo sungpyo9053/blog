@@ -93,6 +93,27 @@ def check_measured_section(article: str, topic_dir: Path) -> list[str]:
     return [f"unmeasured_number:{n}" for n in unknown]
 
 
+def publish_to_repo(topic_dir: Path, slug: str, repo: Path, publish=None) -> str | None:
+    """Mirror a finished experiment into the public repo under experiments/<slug>/ and push it."""
+    source = Path(topic_dir) / "experiment"
+    if not (source / "results.json").is_file():
+        return None
+    target = Path(repo) / "experiments" / slug
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("experiment.py", "plan.md", "results.json"):
+        (target / name).write_bytes((source / name).read_bytes())
+    (target / "README.md").write_text(
+        f"# {slug}\n\n글: https://huntlab.app/{slug}/\n\n`results.json`은 하네스가 {IMAGE} 컨테이너"
+        f"(네트워크 없음)에서 {RUNS}회 실행한 원본 출력과 환경 기록이다.\n\n## 재현\n\n```bash\n"
+        f"docker run --rm --network none -v \"$PWD\":/work {IMAGE} \\\n"
+        "  bash -c \"source /opt/ros/jazzy/setup.bash && python3 /work/experiment.py\"\n```\n")
+    if publish is None:
+        from scripts.discover_physical_ai import publish_files as publish
+    config = json.loads((Path(repo) / "config/physical-ai-discovery.json").read_text())
+    paths = [f"experiments/{slug}/{name}" for name in ("experiment.py", "plan.md", "results.json", "README.md")]
+    return publish(Path(repo), paths, config, f"Add measured experiment {slug}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("topic_dir", type=Path)

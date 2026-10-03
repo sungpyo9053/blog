@@ -277,7 +277,7 @@ def publish_files(repo, paths, config, message):
     remote = git_command(repo, 'ls-remote', 'origin', 'refs/heads/main').split()[0]
     need(remote == git_command(repo, 'rev-parse', 'HEAD'), 'git_remote_head_mismatch')
     need(all(not Path(path).is_absolute() and '..' not in Path(path).parts
-             and path.startswith('editorial/') for path in paths), 'git_path_invalid')
+             and path.startswith(('editorial/', 'experiments/')) for path in paths), 'git_path_invalid')
     git_command(repo, 'add', '--', *paths)
     git_command(repo, '-c', 'core.hooksPath=/dev/null', '-c', 'user.name=HuntLab Automation',
                 '-c', 'user.email=huntlab-automation@users.noreply.github.com',

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.experiment_runner import ExperimentFailed, check_measured_section, run_experiment
+from scripts.experiment_runner import ExperimentFailed, check_measured_section, publish_to_repo, run_experiment
 
 
 def topic(root):
@@ -55,6 +55,17 @@ class ExperimentRunnerTests(unittest.TestCase):
             bad = "<!-- measured:start -->지연은 0.055초<!-- measured:end -->"
             self.assertEqual(check_measured_section(bad, Path(root)), ["unmeasured_number:0.055"])
             self.assertEqual(check_measured_section("본문만", Path(root)), ["measured_section_missing"])
+
+    def test_publish_mirrors_experiment_into_repo(self):
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as repo:
+            run_experiment(topic(root), executor=executor())
+            (Path(repo) / "config").mkdir()
+            (Path(repo) / "config/physical-ai-discovery.json").write_text("{}")
+            calls = []
+            publish_to_repo(Path(root), "my-slug", Path(repo), publish=lambda *a: calls.append(a) or "rev")
+            self.assertTrue((Path(repo) / "experiments/my-slug/results.json").is_file())
+            self.assertIn("https://huntlab.app/my-slug/", (Path(repo) / "experiments/my-slug/README.md").read_text())
+            self.assertEqual(calls[0][1][0], "experiments/my-slug/experiment.py")
 
 
 if __name__ == "__main__":
