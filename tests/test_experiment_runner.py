@@ -97,3 +97,12 @@ class ExperimentRunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublisherTitleTests(unittest.TestCase):
+    def test_readback_title_prefers_raw_over_texturized_rendered(self):
+        from publisher.service import _normalized, _plain_text
+        title = "'Message Filter dropping message' 로그"
+        stored = {"raw": title, "rendered": "&#8216;Message Filter dropping message&#8217; 로그"}
+        self.assertEqual(_normalized(_plain_text(stored)), _normalized(title))
+        self.assertEqual(_plain_text({"rendered": "x"}), "x")

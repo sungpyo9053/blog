@@ -26,8 +26,10 @@ LOCAL_MARKDOWN_IMAGE = re.compile(
 
 
 def _plain_text(value: Any) -> str:
+    # Prefer the stored raw value: "rendered" is wptexturized ('x' -> &#8216;x&#8217;) and never
+    # matches a title containing straight quotes.
     if isinstance(value, dict):
-        return str(value.get("rendered", ""))
+        return str(value["raw"] if isinstance(value.get("raw"), str) else value.get("rendered", ""))
     return str(value or "")
 
 
