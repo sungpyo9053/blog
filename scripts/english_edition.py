@@ -50,12 +50,19 @@ def write_english(topic_dir: Path, slug: str, logger, *, runner=None) -> Path | 
         from scripts.run_daily_pipeline import Stage, resolve_codex, run_stage
         runner = lambda prompt: run_stage(resolve_codex(), Stage("English Writer Agent", None, prompt), logger,
                                           timeout_seconds=1800, topic=slug)
-    runner(_prompt(topic_dir, slug))
     article = topic_dir / "en" / "article.html"
+    prompt = _prompt(topic_dir, slug)
     try:
-        problems = check_measured_section(article.read_text(encoding="utf-8"), topic_dir)
-        if problems:
-            raise ValueError("english_measured_gate:" + ",".join(problems[:5]))
+        for attempt in (1, 2):
+            runner(prompt)
+            problems = check_measured_section(article.read_text(encoding="utf-8"), topic_dir)
+            if not problems:
+                break
+            if attempt == 2:
+                raise ValueError("english_measured_gate:" + ",".join(problems[:5]))
+            # One targeted retry: usually a derived number slipped inside the measured block.
+            prompt += (f" Your previous {str(article)!r} failed the measured-number gate: {', '.join(problems[:5])}. "
+                       "Move derived numbers and explanations outside the measured block (or remove them) and save again.")
         _meta(topic_dir)
     except Exception:
         # A rejected draft must not be picked up by schedule_english later.

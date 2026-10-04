@@ -42,6 +42,19 @@ class EnglishEditionTests(unittest.TestCase):
                 write_english(root, "a-b", None, runner=runner)
             self.assertIsNone(schedule_english(root, 1, datetime(2026, 1, 1), None))
 
+    def test_gate_failure_gets_one_retry_with_the_problem(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, _ = topic(d, "")
+            prompts = []
+            def runner(prompt):
+                prompts.append(prompt)
+                body = "0.055 s" if len(prompts) == 1 else "0.075 s"
+                (root / "en" / "article.html").write_text(f"<!-- measured:start -->{body}<!-- measured:end -->")
+                (root / "en" / "meta.json").write_text(json.dumps({"title": "T", "slug": "a-b", "excerpt": "e"}))
+            self.assertTrue(write_english(root, "a-b", None, runner=runner))
+            self.assertEqual(len(prompts), 2)
+            self.assertIn("unmeasured_number:0.055", prompts[1])
+
     def test_no_experiment_means_no_english(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertIsNone(write_english(Path(d), "a-b", None, runner=lambda p: None))
