@@ -294,6 +294,11 @@ def audit_evidence_links(body: str, evidence: Mapping[str, Any]) -> dict[str, An
     return {"passed": all(checks.values()), "matched_count": len(matched), "checks": checks}
 
 
+def _plain(text: str) -> str:
+    import html
+    return html.unescape(text).translate({0x2018: "'", 0x2019: "'", 0x201C: '"', 0x201D: '"', 0x2013: "-", 0x2014: "-"})
+
+
 def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
     url = str(result.get("url", ""))
     if not url.startswith("https://"): raise PipelineError("published URL is not HTTPS")
@@ -301,7 +306,8 @@ def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dic
     with urllib.request.urlopen(request, timeout=30) as response:
         body = response.read().decode("utf-8", errors="replace")
         status = response.status
-    title_ok = str(candidate["title_seed"]) in body
+    # WordPress texturizes quotes on render ('a' -> &#8216;a&#8217;); compare plain text.
+    title_ok = _plain(str(candidate["title_seed"])) in _plain(body)
     evidence_audit = audit_evidence_links(body, candidate["evidence"])
     evidence_ok = bool(evidence_audit["passed"])
     if status != 200 or not title_ok or not evidence_ok: raise PipelineError("public HTML evidence audit failed")

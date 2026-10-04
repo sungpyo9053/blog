@@ -130,3 +130,16 @@ class CategoryTests(unittest.TestCase):
         from scripts.run_evidence_deep_article import candidate_category
         for title in ("RViz2에서 TF가 안 보일 때", "Gazebo에서 모델이 안 보일 때", "colcon build가 실패할 때"):
             self.assertEqual(candidate_category({"title_seed": title, "problem": ""}), "프레임워크·라이브러리", title)
+
+
+class PublicAuditTitleTests(unittest.TestCase):
+    def test_texturized_quotes_still_match_title(self):
+        from unittest.mock import patch
+        from scripts import run_evidence_deep_article as deep
+        body = "<h1>&#8216;Message Filter&#8217; 로그가 뜰 때</h1>".encode()
+        response = type("R", (), {"read": lambda self: body, "status": 200,
+                                  "__enter__": lambda self: self, "__exit__": lambda self, *a: False})()
+        candidate = {"title_seed": "'Message Filter' 로그가 뜰 때", "evidence": {}}
+        with patch.object(deep.urllib.request, "urlopen", return_value=response), \
+                patch.object(deep, "audit_evidence_links", return_value={"passed": True}):
+            self.assertTrue(deep.audit_public({"url": "https://huntlab.app/x/"}, candidate)["title_present"])
