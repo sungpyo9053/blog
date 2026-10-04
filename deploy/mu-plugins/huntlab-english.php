@@ -42,7 +42,10 @@ function huntlab_en_counterpart(): array {
 add_action(
     'wp_head',
     static function (): void {
-        foreach ( huntlab_en_counterpart() as $lang => $url ) {
+        // Home and /en/ pair up too, so crawlers reach the English edition from the indexed home page.
+        $pair = ( is_front_page() || is_post_type_archive( 'hunt_en' ) )
+            ? [ 'ko' => home_url( '/' ), 'en' => get_post_type_archive_link( 'hunt_en' ) ] : huntlab_en_counterpart();
+        foreach ( $pair as $lang => $url ) {
             printf( '<link rel="alternate" hreflang="%s" href="%s">' . "\n", esc_attr( $lang ), esc_url( $url ) );
         }
     },
@@ -78,3 +81,14 @@ $huntlab_en_byline = static function ( $name ) {
 };
 add_filter( 'the_author', $huntlab_en_byline, 40 );
 add_filter( 'get_the_author_display_name', $huntlab_en_byline, 40 );
+
+// Visible site-wide crawl path to the English edition (home is indexed; /en/ was unknown to Google).
+add_action(
+    'wp_footer',
+    static function (): void {
+        $english = is_singular( 'hunt_en' ) || is_post_type_archive( 'hunt_en' );
+        printf( '<p class="huntlab-lang-switch" style="text-align:center"><a href="%s" hreflang="%s">%s</a></p>' . "\n",
+            esc_url( $english ? home_url( '/' ) : get_post_type_archive_link( 'hunt_en' ) ),
+            $english ? 'ko' : 'en', $english ? '한국어' : 'English edition' );
+    }
+);
