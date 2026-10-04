@@ -31,8 +31,10 @@ from scripts.foundation_candidates import evaluate_foundation
 from scripts.editorial_epoch import load_epoch
 from scripts.weekly_editorial_updates import _save_exclusive
 
-INVENTORY_BUDGET_BYTES = 600_000
-PROMPT_BUDGET_BYTES = 800_000
+# ponytail: every domain lesson goes in as a raw body (~35 KB each), so this grows ~1 MB a month.
+# Upgrade path: send outlines (title + h2s) for older lessons; queue review already compares full text.
+INVENTORY_BUDGET_BYTES = 1_000_000
+PROMPT_BUDGET_BYTES = 1_300_000
 
 
 class DiscoveryError(ValueError):
