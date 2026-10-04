@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (280)
+assert math.isclose(value, 280, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '첫째 터미널(underlay만 source)에서 기대하는 패키지 수 U', "actual": value})
+value = (280 + 3)
+assert math.isclose(value, 283, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '내 노드를 실행하려면 함께 보여야 하는 패키지 수 U+M', "actual": value})
+value = (280 + 3)
+assert math.isclose(value, 283, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설 1 예측: overlay 스크립트 하나가 underlay까지 불러올 때 새 터미널의 개수', "actual": value})
+value = (3)
+assert math.isclose(value, 3, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설 2 예측: overlay 스크립트 하나가 overlay만 불러올 때 새 터미널의 개수(ros2 명령을 찾을 수 있는 경우)', "actual": value})
+value = ((280 + 3) - 3)
+assert math.isclose(value, 280, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '두 가설 예측값의 차이(판별 폭)', "actual": value})
+value = (((280 + 3) + 3) / 2)
+assert math.isclose(value, 143, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '판정 기준선: 두 예측값의 중간, 이보다 크면 가설 1', "actual": value})
+value = (280 + 3 - 1)
+assert math.isclose(value, 282, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '경계: overlay 패키지 1개가 underlay와 이름이 같고 이름 기준으로 셀 때 가설 1 예측(여전히 기준선 143보다 큼)', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
