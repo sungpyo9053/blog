@@ -22,6 +22,8 @@ with high view counts in the reader-question source, and title the lesson in the
 Revenue depends on readers: among valid candidates, prefer the question with the most views
 (thousands, not dozens) and beginner/setup intent (install, build, launch, simulation, first robot)
 over deep middleware internals that few people search for.
+The English edition is the main revenue edition (larger market, higher ad rates): weigh demand by
+how English-speaking developers search, using the reader-question view counts, which are English.
 
 Choose a narrow unanswered reader question in physical AI, robotics, control, or relevant agent
 foundations. Compare all supplied existing titles and relevant bodies. Do not rename a published

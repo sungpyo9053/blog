@@ -25,8 +25,11 @@ def search_week(session, query, today):
             "dataState": "all", "type": "web"}
     totals = (query(session, url, dict(body, rowLimit=1)).get("rows") or [{}])[0]
     top = query(session, url, dict(body, dimensions=["query"], rowLimit=1)).get("rows") or []
+    english = (query(session, url, dict(body, rowLimit=1, dimensionFilterGroups=[{"filters": [
+        {"dimension": "page", "operator": "contains", "expression": "/en/"}]}])).get("rows") or [{}])[0]
     return {"impressions": int(totals.get("impressions", 0)), "clicks": int(totals.get("clicks", 0)),
-            "ctr": round(totals.get("ctr", 0) * 100, 1), "top_query": top[0]["keys"][0] if top else None}
+            "ctr": round(totals.get("ctr", 0) * 100, 1), "top_query": top[0]["keys"][0] if top else None,
+            "en_impressions": int(english.get("impressions", 0)), "en_clicks": int(english.get("clicks", 0))}
 
 
 def analytics_yesterday(session, query, today):
@@ -54,7 +57,8 @@ def compose(today, published, queue_depth, analytics, search):
     lines.append(f"어제 조회 {analytics['views']} 세션 {analytics['sessions']} 광고 ${analytics['revenue']}"
                  if analytics else "어제 GA4 조회 실패")
     if search:
-        lines.append(f"검색7일 노출 {search['impressions']} 클릭 {search['clicks']} ({search['ctr']}%)")
+        lines.append(f"검색7일 노출 {search['impressions']} 클릭 {search['clicks']} ({search['ctr']}%)"
+                     f" · 영문 {search.get('en_impressions', 0)}/{search.get('en_clicks', 0)}")
         if search["top_query"]:
             lines.append(f"상위 검색어: {search['top_query'][:40]}")
     else:

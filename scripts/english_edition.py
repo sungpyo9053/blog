@@ -28,7 +28,11 @@ def _prompt(topic_dir: Path, slug: str) -> str:
         f"https://github.com/sungpyo9053/blog/tree/main/experiments/{slug} . "
         f"Save the HTML body (h2 and below, no h1, no front matter) to {str(out / 'article.html')!r} and "
         f"{str(out / 'meta.json')!r} as JSON with exactly title, slug (lowercase ASCII words joined by hyphens) "
-        "and excerpt (one sentence, at most 160 characters). Do not write anything else."
+        "and excerpt (one sentence, at most 160 characters). This edition is the main search entry point: "
+        "the title must contain the words an English developer types into Google for this problem (the exact "
+        "error message or command when there is one, plus 'ROS 2'), front-loaded and under 65 characters; the "
+        "slug uses those same words; the excerpt states the concrete answer, not a teaser. "
+        "Do not write anything else."
     )
 
 
