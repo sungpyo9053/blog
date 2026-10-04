@@ -1,0 +1,70 @@
+{
+  "checked_at": "2026-10-04T14:00:05.369561+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"RTF 기준: 시뮬레이션 10 s가 벽시계 10 s 동안 흐름\", \"actual\": 1.0}, {\"name\": \"RTF 반례: 같은 시뮬레이션 10 s가 벽시계 20 s 걸림\", \"actual\": 0.5}, {\"name\": \"100 Hz 루프의 주기(ms) = deadline 10 ms\", \"actual\": 10.0}, {\"name\": \"1000 주기 동안 벽시계 10000 ms → 평균 간격(ms)\", \"actual\": 10.0}, {\"name\": \"같은 실행의 RTF: 시뮬레이션 1000×10 ms ÷ 벽시계 10000 ms\", \"actual\": 1.0}, {\"name\": \"그 실행에서 측정한 최대 간격 25 ms의 마감 초과량(ms)\", \"actual\": 15}, {\"name\": \"1000 주기 중 마감을 넘긴 3회의 비율(%)\", \"actual\": 0.3}, {\"name\": \"RTF 0.5에서 시뮬레이션 10 ms 한 단계가 차지하는 벽시계 시간(ms)\", \"actual\": 20.0}, {\"name\": \"RTF 0.5 단계가 벽시계 예산 25 ms 안에 남기는 여유(ms, 양수면 충족)\", \"actual\": 5}]\n",
+  "cases": [
+    {
+      "name": "RTF 기준: 시뮬레이션 10 s가 벽시계 10 s 동안 흐름",
+      "expression": "10 / 10",
+      "expected": 1,
+      "actual": 1.0
+    },
+    {
+      "name": "RTF 반례: 같은 시뮬레이션 10 s가 벽시계 20 s 걸림",
+      "expression": "10 / 20",
+      "expected": 0.5,
+      "actual": 0.5
+    },
+    {
+      "name": "100 Hz 루프의 주기(ms) = deadline 10 ms",
+      "expression": "1000 / 100",
+      "expected": 10,
+      "actual": 10.0
+    },
+    {
+      "name": "1000 주기 동안 벽시계 10000 ms → 평균 간격(ms)",
+      "expression": "10000 / 1000",
+      "expected": 10,
+      "actual": 10.0
+    },
+    {
+      "name": "같은 실행의 RTF: 시뮬레이션 1000×10 ms ÷ 벽시계 10000 ms",
+      "expression": "(1000 * 10) / 10000",
+      "expected": 1,
+      "actual": 1.0
+    },
+    {
+      "name": "그 실행에서 측정한 최대 간격 25 ms의 마감 초과량(ms)",
+      "expression": "25 - 10",
+      "expected": 15,
+      "actual": 15
+    },
+    {
+      "name": "1000 주기 중 마감을 넘긴 3회의 비율(%)",
+      "expression": "3 / 1000 * 100",
+      "expected": 0.3,
+      "actual": 0.3
+    },
+    {
+      "name": "RTF 0.5에서 시뮬레이션 10 ms 한 단계가 차지하는 벽시계 시간(ms)",
+      "expression": "10 / 0.5",
+      "expected": 20,
+      "actual": 20.0
+    },
+    {
+      "name": "RTF 0.5 단계가 벽시계 예산 25 ms 안에 남기는 여유(ms, 양수면 충족)",
+      "expression": "25 - 20",
+      "expected": 5,
+      "actual": 5
+    }
+  ],
+  "teaching_context": {
+    "description": "설명용 숫자로 만든 교육용 산술 모델이며 실제 로봇이나 시뮬레이터 측정값이 아니다. 단위: 시간은 초(s) 또는 밀리초(ms), RTF는 단위 없는 비율. 가정: 100 Hz 제어 루프가 1000 주기 돌았고, deadline(허용 최대 간격)은 주기와 같은 10 ms다. RTF는 Clock and Time 설계 문서의 정의대로 시뮬레이션 시간이 흐른 양 ÷ 실제(벽시계) 시간이 흐른 양으로 계산한다. 입력값을 이렇게 고른 이유는 평균은 완벽한데 최대 간격만 마감을 넘는 상황(RTF 1.0 + 마감 초과)과, 그 반대 상황(RTF 0.5 + 각 단계가 예산 안)을 같은 숫자 크기로 나란히 비교하기 위해서다. 사칙연산 결과는 '전체 비율'과 '주기별 최악값'이 서로 다른 양이라는 것만 보여 준다.",
+    "conclusion": "평균 간격 10 ms와 RTF 1.0은 같은 실행에서 동시에 성립하지만, 최대 간격 25 ms는 10 ms 마감을 15 ms 넘기고 1000 주기 중 0.3%가 마감을 어긴다. 반대로 RTF가 0.5여도 한 단계가 정해진 벽시계 예산 안에 들 수 있다. 공식 설계 문서가 'real time'을 시간이 흐르는 실제 속도로 정의하고 deterministic deadline과 무관하다고 밝혔으므로, RTF 수치로 실시간 성능을 판정해서는 안 된다. 실시간 여부는 주기별 최대 간격을 마감과 비교해 따로 확인해야 한다. 독자는 자기 노드의 타이머 콜백 간격 최댓값을 기록해 deadline과 비교하는 것부터 시작하면 된다.",
+    "limitations": "모든 수치는 직접 고른 설명용 값이고 측정 결과가 아니다. 지터 분포, executor 스케줄링, OS 스케줄러, DDS 전송 지연, 실시간 커널 설정은 모델에 없다. QoS 문서는 실시간 컴퓨팅을 '알맞은 QoS가 필요한 맥락'으로만 언급할 뿐 ROS 2가 마감을 보장한다고 하지 않는다. 따라서 이 계산으로는 ROS 2나 특정 RMW가 실시간을 보장하는지 결론 낼 수 없고, 어느 정도의 마감 초과율이 허용 가능한지도 정해지지 않는다. 25 ms 예산이나 0.3% 같은 숫자는 권장값이 아니다. 실물 로봇의 안전 판단이나 제어 주기 설계에 그대로 쓰면 안 된다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
