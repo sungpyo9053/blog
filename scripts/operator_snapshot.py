@@ -37,11 +37,14 @@ def analytics_yesterday(session, query, today):
     url = "https://analyticsdata.googleapis.com/v1beta/properties/" + os.environ["GA4_PROPERTY_ID"] + ":runReport"
     day = (today - timedelta(days=1)).isoformat()
     data = query(session, url, {"dateRanges": [{"startDate": day, "endDate": day}],
-                                "metrics": [{"name": n} for n in ("screenPageViews", "sessions", "totalAdRevenue")],
+                                "metrics": [{"name": n} for n in ("screenPageViews", "sessions", "totalAdRevenue",
+                                                                  "userEngagementDuration", "activeUsers")],
                                 "dimensionFilter": {"filter": {"fieldName": "hostName", "stringFilter": {
                                     "matchType": "EXACT", "value": HOST, "caseSensitive": False}}}})
-    values = [float(v["value"]) for v in (data.get("rows") or [{"metricValues": [{"value": 0}] * 3}])[0]["metricValues"]]
-    return {"views": int(values[0]), "sessions": int(values[1]), "revenue": round(values[2], 2)}
+    values = [float(v["value"]) for v in (data.get("rows") or [{"metricValues": [{"value": 0}] * 5}])[0]["metricValues"]]
+    # GA4's "average engagement time per active user".
+    return {"views": int(values[0]), "sessions": int(values[1]), "revenue": round(values[2], 2),
+            "engaged_seconds": round(values[3] / values[4]) if values[4] else 0}
 
 
 def site_today(today, fetch_json):
@@ -56,6 +59,8 @@ def compose(today, published, queue_depth, analytics, search):
              f"오늘 공개 한{published[0]} 영{published[1]} · 대기 {queue_depth}편"]
     lines.append(f"어제 조회 {analytics['views']} 세션 {analytics['sessions']} 광고 ${analytics['revenue']}"
                  if analytics else "어제 GA4 조회 실패")
+    if analytics:
+        lines.append(f"평균 참여 {analytics.get('engaged_seconds', 0)}초/명")
     if search:
         lines.append(f"검색7일 노출 {search['impressions']} 클릭 {search['clicks']} ({search['ctr']}%)"
                      f" · 영문 {search.get('en_impressions', 0)}/{search.get('en_clicks', 0)}")
