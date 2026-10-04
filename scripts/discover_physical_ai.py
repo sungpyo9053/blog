@@ -89,7 +89,8 @@ def arithmetic(expression):
                 value = left / right
         else:
             raise DiscoveryError('unsafe_expression')
-        need(math.isfinite(value) and abs(value) <= 1e12, 'arithmetic_out_of_range')
+        # 2**53: the largest range where floats still hold every integer exactly (float64 ulp math needs 2**52).
+        need(math.isfinite(value) and abs(value) <= 2**53, 'arithmetic_out_of_range')
         return value
     return evaluate(tree)
 

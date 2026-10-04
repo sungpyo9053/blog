@@ -91,9 +91,10 @@ class ArithmeticTests(unittest.TestCase):
 
     def test_allowed(self):
         self.assertEqual(d.arithmetic('(-2 + 5) * 8 / 4'), 6)
+        self.assertEqual(d.arithmetic('4194304 / 4503599627370496'), 2**22 / 2**52)
 
     def test_forbidden(self):
-        for expression in ('True', '__import__("os")', 'a+1', '1**2', '(1).__class__', '[1]', '1//2', '1%2', '1/0', '1e309', '9e12', '1;'+'print(1)'):
+        for expression in ('True', '__import__("os")', 'a+1', '1**2', '(1).__class__', '[1]', '1//2', '1%2', '1/0', '1e309', '1e16', '1;'+'print(1)'):
             with self.subTest(expression=expression), self.assertRaises(d.DiscoveryError):
                 d.arithmetic(expression)
 
