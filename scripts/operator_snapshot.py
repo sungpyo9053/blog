@@ -54,6 +54,12 @@ def site_today(today, fetch_json):
     return len(ko), len(en)
 
 
+def due_today(rows, today):
+    """The report runs at 00:00, before the 10:00 release, so count today's scheduled pair as well."""
+    due = [r for r in rows if r["status"] == "scheduled" and str(r.get("scheduled_at", ""))[:10] == today.isoformat()]
+    return len(due), sum(bool(r.get("english")) for r in due)
+
+
 def compose(today, published, queue_depth, analytics, search):
     lines = [f"[HuntLab 일일 {today.strftime('%m/%d')}]",
              f"오늘 공개 한{published[0]} 영{published[1]} · 대기 {queue_depth}편"]
@@ -79,8 +85,10 @@ def main() -> int:
     today = datetime.now(KST).date()
     fetch_json = lambda url: json.loads(urllib.request.urlopen(
         urllib.request.Request(url, headers={"User-Agent": "HuntLab-Operator/1.0"}), timeout=30).read())
-    published = site_today(today, fetch_json)
-    depth = sum(row["status"] in ("queued", "scheduled") for row in queue.rows(ROOT))
+    rows = queue.rows(ROOT)
+    live, due = site_today(today, fetch_json), due_today(rows, today)
+    published = (live[0] + due[0], live[1] + due[1])
+    depth = sum(row["status"] in ("queued", "scheduled") for row in rows)
     analytics = search = None
     session = _session()
     try:

@@ -22,6 +22,12 @@ class EngagementTests(unittest.TestCase):
         self.assertIn("평균 참여 50초/명", message)
         self.assertLessEqual(len(message), 200)
 
+    def test_midnight_report_counts_todays_scheduled_pair(self):
+        rows = [{"status": "scheduled", "scheduled_at": "2026-10-05T10:00:00+09:00", "english": {"post_id": 864}},
+                {"status": "scheduled", "scheduled_at": "2026-10-06T10:00:00+09:00", "english": {"post_id": 874}},
+                {"status": "published", "scheduled_at": "2026-10-05T10:00:00+09:00", "english": {}}]
+        self.assertEqual(snap.due_today(rows, date(2026, 10, 5)), (1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()
