@@ -222,7 +222,8 @@ def compact_inventory(inventory, query=''):
     # feedback lesson when a proposal uses different terminology.
     domain = re.compile(r'피지컬|로봇|센서|제어|좌표|동역학|운동학|이동평균|강화학습|'
                         r'physical[- _]?ai|robot|\bros(?:2)?\b|tf2|sensor|control|'
-                        r'coordinate|odometr|kinematic|dynamics|reinforcement|moving[- _]?average', re.I)
+                        r'coordinate|odometr|kinematic|dynamics|reinforcement|moving[- _]?average|'
+                        r'colcon|gazebo|nav2|rviz|moveit|urdf', re.I)
     related = []
     for row in rows:
         identity = str(row.get('title', '')) + ' ' + str(row.get('slug', ''))

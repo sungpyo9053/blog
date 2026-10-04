@@ -39,6 +39,11 @@ class ArithmeticTests(unittest.TestCase):
         self.assertNotIn('excerpt',result['all_post_metadata'][0])
         self.assertEqual(result['related_full_bodies'][0]['content'],raw)
 
+    def test_ros_tool_titles_without_ros_word_get_full_bodies(self):
+        # Scheduled colcon posts were hidden from the reviewer, which then held every colcon candidate.
+        result=d.compact_inventory({'posts':[{'post_id':871,'title':'colcon build가 너무 느릴 때','slug':'colcon-build-slow','content':'body'}]})
+        self.assertEqual([r['post_id'] for r in result['related_full_bodies']],[871])
+
     def test_five_more_fifteen_kb_lessons_fit_inventory_and_global_prompt_budget(self):
         # Synthetic capacity fixture, not a claim that a future article passed review.
         posts=[{'post_id':i,'status':'future','title':'로봇 기초 '+str(i),'slug':'robot-'+str(i),'excerpt':'summary'*400,'content':'x'*15000} for i in range(14)]
