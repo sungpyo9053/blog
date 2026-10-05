@@ -138,12 +138,19 @@ def fetch_https(url, allowed_hosts, allow_query=False):
 
 
 def reader_questions_text(raw):
-    """Stack Exchange API JSON (gzip) -> one line per question, most viewed first."""
+    """Stack Exchange or GitHub issue-search API JSON (gzip ok) -> one line per question, most demand first.
+
+    GitHub issues have no view count, so comments + reactions stand in for demand."""
     data = json.loads(gzip.decompress(raw) if raw[:2] == b'\x1f\x8b' else raw)
-    items = sorted(data.get('items', []), key=lambda item: -item.get('view_count', 0))
-    return '\n'.join(f"{item.get('view_count', 0)} views | score {item.get('score', 0)} | "
-                     f"answered {item.get('is_answered')} | {html.unescape(item.get('title', ''))} | {item.get('link', '')}"
-                     for item in items)
+
+    def line(item):
+        if 'html_url' in item:
+            demand = item.get('comments', 0) + (item.get('reactions') or {}).get('total_count', 0)
+            return demand, (f"{demand} comments+reactions | {item.get('state')} issue | "
+                            f"{html.unescape(item.get('title', ''))} | {item['html_url']}")
+        return item.get('view_count', 0), (f"{item.get('view_count', 0)} views | score {item.get('score', 0)} | "
+                                           f"answered {item.get('is_answered')} | {html.unescape(item.get('title', ''))} | {item.get('link', '')}")
+    return '\n'.join(text for _, text in sorted(map(line, data.get('items', [])), key=lambda pair: -pair[0]))
 
 
 def output_schema(role):
@@ -334,7 +341,7 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
         check = inspect_article('Fresh inventory availability check.', inventory, now=now)
         need(not any('inventory' in failure for failure in check['failures']), 'inventory_not_fresh_complete')
         rows = config.get('primary_sources', [])
-        need(isinstance(rows, list) and 1 <= len(rows) <= 16, 'primary_source_config_invalid')
+        need(isinstance(rows, list) and 1 <= len(rows) <= 17, 'primary_source_config_invalid')
         rotation = now.date().toordinal() % len(rows)
         rows = rows[rotation:] + rows[:rotation]
         sources, failures = [], []

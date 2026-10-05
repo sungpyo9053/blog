@@ -402,3 +402,11 @@ class ReaderQuestionsTests(unittest.TestCase):
         lines = reader_questions_text(raw).splitlines()
         self.assertTrue(lines[0].startswith('99 views') and lines[0].endswith('https://x/2'))
         self.assertIn('a & b', lines[1])
+
+    def test_github_issues_rank_by_comments_plus_reactions(self):
+        from scripts.discover_physical_ai import reader_questions_text
+        raw = json.dumps({'items': [
+            {'title': 'quiet', 'html_url': 'https://g/1', 'comments': 1, 'state': 'open', 'reactions': {'total_count': 0}},
+            {'title': 'hot', 'html_url': 'https://g/2', 'comments': 5, 'state': 'open', 'reactions': {'total_count': 3}}]}).encode()
+        lines = reader_questions_text(raw).splitlines()
+        self.assertTrue(lines[0].startswith('8 comments+reactions') and lines[0].endswith('https://g/2'))
