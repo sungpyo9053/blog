@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-ros2-wifi-ip-fragment-buffer-ipfrag-time-budget",
+  "title": "ROS 2가 유선에서는 되는데 Wi-Fi에서는 멈출 때: IP 조각 버퍼 256KB와 재조립 대기 30초를 메시지 크기로 계산해 보기",
+  "slug": "ros2-wifi-ip-fragment-buffer-ipfrag-time-budget",
+  "reader_question": "두 컴퓨터 사이의 ROS 2 통신이 이더넷에서는 되는데 Wi-Fi에서는 왜 안 되거나 멈추는가? (https://robotics.stackexchange.com/questions/25190/ros2-communication-between-machines-work-over-ethernet-but-not-over-wifi) 이 글은 여러 원인 후보 가운데 공식 DDS tuning 문서가 설명하는 IP 조각 재조립 문제 하나만 숫자로 따져 본다.",
+  "target_reader": "노트북과 로봇 PC를 Wi-Fi로 연결해 ROS 2 토픽을 주고받다가, 이미지나 포인트 클라우드처럼 큰 메시지에서 통신이 멈추는 일을 겪은 입문자. 바이트 단위 환산과 Hz는 알지만 IP 조각화와 커널 파라미터는 처음 접하는 독자를 대상으로 한다.",
+  "learning_outcome": "공식 문서의 기본값(262144 bytes, 30 s)과 예시값(3 s, 134217728 bytes)을 자기 메시지 크기와 발행 주기에 대입한다. 이를 통해 두 가지를 계산한다. 첫째, 멈춘 구간에 발행되는 메시지 수, 곧 영향을 받을 수 있는 최대 범위다. 둘째, 최악 가정에서 재조립 대기 시간 동안 들어오는 데이터가 버퍼 한도 안에 들어가는지다. 계산 결과로 ipfrag_time 단축, 버퍼 증가, best-effort 설정 가운데 무엇을 먼저 시험할지 정한다. 실제 유실 개수와 멈춤 시간은 조정 전후를 측정해 확인하는 계획을 세울 수 있다.",
+  "unique_takeaway": "버퍼를 128MB로 키워도, 모든 데이터그램에서 조각 하나씩이 빠진다는 문서의 최악 가정에서는 10 Hz·1 MiB 토픽의 30초 대기 분량(약 300 MiB)을 담지 못한다. ipfrag_time을 3초로 줄이면 대기 분량이 약 30 MiB로 줄어 128MB 안에 들어간다. 두 파라미터는 '대기 시간 × 발행 주기 × 메시지 크기'를 버퍼 한도와 견주어 함께 정해야 한다. 이 곱셈이 알려 주는 것은 영향을 받을 수 있는 범위까지다. 실제로 몇 개가 유실되는지는 QoS 설정에 따라 달라지므로 측정으로 확인해야 한다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/ros2_documentation/rolling/source/Developer-Tools/Build/DDS-tuning.rst",
+      "publisher": "ROS 2 Documentation",
+      "claim_scope": "Documented DDS/RMW tuning for lossy or WiFi links and large messages; not every network setup",
+      "checked_at": "2026-10-05T14:00:22.482186+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261005T050017Z-c422d89161-ros2-wifi-ip-fragment-buffer-ipfrag-time-budget/example.py",
+    "sha256": "d9711a616bb5fe97d1cf39a72324ee1cf2907b7651d3f1b217a522b8b2f85c84",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/a8ea8bc33ad74b837b68ae91f78fd3ef9106cb8a/editorial/generated-foundations/20261005T050017Z-c422d89161-ros2-wifi-ip-fragment-buffer-ipfrag-time-budget/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261005T050017Z-c422d89161-ros2-wifi-ip-fragment-buffer-ipfrag-time-budget/verification.json",
+    "sha256": "36c9f288308ae6f89c57d74bb2715c1bd36aa2e6b718784d39f7fb12be6786d4",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/a8ea8bc33ad74b837b68ae91f78fd3ef9106cb8a/editorial/generated-foundations/20261005T050017Z-c422d89161-ros2-wifi-ip-fragment-buffer-ipfrag-time-budget/verification.json"
+  },
+  "author_id": "discovery-writer-43513177e3b94b038e6c5f4be04e09d2"
+}
