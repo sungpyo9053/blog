@@ -21,6 +21,18 @@ add_action(
     0
 );
 
+// Ownership proof for Bing Webmaster Tools and Naver Search Advisor; removing it un-verifies the site.
+add_action(
+    'wp_head',
+    static function (): void {
+        if ( is_front_page() ) {
+            echo '<meta name="msvalidate.01" content="714378BFAD47930C41F5D2703811D27B" />' . "\n";
+            echo '<meta name="naver-site-verification" content="8f24fc13c5cb2e150f7c3f1030cbd889d21fd47d" />' . "\n";
+        }
+    },
+    1
+);
+
 add_action(
     'transition_post_status',
     static function ( string $new, string $old, WP_Post $post ): void {
