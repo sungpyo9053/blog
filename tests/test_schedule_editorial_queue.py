@@ -135,6 +135,27 @@ class ScheduleSafetyTests(unittest.TestCase):
         run.assert_not_called()
 
 
+class AttachEnglishTests(unittest.TestCase):
+    def test_late_english_draft_joins_its_korean_slot(self):
+        row = {'queue_id': 'q1', 'scheduled_at': '2026-10-06T10:00:00+09:00', 'publication': {'post_id': 867},
+               'prepared': {'context': {'directory': '/runs/t'}}}
+        with patch('scripts.english_edition.schedule_english', return_value=901) as schedule, \
+                patch.object(scheduler.queue, 'save') as save:
+            scheduler.attach_english(row, Mock())
+        self.assertEqual(schedule.call_args.args[:3], (Path('/runs/t'), 867, datetime.fromisoformat(row['scheduled_at'])))
+        self.assertEqual(row['english'], {'post_id': 901, 'scheduled_at': '2026-10-06T10:00:00+09:00'})
+        save.assert_called_once()
+
+    def test_no_gated_english_leaves_row_alone(self):
+        row = {'queue_id': 'q1', 'scheduled_at': '2026-10-06T10:00:00+09:00', 'publication': {'post_id': 867},
+               'prepared': {'context': {'directory': '/runs/t'}}}
+        with patch('scripts.english_edition.schedule_english', return_value=None), \
+                patch.object(scheduler.queue, 'save') as save:
+            scheduler.attach_english(row, Mock())
+        self.assertNotIn('english', row)
+        save.assert_not_called()
+
+
 class FillSafetyTests(unittest.TestCase):
     def test_stops_immediately_on_schedule_failure(self):
         with patch.object(filler.subprocess,'run',return_value=SimpleNamespace(returncode=1)) as run:

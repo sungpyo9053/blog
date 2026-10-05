@@ -39,6 +39,20 @@ def next_slot(posts, now):
     return None
 
 
+def attach_english(row, client):
+    """Schedule the gated English edition in the Korean slot. Also runs for already scheduled rows,
+    so an English draft that passed its gate after the Korean post was scheduled still goes out."""
+    try:
+        from scripts.english_edition import schedule_english
+        english_id = schedule_english(Path(row['prepared']['context']['directory']), row['publication']['post_id'],
+                                      datetime.fromisoformat(row['scheduled_at']), client)
+        if english_id:
+            row['english'] = {'post_id': english_id, 'scheduled_at': row['scheduled_at']}
+            queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)
+    except Exception as exc:
+        configure_logger(queue.clock().date()).warning('english_schedule_failed error=%s', type(exc).__name__)
+
+
 def schedule_one():
     """Caller owns the same lane lock as preparation and legacy release."""
     now = queue.clock()
@@ -73,6 +87,8 @@ def schedule_one():
                 deep.notify_publication(result)
             elif post.get('status') != 'future':
                 raise ValueError('scheduled_post_state_changed')
+            elif not row.get('english'):
+                attach_english(row, client)
     candidates = [row for row in items if row['status'] == 'queued']
     if not candidates:
         return {'status': 'no_approved_article', 'wordpress_write_count': 0}
@@ -110,14 +126,7 @@ def schedule_one():
         raise ValueError('scheduled_post_date_mismatch')
     row.update(status='scheduled')
     queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)
-    try:  # Same slot for the English edition; Korean scheduling is already complete.
-        from scripts.english_edition import schedule_english
-        english_id = schedule_english(Path(context.directory), result['post_id'], slot, client)
-        if english_id:
-            row['english'] = {'post_id': english_id, 'scheduled_at': slot.isoformat()}
-            queue.save(queue.directory(ROOT) / f"{row['queue_id']}.json", row)
-    except Exception as exc:
-        configure_logger(now.date()).warning('english_schedule_failed error=%s', type(exc).__name__)
+    attach_english(row, client)  # Korean scheduling is already complete.
     return {'status': 'scheduled', 'wordpress_write_count': 1,
             'post_id': result['post_id'], 'scheduled_at': slot.isoformat(), 'queue_id': row['queue_id']}
 
