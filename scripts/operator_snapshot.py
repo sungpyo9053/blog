@@ -43,7 +43,9 @@ def analytics_yesterday(session, query, today):
                                     "matchType": "EXACT", "value": HOST, "caseSensitive": False}}}})
     values = [float(v["value"]) for v in (data.get("rows") or [{"metricValues": [{"value": 0}] * 5}])[0]["metricValues"]]
     # GA4's "average engagement time per active user".
+    # totalAdRevenue is in the property's currency (KRW here), not USD.
     return {"views": int(values[0]), "sessions": int(values[1]), "revenue": round(values[2], 2),
+            "currency": data.get("metadata", {}).get("currencyCode", ""),
             "engaged_seconds": round(values[3] / values[4]) if values[4] else 0}
 
 
@@ -63,7 +65,7 @@ def due_today(rows, today):
 def compose(today, published, queue_depth, analytics, search):
     lines = [f"[HuntLab 일일 {today.strftime('%m/%d')}]",
              f"오늘 공개 한{published[0]} 영{published[1]} · 대기 {queue_depth}편"]
-    lines.append(f"어제 조회 {analytics['views']} 세션 {analytics['sessions']} 광고 ${analytics['revenue']}"
+    lines.append(f"어제 조회 {analytics['views']} 세션 {analytics['sessions']} 광고 {analytics['revenue']}{analytics.get('currency', '')}"
                  if analytics else "어제 GA4 조회 실패")
     if analytics:
         lines.append(f"평균 참여 {analytics.get('engaged_seconds', 0)}초/명")

@@ -18,8 +18,9 @@ class EngagementTests(unittest.TestCase):
 
     def test_compose_shows_engagement_line(self):
         message = snap.compose(date(2026, 10, 4), (1, 1), 5,
-                               {"views": 13, "sessions": 9, "revenue": 0.24, "engaged_seconds": 50}, None)
+                               {"views": 13, "sessions": 9, "revenue": 0.24, "currency": "KRW", "engaged_seconds": 50}, None)
         self.assertIn("평균 참여 50초/명", message)
+        self.assertIn("광고 0.24KRW", message)
         self.assertLessEqual(len(message), 200)
 
     def test_midnight_report_counts_todays_scheduled_pair(self):
