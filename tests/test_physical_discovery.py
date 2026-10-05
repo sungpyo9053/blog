@@ -392,6 +392,22 @@ class DiscoveryTests(unittest.TestCase):
 if __name__ == '__main__': unittest.main()
 
 
+class ProposedBeforeTests(unittest.TestCase):
+    def test_renamed_repeat_of_rejected_topic_is_caught(self):
+        from scripts.discover_physical_ai import repeats_proposal
+        proposed = [{'slug': 'ros2-wifi-ip-fragment-buffer-ipfrag-time', 'title': 't'}]
+        self.assertTrue(repeats_proposal('ros2-wifi-ip-fragment-buffer-ipfrag-time-budget', proposed))
+        self.assertFalse(repeats_proposal('ros2-qos-deadline-missed-sensor-topic', proposed))
+
+    def test_manifests_listed_without_review_files(self):
+        from scripts.discover_physical_ai import proposed_before
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / 'editorial/physical-ai-candidates'; folder.mkdir(parents=True)
+            (folder / 'a.json').write_text(json.dumps({'slug': 'a', 'title': 'A'}))
+            (folder / 'a.review.json').write_text(json.dumps({'verdict': 'x'}))
+            self.assertEqual(proposed_before(Path(temp)), [{'slug': 'a', 'title': 'A'}])
+
+
 class ReaderQuestionsTests(unittest.TestCase):
     def test_gzip_api_json_becomes_lines_most_viewed_first(self):
         import gzip as _gzip

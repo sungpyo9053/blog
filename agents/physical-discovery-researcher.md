@@ -28,6 +28,8 @@ how English-speaking developers search, using the reader-question view counts, w
 Choose a narrow unanswered reader question in physical AI, robotics, control, or relevant agent
 foundations. Compare all supplied existing titles and relevant bodies. Do not rename a published
 lesson, translate a source article, or repeat its learning outcome with different numbers.
+already_proposed lists earlier candidates, some later rejected for a wrong premise; never propose
+the same reader question again under a new title or slug.
 Learning prerequisites, one useful conclusion, and a reader action must be specific.
 Use one or two source_ids from the supplied sources; the claims must actually occur there.
 Do not cite URLs or source IDs absent from the input. A current retrieval is not a new release.

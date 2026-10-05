@@ -169,6 +169,20 @@ def output_schema(role):
                 'candidate':{'anyOf':[candidate,{'type':'null'}]}})
 
 
+def proposed_before(repo):
+    """Earlier candidate manifests, including ones the article pipeline later rejected."""
+    return [{'slug': data['slug'], 'title': data['title']}
+            for path in sorted((repo / 'editorial/physical-ai-candidates').glob('*.json'))
+            if not path.name.endswith('.review.json') for data in [json.loads(path.read_text())]]
+
+
+def repeats_proposal(slug, proposed):
+    # ponytail: slug-word Jaccard; a renamed slug with new wording slips through, the prompt list covers that.
+    words = set(slug.split('-'))
+    return any(len(words & set(row['slug'].split('-'))) / len(words | set(row['slug'].split('-'))) >= 0.6
+               for row in proposed)
+
+
 def invoke_agent(repo, role, payload, directory):
     need(not contains_secret(json.dumps(payload, ensure_ascii=False)), 'unsafe_model_input')
     prompt = (repo / f'agents/physical-discovery-{role}.md').read_text()
@@ -367,7 +381,8 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
         need(len({row['id'] for row in sources}) == len(sources), 'duplicate_source_id')
         author_id, reviewer_id = 'discovery-writer-' + uuid.uuid4().hex, 'discovery-reviewer-' + uuid.uuid4().hex
         _save_exclusive(directory / 'execution-identities.json', {'author_id': author_id, 'reviewer_id': reviewer_id})
-        payload = {'sources': sources, 'inventory': compact_inventory(inventory),
+        proposed = proposed_before(repo)
+        payload = {'sources': sources, 'inventory': compact_inventory(inventory), 'already_proposed': proposed,
                    'researcher_id': author_id,
                    'output_schema': {'status': 'candidate|no_candidate', 'reason': 'string',
                        'candidate': {'title': 'string', 'slug': 'string', 'reader_question': 'string',
@@ -394,6 +409,10 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
             event.reader_action = candidate['learning_outcome']
             if existing_overlap(event, inventory['posts'])['result'] != 'none':
                 result = {'status': 'no_candidate', 'reason': 'candidate_duplicate', 'wordpress_writes': 0}
+                _save_exclusive(receipt, result)
+                return result
+            if repeats_proposal(candidate['slug'], proposed):
+                result = {'status': 'no_candidate', 'reason': 'candidate_already_proposed', 'wordpress_writes': 0}
                 _save_exclusive(receipt, result)
                 return result
             # Code contains only host-written statements, JSON string literals and
