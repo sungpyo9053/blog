@@ -82,6 +82,10 @@ def schedule_english(topic_dir: Path, ko_post_id: int, slot, client) -> int | No
     if not article.is_file():
         return None
     meta = _meta(Path(topic_dir))
+    # The queue row can lose its 'english' receipt; an existing edition must not get a "-2" twin.
+    existing = client.request("GET", f"hunt_en?slug={meta['slug']}&status=publish,future&_fields=id")
+    if existing:
+        return existing[0]["id"]
     post = client.request("POST", "hunt_en", payload={
         "title": meta["title"], "content": article.read_text(encoding="utf-8"), "excerpt": meta["excerpt"],
         "slug": meta["slug"], "status": "future", "date": slot.strftime("%Y-%m-%dT%H:%M:%S"),

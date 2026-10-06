@@ -29,11 +29,20 @@ class EnglishEditionTests(unittest.TestCase):
             root, runner = topic(d, "<!-- measured:start -->0.075 s vs 0.4 s<!-- measured:end -->")
             self.assertTrue(write_english(root, "a-b", None, runner=runner))
             calls = []
-            client = SimpleNamespace(request=lambda *a, **k: calls.append((a, k)) or {"id": 9})
+            client = SimpleNamespace(request=lambda *a, **k: calls.append((a, k)) or ([] if a[0] == "GET" else {"id": 9}))
             slot = datetime(2026, 10, 5, 10, tzinfo=ZoneInfo("Asia/Seoul"))
             self.assertEqual(schedule_english(root, 827, slot, client), 9)
-            payload = calls[0][1]["payload"]
+            payload = calls[1][1]["payload"]
             self.assertEqual((payload["status"], payload["date"], payload["meta"]), ("future", "2026-10-05T10:00:00", {"ko_post_id": 827}))
+
+    def test_existing_edition_is_reused_not_duplicated(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, runner = topic(d, "<!-- measured:start -->0.075 s vs 0.4 s<!-- measured:end -->")
+            write_english(root, "a-b", None, runner=runner)
+            calls = []
+            client = SimpleNamespace(request=lambda *a, **k: calls.append(a) or [{"id": 874}])
+            self.assertEqual(schedule_english(root, 867, datetime(2026, 10, 6, 10), client), 874)
+            self.assertEqual([call[0] for call in calls], ["GET"])
 
     def test_invented_number_is_rejected_and_never_scheduled(self):
         with tempfile.TemporaryDirectory() as d:

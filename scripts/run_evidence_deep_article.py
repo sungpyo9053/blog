@@ -296,7 +296,9 @@ def audit_evidence_links(body: str, evidence: Mapping[str, Any]) -> dict[str, An
 
 def _plain(text: str) -> str:
     import html
-    return html.unescape(text).translate({0x2018: "'", 0x2019: "'", 0x201C: '"', 0x201D: '"', 0x2013: "-", 0x2014: "-"})
+    # wptexturize also renders "--" as an en dash, so collapse dash runs on both sides.
+    return re.sub(r"-+", "-", html.unescape(text).translate(
+        {0x2018: "'", 0x2019: "'", 0x201C: '"', 0x201D: '"', 0x2013: "-", 0x2014: "-"}))
 
 
 def audit_public(result: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:

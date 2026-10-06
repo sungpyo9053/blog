@@ -557,3 +557,10 @@ class EvidenceDeepArticleTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class PlainTitleTests(unittest.TestCase):
+    def test_texturized_double_hyphen_still_matches_title_seed(self):
+        from scripts.run_evidence_deep_article import _plain
+        seed = "멈추면 --executor sequential로"
+        self.assertIn(_plain(seed), _plain("<h1>멈추면 &#8211;executor sequential로</h1>"))
