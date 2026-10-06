@@ -152,7 +152,9 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
             continue
         try:
             if not (run/'result.json').exists():
-                if now - stamp > timedelta(hours=2):
+                progress = read(run/'progress.json') if (run/'progress.json').exists() else {}
+                # A run that died before any WordPress write leaves nothing to repair.
+                if now - stamp > timedelta(hours=2) and progress.get('wordpress_write_count') != 0:
                     issue(run.name, 'run_incomplete')
                 continue
             record = read(run/'result.json')
@@ -189,6 +191,9 @@ def run_watchdog(root, now, *, apply=False, recover=resume_public_audit,
                 else:
                     issue(run.name, 'public_audit_needs_repair')
                     continue
+            if (record.get('failed') and record.get('run_kind') == 'preparation'
+                    and record.get('wordpress_write_count') == 0):
+                continue  # Prepare-only runs never touch WordPress; rejections are reported by the fill job.
             if record.get('failed'):
                 reconciliation = read_reconciliation(run)
                 if reconciliation and reconciliation.get('wordpress_write_count') == 0:

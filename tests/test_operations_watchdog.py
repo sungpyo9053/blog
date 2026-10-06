@@ -134,6 +134,19 @@ class OperationsWatchdogTests(unittest.TestCase):
         self.recover.assert_not_called()
         self.notify.assert_not_called()
 
+    def test_rejected_preparation_without_wordpress_write_needs_no_repair(self):
+        self.save(str((self.directory/'result.json').relative_to(self.root)),
+                  {'failed': True, 'run_kind': 'preparation', 'deep_article': 'failed',
+                   'error_type': 'ContentQualityRejection', 'wordpress_write_count': 0})
+        self.assertEqual([row for row in self.execute()['issues'] if row['key'] == self.run_id], [])
+
+    def test_dead_run_before_any_write_is_not_incomplete(self):
+        self.now = datetime(2026, 9, 20, 12, 0, tzinfo=ZoneInfo('Asia/Seoul'))  # more than 2h after the run
+        self.assertIn({'key': self.run_id, 'reason': 'run_incomplete'}, self.execute()['issues'])
+        self.save(str((self.directory/'progress.json').relative_to(self.root)),
+                  {'stage': 'discovery_started', 'wordpress_write_count': 0})
+        self.assertEqual([row for row in self.execute()['issues'] if row['key'] == self.run_id], [])
+
     def test_no_topic_is_not_failure(self):
         self.save(str((self.directory/'result.json').relative_to(self.root)),
                   {'failed': False, 'deep_article': 'no_publishable_topic', 'wordpress_write_count': 0})
