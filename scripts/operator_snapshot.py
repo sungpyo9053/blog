@@ -63,6 +63,12 @@ def sources_yesterday(session, query, today):
              int(row["metricValues"][0]["value"])) for row in data.get("rows") or []]
 
 
+def ai_reads_yesterday(client, today):
+    """AI assistant page fetches counted by the huntlab-ai-reads mu-plugin (GA4 cannot see them)."""
+    day = (today - timedelta(days=1)).isoformat()
+    return client.request("GET", f"ai-reads?day={day}", namespace="huntlab/v1")
+
+
 def site_today(today, fetch_json):
     after = today.isoformat() + "T00:00:00"
     ko = fetch_json(f"https://huntlab.app/wp-json/wp/v2/posts?after={after}&_fields=id")
@@ -76,7 +82,7 @@ def due_today(rows, today):
     return len(due), sum(bool(r.get("english")) for r in due)
 
 
-def compose(today, published, queue_depth, analytics, search, sources=None):
+def compose(today, published, queue_depth, analytics, search, sources=None, ai_reads=None):
     lines = [f"[HuntLab 일일 {today.strftime('%m/%d')}]",
              f"오늘 공개 한{published[0]} 영{published[1]} · 대기 {queue_depth}편"]
     lines.append(f"어제 조회 {analytics['views']} 세션 {analytics['sessions']} 광고 {analytics['revenue']}{analytics.get('currency', '')}"
@@ -85,6 +91,8 @@ def compose(today, published, queue_depth, analytics, search, sources=None):
         lines.append(f"평균 참여 {analytics.get('engaged_seconds', 0)}초/명")
     if sources:
         lines.append("유입: " + " · ".join(f"{name[:12]} {count}" for name, count in sources))
+    if ai_reads:
+        lines.append(f"AI 열람: 사용자 질문 {ai_reads.get('user', 0)} · 수집 {ai_reads.get('crawl', 0)}")
     if search:
         lines.append(f"검색7일 노출 {search['impressions']} 클릭 {search['clicks']} ({search['ctr']}%)"
                      f" · 영문 {search.get('en_impressions', 0)}/{search.get('en_clicks', 0)}")
@@ -107,7 +115,7 @@ def main() -> int:
     live, due = site_today(today, fetch_json), due_today(rows, today)
     published = (live[0] + due[0], live[1] + due[1])
     depth = sum(row["status"] in ("queued", "scheduled") for row in rows)
-    analytics = search = sources = None
+    analytics = search = sources = ai_reads = None
     session = _session()
     try:
         analytics = analytics_yesterday(session, _query, today)
@@ -121,7 +129,13 @@ def main() -> int:
         sources = sources_yesterday(session, _query, today)
     except Exception:
         pass
-    message = compose(today, published, depth, analytics, search, sources)
+    try:
+        from publisher.config import WordPressConfig
+        from publisher.wordpress import WordPressClient
+        ai_reads = ai_reads_yesterday(WordPressClient(WordPressConfig.from_environment(ROOT / ".env"), max_retries=0), today)
+    except Exception:
+        pass
+    message = compose(today, published, depth, analytics, search, sources, ai_reads)
     receipt = ROOT / "output/operator-snapshot" / f"{today.isoformat()}.json"
     receipt.parent.mkdir(parents=True, exist_ok=True)
     try:

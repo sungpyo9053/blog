@@ -32,6 +32,14 @@ class EngagementTests(unittest.TestCase):
                                "currency": "KRW", "engaged_seconds": 40}, None, sources)
         self.assertIn("유입: github.com 2 · 직접 4", message)
 
+    def test_ai_reads_line_and_request(self):
+        calls = []
+        client = mock.Mock(request=lambda *a, **k: calls.append((a, k)) or {"user": 5, "crawl": 70})
+        reads = snap.ai_reads_yesterday(client, date(2026, 10, 7))
+        self.assertEqual(calls[0], (("GET", "ai-reads?day=2026-10-06"), {"namespace": "huntlab/v1"}))
+        message = snap.compose(date(2026, 10, 7), (1, 1), 7, None, None, None, reads)
+        self.assertIn("AI 열람: 사용자 질문 5 · 수집 70", message)
+
     def test_midnight_report_counts_todays_scheduled_pair(self):
         rows = [{"status": "scheduled", "scheduled_at": "2026-10-05T10:00:00+09:00", "english": {"post_id": 864}},
                 {"status": "scheduled", "scheduled_at": "2026-10-06T10:00:00+09:00", "english": {"post_id": 874}},
