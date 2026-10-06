@@ -23,6 +23,15 @@ class EngagementTests(unittest.TestCase):
         self.assertIn("광고 0.24KRW", message)
         self.assertLessEqual(len(message), 200)
 
+    def test_sources_line_names_non_google_traffic(self):
+        data = {"rows": [{"dimensionValues": [{"value": "github.com"}], "metricValues": [{"value": "2"}]},
+                         {"dimensionValues": [{"value": "(direct)"}], "metricValues": [{"value": "4"}]}]}
+        with mock.patch.dict("os.environ", {"GA4_PROPERTY_ID": "1"}):
+            sources = snap.sources_yesterday(None, lambda *_: data, date(2026, 10, 6))
+        message = snap.compose(date(2026, 10, 6), (1, 1), 7, {"views": 16, "sessions": 6, "revenue": 60.4,
+                               "currency": "KRW", "engaged_seconds": 40}, None, sources)
+        self.assertIn("유입: github.com 2 · 직접 4", message)
+
     def test_midnight_report_counts_todays_scheduled_pair(self):
         rows = [{"status": "scheduled", "scheduled_at": "2026-10-05T10:00:00+09:00", "english": {"post_id": 864}},
                 {"status": "scheduled", "scheduled_at": "2026-10-06T10:00:00+09:00", "english": {"post_id": 874}},
