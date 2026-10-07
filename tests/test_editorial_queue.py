@@ -72,6 +72,17 @@ class EditorialQueueTests(unittest.TestCase):
         fetch.assert_not_called()
         self.assertFalse((self.repo/'baseline.json').exists())
 
+    def test_sphinx_rebuild_timestamp_does_not_change_digest(self):
+        def digest(stamp):
+            body = f'<html><p>copy.deepcopy copies.</p><div class="footer">Last updated on {stamp}.</div></html>'.encode()
+            response = Mock(status_code=200, headers={'Content-Type': 'text/html'})
+            response.iter_content = Mock(return_value=[body])
+            response.__enter__ = Mock(return_value=response)
+            response.__exit__ = Mock(return_value=False)
+            with patch.object(queue, 'safe_url'), patch.object(queue.requests, 'get', return_value=response):
+                return queue.source_digest('https://docs.python.org/3/library/copy.html')
+        self.assertEqual(digest('Oct 07, 2026 (05:37 UTC)'), digest('Oct 06, 2026 (23:10 UTC)'))
+
     def test_source_http_failure_has_safe_diagnostic_and_still_blocks(self):
         url = 'https://example.test/document?token=do-not-log'
         response = Mock(status_code=403)

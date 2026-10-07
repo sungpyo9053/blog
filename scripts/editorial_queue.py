@@ -159,7 +159,10 @@ def source_digest(url):
         # HTML navigation/advertising scripts are not the article's source text.
         if 'text/html' in response.headers.get('Content-Type',''):
             parser = SourceText(); parser.feed(data.decode('utf-8',errors='replace'))
-            data = re.sub(r'\s+',' ',' '.join(parser.parts)).strip().encode()
+            text = re.sub(r'\s+',' ',' '.join(parser.parts)).strip()
+            # Sphinx docs (docs.python.org, ROS docs) restamp "Last updated on Oct 07, 2026 (05:37 UTC)."
+            # on every rebuild; that is not a change to the cited text.
+            data = re.sub(r'Last updated on [A-Z][a-z]{2} \d{1,2}, \d{4}(?: \(\d{1,2}:\d{2} UTC\))?\.?', '', text).strip().encode()
         if not data:
             raise SourceCheckError('source_empty', url)
         return hashlib.sha256(data).hexdigest()
