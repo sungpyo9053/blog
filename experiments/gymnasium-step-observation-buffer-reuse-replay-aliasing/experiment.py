@@ -1,269 +1,194 @@
 #!/usr/bin/env python3
-"""Observation-buffer reuse in a Gym-style robot env fed by ROS 2 joint-angle messages.
+"""관측 배열을 제자리 수정해 돌려주는 환경을 복사 없이 쌓으면 버퍼에 무엇이 남는가.
 
-A simulated arm node publishes one joint angle per step (std_msgs/Float64). A Gym-style
-env (no gymnasium in the image, so a minimal class) receives it in a rclpy subscription
-callback and returns an observation according to one of several return policies.
-Several consumers store the returned observations. Everything printed is computed at
-run time; nothing below is a pre-written result.
+ros:jazzy-ros-base 컨테이너(네트워크 없음)에서 실행한다. gymnasium은 이미지에 없으므로
+Gymnasium Env의 reset()/step() 반환 계약만 흉내 낸 설명용 환경을 쓴다(check_env는 측정하지 않는다).
+모든 숫자는 실행 중 계산해 JSON 한 줄씩 출력한다.
+
+측정 1: 반환 방식 4종 x 버퍼 3종(list·copy_on_store는 4 step, deque(maxlen=4)는 6 step)을 쌓고 평균, 가장 오래된/최신 원소 오차, 차분 속도를 잰다.
+측정 2: 같은 버그에서 버퍼 길이(step 수)를 늘리면 가장 오래된 원소 오차가 어떻게 변하는지 잰다.
+측정 3: 마지막 원소만 보는 테스트와 가장 오래된 원소를 보는 테스트가 각각 버그를 잡는지 잰다.
+측정 4: ROS 2 sensor_msgs/JointState 메시지 객체 하나를 재사용할 때, 발행 노드 안의 list와
+        토픽을 건너 받은 구독 쪽 list에 남는 값을 잰다.
+측정 5: 7관절 float64 관측의 .copy()와 np.array() 1회 비용을 잰다.
 """
 import json
 import platform
+import statistics
 import sys
 import time
 from collections import deque
 
 import numpy as np
-import rclpy
-from rclpy.executors import SingleThreadedExecutor
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from std_msgs.msg import Float64
 
-STEPS = 4            # buffer length / steps per episode
-DT = 0.125           # nominal step interval [s] used for finite-difference velocity
-INCREMENTS = (0.25, 0.0)  # moving joint, and the "joint does not move" counterexample
-TOPIC = "/arm/joint_angle"
-POLICIES = ("reuse", "view", "asarray", "copy", "np_array", "rebind")
+STEP_RAD = 0.25   # 설명용: 매 step 관절이 움직이는 양
+DT = 0.125        # 설명용: step 간격(s)
+N_STEPS = 4
 
 
 def emit(**record):
-    print(json.dumps(record, ensure_ascii=False, separators=(",", ":")), flush=True)
+    print(json.dumps(record, ensure_ascii=False), flush=True)
 
 
-class ArmSim(Node):
-    """Publishes the joint angle the arm reaches after each step command."""
+class OneJointEnv:
+    """Gymnasium Env의 reset/step 반환 형태만 흉내 낸 관절 1개 설명용 환경."""
 
-    def __init__(self):
-        super().__init__("arm_sim")
-        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
-        self.pub = self.create_publisher(Float64, TOPIC, qos)
-        self.angle = 0.0
+    def __init__(self, mode, n_joints=1):
+        self.mode = mode
+        self._q = np.zeros(n_joints, dtype=np.float64)
 
-    def reset(self):
-        self.angle = 0.0
-
-    def advance(self, increment):
-        self.angle += increment
-        msg = Float64()
-        msg.data = self.angle
-        self.pub.publish(msg)
-        return self.angle
-
-
-class GymStyleArmEnv(Node):
-    """Gym-style env: subscription callback writes the latest angle into self._q."""
-
-    def __init__(self, policy):
-        super().__init__(f"arm_env_{policy}")
-        self.policy = policy
-        self._q = np.zeros(1, dtype=np.float64)
-        self.received = 0
-        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
-        self.sub = self.create_subscription(Float64, TOPIC, self._on_angle, qos)
-
-    def _on_angle(self, msg):
-        if self.policy == "rebind":
-            self._q = np.array([msg.data], dtype=np.float64)   # new array, old one untouched
-        else:
-            self._q[0] = msg.data                              # in-place mutation
-        self.received += 1
-
-    def _obs(self):
-        if self.policy in ("reuse", "rebind"):
+    def _get_obs(self):
+        if self.mode == "reuse":
             return self._q
-        if self.policy == "view":
+        if self.mode == "view":
             return self._q[:]
-        if self.policy == "asarray":
-            return np.asarray(self._q)
-        if self.policy == "copy":
-            return self._q.copy()
-        if self.policy == "np_array":
-            return np.array(self._q)
-        raise ValueError(self.policy)
+        if self.mode == "asarray":
+            return np.asarray(self._q, dtype=np.float64)
+        return self._q.copy()
 
     def reset(self):
-        if self.policy == "rebind":
-            self._q = np.zeros(1, dtype=np.float64)
+        self._q[:] = 0.0  # 제자리 수정
+        return self._get_obs(), {}
+
+    def step(self, action=None):
+        self._q += STEP_RAD  # 제자리 수정: 새 배열을 만들지 않는다
+        return self._get_obs(), 0.0, False, False, {}
+
+
+def fill(env_mode, buffer_kind, n_steps):
+    env = OneJointEnv(env_mode)
+    env.reset()
+    expected = []
+    if buffer_kind == "deque4":
+        buf = deque(maxlen=4)
+    else:
+        buf = []
+    for _ in range(n_steps):
+        obs, *_ = env.step()
+        expected.append(float(env._q[0]))  # 그 순간의 참값을 숫자로 따로 기록
+        if buffer_kind == "copy_on_store":
+            buf.append(np.array(obs))  # SB3 ReplayBuffer.add()처럼 저장할 때 복사
         else:
-            self._q[0] = 0.0
-        return self._obs(), {}
-
-    def step(self, sim, executor, increment):
-        before = self.received
-        t0 = time.perf_counter()
-        sim.advance(increment)
-        deadline = time.monotonic() + 5.0
-        while self.received == before and time.monotonic() < deadline:
-            executor.spin_once(timeout_sec=0.05)
-        latency_ms = (time.perf_counter() - t0) * 1000.0
-        if self.received == before:
-            raise RuntimeError(f"no joint-angle message within 5 s (policy={self.policy})")
-        return self._obs(), 0.0, False, False, {}, latency_ms
+            buf.append(obs)  # 복사 없이 참조만 쌓음
+    stored = [float(o[0]) for o in buf]
+    expected = expected[-len(stored):]
+    return buf, stored, expected
 
 
-class CopyingBuffer:
-    """Preallocated storage that copies on add (the Stable-Baselines3 ReplayBuffer pattern)."""
+def summarize(env_mode, buffer_kind, n_steps):
+    buf, stored, expected = fill(env_mode, buffer_kind, n_steps)
+    vel_stored = [(b - a) / DT for a, b in zip(stored, stored[1:])]
+    vel_expected = [(b - a) / DT for a, b in zip(expected, expected[1:])]
+    return {
+        "env": env_mode,
+        "buffer": buffer_kind,
+        "steps": n_steps,
+        "stored_rad": stored,
+        "expected_rad": expected,
+        "mean_stored": statistics.fmean(stored),
+        "mean_expected": statistics.fmean(expected),
+        "mean_err": statistics.fmean(stored) - statistics.fmean(expected),
+        "oldest_err": stored[0] - expected[0],
+        "newest_err": stored[-1] - expected[-1],
+        "fd_vel_stored": vel_stored[0],
+        "fd_vel_expected": vel_expected[0],
+        "distinct_ids": len({id(o) for o in buf}),
+        "oldest_shares_mem_newest": bool(np.shares_memory(buf[0], buf[-1])),
+    }
 
-    def __init__(self, size):
-        self.data = np.zeros((size, 1), dtype=np.float64)
-        self.pos = 0
 
-    def append(self, obs):
-        self.data[self.pos] = np.array(obs)
-        self.pos += 1
-
-    def values(self):
-        return [float(v) for v in self.data[:self.pos, 0]]
+def measure_buffers():
+    # list는 4 step, deque(maxlen=4)는 6 step을 넣어 최근 4칸 창이 밀려나는 경우까지 본다.
+    for mode in ("reuse", "view", "asarray", "copy"):
+        for kind, n in (("list", N_STEPS), ("deque4", N_STEPS + 2), ("copy_on_store", N_STEPS)):
+            emit(m="buffer", **summarize(mode, kind, n))
 
 
-def velocities(values):
-    return [(values[i + 1] - values[i]) / DT for i in range(len(values) - 1)]
+def measure_length_growth():
+    for n in (2, 4, 8, 16, 64):
+        s = summarize("reuse", "list", n)
+        emit(m="reuse_length", steps=n, oldest_err=s["oldest_err"], mean_err=s["mean_err"],
+             newest_err=s["newest_err"])
 
 
-def shares(a, b):
-    return bool(np.shares_memory(a, b))
+def measure_tests():
+    for mode in ("reuse", "view", "asarray", "copy"):
+        _, stored, expected = fill(mode, "list", N_STEPS)
+        emit(m="unit_test", env=mode, last_only_pass=stored[-1] == expected[-1],
+             oldest_pass=stored[0] == expected[0], all_pass=stored == expected)
 
 
-def wait_for_match(sim, env, executor):
+def measure_ros():
+    import rclpy
+    from rclpy.node import Node
+    from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+    from sensor_msgs.msg import JointState
+
+    rclpy.init()
+    node = Node("obs_reuse_probe")
+    qos = QoSProfile(depth=16, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
+    received = []
+    node.create_subscription(JointState, "joint_obs", received.append, qos)  # 받은 메시지를 그대로 append
+    pub = node.create_publisher(JointState, "joint_obs", qos)
+
     deadline = time.monotonic() + 10.0
-    while sim.pub.get_subscription_count() < 1 and time.monotonic() < deadline:
-        executor.spin_once(timeout_sec=0.05)
-    if sim.pub.get_subscription_count() < 1:
-        raise RuntimeError("subscription never matched")
-    for _ in range(5):
-        executor.spin_once(timeout_sec=0.02)
+    while pub.get_subscription_count() < 1 and time.monotonic() < deadline:
+        rclpy.spin_once(node, timeout_sec=0.05)
+    matched = pub.get_subscription_count()
+
+    msg = JointState()  # 메시지 객체 하나를 계속 재사용
+    msg.name = ["joint1"]
+    msg.position = [0.0]
+    local_log = []
+    expected = []
+    for _ in range(N_STEPS):
+        msg.position[0] += STEP_RAD  # 제자리 수정
+        expected.append(msg.position[0])
+        pub.publish(msg)
+        local_log.append(msg)  # 발행 노드 안에서 복사 없이 기록
+        rclpy.spin_once(node, timeout_sec=0.0)
+
+    deadline = time.monotonic() + 10.0
+    while len(received) < N_STEPS and time.monotonic() < deadline:
+        rclpy.spin_once(node, timeout_sec=0.05)
+
+    local_vals = [float(m.position[0]) for m in local_log]
+    recv_vals = [float(m.position[0]) for m in received]
+    emit(m="ros2_jointstate", position_type=type(msg.position).__name__, matched=matched,
+         expected_rad=expected, pub_local_rad=local_vals,
+         pub_local_ids=len({id(x) for x in local_log}), pub_local_oldest_err=local_vals[0] - expected[0],
+         sub_count=len(recv_vals), sub_rad=recv_vals, sub_ids=len({id(x) for x in received}),
+         sub_oldest_err=(recv_vals[0] - expected[0]) if recv_vals else None,
+         sub_matches=recv_vals == expected)
+    node.destroy_node()
+    rclpy.shutdown()
 
 
-def run_episode(policy, increment):
-    sim = ArmSim()
-    env = GymStyleArmEnv(policy)
-    executor = SingleThreadedExecutor()
-    executor.add_node(sim)
-    executor.add_node(env)
-    try:
-        wait_for_match(sim, env, executor)
-        sim.reset()
-        reset_obs, _ = env.reset()
-        returned, snapshot, latencies = [], [], []
-        list_buf, deque_buf, copy_buf = [], deque(maxlen=STEPS), CopyingBuffer(STEPS)
-        stack_refs, stack_outputs = deque(maxlen=STEPS), []
-        published = []
-        for _ in range(STEPS):
-            obs, _r, _term, _trunc, _info, latency = env.step(sim, executor, increment)
-            published.append(sim.angle)
-            snapshot.append(float(obs[0]))          # value at the moment step() returned
-            returned.append(obs)
-            latencies.append(latency)
-            list_buf.append(obs)
-            deque_buf.append(obs)
-            copy_buf.append(obs)
-            stack_refs.append(obs)                   # frame-stack mimic: deque of references
-            stack_outputs.append(np.stack(list(stack_refs)).copy())  # new stacked array every step
-        received = env.received
-        # Read every consumer after the episode, before any reset.
-        consumers = {
-            "list_append": [float(o[0]) for o in list_buf],
-            "deque_maxlen4": [float(o[0]) for o in deque_buf],
-            "copy_on_add": copy_buf.values(),
-            "frame_stack_last_output": [float(v) for v in stack_outputs[-1][:, 0]],
-        }
-        # check_env-style sequence in Gymnasium 1.4.0: reset -> step -> step -> reset.
-        reset_end_obs, _ = env.reset()
-        list_after_reset = [float(o[0]) for o in list_buf]
-        checked = [("reset0", reset_obs), ("step1", returned[0]), ("step2", returned[1]),
-                   ("reset_end", reset_end_obs)]
-        pair_shares = {f"{a}~{b}": shares(x, y)
-                       for i, (a, x) in enumerate(checked) for (b, y) in checked[i + 1:]}
-        return {
-            "published_rad": published, "snapshot_rad": snapshot, "received_msgs": received,
-            "consumers": consumers, "list_after_reset_rad": list_after_reset,
-            "consecutive_is": [returned[i] is returned[i + 1] for i in range(STEPS - 1)],
-            "consecutive_shares_memory": [shares(returned[i], returned[i + 1]) for i in range(STEPS - 1)],
-            "reset_step1_shares_memory": shares(reset_obs, returned[0]),
-            "checkenv_style_pairs": pair_shares,
-            "latency_ms": latencies,
-        }
-    finally:
-        executor.remove_node(env)
-        executor.remove_node(sim)
-        env.destroy_node()
-        sim.destroy_node()
-        executor.shutdown()
-
-
-CONSUMER_KEYS = {"list_append": "list", "deque_maxlen4": "deque", "copy_on_add": "copy_buf",
-                 "frame_stack_last_output": "stack"}
+def measure_copy_cost():
+    q = np.linspace(-1.0, 1.0, 7)  # 7관절 float64 관측
+    reps = 20000
+    for name, fn in (("ndarray.copy", lambda: q.copy()), ("np.array", lambda: np.array(q)),
+                     ("return_reference", lambda: q)):
+        samples = []
+        for _ in range(7):
+            t0 = time.perf_counter_ns()
+            for _ in range(reps):
+                fn()
+            samples.append((time.perf_counter_ns() - t0) / reps)
+        emit(m="cost_7joint", op=name, reps=reps, samples=len(samples),
+             median_ns=round(statistics.median(samples), 1), min_ns=round(min(samples), 1))
 
 
 def main():
-    # The harness keeps only the last 8000 stdout characters, so each episode is one compact line.
     started = time.monotonic()
-    rclpy.init()
-    emit(kind="env", python=platform.python_version(), numpy=np.__version__,
-         ros_distro=__import__("os").environ.get("ROS_DISTRO", ""), steps=STEPS, dt_s=DT)
-    summary = []
-    all_latency = []
-    all_received = 0
-    try:
-        for increment in INCREMENTS:
-            for policy in POLICIES:
-                ep = run_episode(policy, increment)
-                truth = ep["snapshot_rad"]
-                stored, mean, oldest_err, vel, bad = {}, {}, {}, {}, {}
-                for consumer, values in ep["consumers"].items():
-                    key = CONSUMER_KEYS[consumer]
-                    errors = [s - t for s, t in zip(values, truth)]
-                    tests = {
-                        "last_slot_value": values[-1] != truth[-1],
-                        "oldest_slot_value": values[0] != truth[0],
-                        "shares_memory_between_steps": any(ep["consecutive_shares_memory"]),
-                        "checkenv_style_any_pair": any(ep["checkenv_style_pairs"].values()),
-                    }
-                    stored[key] = values
-                    mean[key] = float(np.mean(values))
-                    oldest_err[key] = errors[0]
-                    vel[key] = velocities(values)
-                    bad[key] = any(e != 0 for e in errors)
-                    summary.append((policy, key, increment, bad[key], tests,
-                                    float(np.mean(values)) - float(np.mean(truth)), errors))
-                # Derived numbers for the reference-keeping list buffer; other consumers are
-                # summarised by their stored values and the corrupted flag.
-                emit(kind="ep", p=policy, inc=increment, msgs=ep["received_msgs"], true=truth,
-                     stored=stored, bad=[k for k, v in bad.items() if v],
-                     list_mean=mean["list"], true_mean=float(np.mean(truth)),
-                     list_oldest_err=oldest_err["list"], list_vel=vel["list"], true_vel=velocities(truth),
-                     is_=ep["consecutive_is"], shares=ep["consecutive_shares_memory"],
-                     ck_pairs=sum(ep["checkenv_style_pairs"].values()),
-                     list_after_reset=ep["list_after_reset_rad"])
-                all_latency.extend(ep["latency_ms"])
-                all_received += ep["received_msgs"]
-    finally:
-        rclpy.shutdown()
-
-    corrupted = [s for s in summary if s[3]]
-    sharing = [s for s in summary if s[4]["shares_memory_between_steps"]]
-    worst = max(corrupted, key=lambda s: abs(s[6][0]), default=None)
-    emit(kind="summary",
-         cases=len(summary),
-         corrupted_cases=len(corrupted),
-         corrupted=[f"{p}/{c}/{i}" for p, c, i, *_ in corrupted],
-         max_abs_mean_error=max((abs(s[5]) for s in corrupted), default=0.0),
-         worst_per_slot_error=worst[6] if worst else [],
-         last_slot_error_max=max(abs(s[6][-1]) for s in summary),
-         caught_by_last_slot=sum(s[4]["last_slot_value"] for s in corrupted),
-         caught_by_oldest_slot=sum(s[4]["oldest_slot_value"] for s in corrupted),
-         caught_by_shares_memory=sum(s[4]["shares_memory_between_steps"] for s in corrupted),
-         caught_by_checkenv_style=sum(s[4]["checkenv_style_any_pair"] for s in corrupted),
-         sharing_cases=len(sharing),
-         sharing_but_values_ok=len([s for s in sharing if not s[3]]),
-         oldest_slot_misses_sharing=sum(not s[4]["oldest_slot_value"] for s in sharing),
-         false_alarm_shares_memory=sum(s[4]["shares_memory_between_steps"] for s in summary
-                                       if s[0] in ("copy", "np_array", "rebind")),
-         ros_msgs_received=all_received, ros_msgs_published=len(INCREMENTS) * len(POLICIES) * STEPS,
-         ros_step_latency_ms_median=round(float(np.median(all_latency)), 3),
-         ros_step_latency_ms_max=round(float(np.max(all_latency)), 3),
-         wall_seconds=round(time.monotonic() - started, 3))
+    emit(m="env", python=platform.python_version(), numpy=np.__version__,
+         machine=platform.machine(), step_rad=STEP_RAD, dt_s=DT, n_steps=N_STEPS)
+    measure_buffers()
+    measure_length_growth()
+    measure_tests()
+    measure_ros()
+    measure_copy_cost()
+    emit(m="done", elapsed_s=round(time.monotonic() - started, 2))
     return 0
 
 
