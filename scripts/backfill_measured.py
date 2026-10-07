@@ -51,7 +51,8 @@ def run(now=None, *, client=None, posts=None, stage=None, executor=None, publish
     if posts is None:
         from scripts import run_evidence_deep_article as deep
         from scripts.run_weekly_editorial import eligible_posts
-        posts = eligible_posts(client, deep.refresh_inventory())
+        # refresh_inventory returns the snapshot file path, not its contents.
+        posts = eligible_posts(client, json.loads(deep.refresh_inventory().read_text()))
     post = pick(posts, state["attempted"])
     if post is None:
         return {"status": "nothing_to_backfill"}

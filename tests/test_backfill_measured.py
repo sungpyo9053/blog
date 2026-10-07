@@ -41,6 +41,18 @@ class BackfillTests(unittest.TestCase):
     def test_insert_before_reference_links(self):
         self.assertEqual(insert_section(POST["content"], "<h2>M</h2>"), "<p>body</p>\n<h2>M</h2>\n\n<h2>참고 링크</h2><ul></ul>")
 
+    def test_default_posts_read_inventory_contents(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            snapshot = Path(d) / "inventory.json"
+            snapshot.write_text(json.dumps({"posts": []}))
+            seen = []
+            with mock.patch("scripts.run_evidence_deep_article.refresh_inventory", return_value=snapshot), \
+                    mock.patch("scripts.run_weekly_editorial.eligible_posts", side_effect=lambda c, inv: seen.append(inv) or []):
+                result = run(NOW, client=SimpleNamespace(), state_path=Path(d) / "state.json", work_root=Path(d))
+        self.assertEqual(seen, [{"posts": []}])
+        self.assertEqual(result, {"status": "nothing_to_backfill"})
+
     def run_with(self, section):
         with tempfile.TemporaryDirectory() as d:
             updates, sent = [], []
