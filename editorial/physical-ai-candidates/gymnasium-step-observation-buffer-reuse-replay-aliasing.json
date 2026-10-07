@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-gymnasium-step-observation-buffer-reuse-replay-aliasing",
+  "title": "Gymnasium 커스텀 로봇 환경에서 step()이 같은 관측 배열을 고쳐 돌려주면, 복사 없이 쌓는 리플레이 버퍼에는 무엇이 남을까: 관절각 4스텝으로 평균과 차분 속도 계산하기",
+  "slug": "gymnasium-step-observation-buffer-reuse-replay-aliasing",
+  "reader_question": "로봇 팔 관절각을 관측으로 내보내는 Gymnasium 커스텀 환경을 만들었다. step()마다 self 안의 numpy 배열 하나를 고쳐서 그대로 돌려주고 있다. Gymnasium 문서는 매 step마다 새 observation·info 객체를 돌려주라고 하는데, 이를 어기고 관측을 복사하지 않고 그대로 쌓는 단순한 버퍼에 넣으면 기록된 숫자는 얼마나 달라지는가? 그리고 어떤 테스트로 이 문제를 잡아낼 수 있는가?",
+  "target_reader": "Gymnasium으로 로봇 팔이나 이동로봇용 커스텀 환경을 처음 만들면서 step()을 직접 구현하는 입문자. Python 리스트와 numpy 배열은 쓸 줄 알고 관측·행동·보상이라는 용어도 들어 봤지만, 자기가 쓰는 버퍼가 관측을 복사해서 저장하는지 참조로 저장하는지는 아직 따져 보지 않은 사람.",
+  "learning_outcome": "Gymnasium Env API 문서가 step()에 매번 새 observation·info 객체를 요구하는 이유를 문서에 적힌 근거(사용자가 리플레이·롤아웃 버퍼에 매 timestep 데이터를 보관한다)로 설명할 수 있다. 반환 객체를 복사하지 않고 참조만 쌓는 버퍼라는 조건에서 4스텝 관절각 기록의 평균 오차(0.375 rad), 가장 오래된 원소의 오차(0.75 rad), 차분 속도의 변화(2 rad/s에서 0으로)를 직접 계산할 수 있다. 마지막으로 자기 환경에 세 가지를 적용한다. step()이 반환 직전에 관측을 새 배열로 만드는지 확인하고, 2스텝 이상 쌓은 뒤 가장 오래된 원소를 처음 값과 비교하는 단위 테스트를 추가하며, 문서가 이 요구를 검사한다고 밝힌 gymnasium.utils.env_checker.check_env()를 실행한다.",
+  "unique_takeaway": "같은 배열을 재사용하는 버그가 버퍼 내용을 망가뜨리는 경우는 버퍼가 반환 객체를 복사하지 않고 참조만 쌓을 때다. 그런 단순 버퍼에서는 마지막 한 칸만 비교하는 테스트로 차이를 보면 0이 나와 버그가 드러나지 않는다. 오차는 가장 오래된 원소에서 가장 크고(0.75 rad), 연속 관측으로 구한 속도는 0이 되어, 실제로는 움직인 관절이 버퍼에는 정지한 것처럼 남는다. 따라서 테스트는 최신 값이 아니라 가장 오래된 값을 검사해야 한다. 쓰고 있는 라이브러리 버퍼가 저장할 때 복사하는지는 별도로 확인해야 하는 조건이며, 이 글은 그 조건을 단정하지 않는다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/openai/spinningup/master/docs/spinningup/rl_intro.rst",
+      "publisher": "OpenAI Spinning Up",
+      "claim_scope": "States, observations, policies, rewards and returns",
+      "checked_at": "2026-10-07T14:00:18.304739+09:00"
+    },
+    {
+      "url": "https://gymnasium.farama.org/api/env/",
+      "publisher": "Farama Foundation",
+      "claim_scope": "Environment step/reset API, observations, rewards and termination",
+      "checked_at": "2026-10-07T14:00:18.304739+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261007T050015Z-97902efd73-gymnasium-step-observation-buffer-reuse-replay-aliasing/example.py",
+    "sha256": "6fc6ef2de478ce99f5e1c4f456d2c80161e4b78bc5828b744cc17e88ee7de272",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/7151ccfd392627e4ce9c4509c258c355ea41cca9/editorial/generated-foundations/20261007T050015Z-97902efd73-gymnasium-step-observation-buffer-reuse-replay-aliasing/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261007T050015Z-97902efd73-gymnasium-step-observation-buffer-reuse-replay-aliasing/verification.json",
+    "sha256": "f8ccc839af58eba8001689eeb2bbe8e3d1b32fe2fe453affbbbf145ac2255af1",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/7151ccfd392627e4ce9c4509c258c355ea41cca9/editorial/generated-foundations/20261007T050015Z-97902efd73-gymnasium-step-observation-buffer-reuse-replay-aliasing/verification.json"
+  },
+  "author_id": "discovery-writer-cae1d6f31ffe4c88b9741e0ae0598f1a"
+}
