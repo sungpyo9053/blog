@@ -75,6 +75,36 @@ add_filter(
     5
 );
 
+// "Keep reading": up to three other English lessons, same symptom group (huntlab-hub) first, then newest.
+add_filter(
+    'the_content',
+    static function ( string $content ): string {
+        if ( ! is_singular( 'hunt_en' ) || ! in_the_loop() || ! is_main_query() ) {
+            return $content;
+        }
+        $current = get_post();
+        $others  = get_posts( [ 'post_type' => 'hunt_en', 'post_status' => 'publish', 'numberposts' => 50,
+            'exclude' => [ $current->ID ] ] );
+        $pattern = null;
+        foreach ( function_exists( 'huntlab_hub_groups' ) ? huntlab_hub_groups() : [] as $group ) {
+            if ( preg_match( $group[2], $current->post_name ) ) {
+                $pattern = $group[2];
+                break;
+            }
+        }
+        // usort is stable since PHP 8: same-group posts first, newest order kept within each side.
+        usort( $others, static fn( $a, $b ) => (int) ( $pattern && preg_match( $pattern, $b->post_name ) )
+            - (int) ( $pattern && preg_match( $pattern, $a->post_name ) ) );
+        $items = '';
+        foreach ( array_slice( $others, 0, 3 ) as $post ) {
+            $items .= '<li><a href="' . esc_url( get_permalink( $post ) ) . '">' . esc_html( get_the_title( $post ) ) . '</a></li>';
+        }
+        return $items ? $content . '<aside class="huntlab-related" aria-label="Keep reading"><h2>Keep reading</h2><ul>'
+            . $items . '</ul></aside>' : $content;
+    },
+    15
+);
+
 // English byline for the pen name (Korean pages show 훈트 via huntlab-reader-loop, priority 30).
 $huntlab_en_byline = static function ( $name ) {
     return ( ! is_admin() && is_singular( 'hunt_en' ) ) ? 'Hunt' : $name;
