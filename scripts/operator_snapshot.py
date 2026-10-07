@@ -93,6 +93,8 @@ def compose(today, published, queue_depth, analytics, search, sources=None, ai_r
         lines.append("유입: " + " · ".join(f"{name[:12]} {count}" for name, count in sources))
     if ai_reads:
         lines.append(f"AI 열람: 사용자 질문 {ai_reads.get('user', 0)} · 수집 {ai_reads.get('crawl', 0)}")
+        if "waitlist" in ai_reads:
+            lines.append(f"가이드 사전신청 누적 {ai_reads['waitlist']}명")
     if search:
         lines.append(f"검색7일 노출 {search['impressions']} 클릭 {search['clicks']} ({search['ctr']}%)"
                      f" · 영문 {search.get('en_impressions', 0)}/{search.get('en_clicks', 0)}")
@@ -132,7 +134,9 @@ def main() -> int:
     try:
         from publisher.config import WordPressConfig
         from publisher.wordpress import WordPressClient
-        ai_reads = ai_reads_yesterday(WordPressClient(WordPressConfig.from_environment(ROOT / ".env"), max_retries=0), today)
+        client = WordPressClient(WordPressConfig.from_environment(ROOT / ".env"), max_retries=0)
+        ai_reads = ai_reads_yesterday(client, today)
+        ai_reads["waitlist"] = client.request("GET", "guide-waitlist", namespace="huntlab/v1")["count"]
     except Exception:
         pass
     message = compose(today, published, depth, analytics, search, sources, ai_reads)

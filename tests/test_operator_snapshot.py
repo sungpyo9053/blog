@@ -39,6 +39,9 @@ class EngagementTests(unittest.TestCase):
         self.assertEqual(calls[0], (("GET", "ai-reads?day=2026-10-06"), {"namespace": "huntlab/v1"}))
         message = snap.compose(date(2026, 10, 7), (1, 1), 7, None, None, None, reads)
         self.assertIn("AI 열람: 사용자 질문 5 · 수집 70", message)
+        self.assertNotIn("사전신청", message)
+        message = snap.compose(date(2026, 10, 7), (1, 1), 7, None, None, None, {**reads, "waitlist": 3})
+        self.assertIn("가이드 사전신청 누적 3명", message)
 
     def test_midnight_report_counts_todays_scheduled_pair(self):
         rows = [{"status": "scheduled", "scheduled_at": "2026-10-05T10:00:00+09:00", "english": {"post_id": 864}},
