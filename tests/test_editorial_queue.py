@@ -298,3 +298,10 @@ class SelfLinkTests(unittest.TestCase):
         self.assertFalse(queue.is_self_link(
             'https://github.com/sungpyo9053/blog/blob/abc/editorial/generated-foundations/x/example.py'))
         self.assertFalse(queue.is_self_link('https://github.com/sungpyo9053/blog-other'))
+
+
+class PublicPlainTests(unittest.TestCase):
+    def test_texturized_double_hyphen_in_body_matches_raw(self):
+        from scripts.editorial_queue import public_plain
+        self.assertIn(public_plain('<p>쪽: --symlink-install</p>'),
+                      public_plain('<p>쪽: &#8211;symlink-install</p>'))

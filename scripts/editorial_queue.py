@@ -348,6 +348,14 @@ def preflight(row, *, repo, inventory_path, now, fetch=source_digest, line_count
     return context
 
 
+def public_plain(text):
+    """Visible text with WordPress texturize undone: curly quotes, and '--' rendered as an en dash."""
+    parser=SourceText(); parser.feed(text)
+    value=html.unescape(' '.join(parser.parts))
+    value=re.sub(r'\s+','',value).translate(str.maketrans({'“':'"','”':'"','″':'"','‘':"'",'’':"'",'′':"'",'–':'-','—':'-'}))
+    return re.sub(r'-+','-',value)
+
+
 def audit_queued_public(published, candidate):
     from scripts.run_evidence_deep_article import audit_public
     from publisher.config import WordPressConfig
@@ -361,10 +369,7 @@ def audit_queued_public(published, candidate):
         raise ValueError('queue_readback_content_changed')
     response = requests.get(published['url'],timeout=30)
     response.raise_for_status()
-    def plain(text):
-        parser=SourceText(); parser.feed(text)
-        value=html.unescape(' '.join(parser.parts))
-        return re.sub(r'\s+','',value).translate(str.maketrans({'“':'"','”':'"','″':'"','‘':"'",'’':"'",'′':"'",'–':'-','—':'-'}))
+    plain = public_plain
     public = plain(response.text)
     blocks=re.findall(r'<(?:p|pre|h[2-6])\b[^>]*>(.*?)</(?:p|pre|h[2-6])>',raw,re.S|re.I)
     if not blocks or any(plain(block) not in public for block in blocks if plain(block)):
