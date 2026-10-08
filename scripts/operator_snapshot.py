@@ -69,6 +69,18 @@ def ai_reads_yesterday(client, today):
     return client.request("GET", f"ai-reads?day={day}", namespace="huntlab/v1")
 
 
+def with_retry(call, wait=30, sleep=None):
+    """GA4 sometimes fails right at midnight; one retry after `wait` seconds, then give up (None)."""
+    import time
+    for attempt in (1, 2):
+        try:
+            return call()
+        except Exception:
+            if attempt == 1:
+                (sleep or time.sleep)(wait)
+    return None
+
+
 def site_today(today, fetch_json):
     after = today.isoformat() + "T00:00:00"
     ko = fetch_json(f"https://huntlab.app/wp-json/wp/v2/posts?after={after}&_fields=id")
@@ -119,10 +131,7 @@ def main() -> int:
     depth = sum(row["status"] in ("queued", "scheduled") for row in rows)
     analytics = search = sources = ai_reads = None
     session = _session()
-    try:
-        analytics = analytics_yesterday(session, _query, today)
-    except Exception:
-        pass
+    analytics = with_retry(lambda: analytics_yesterday(session, _query, today))
     try:
         search = search_week(session, _query, today)
     except Exception:

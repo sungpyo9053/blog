@@ -43,6 +43,18 @@ class EngagementTests(unittest.TestCase):
         message = snap.compose(date(2026, 10, 7), (1, 1), 7, None, None, None, {**reads, "waitlist": 3})
         self.assertIn("가이드 사전신청 누적 3명", message)
 
+    def test_with_retry_recovers_once_then_gives_up(self):
+        calls = iter([RuntimeError("blip"), {"views": 1}])
+        def call():
+            value = next(calls)
+            if isinstance(value, Exception):
+                raise value
+            return value
+        self.assertEqual(snap.with_retry(call, sleep=lambda _: None), {"views": 1})
+        def boom():
+            raise RuntimeError("down")
+        self.assertIsNone(snap.with_retry(boom, sleep=lambda _: None))
+
     def test_midnight_report_counts_todays_scheduled_pair(self):
         rows = [{"status": "scheduled", "scheduled_at": "2026-10-05T10:00:00+09:00", "english": {"post_id": 864}},
                 {"status": "scheduled", "scheduled_at": "2026-10-06T10:00:00+09:00", "english": {"post_id": 874}},
