@@ -20,7 +20,8 @@ add_action(
     'template_redirect',
     static function (): void {
         $kind = huntlab_ai_reads_kind( (string) ( $_SERVER['HTTP_USER_AGENT'] ?? '' ) );
-        if ( ! $kind ) {
+        // Scanners spoof AI user agents while probing /.env, /key.json …; only real pages count.
+        if ( ! $kind || is_404() ) {
             return;
         }
         $day    = wp_date( 'Y-m-d', null, new DateTimeZone( 'Asia/Seoul' ) );
