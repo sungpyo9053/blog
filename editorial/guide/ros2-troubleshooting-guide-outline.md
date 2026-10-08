@@ -15,7 +15,8 @@ Format: English PDF + the reproduction scripts (zip). Price to be decided by the
    Sources: ros2-message-filter-laser-stamp-clock-mismatch, /en/ros2-message-filter-dropping-message-clock-mismatch.
 3. **When `map -> odom` stops after an upgrade.** Bisecting apt upgrades with `dpkg-query` diff;
    case study: Humble tf2 0.25.22 → 0.25.23 (ROBOTIS-GIT/turtlebot3#1155, ros2/geometry2#995).
-   Needs our own reproduction before it ships (measured section rule).
+   Measured 2026-10-08: deterministic stress test deadlocks 5/5 within 0.1 s on 0.25.23, 0/5 in 20 s on 0.25.22
+   (`experiments/tf2-humble-0-25-23-wait-for-transform-deadlock/`). Upstream fix: 0.25.24 (testing, per #992).
 4. **Topic exists but no data arrives: QoS.** Compatibility before queue depth; deadline period rules;
    transient_local late joiners.
    Sources: ros2-qos-compatibility-before-queue-depth, ros2-qos-deadline-period-compatibility,
