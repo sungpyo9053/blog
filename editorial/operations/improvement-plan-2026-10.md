@@ -14,7 +14,7 @@ are still live next to the Physical AI lessons. To be confirmed by the 10/12 ind
 | # | Item | Why it moves revenue | Owner | When |
 |---|---|---|---|---|
 | P1 | Site trust audit: the 10 live off-niche dev-log posts (wordpress-*, topic-planner, evidence-first) — impressions, internal links, recommendation (keep / noindex / 410) | Mixed-topic AI history is the leading suspect for zero indexing | Claude prepares, **owner approves** (bulk change to public posts) | 10/09 audit → 10/12 decision |
-| P2 | Real author page (E-E-A-T): who measures, environment, GitHub experiments repo | Trust signal for indexing and for paid guide buyers | Claude drafts (unpublished), **owner decides real name/credentials** | 10/10 draft |
+| P2 | "How these articles are made" page (no real name, owner decision 10/08): AI-written, automated measured runs, review gates, public experiments repo | Transparency trust signal (Google guidance on automation) and buyer trust | Claude drafts (unpublished), owner confirms before publishing | 10/10 draft |
 | P3 | tf2 0.25.23 deadlock article (EN first): measured 5/5 vs 0/5 already in `experiments/` | Fresh, unanswered search demand; feeds guide ch. 3; backlink-worthy | Claude: extend experiment runner to pinned Humble snapshot images, then let discovery/pipeline produce it through the normal gates | 10/09 |
 | P4 | 10/12 index comparison (Google/Bing/Naver) → keep course or pivot (fewer deeper posts / separate EN domain / revenue model) | Decides whether search can ever pay | Claude reports, **owner decides** | 10/12 |
 | P5 | Distribution: daily GitHub answer routine (≤1/day, exact match only); public experiments repo | Only proven outside-visit channel so far | Claude (running) | daily 00:03 |
