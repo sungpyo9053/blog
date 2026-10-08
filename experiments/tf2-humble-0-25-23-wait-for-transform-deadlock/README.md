@@ -20,3 +20,5 @@ Interpretation (not measured): 0.25.23 (geometry2 commit 50af68fa, "Fix waitForT
 holds `timer_to_request_map_mutex_` while calling `addTransformableRequest`, while `setTransform` →
 `testTransformableRequests` runs the request callback that takes the same mutex — a lock-order inversion.
 Matches ros2/geometry2#992 and #995. Not yet confirmed with a debugger backtrace.
+
+More measured ROS 2 troubleshooting: [HuntLab ROS 2 troubleshooting guide](https://huntlab.app/ros-2-troubleshooting-guide/) · [all experiments](../)
