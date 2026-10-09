@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-rclpy-rate-sleep-timer-executor-loop-period",
+  "title": "rclpy에서 rate.sleep()이 멈추거나 주기가 안 맞을 때: Rate가 타이머 콜백의 이벤트를 기다린다는 점으로 executor 구성과 루프 주기 계산하기",
+  "slug": "rclpy-rate-sleep-timer-executor-loop-period",
+  "reader_question": "https://robotics.stackexchange.com/questions/96684/rate-and-sleep-function-in-rclpy-library-for-ros2 — ROS 1의 rospy.Rate처럼 rclpy에서도 create_rate()와 rate.sleep()으로 고정 주기 루프를 만들고 싶은데, 루프가 멈추거나 기대한 주기로 돌지 않는다. rclpy의 Rate와 sleep은 어떻게 동작하고, 어떻게 써야 하나? (같은 맥락의 질문: https://robotics.stackexchange.com/questions/103990/how-to-use-the-rate-sleep-function-properly)",
+  "target_reader": "rospy.Rate에 익숙하거나 Python으로 첫 ROS 2 노드를 만드는 입문자. 메인 while 루프에서 rate.sleep()을 불렀더니 노드가 첫 반복 뒤에 멈춘 적이 있거나, 루프 주기가 기대보다 느려진 경험이 있는 사람이다. Python의 while 루프, 스레드라는 말의 뜻, Hz와 초 환산만 알면 따라올 수 있다.",
+  "learning_outcome": "Jazzy rclpy의 timer.py 원문에서 Rate가 동작하는 방식을 직접 확인한다. Rate는 Timer 하나를 감싸고, 그 타이머의 콜백을 threading.Event의 set으로 바꿔 둔다. sleep()은 그 이벤트가 세워질 때까지 _event.wait()로 기다린다. 이 구조에서 독자는 executor가 타이머 콜백을 가져가 실행해 줘야만 sleep()이 돌아온다는 점을 이해한다. 그다음 자기 루프에 대해 네 가지 값을 직접 계산한다. 목표 주기(1/Hz)와 타이머 주기(ns), 작업이 주기보다 짧을 때 기다리는 시간, 주어진 시간 동안의 반복 횟수, 작업이 주기보다 길 때의 실효 주기다. 계산을 마치면 spin을 별도 스레드로 돌릴지, Rate를 create_timer 콜백 구조로 바꿀지 정할 수 있다.",
+  "unique_takeaway": "rate.sleep()은 time.sleep()처럼 스스로 시간을 재지 않는다. 타이머 콜백이 이벤트를 세워 줘야 깨어나고, 그 콜백은 executor가 실행해 준다. 그래서 spin이 돌지 않는 메인 스레드에서 sleep()을 부르면 첫 반복 뒤에 멈출 수 있다. 단일 스레드 executor의 콜백 안에서 불러도 같은 이유로 막힐 수 있으며, 원문 docstring도 이 경우를 경고한다. 루프가 '멈췄다'면 executor 구성부터 본다. '느리다'면 작업 시간을 주기와 비교한다. 두 증상은 원인이 달라 따로 진단해야 한다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/rclpy/jazzy/rclpy/rclpy/timer.py",
+      "publisher": "ROS 2 rclpy (Jazzy source)",
+      "claim_scope": "How rclpy Timer and Rate are implemented in Jazzy (Rate.sleep waits on a timer driven by the node's clock and executor); source code, not a behavior guarantee for other distros",
+      "checked_at": "2026-10-10T08:44:49.055165+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261009T234446Z-ec080d39da-rclpy-rate-sleep-timer-executor-loop-period/example.py",
+    "sha256": "0b911e90775b33faad28cc92f40efc4b599026cb5b1cb684b54c917a92bbb2e9",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/82aff61b2cb132ee0368b70d92f54c2e7883d61b/editorial/generated-foundations/20261009T234446Z-ec080d39da-rclpy-rate-sleep-timer-executor-loop-period/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261009T234446Z-ec080d39da-rclpy-rate-sleep-timer-executor-loop-period/verification.json",
+    "sha256": "d2ec4ee4458b070c6a2046b9a5875938dc81b22e51e0cd96a356885944c3292b",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/82aff61b2cb132ee0368b70d92f54c2e7883d61b/editorial/generated-foundations/20261009T234446Z-ec080d39da-rclpy-rate-sleep-timer-executor-loop-period/verification.json"
+  },
+  "author_id": "discovery-writer-f877c8cc26454f9a928b9fb767e30c50"
+}
