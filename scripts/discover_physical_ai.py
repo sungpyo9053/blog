@@ -355,7 +355,7 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
         check = inspect_article('Fresh inventory availability check.', inventory, now=now)
         need(not any('inventory' in failure for failure in check['failures']), 'inventory_not_fresh_complete')
         rows = config.get('primary_sources', [])
-        need(isinstance(rows, list) and 1 <= len(rows) <= 17, 'primary_source_config_invalid')
+        need(isinstance(rows, list) and 1 <= len(rows) <= 20, 'primary_source_config_invalid')
         rotation = now.date().toordinal() % len(rows)
         rows = rows[rotation:] + rows[:rotation]
         sources, failures = [], []
