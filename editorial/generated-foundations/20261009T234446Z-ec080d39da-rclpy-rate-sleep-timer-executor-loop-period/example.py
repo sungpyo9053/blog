@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (1/8)
+assert math.isclose(value, 0.125, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '8 Hz Rate의 목표 주기(초)', "actual": value})
+value = (1000000000/8)
+assert math.isclose(value, 125000000, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '8 Hz를 Timer의 timer_period_ns로 옮긴 값(ns)', "actual": value})
+value = (0.125-0.0625)
+assert math.isclose(value, 0.0625, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '작업 0.0625초일 때 sleep이 기다리는 시간(초), spin은 별도 스레드', "actual": value})
+value = (5/0.125)
+assert math.isclose(value, 40, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '5초 동안 8 Hz 루프가 도는 반복 횟수', "actual": value})
+value = (0.125-0.125)
+assert math.isclose(value, 0, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '경계: 작업 시간이 주기 0.125초와 정확히 같을 때 대기 시간(초)', "actual": value})
+value = (1/0.25)
+assert math.isclose(value, 4, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '작업 0.25초가 주기 0.125초보다 길 때 실효 루프 주파수(Hz). 이미 세워진 이벤트 덕분에 sleep이 바로 돌아온다는 예측', "actual": value})
+value = (1)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '반례: executor가 타이머 콜백을 실행하지 않는 메인 스레드에서 sleep을 부를 때 끝나는 반복 수(첫 본문만 실행된다는 코드 기반 예측)', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
