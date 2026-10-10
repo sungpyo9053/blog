@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-rclpy-time-default-clock-type-from-msg-mismatch",
+  "title": "rclpy.time.Time()과 Node.get_clock().now()는 뭐가 다를까: Time() 기본값 SYSTEM_TIME과 from_msg 기본값 ROS_TIME이 섞일 때 TypeError가 나는 지점 확인하기",
+  "slug": "rclpy-time-default-clock-type-from-msg-mismatch",
+  "reader_question": "https://robotics.stackexchange.com/questions/104775/rclpy-time-time-vs-node-get-clock-now — rclpy 노드에서 시각을 다룰 때 rclpy.time.Time()을 써야 하나, Node.get_clock().now()를 써야 하나? 둘은 무엇이 다르고, 서로 섞어 비교하거나 빼면 어떻게 되나?",
+  "target_reader": "ROS 2 Jazzy에서 rclpy로 첫 노드를 작성하는 입문자. 타이머 콜백이나 구독 콜백에서 메시지 타임스탬프를 기준 시각과 비교하거나 경과 시간을 구하려 한다. 토픽 발행과 구독은 해 봤지만 rclpy Time 객체에 clock_type이 붙어 있다는 사실은 아직 모른다.",
+  "learning_outcome": "rclpy Jazzy time.py의 생성자 기본값을 직접 읽고, 같은 Time 클래스가 생성 경로에 따라 다른 clock_type을 갖는다는 것을 확인한다. 인자 없는 Time()은 SYSTEM_TIME에 0 ns이고, Time.from_msg()는 ROS_TIME이 기본값이다. Time(seconds=…, nanoseconds=…)의 나노초 합산과 seconds_nanoseconds()·to_msg()의 몫·나머지 분해를 손으로 계산할 수 있게 된다. clock_type이 다르면 __sub__, __eq__, __lt__, __le__, __gt__, __ge__가 값과 무관하게 TypeError를 던진다는 규칙도 알게 된다. 그 결과 독자는 기준 시각을 직접 만들 때 clock_type 인자를 비교 상대와 맞춰 명시하고, 자기 노드의 get_clock().now()가 어떤 clock_type인지 출력해 확인하는 습관을 갖는다.",
+  "unique_takeaway": "Time()과 from_msg()는 같은 클래스인데 기본 clock_type이 다르다. Time()은 SYSTEM_TIME, from_msg()는 ROS_TIME이다. 그래서 Time(seconds=1.5).to_msg()를 다시 Time.from_msg()로 되돌리면 나노초는 1500000000으로 똑같지만, 원래 객체와 == 비교하는 순간 TypeError가 난다. 값이 아니라 clock_type이 비교 가능 여부를 가른다. 기존 HuntLab 글들은 /clock 수신 전 0초 문제와 시계 종류를 다뤘지만, rclpy 생성자 기본값의 이 비대칭과 그로 인한 비교 실패는 다루지 않았다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/rclpy/jazzy/rclpy/rclpy/time.py",
+      "publisher": "ROS 2 rclpy (Jazzy source)",
+      "claim_scope": "How rclpy Time is constructed in Jazzy (Time() defaults to ClockType.SYSTEM_TIME and zero nanoseconds; comparison and arithmetic require matching clock types); source code, not a behavior guarantee for other distros",
+      "checked_at": "2026-10-10T14:19:39.952038+09:00"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/ros2/design/gh-pages/articles/130_ros_time.md",
+      "publisher": "ROS 2 Design",
+      "claim_scope": "Clock abstractions, simulation time and differences from wall time",
+      "checked_at": "2026-10-10T14:19:39.952038+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261010T051937Z-2ab04b21a9-rclpy-time-default-clock-type-from-msg-mismatch/example.py",
+    "sha256": "fb3c9f6b7d928da2475b93a2124c85d2dcb796ba22024c6fa4b82ecbdd0a38b2",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/4f88b37121e9bc6d40b7f403c54fd523b86897c4/editorial/generated-foundations/20261010T051937Z-2ab04b21a9-rclpy-time-default-clock-type-from-msg-mismatch/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261010T051937Z-2ab04b21a9-rclpy-time-default-clock-type-from-msg-mismatch/verification.json",
+    "sha256": "a6508780d545ca21c0def58da77553a0806e04df5bacddbd1c4f142c565e277c",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/4f88b37121e9bc6d40b7f403c54fd523b86897c4/editorial/generated-foundations/20261010T051937Z-2ab04b21a9-rclpy-time-default-clock-type-from-msg-mismatch/verification.json"
+  },
+  "author_id": "discovery-writer-e9c628ec08324088868343654b6d7964"
+}
