@@ -390,7 +390,13 @@ def run_discovery(repo, inventory_path, run_id, now=None, logger=None, *,
                          'source_ids': ['one or two supplied source IDs'],
                          'example': {'description': 'string', 'cases': [{'name': 'string', 'expression': 'numeric expression', 'expected': 'JSON number'}],
                                      'conclusion': 'string', 'limitations': 'string'}}},
-                   'verification_scope': 'bounded_arithmetic_only_no_hardware_or_library_execution'}
+                   'verification_scope': 'bounded_arithmetic_only_no_hardware_or_library_execution',
+                   # The checker rejects these outright; without them the researcher wasted a good
+                   # candidate on a 2**63 ns overflow case (10/10 14:17, arithmetic_out_of_range).
+                   'arithmetic_limits': 'Each expression <= 500 chars and <= 80 AST nodes, only unary +/- and + - * / '
+                                        'on int/float literals; every intermediate and final value must satisfy '
+                                        '|value| <= 2**53 (9007199254740992). Express huge boundaries in larger units '
+                                        '(e.g. seconds, not ns).'}
         round_dir = directory
         for attempt in range(2):
             answer = agent(repo, 'researcher', payload, round_dir)
