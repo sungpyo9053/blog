@@ -101,8 +101,12 @@ add_action(
         $english = is_singular( 'hunt_en' ) || is_post_type_archive( 'hunt_en' ) || ( $en_page && is_page( $en_page->ID ) );
         $hub     = huntlab_hub_page( $english ? 'en' : 'ko' );
         if ( $hub ) {
-            printf( '<p class="huntlab-hub-link" style="text-align:center"><a href="%s">%s</a></p>' . "\n",
-                esc_url( get_permalink( $hub ) ), $english ? 'ROS 2 troubleshooting guide' : 'ROS 2 문제 해결 모음' );
+            // Transparency page (how AI-written, measured articles are made) sits next to the hub link.
+            $how = get_page_by_path( $english ? 'how-these-articles-are-made' : 'how-articles-are-made' );
+            printf( '<p class="huntlab-hub-link" style="text-align:center"><a href="%s">%s</a>%s</p>' . "\n",
+                esc_url( get_permalink( $hub ) ), $english ? 'ROS 2 troubleshooting guide' : 'ROS 2 문제 해결 모음',
+                ( $how && 'publish' === $how->post_status ) ? ' · <a href="' . esc_url( get_permalink( $how ) ) . '">'
+                    . ( $english ? 'How these articles are made' : '글을 만드는 방식' ) . '</a>' : '' );
         }
     },
     5
