@@ -1,0 +1,48 @@
+<p>ROS 2 작업공간을 <code>colcon build</code>로 빌드하다가 노트북이 멈추거나 <code>c++: fatal error: Killed signal terminated program cc1plus</code>를 본 적이 있다면, 원인은 대개 RAM이다. 그럼 RAM은 몇 GB면 될까. 감으로 답하지 않고, 실제 패키지(Nav2, Jazzy 브랜치 45개 패키지)를 RAM 상한을 바꿔 가며 다섯 번 빌드해 쟀다.</p>
+
+<h2>결론부터</h2>
+<ul>
+<li><strong>기본 설정 그대로(<code>colcon build</code>) 빌드하면 4GB에서는 실패</strong>했다. 컴파일러가 메모리 부족으로 강제 종료됐다.</li>
+<li><strong>8GB에서는 성공</strong>했지만 상한 8GiB 중 7.8GiB까지 차올랐다. 남는 몫이 거의 없다.</li>
+<li><strong>순차 빌드(<code>--parallel-workers 1</code> + <code>MAKEFLAGS=-j1</code>)로 바꾸면 최대 2.7GiB</strong>로 줄었고, 4GB에서도 끝까지 빌드됐다.</li>
+<li>실제 노트북은 OS·브라우저·IDE가 3~4GB를 더 쓴다. 그래서 <strong>기본 설정으로 편하게 빌드하려면 16GB</strong>, 8GB 노트북이라면 <strong>순차 빌드 설정</strong>이 현실적인 선이다.</li>
+</ul>
+
+<h2>측정 조건</h2>
+<p>4 vCPU·16GB 리눅스 서버(AWS Lightsail)에서 Docker 컨테이너마다 메모리 상한을 걸고, 스왑은 껐다(<code>--memory-swap</code>을 <code>--memory</code>와 같게). 그래서 "성공"은 RAM 안에서 끝났다는 뜻이다. 이미지는 <code>ros:jazzy</code>(다이제스트 <code>066420e07f60…</code>), Nav2는 jazzy 브랜치 커밋 <code>645abd95</code>다. 최대 메모리는 컨테이너 cgroup의 <code>memory.peak</code>로 읽었다.</p>
+
+<table>
+<thead><tr><th>조건</th><th>RAM 상한</th><th>결과</th><th>최대 메모리</th></tr></thead>
+<tbody>
+<tr><td>기본 설정 (4 워커 × make -j4)</td><td>16GiB</td><td>성공 (45/45)</td><td>8.1GiB</td></tr>
+<tr><td>기본 설정</td><td>8GiB</td><td>성공 (45/45)</td><td>7.8GiB</td></tr>
+<tr><td>기본 설정</td><td>4GiB</td><td><strong>실패</strong> — cc1plus Killed, 8개 완료 후 중단</td><td>4.0GiB (상한)</td></tr>
+<tr><td>순차 빌드 (워커 1 × make -j1)</td><td>16GiB</td><td>성공 (45/45)</td><td>2.7GiB</td></tr>
+<tr><td>순차 빌드</td><td>4GiB</td><td>성공 (45/45)</td><td>2.7GiB</td></tr>
+</tbody>
+</table>
+
+<h2>숫자를 읽을 때 주의할 점</h2>
+<ul>
+<li><strong>memory.peak에는 파일 캐시도 들어간다.</strong> 16GB에서 8.1GiB가 잡힌 건 여유가 있어서 캐시까지 넉넉히 쓴 결과다. 8GB에서 7.8GiB로 상한 근처까지 찼지만 죽지 않은 것도, 커널이 캐시를 비워 가며 버텼기 때문이다. 그래서 "기본 설정에 꼭 필요한 양"은 4GiB보다 크고 8GiB보다 작은 어딘가다.</li>
+<li><strong>빌드 시간은 비교하지 않는다.</strong> 측정 서버는 CPU 크레딧이 바닥나 중간부터 속도가 묶였다(steal 약 60%). 그래서 기본 설정과 순차 빌드가 둘 다 2시간 안팎으로 비슷하게 나왔다. 제 속도가 나오는 PC라면 순차 빌드는 기본 설정보다 몇 배 느리다.</li>
+<li><strong>코어 수에 따라 달라진다.</strong> 기본 설정은 동시에 도는 컴파일러 수가 대략 코어 수의 제곱(워커 수 × make -j)까지 늘어난다. 8코어·16코어 노트북은 같은 Nav2라도 기본 설정에서 더 많은 RAM을 쓴다.</li>
+</ul>
+
+<h2>8GB 노트북이라면</h2>
+<p>내가 쓰는 노트북은 2020년 인텔 맥북 프로 13형(4코어, RAM 8GB)이다. 이 측정 기준으로 보면, 이 정도 사양에서 Nav2 같은 큰 작업공간을 기본 설정으로 빌드하면 OS 몫까지 합쳐 메모리가 모자랄 가능성이 크다(측정은 위 리눅스 서버에서 했고, 이 맥에서 직접 빌드하지는 않았다). 8GB에서 빌드해야 한다면 이렇게 돌린다.</p>
+<pre><code>MAKEFLAGS="-j1" colcon build --parallel-workers 1</code></pre>
+<p>조금 덜 느리게 하려면 <code>MAKEFLAGS="-j2"</code>처럼 숫자를 하나씩 올려 보며 멈추지 않는 선을 찾으면 된다. 동시에 도는 컴파일러가 늘수록 최대 메모리가 커진다는 원리는 <a href="https://huntlab.app/colcon-build-executor-sequential-memory-budget/">colcon 순차 빌드 메모리 예산 글</a>에서 따로 쟀다.</p>
+
+<h2>RAM을 사거나 바꾼다면</h2>
+<p>측정 결과로 정리하면 기준은 이렇다.</p>
+<ul>
+<li><strong>새 노트북</strong>: ROS 2 개발용이면 RAM 16GB 이상. 코어가 8개 이상이면 32GB가 편하다.</li>
+<li><strong>지금 노트북 업그레이드</strong>: RAM 슬롯이 있는 모델이면 16GB 모듈로 올리는 게 가장 싸게 해결하는 방법이다. 맥북처럼 RAM이 메인보드에 붙어 있는 모델은 교체가 안 되니 순차 빌드 설정으로 버틴다.</li>
+</ul>
+<!-- COUPANG_LINKS: 사용자에게서 파트너스 링크 받으면 여기에 2~3개 삽입 -->
+
+<h2>재현</h2>
+<p>측정 스크립트(<code>measure.sh</code>)와 다섯 번의 원본 결과(<code>results.tsv</code>, 조건별 빌드 로그)는 <a href="https://github.com/sungpyo9053/blog/tree/main/experiments/colcon-ram-nav2-real-build">실험 공개 폴더</a>에 있다. Docker가 있는 리눅스에서 <code>bash measure.sh</code>로 같은 순서를 다시 돌릴 수 있다.</p>
+
+<p><small>이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</small></p>
