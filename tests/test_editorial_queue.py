@@ -316,3 +316,4 @@ class PublicPlainTests(unittest.TestCase):
         from scripts.editorial_queue import public_plain
         self.assertIn(public_plain('<p>쪽: --symlink-install</p>'),
                       public_plain('<p>쪽: &#8211;symlink-install</p>'))
+        self.assertIn(public_plain('<p>(...) It may</p>'), public_plain('<p>(&#8230;) It may</p>'))

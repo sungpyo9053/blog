@@ -352,10 +352,10 @@ def preflight(row, *, repo, inventory_path, now, fetch=source_digest, line_count
 
 
 def public_plain(text):
-    """Visible text with WordPress texturize undone: curly quotes, and '--' rendered as an en dash."""
+    """Visible text with WordPress texturize undone: curly quotes, '...' as an ellipsis, '--' as an en dash."""
     parser=SourceText(); parser.feed(text)
     value=html.unescape(' '.join(parser.parts))
-    value=re.sub(r'\s+','',value).translate(str.maketrans({'“':'"','”':'"','″':'"','‘':"'",'’':"'",'′':"'",'–':'-','—':'-'}))
+    value=re.sub(r'\s+','',value).translate(str.maketrans({'“':'"','”':'"','″':'"','‘':"'",'’':"'",'′':"'",'–':'-','—':'-','…':'...'}))
     return re.sub(r'-+','-',value)
 
 
