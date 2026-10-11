@@ -1,5 +1,5 @@
 제목: ROS 2 colcon 빌드, RAM 몇 GB면 될까 — Nav2를 16·8·4GB에서 직접 빌드해 봤습니다
-
+게시: https://blog.naver.com/sungpyo9053/224438142301 (2026-10-11)
 colcon build 중에 노트북이 멈추거나 "c++: fatal error: Killed signal terminated program cc1plus"가 뜬다면 원인은 대개 RAM입니다. 감으로 답하지 않고 Nav2(Jazzy, 45개 패키지)를 메모리 상한을 바꿔 가며 다섯 번 빌드해 쟀습니다.
 
 ■ 결과 (4 vCPU 리눅스, Docker 메모리 상한, 스왑 끔)
