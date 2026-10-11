@@ -300,6 +300,8 @@ class DiscoveryTests(unittest.TestCase):
                        '-c', 'user.email=huntlab-automation@users.noreply.github.com',
                        'commit', '--only', '-m', 'Test', '--', *paths), commands)
         self.assertFalse(any('-a' in row or '--all' in row for row in commands))
+        pull = commands.index(('-c', 'core.hooksPath=/dev/null', 'pull', '--ff-only', '-q', 'origin', 'main'))
+        self.assertLess(pull, commands.index(('add', '--', *paths)))
 
     def test_git_unchanged_path_is_not_a_scope_mismatch(self):
         paths = ['experiments/x/README.md', 'experiments/x/results.json']

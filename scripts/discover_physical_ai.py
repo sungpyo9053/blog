@@ -318,6 +318,8 @@ def publish_files(repo, paths, config, message):
     need(git_command(repo, 'branch', '--show-current') == 'main', 'git_not_main')
     need(git_command(repo, 'remote', 'get-url', 'origin') == expected
          and git_command(repo, 'remote', 'get-url', '--push', 'origin') == push_expected, 'git_origin_mismatch')
+    # A push from elsewhere during the run only moves origin ahead; catch up, but never merge a divergence.
+    git_command(repo, '-c', 'core.hooksPath=/dev/null', 'pull', '--ff-only', '-q', 'origin', 'main')
     remote = git_command(repo, 'ls-remote', 'origin', 'refs/heads/main').split()[0]
     need(remote == git_command(repo, 'rev-parse', 'HEAD'), 'git_remote_head_mismatch')
     need(all(not Path(path).is_absolute() and '..' not in Path(path).parts
