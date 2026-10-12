@@ -30,10 +30,13 @@
 - 애드센스·쿠팡 실제 수익 숫자는 콘솔 접근이 필요 (API 승인 시 자동화)
 - 가이드 결제 플랫폼 계정·가격
 
-## Claude 세션 크론 (7일 만료 → 매주 월 점검 때 갱신)
-- DAILY `17 21 * * *`: revenue-200-plan.md의 매일 21:17 항목 실행(gsc-index-requests.md 중복 금지, 그날 이미 10건이면 생략) → 결과 카톡. 사용자 할 일 생기면 카톡으로 요청.
-- WEEKLY `7 10 * * 1`: 09:30 goal_report 카톡 해석 + 마일스톤 판정 + 다음 주 레버 조정·계획 문서 갱신 + 쿠팡 실측 장비 글 1편 준비 → 카톡. 마지막에 CronList로 DAILY·WEEKLY를 지우고 같은 내용으로 다시 등록(만료 방지).
-- 세션(터미널)이 꺼지면 크론도 사라진다. 서버 타이머(goal_report)는 계속 돈다.
+## Claude 세션 크론 (SSOT — WEEKLY가 매주 이 절대로 전부 재등록)
+- MORNING `43 7 * * *`: [HuntLab $200 MORNING] 러너 실패 유닛, 02:00 prepare 결과(sudo tail logs/systemd-editorial-prepare.out.log), 예약 글 수(posts·hunt_en status=future). 버그면 고치고(품질 반려는 우회 금지) push 전 prepare inactive 확인. 그날 계획 문서(editorial/operations/YYYY-MM-DD-plan.md)가 있으면 아침 항목도 수행. 카톡 보고.
+- MIDDAY `37 10 * * *`: [HuntLab $200 MIDDAY] 10:00 KO+EN 공개 확인(공개 REST)·schedule 서비스 정상 확인. GSC 색인 요청 최대 10건: 러너 URL Inspection으로 미색인 목록 → gsc-index-requests.md에 14일 내 요청 없는 최신 글 우선. 로그인된 GSC 창이 front window인지, Enter 전 Chrome frontmost인지 확인. 기록·커밋, 카톡 보고(로그아웃이면 로그인 요청).
+- DAILY `17 21 * * *`: [HuntLab $200 DAILY] GitHub/Discourse 정확히 맞는 열린 이슈 1건 이하 답글(코드·로그 확인, disclosure, Discourse AI 표기), 그날 공개 글 네이버 요약 1편(원문 복사·쿠팡 링크 금지), 그날 평가(수익 기준 등급 + 다음 날 일정)를 카톡 보고. 다음 날 특별 작업이 있으면 YYYY-MM-DD-plan.md 작성.
+- WEEKLY `7 10 * * 1`: [HuntLab $200 WEEKLY] 09:30 goal_report 결과 + GSC 색인 수로 마일스톤 판정, 미달 시 '미달 시 조치' 반영·주간 기록 추가, 쿠팡 실측 장비 글 1편 진행(측정 서버는 끝나면 반드시 삭제), 카톡 보고. 마지막에 CronList에서 [HuntLab $200 MORNING/MIDDAY/DAILY/WEEKLY]를 지우고 이 절의 cron식·내용으로 재등록(7일 만료 방지).
+- 마일스톤 판정 일회성: 10/24 21:43, 11/30 21:43, 12/31 21:43 (이후 것은 12/31 판정 때 등록).
+- 세션(터미널)이 꺼지면 크론도 사라진다. 서버 타이머(goal_report 월 09:30)는 계속 돈다.
 
 ## 주간 기록
 - 10/12 (1주차): 방문 41·조회 71·검색유입 13, 구글 클릭 0·노출 4 → 10/24 목표 70의 58%(전주 34→41). 구글 색인 3/46 → 13/48 (10/11 GSC 수동 요청 효과로 보임). 마일스톤 기한 전이라 레버 유지. 쿠팡 2편: MoveIt 2 RAM 실측 스크립트 준비(experiments/colcon-ram-moveit2-real-build, Nav2와 같은 방법, 조건 default 16/8/4g + seq 8/4g) — AWS 로그인 만료로 측정 서버 생성은 사용자 `aws login` 대기. GSC 2차 요청은 구글 로그인 만료로 대기.
