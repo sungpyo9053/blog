@@ -16,4 +16,14 @@
 - ros-camera-optical-frame-axis-mapping-check
 - (사이트맵) hunt_en-sitemap.xml 제출 — 기존엔 sitemap.xml만 제출, EN 사이트맵은 인덱스에 미포함
 
+## 2026-10-12 (5건, 6번째에서 일일 할당량 도달)
+- ros2-docker-discovery-range-static-peers-combinations
+- en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range
+- en/ros2-tf-frame-offset-doubled-static-transform-publisher
+- en/ros2-liveliness-vs-deadline-detect-stopped-sensor-topic
+- en/ros2-message-filter-dropping-message-clock-mismatch
+- 미완(10/13 우선): ros2-distro-choice-iron-humble-remaining-support-months, en/ros-2-humble-vs-jazzy-vs-iron-which-distro-before-eol, en/colcon-build-slow-overlay-colcon-ignore-symlink-install-measured (Enter 미반영 타임아웃), en/ros2-transient-local-late-joiner-lifespan, ros2-sim-time-zero-uninitialized-first-dt-spike (할당량)
+- 상태 (10/12 09:00 URL Inspection): 48편 중 PASS 13
+- 교훈: 일일 할당량이 약 5~10건으로 보임(10/11 10건 성공, 10/12 5건 후 할당량). 입력 직후 Enter는 무시될 수 있어 5초 대기·재입력 후 Enter.
+
 ## 상태 기준선 (10/11 URL Inspection API): 46편 중 PASS 3
