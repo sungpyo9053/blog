@@ -53,6 +53,16 @@ add_action(
 );
 
 add_filter(
+    'aioseo_facebook_tags',
+    static function ( array $tags ): array {
+        if ( is_singular( 'hunt_en' ) || is_post_type_archive( 'hunt_en' ) ) {
+            $tags['og:locale'] = 'en_US';
+        }
+        return $tags;
+    }
+);
+
+add_filter(
     'language_attributes',
     static function ( string $output ): string {
         return ( is_singular( 'hunt_en' ) || is_post_type_archive( 'hunt_en' ) )
