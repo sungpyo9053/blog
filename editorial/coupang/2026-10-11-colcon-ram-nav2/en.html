@@ -1,0 +1,44 @@
+<p>If <code>colcon build</code> freezes your laptop or dies with <code>c++: fatal error: Killed signal terminated program cc1plus</code>, the usual cause is RAM. So how much RAM do you actually need? Instead of guessing, I built a real workspace (Nav2, Jazzy branch, 45 packages) five times under different memory caps and measured it.</p>
+
+<h2>Short answer</h2>
+<ul>
+<li><strong>With default settings (<code>colcon build</code>), the build failed at 4GB.</strong> The compiler was killed for running out of memory.</li>
+<li><strong>At 8GB it succeeded</strong>, but peak usage reached 7.8GiB of the 8GiB cap. There is almost no headroom.</li>
+<li><strong>A sequential build (<code>--parallel-workers 1</code> + <code>MAKEFLAGS=-j1</code>) peaked at 2.7GiB</strong> and finished even at 4GB.</li>
+<li>A real laptop also spends 3–4GB on the OS, browser and IDE. So <strong>16GB is the comfortable line for default builds</strong>; on an 8GB laptop, <strong>use the sequential settings</strong>.</li>
+</ul>
+
+<h2>Test setup</h2>
+<p>A 4 vCPU, 16GB Linux server (AWS Lightsail). Each build ran in a Docker container with a memory cap and swap disabled (<code>--memory-swap</code> equal to <code>--memory</code>), so "success" means it fit in RAM. Image: <code>ros:jazzy</code> (digest <code>066420e07f60…</code>); Nav2 jazzy branch at commit <code>645abd95</code>. Peak memory was read from the container cgroup's <code>memory.peak</code>.</p>
+
+<table>
+<thead><tr><th>Setting</th><th>RAM cap</th><th>Result</th><th>Peak memory</th></tr></thead>
+<tbody>
+<tr><td>Default (4 workers × make -j4)</td><td>16GiB</td><td>Success (45/45)</td><td>8.1GiB</td></tr>
+<tr><td>Default</td><td>8GiB</td><td>Success (45/45)</td><td>7.8GiB</td></tr>
+<tr><td>Default</td><td>4GiB</td><td><strong>Failed</strong>: cc1plus Killed, stopped after 8 packages</td><td>4.0GiB (cap)</td></tr>
+<tr><td>Sequential (1 worker × make -j1)</td><td>16GiB</td><td>Success (45/45)</td><td>2.7GiB</td></tr>
+<tr><td>Sequential</td><td>4GiB</td><td>Success (45/45)</td><td>2.7GiB</td></tr>
+</tbody>
+</table>
+
+<h2>How to read these numbers</h2>
+<ul>
+<li><strong>memory.peak includes page cache.</strong> The 8.1GiB at 16GB is partly cache used simply because there was room. At 8GB the build reached 7.8GiB without being killed because the kernel dropped cache to make space. So the memory a default build truly needs is somewhere between 4GiB and 8GiB.</li>
+<li><strong>Build times are not compared.</strong> The server ran out of CPU credits partway through and was throttled (about 60% steal), so default and sequential builds both took around two hours. On a machine running at full speed, a sequential build is several times slower than the default.</li>
+<li><strong>Core count matters.</strong> With default settings the number of concurrent compilers grows roughly with the square of the core count (workers × make -j). On an 8- or 16-core laptop, the same Nav2 default build uses more RAM.</li>
+</ul>
+
+<h2>If you have an 8GB laptop</h2>
+<p>My own laptop is a 2020 Intel 13-inch MacBook Pro (4 cores, 8GB RAM). Going by these measurements, a default build of a large workspace like Nav2 on a machine like that is likely to run short of memory once the OS takes its share (the measurements were made on the Linux server above; I did not build on this Mac). If you have to build on 8GB, run:</p>
+<pre><code>MAKEFLAGS="-j1" colcon build --parallel-workers 1</code></pre>
+<p>To make it a little faster, raise the number one step at a time (<code>MAKEFLAGS="-j2"</code> and so on) until you find the highest setting that doesn't freeze. Why peak memory grows with the number of concurrent compilers is measured separately in <a href="https://huntlab.app/en/colcon-build-executor-sequential-makeflags-memory-time/">colcon sequential build: MAKEFLAGS, memory and time</a>.</p>
+
+<h2>If you are buying or upgrading RAM</h2>
+<ul>
+<li><strong>New laptop</strong>: 16GB or more for ROS 2 development. With 8 or more cores, 32GB is more comfortable.</li>
+<li><strong>Upgrading your current laptop</strong>: if it has a RAM slot, moving to a 16GB module is the cheapest fix. Check whether it takes DDR4 or DDR5 SO-DIMM first; the two don't fit each other's slots. Laptops with soldered RAM (LPDDR, MacBooks) can't be upgraded, so use the sequential settings.</li>
+</ul>
+
+<h2>Reproduce it</h2>
+<p>The measurement script (<code>measure.sh</code>) and the raw results from all five runs (<code>results.tsv</code> and per-setting build logs) are in the <a href="https://github.com/sungpyo9053/blog/tree/main/experiments/colcon-ram-nav2-real-build">public experiment folder</a>. On Linux with Docker, <code>bash measure.sh</code> runs the same sequence again.</p>

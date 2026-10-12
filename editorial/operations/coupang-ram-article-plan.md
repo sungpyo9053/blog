@@ -21,7 +21,7 @@
       - ① 삼성 노트북용 DDR5 16GB 5600MHz 1개(SM5600V5-16G, 확인됨): https://link.coupang.com/a/hKmDoLsLDM (상품 9705498800, 태그 AF8567082 확인)
       - ② 삼성전자 노트북용 DDR4 16GB(사용자 확인): https://link.coupang.com/a/hKmHcKFNHE (상품 7170468964)
       - ③ 씽크패드 16GB(상품명 미확인): https://link.coupang.com/a/hKmKwDNvKC (상품 9393207151)
-- [x] 8. KO 공개 10/11 (#935) / [ ] EN, 별도 카테고리
+- [x] 8. KO 공개 10/11 (#935) / [x] EN 공개 10/12 (hunt_en #945, ko_post_id=935, 쿠팡 링크·고지문 없음, hreflang 양방향·IndexNow 200 확인)
 - [ ] 9. 후속 시리즈: MoveIt 2 RAM / SSD 용량 / 라즈베리파이 5 4GB vs 8GB (같은 측정 파이프라인 재사용)
 
 ## 메모
