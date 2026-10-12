@@ -24,3 +24,5 @@ Humble·Foxy에는 이 변수가 없습니다. 다른 호스트 표는 문서와
 원문: https://huntlab.app/ros2-docker-discovery-range-static-peers-combinations/
 
 #ROS2 #Docker #DDS #FastDDS #로봇개발 #ROS2Jazzy #네트워크
+
+<!-- 게시: 2026-10-13 https://blog.naver.com/sungpyo9053/224439765394 -->
