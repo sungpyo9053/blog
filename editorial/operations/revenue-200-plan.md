@@ -40,3 +40,4 @@
 
 ## 주간 기록
 - 10/12 (1주차): 방문 41·조회 71·검색유입 13, 구글 클릭 0·노출 4 → 10/24 목표 70의 58%(전주 34→41). 구글 색인 3/46 → 13/48 (10/11 GSC 수동 요청 효과로 보임). 마일스톤 기한 전이라 레버 유지. 쿠팡 2편: MoveIt 2 RAM 실측 스크립트 준비(experiments/colcon-ram-moveit2-real-build, Nav2와 같은 방법, 조건 default 16/8/4g + seq 8/4g) — AWS 로그인 만료로 측정 서버 생성은 사용자 `aws login` 대기. GSC 2차 요청은 구글 로그인 만료로 대기.
+- SEO 점검(10/12): KO 글 title·description·canonical·BlogPosting 스키마·hreflang 정상, 사이트맵 인덱스에 hunt_en 포함(11편). 고친 것: #935 자동 잘린 요약 → 직접 쓴 요약. 남은 것(다음 WEEKLY): 영어판 og:locale이 ko_KR, 영어판 스키마가 WebPage뿐(BlogPosting 아님) — mu-plugin 또는 AIOSEO 글 유형 설정으로 수정.
