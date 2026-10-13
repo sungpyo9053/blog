@@ -4,7 +4,7 @@
 # with real-package numbers (same method as ../colcon-ram-nav2-real-build). Run on a throwaway 4 vCPU / 16 GB host. Swap is disabled per run
 # (--memory-swap == --memory) so "fits" means fits in RAM.
 # Output: results.tsv (label, mem_limit, workers, makeflags, exit, oom_kills, peak_bytes, wall_s)
-#         env.txt (image digest, nav2 commit, host cpu/mem)
+#         env.txt (image digest, moveit2 commit, host cpu/mem)
 set -uo pipefail
 cd "$(dirname "$0")"
 

@@ -1,0 +1,62 @@
+<p>Nav2는 RAM 8GB에서 기본 설정 그대로 빌드가 끝났다(<a href="https://huntlab.app/colcon-build-how-much-ram-nav2-16gb-8gb-4gb-measured/">Nav2 RAM 실측 글</a>). MoveIt 2도 그럴까. 같은 방법으로 MoveIt 2(Jazzy 브랜치, 41개 패키지)를 RAM 상한을 바꿔 가며 다섯 번 빌드했다. 결과는 달랐다. <strong>8GB에서 기본 설정 빌드가 실패</strong>했다.</p>
+
+<h2>결론부터</h2>
+<ul>
+<li><strong>기본 설정(<code>colcon build</code>)은 8GB에서 실패</strong>했다. 41개 중 24개를 빌드한 뒤 컴파일러가 메모리 부족으로 강제 종료됐다. 4GB에서는 4개만 빌드하고 멈췄다.</li>
+<li><strong>16GB에서는 성공</strong>했고 최대 8.7GiB까지 올라갔다.</li>
+<li><strong>순차 빌드(<code>--parallel-workers 1</code> + <code>MAKEFLAGS=-j1</code>)는 최대 2.4GiB</strong>였고, 8GB와 4GB 모두 끝까지 빌드됐다.</li>
+<li>OS·브라우저·IDE 몫까지 생각하면 <strong>MoveIt 2를 기본 설정으로 빌드하려면 16GB</strong>는 있어야 한다. 8GB 노트북이라면 <strong>순차 빌드가 사실상 유일한 방법</strong>이다.</li>
+</ul>
+
+<h2>측정 조건</h2>
+<p>Nav2 때와 같다. 4 vCPU·16GB 리눅스 서버(AWS Lightsail)에서 Docker 컨테이너마다 메모리 상한을 걸고, 스왑은 껐다(<code>--memory-swap</code>을 <code>--memory</code>와 같게). 그래서 "성공"은 RAM 안에서 끝났다는 뜻이다. 이미지는 <code>ros:jazzy</code>(다이제스트 <code>066420e07f60…</code>), MoveIt 2는 jazzy 브랜치 커밋 <code>e34dffb0</code>이다. 최대 메모리는 컨테이너 cgroup의 <code>memory.peak</code>로 읽었다.</p>
+
+<table>
+<thead><tr><th>조건</th><th>RAM 상한</th><th>결과</th><th>최대 메모리</th></tr></thead>
+<tbody>
+<tr><td>기본 설정 (4 워커 × make -j4)</td><td>16GiB</td><td>성공 (41/41)</td><td>8.7GiB</td></tr>
+<tr><td>기본 설정</td><td>8GiB</td><td><strong>실패</strong> — cc1plus Killed, 24개 완료 후 중단</td><td>8.0GiB (상한)</td></tr>
+<tr><td>기본 설정</td><td>4GiB</td><td><strong>실패</strong> — cc1plus Killed, 4개 완료 후 중단</td><td>4.0GiB (상한)</td></tr>
+<tr><td>순차 빌드 (워커 1 × make -j1)</td><td>8GiB</td><td>성공 (41/41)</td><td>2.4GiB</td></tr>
+<tr><td>순차 빌드</td><td>4GiB</td><td>성공 (41/41)</td><td>2.4GiB</td></tr>
+</tbody>
+</table>
+
+<h2>Nav2와 나란히 놓으면</h2>
+<table>
+<thead><tr><th></th><th>Nav2 (45개)</th><th>MoveIt 2 (41개)</th></tr></thead>
+<tbody>
+<tr><td>기본 설정, 16GiB 최대 메모리</td><td>8.1GiB</td><td>8.7GiB</td></tr>
+<tr><td>기본 설정, 8GiB</td><td>성공</td><td><strong>실패</strong></td></tr>
+<tr><td>순차 빌드 최대 메모리</td><td>2.7GiB</td><td>2.4GiB</td></tr>
+</tbody>
+</table>
+<p>패키지 수는 MoveIt 2가 더 적지만, 기본 설정에서 동시에 돈 컴파일러들의 메모리 합이 8GB를 넘겼다. 순차 빌드에서는 한 번에 파일 하나만 컴파일하므로 두 프로젝트 모두 2GiB대에 머문다. "8GB면 ROS 2 빌드는 된다"는 말은 Nav2까지만 맞고, MoveIt 2를 소스로 빌드하기 시작하면 틀린다.</p>
+
+<h2>숫자를 읽을 때 주의할 점</h2>
+<ul>
+<li><strong>memory.peak에는 파일 캐시도 들어간다.</strong> 16GB에서 잡힌 8.7GiB에는 여유가 있어서 쓴 캐시가 섞여 있다. 그래도 8GB에서는 커널이 캐시를 비워도 버티지 못하고 컴파일러가 죽었다. 기본 설정에 꼭 필요한 양은 8GiB보다 크다.</li>
+<li><strong>빌드 시간은 참고만 한다.</strong> 기본 설정 16GB는 1시간 37분, 순차 빌드는 1시간 56분~57분이 걸렸다. 측정 서버는 CPU 크레딧을 쓰는 버스트형이라 중간에 속도가 묶였을 수 있다. 제 속도가 나오는 PC라면 순차 빌드와 기본 설정의 시간 차이가 이보다 커진다.</li>
+<li><strong>코어 수에 따라 달라진다.</strong> 기본 설정은 동시에 도는 컴파일러 수가 대략 워커 수 × make -j만큼 늘어난다. 8코어·16코어 PC는 같은 MoveIt 2라도 기본 설정에서 더 많은 RAM을 쓴다.</li>
+</ul>
+
+<h2>8GB 노트북이라면</h2>
+<p>내 노트북은 2020년 인텔 맥북 프로 13형(4코어, RAM 8GB)이다. 측정은 위 리눅스 서버에서 했고 이 맥에서 MoveIt 2를 직접 빌드하지는 않았다. 다만 측정 서버도 4코어였고 8GB 상한에서 기본 설정이 실패했으니, OS 몫까지 쓰는 이 사양에서는 순차 빌드로 돌린다.</p>
+<pre><code>MAKEFLAGS="-j1" colcon build --parallel-workers 1</code></pre>
+<p>MoveIt 2를 직접 고칠 일이 없다면 소스 빌드 대신 <code>sudo apt install ros-jazzy-moveit</code>로 바이너리를 설치하는 편이 낫다. 순차 빌드는 메모리 대신 시간을 쓰는 방법이라, 빌드 자체를 피하는 게 가장 빠르다.</p>
+
+<h2>RAM을 사거나 바꾼다면</h2>
+<ul>
+<li><strong>새 노트북</strong>: MoveIt 2를 소스로 빌드할 생각이면 RAM 16GB가 최소다. 코어가 8개 이상이면 기본 설정 빌드의 동시 컴파일 수가 늘어나니 32GB가 편하다.</li>
+<li><strong>지금 노트북 업그레이드</strong>: RAM 슬롯이 있는 모델이면 16GB 모듈로 올리는 게 가장 싸다. 맥북처럼 RAM이 메인보드에 붙어 있는 모델은 교체가 안 되니 순차 빌드나 바이너리 설치로 버틴다.</li>
+</ul>
+<p>위 기준에 맞춰 고른 상품이다. 써 보고 고른 게 아니라 사양으로 고른 것이니, 사기 전에 내 노트북과 맞는지 꼭 확인한다.</p>
+<ul>
+<li><a href="https://link.coupang.com/a/hKmDoLsLDM" rel="sponsored nofollow noopener" target="_blank">삼성 노트북용 DDR5 16GB 5600MHz</a>: 최근 노트북에 많이 쓰는 규격이다. 내 노트북이 DDR5 SO-DIMM 슬롯을 쓰는지 먼저 확인한다. RAM이 메인보드에 붙은(LPDDR) 모델은 교체할 수 없다.</li>
+<li><a href="https://link.coupang.com/a/hKmHcKFNHE" rel="sponsored nofollow noopener" target="_blank">삼성전자 노트북용 DDR4 16GB</a>: 그 이전 세대 노트북용이다. DDR4와 DDR5는 슬롯 모양이 달라 서로 끼울 수 없다.</li>
+</ul>
+
+<h2>재현</h2>
+<p>측정 스크립트(<code>measure.sh</code>)와 다섯 번의 원본 결과(<code>results.tsv</code>, 조건별 빌드 로그)는 <a href="https://github.com/sungpyo9053/blog/tree/main/experiments/colcon-ram-moveit2-real-build">실험 공개 폴더</a>에 있다. Docker가 있는 리눅스에서 <code>bash measure.sh</code>로 같은 순서를 다시 돌릴 수 있다.</p>
+
+<p><small>이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</small></p>
