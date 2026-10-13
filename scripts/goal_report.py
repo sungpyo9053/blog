@@ -39,7 +39,7 @@ def last_revenue(path: Path = REVENUE_LOG) -> str:
 def message(today: date, sessions: int, views: int, organic: int, clicks: int, impressions: int, revenue: str) -> str:
     deadline, goal = target_for(today)
     verdict = "순항" if sessions >= goal else f"미달({sessions * 100 // max(goal, 1)}%)"
-    return (f"[HuntLab $200 주간]\n지난7일 방문 {sessions}·조회 {views}·검색유입 {organic}\n"
+    return (f"[HuntLab $200 주간]\n지난7일 방문자 {sessions}·조회 {views}·검색유입 {organic}\n"
             f"구글 클릭 {clicks}·노출 {impressions}\n"
             f"목표 {deadline:%m/%d}까지 주 {goal}방문 → {verdict}\n"
             f"실수익({revenue}) / 월 $200")[:200]
@@ -52,7 +52,7 @@ def main() -> int:
     ga = _query(session, f"https://analyticsdata.googleapis.com/v1beta/properties/{os.environ['GA4_PROPERTY_ID']}:runReport",
                 {"dateRanges": [{"startDate": "7daysAgo", "endDate": "yesterday"}],
                  "dimensions": [{"name": "sessionDefaultChannelGroup"}],
-                 "metrics": [{"name": "sessions"}, {"name": "screenPageViews"}]})
+                 "metrics": [{"name": "activeUsers"}, {"name": "screenPageViews"}]})
     rows = [(r["dimensionValues"][0]["value"], int(r["metricValues"][0]["value"]), int(r["metricValues"][1]["value"]))
             for r in ga.get("rows", [])]
     end = date.today() - timedelta(days=2)
