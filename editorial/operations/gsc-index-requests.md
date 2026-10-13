@@ -16,6 +16,11 @@
 - ros-camera-optical-frame-axis-mapping-check
 - (사이트맵) hunt_en-sitemap.xml 제출 — 기존엔 sitemap.xml만 제출, EN 사이트맵은 인덱스에 미포함
 
+## 2026-10-13 (1건, 2번째에서 할당량 — 24시간 롤링으로 보임)
+- ros2-distro-choice-iron-humble-remaining-support-months
+- 미완(10/14 우선): en/ros-2-humble-vs-jazzy-vs-iron-which-distro-before-eol, en/colcon-build-slow-overlay-colcon-ignore-symlink-install-measured, en/ros2-transient-local-late-joiner-lifespan, ros2-sim-time-zero-uninitialized-first-dt-spike, ros2-transient-local-late-joiner-sample-age-lifespan, ros2-qos-deadline-period-compatibility, ros2-sim-time-real-time-factor-latency-budget, ros-pose-covariance-row-major-index, gaussian-policy-action-bound-margin (+ 2026-10-13-plan.md 6~10번)
+- 교훈: 10/12 오후 요청 뒤 다음 날 오전엔 1건만 통과. 하루 요청 수를 줄이고 10:37 고정 시각에 몰아서 하는 게 할당량에 맞다.
+
 ## 2026-10-12 (5건, 6번째에서 일일 할당량 도달)
 - ros2-docker-discovery-range-static-peers-combinations
 - en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range
