@@ -32,7 +32,7 @@
 
 ## Claude 세션 크론 (SSOT — WEEKLY가 매주 이 절대로 전부 재등록)
 - MORNING `43 7 * * *`: [HuntLab $200 MORNING] 러너 실패 유닛, 02:00 prepare 결과(sudo tail logs/systemd-editorial-prepare.out.log), 예약 글 수(posts·hunt_en status=future). 버그면 고치고(품질 반려는 우회 금지) push 전 prepare inactive 확인. 그날 계획 문서(editorial/operations/YYYY-MM-DD-plan.md)가 있으면 아침 항목도 수행. 카톡 보고.
-- MIDDAY `37 10 * * *`: [HuntLab $200 MIDDAY] 10:00 KO+EN 공개 확인(공개 REST)·schedule 서비스 정상 확인. GSC 색인 요청 최대 10건: 러너 URL Inspection으로 미색인 목록 → gsc-index-requests.md에 14일 내 요청 없는 최신 글 우선. 로그인된 GSC 창이 front window인지, Enter 전 Chrome frontmost인지 확인. 기록·커밋, 카톡 보고(로그아웃이면 로그인 요청).
+- MIDDAY `37 10 * * *`: [HuntLab $200 MIDDAY] 10:00 KO+EN 공개 확인(공개 REST)·schedule 서비스 정상 확인. GSC 색인 요청 최대 10건: 러너 URL Inspection으로 미색인 목록 → gsc-index-requests.md에 14일 내 요청 없는 글 중 영어판(/en/) 우선, 그다음 최신 KO. 로그인된 GSC 창이 front window인지, Enter 전 Chrome frontmost인지 확인. 기록·커밋, 카톡 보고(로그아웃이면 로그인 요청).
 - DAILY `17 21 * * *`: [HuntLab $200 DAILY] (1) 커뮤니티 배포 1건: 실측 글(우선 MoveIt·Nav2 RAM 영어판) 1편을 Reddit r/ROS → ROS Discourse(AI 사용 표기 필수) → 국내 ROS 커뮤니티 순으로 하루 1곳. 각 커뮤니티 자기홍보 규칙을 먼저 읽고, 글 본문에 측정 숫자와 결론을 직접 써서 링크 없이도 읽히게 하고 끝에 (disclosure: my blog). 같은 글을 같은 곳에 두 번 올리지 않는다. Chrome에 로그인돼 있지 않으면 카톡으로 로그인 요청. 기록은 editorial/operations/distribution-log.md. (2) GitHub/Discourse 정확히 맞는 열린 이슈 1건 이하 답글(코드·로그 확인, disclosure, Discourse AI 표기). (3) 그날 공개 글 네이버 요약 1편(원문 복사·쿠팡 링크 금지). (4) 평가: 상승/보합/하락을 실수익(revenue-actual.tsv)과 방문자(GA4 activeUsers, 세션 아님)로만 매기고 다음 날 일정과 함께 카톡 보고. 다음 날 특별 작업이 있으면 YYYY-MM-DD-plan.md 작성.
 - WEEKLY `7 10 * * 1`: [HuntLab $200 WEEKLY] 09:30 goal_report 결과 + GSC 색인 수로 마일스톤 판정, 미달 시 '미달 시 조치' 반영·주간 기록 추가, 쿠팡 실측 장비 글 1편 진행(측정 서버는 끝나면 반드시 삭제), 카톡 보고. 마지막에 CronList에서 [HuntLab $200 MORNING/MIDDAY/DAILY/WEEKLY]를 지우고 이 절의 cron식·내용으로 재등록(7일 만료 방지).
 - 마일스톤 판정 일회성: 10/24 21:43, 11/30 21:43, 12/31 21:43 (이후 것은 12/31 판정 때 등록).
@@ -43,3 +43,4 @@
 - SEO 점검(10/12): KO 글 title·description·canonical·BlogPosting 스키마·hreflang 정상, 사이트맵 인덱스에 hunt_en 포함(11편). 고친 것: #935 자동 잘린 요약 → 직접 쓴 요약. 10/12 밤 추가 수정: 영어판 og:locale en_US(huntlab-english.php aioseo_facebook_tags 필터), 영어판 스키마 BlogPosting(AIOSEO aioseo_options_dynamic의 postTypes.hunt_en을 post 설정으로 복사, 백업 WP호스트 /tmp/aioseo_dyn_backup_20261012.json).
 - 10/13 실수익(사용자 콘솔 확인): 애드센스 $0.00, 쿠팡 0원. 이후 평가·주간 보고는 추정 RPM 대신 editorial/operations/revenue-actual.tsv의 실제 값을 쓴다.
 - 10/13 방향 수정: 방문 지표를 세션→방문자(activeUsers)로 바꾸니 지난 7일 방문자 19, 검색 유입 2, 수익 $0. 구글 노출을 기다리는 것만으로는 부족해 DAILY에 커뮤니티 배포(하루 1곳)를 추가했다. 10/20까지 하루 방문자 10명 미만이면 주제 재선정을 사용자와 논의.
+- 10/13 진단: 9/1 이후 GSC 노출 1838·클릭 12는 거의 전부 삭제(410)된 옛 일반 글(멜론 849노출 등)에서 나옴. EN 12편(최고 10일)은 노출 3, KO ROS는 ~0. 목표 지표를 영어 검색 유입으로 정함(사용자: "영어라도 검색해서 오는 사람 있으면 되지"). 조치: GSC 요청은 EN 우선, 커뮤니티 배포는 EN 링크(백링크 효과), 주간 지표에 EN 노출 추가. 10/20 판정: EN 노출 3 → 수십 이상인지.
