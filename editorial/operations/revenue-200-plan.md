@@ -30,12 +30,28 @@
 - 애드센스·쿠팡 실제 수익 숫자는 콘솔 접근이 필요 (API 승인 시 자동화)
 - 가이드 결제 플랫폼 계정·가격
 
+## 10/14 피벗: 장비 실측 × 네이버 × 쿠팡 (연말 기한, 사용자 승인)
+
+근거: 10/13 네이버 요약 3개 블로그 탭 1위(색인 병목 없음) vs 구글 EN 노출 3·KO ~0. ROS 주제는 검색 수요·구매 의도가 작다. 월 $200 = 애드센스 월 3만~7만 조회 또는 쿠팡 판매 약 900만 원 — 구매 직전 검색어를 노려야 한다.
+
+- 주력: 개발 장비 실측 글(huntlab KO, 카테고리 326, 쿠팡 링크+고지문) → 같은 날 네이버 요약(원문 링크, 쿠팡 링크 없음). 주 2편 목표.
+- 주제 순서(검색 수요 큰 것부터, 전부 측정 서버 Docker 메모리 상한으로 재현 가능한 것만):
+  1. 로컬 LLM(Ollama) RAM 8·16GB에서 어떤 모델 크기까지 도나 — 모델 3B/7B/14B q4, 최대 메모리·성공·토큰/초
+  2. 개발용 노트북 RAM 8 vs 16 vs 32GB — 웹 개발 스택(Node dev 서버+DB+브라우저 대용 부하) 실측
+  3. 안드로이드 Gradle 빌드 RAM — 8·16GB 상한
+  4. 개발 PC SSD 몇 GB — Docker 이미지·node_modules·SDK 실제 용량 합산
+- 원칙 유지: 안 써 본 제품 리뷰 금지(사양 기준 추천만), 측정 서버는 끝나면 즉시 삭제, 쿠팡 링크는 사용자가 파트너스에서 생성(측정 결과 나오면 카톡으로 상품 지정 요청).
+- ROS 글 파이프라인·7편 버퍼는 그대로 둔다(자동). Claude 작업 시간은 장비 글 우선.
+- 판정: 11/15 — 네이버 경유 huntlab 방문자 하루 30명 이상, 쿠팡 클릭 발생 여부. 미달 시 사용자와 재논의.
+- 사용자 몫: aws login(측정 서버), 네이버 로그인, 쿠팡 링크 생성.
+
 ## Claude 세션 크론 (SSOT — WEEKLY가 매주 이 절대로 전부 재등록)
 - MORNING `43 7 * * *`: [HuntLab $200 MORNING] 러너 실패 유닛, 02:00 prepare 결과(sudo tail logs/systemd-editorial-prepare.out.log), 예약 글 수(posts·hunt_en status=future). 버그면 고치고(품질 반려는 우회 금지) push 전 prepare inactive 확인. 그날 계획 문서(editorial/operations/YYYY-MM-DD-plan.md)가 있으면 아침 항목도 수행. 카톡 보고.
 - MIDDAY `37 10 * * *`: [HuntLab $200 MIDDAY] 10:00 KO+EN 공개 확인(공개 REST)·schedule 서비스 정상 확인. 사이트맵은 러너 huntlab-sitemap-submit.timer(10:20)가 API로 자동 제출하니 결과만 확인(journalctl). URL 단위 색인 요청은 API가 없어(Indexing API는 채용·라이브 전용, 금지) GSC 웹에서만 되므로 그날 공개된 EN 1편 + KO 1편만 요청(백로그 일괄 요청 중단). 로그인된 GSC 창이 front window인지, Enter 전 Chrome frontmost인지 확인. 기록·커밋, 카톡 보고(로그아웃이면 로그인 요청).
 - DAILY `17 21 * * *`: [HuntLab $200 DAILY] (1) 커뮤니티 배포 1건: 실측 글(우선 MoveIt·Nav2 RAM 영어판) 1편을 Reddit r/ROS → ROS Discourse(AI 사용 표기 필수) → 국내 ROS 커뮤니티 순으로 하루 1곳. 각 커뮤니티 자기홍보 규칙을 먼저 읽고, 글 본문에 측정 숫자와 결론을 직접 써서 링크 없이도 읽히게 하고 끝에 (disclosure: my blog). 같은 글을 같은 곳에 두 번 올리지 않는다. Chrome에 로그인돼 있지 않으면 카톡으로 로그인 요청. 기록은 editorial/operations/distribution-log.md. (2) GitHub/Discourse 정확히 맞는 열린 이슈 1건 이하 답글(코드·로그 확인, disclosure, Discourse AI 표기). (3) 그날 공개 글 네이버 요약 1편(원문 복사·쿠팡 링크 금지). (4) 평가: 상승/보합/하락을 실수익(revenue-actual.tsv)과 방문자(GA4 activeUsers, 세션 아님)로만 매기고 다음 날 일정과 함께 카톡 보고. 다음 날 특별 작업이 있으면 YYYY-MM-DD-plan.md 작성.
 - COMMUNITY `23 * * * *`(매시 스캔): [HuntLab $200 COMMUNITY] distribution-log.md에서 오늘(KST) 답글 수를 세어 3개면 즉시 종료. 아니면 Reddit(u/Wooden_One_4001: r/ROS, r/robotics)과 ROS Discourse(sungpyo9053, AI 사용 표기 필수)에서 최근 질문(Discourse latest는 매시, Reddit은 하루 2회 13시·21시대 스캔에서만 — 10/13 23:4x JSON 반복 조회로 'blocked by network security' 차단됨) 중 이전 스캔 이후 새로 올라온 것만 보고, 우리 실측·글로 정확히 답할 수 있는 것에 답글(하루 합계 최대 3개, 같은 시간에 1개). 맞는 게 없으면 아무것도 쓰지 않고 카톡도 보내지 않는다. 답은 본문에 숫자·명령까지 다 쓰고, 링크는 질문과 정확히 같은 글일 때만(답글 10개 중 링크 1개 이하, Reddit 9:1 원칙). 자기 글 게시는 하루 1개 이하(DAILY 몫). 같은 질문·스레드에 두 번 쓰지 않는다. 글이 숨겨지거나 삭제·경고를 받으면 그날 중단하고 카톡 보고. 기록은 distribution-log.md(날짜·곳·주소·링크 여부·반응). 로그아웃이면 카톡으로 로그인 요청.
 - WEEKLY `7 10 * * 1`: [HuntLab $200 WEEKLY] 09:30 goal_report 결과 + GSC 색인 수로 마일스톤 판정, 미달 시 '미달 시 조치' 반영·주간 기록 추가, 쿠팡 실측 장비 글 1편 진행(측정 서버는 끝나면 반드시 삭제), 카톡 보고. 마지막에 CronList에서 [HuntLab $200 MORNING/MIDDAY/DAILY/WEEKLY]를 지우고 이 절의 cron식·내용으로 재등록(7일 만료 방지).
+- EQUIP `47 22 * * *`: [HuntLab $200 EQUIP] '10/14 피벗' 절의 주제 순서대로 장비 실측 글 1편씩 진행하는 상태 기계. 상태는 editorial/operations/equip-pipeline.md에 기록. 단계: (a) 측정 스크립트 작성(experiments/<주제>/measure.sh, Nav2·MoveIt 방식 재사용) → (b) aws 로그인 확인(만료면 카톡으로 `aws login` 요청 후 종료) → 측정 서버 생성·측정 시작 → (c) 완료 확인·결과 회수·서버 삭제(필수) → (d) 결과로 상품 기준 정해 카톡으로 쿠팡 링크 요청 → (e) KO 초안 작성·품질 확인 후 공개(고지문 필수), IndexNow → (f) 네이버 요약 게시(로그인 만료면 카톡 요청) → 다음 주제. 한 번에 진행 가능한 단계까지 하고 카톡 보고.
 - 마일스톤 판정 일회성: 10/24 21:43, 11/30 21:43, 12/31 21:43 (이후 것은 12/31 판정 때 등록).
 - 세션(터미널)이 꺼지면 크론도 사라진다. 서버 타이머(goal_report 월 09:30)는 계속 돈다.
 
