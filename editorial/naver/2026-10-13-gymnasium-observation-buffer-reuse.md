@@ -25,3 +25,5 @@
 원문: https://huntlab.app/gymnasium-step-observation-buffer-reuse-replay-aliasing/
 
 #Gymnasium #강화학습 #로봇학습 #리플레이버퍼 #numpy #ROS2 #파이썬
+
+게시: https://blog.naver.com/sungpyo9053/224441791156 (2026-10-14 20:5x)
