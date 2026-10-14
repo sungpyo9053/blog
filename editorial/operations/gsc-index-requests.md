@@ -3,6 +3,13 @@
 방법: Chrome(로그인됨)에서 GSC 홈의 aria-label "huntlab.app에 있는 모든 URL 검사" 입력 → System Events key code 36(실제 Enter, Chrome frontmost 확인 필수) → "색인 생성 요청" 버튼 JS click → 본문에 "색인 생성 요청됨" 확인.
 우선순위: URL is unknown / Discovered-not-indexed 중 최신·검색수요 큰 글. 이미 요청한 URL은 2주 내 재요청 안 함.
 
+
+## 2026-10-14 (4건 모두 성공, 10:4x)
+- ros-2-troubleshooting-guide (EN 허브 #898)
+- ros2-troubleshooting (KO 허브 #897)
+- en/ros-2-rclpy-publish-slow-large-custom-message-arrays (오늘 EN #918)
+- ros2-nested-message-array-vs-primitive-arrays-serialization (오늘 KO #916)
+- 사이트맵: 러너 타이머 10:20 첫 정기 실행, 두 사이트맵 204.
 ## 2026-10-11 (10건)
 - ros2-colcon-build-ram-how-many-gb-nav2-measured
 - ros2-local-setup-vs-setup-bash-fresh-terminal-package-count
