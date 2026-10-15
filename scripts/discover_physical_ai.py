@@ -227,6 +227,32 @@ def invoke_agent(repo, role, payload, directory):
     return answer
 
 
+def body_text(raw):
+    """Readable body for the model: every word, table cell, code line and link URL kept.
+
+    Only presentation markup (class/style/alt, WordPress comments, tag syntax) is
+    removed. Raw HTML cost ~25% more bytes and the inventory hit its budget on
+    2026-10-15 at 38 lessons.
+    """
+    # ponytail: still grows ~25KB per lesson; past ~45 lessons the budget needs a
+    # recency or query-anchor rule for which lessons get full bodies.
+    blocks = []
+    def keep(match):
+        blocks.append(html.unescape(re.sub(r'<[^>]+>', '', match.group(1))))
+        return f'\x00{len(blocks) - 1}\x00'
+    text = re.sub(r'<!--.*?-->', '', raw, flags=re.S)
+    text = re.sub(r'<pre[^>]*>(.*?)</pre>', keep, text, flags=re.S | re.I)
+    text = re.sub(r'<a\s[^>]*?href="([^"]*)"[^>]*>(.*?)</a>', r'\2 (\1)', text, flags=re.S | re.I)
+    text = re.sub(r'<img\s[^>]*?src="([^"]*)"[^>]*>', r'[image \1]', text, flags=re.I)
+    text = re.sub(r'</t[dh]>\s*', ' | ', text, flags=re.I)
+    text = re.sub(r'<li[^>]*>', '\n- ', text, flags=re.I)
+    text = re.sub(r'<br\s*/?>|</(?:p|tr|h[1-6]|li|ul|ol|table|blockquote|div)>', '\n', text, flags=re.I)
+    text = html.unescape(re.sub(r'<[^>]+>', '', text))
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r' *\n[ \n]*', '\n', text).strip()
+    return re.sub('\x00(\\d+)\x00', lambda m: '\n```\n' + blocks[int(m.group(1))] + '\n```\n', text)
+
+
 def compact_inventory(inventory, query=''):
     rows = inventory['posts']
     # Summaries duplicate selected raw bodies and are not full-content evidence.
@@ -256,7 +282,7 @@ def compact_inventory(inventory, query=''):
         # two distinct query anchors. No top-N cut or body truncation follows.
         query_match = sum(matches(term, identity.casefold()) for term in terms) >= 2
         if domain_match or query_match:
-            related.append({'post_id': row['post_id'], 'title': row['title'], 'content': row['content'],
+            related.append({'post_id': row['post_id'], 'title': row['title'], 'content': body_text(row['content']),
                             'selection_reason': 'editorial_domain_full_body' if domain_match else 'candidate_query_full_body'})
     result = {'inspected_post_count': len(rows), 'all_post_metadata': metadata,
               'related_full_bodies': related, 'scope': 'full_inventory_mechanical_comparison_plus_related_body_review',

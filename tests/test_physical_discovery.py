@@ -27,7 +27,7 @@ class ArithmeticTests(unittest.TestCase):
         for query in ('','다른 질문'):
             result=d.compact_inventory({'posts':posts},query)
             self.assertEqual(len(result['related_full_bodies']),12)
-            self.assertEqual(result['related_full_bodies'][-1]['content'],posts[-1]['content'])
+            self.assertEqual(result['related_full_bodies'][-1]['content'],d.body_text(posts[-1]['content']))
 
     def test_relevant_body_budget_fails_without_silent_truncation(self):
         with self.assertRaisesRegex(d.DiscoveryError,'relevant_inventory_too_large'):
@@ -37,7 +37,11 @@ class ArithmeticTests(unittest.TestCase):
         raw='<table><tr><td>A</td><td>0.25</td></tr></table><pre> x = 1\n  y = 2</pre><a href="https://example.test/">근거</a>'
         result=d.compact_inventory({'posts':[{'post_id':1,'status':'future','title':'로봇 단위','slug':'robot-unit','excerpt':'redundant '*400,'content':raw}]})
         self.assertNotIn('excerpt',result['all_post_metadata'][0])
-        self.assertEqual(result['related_full_bodies'][0]['content'],raw)
+        body=result['related_full_bodies'][0]['content']
+        # Markup goes; every cell, code line (with indentation) and source URL stays.
+        self.assertNotIn('<',body)
+        for kept in ('A | 0.25','\n x = 1\n  y = 2\n','근거 (https://example.test/)'):
+            self.assertIn(kept,body)
 
     def test_ros_tool_titles_without_ros_word_get_full_bodies(self):
         # Scheduled colcon posts were hidden from the reviewer, which then held every colcon candidate.
