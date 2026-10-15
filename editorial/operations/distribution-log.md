@@ -12,3 +12,7 @@
 - GA4 오늘 discourse.openrobotics.org 유입 1명(10/13 Discourse 글 승인된 것으로 보임).
 - GitHub 이슈: moveit2 열린 메모리 이슈 중 빌드 RAM 관련 없음 → 생략.
 - 네이버 4호 게시 224441791156. 5호(#916 요약) 원고 커밋, 로그아웃으로 게시 대기.
+
+## 2026-10-15
+- Reddit r/ROS 자기 글 게시(10/14 캡차로 막힌 것): https://www.reddit.com/r/ROS/comments/1x6gda1/ — MoveIt EN #969 링크 + GitHub 원본, disclosure. old.reddit이 새 화면으로 바뀌어 Markdown 모드로 입력.
+- 네이버 5호(#916 요약) 게시: 224442818036.

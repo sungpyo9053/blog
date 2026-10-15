@@ -21,3 +21,5 @@ N=0~3 크기 예측식 검증, 30 Hz 발행 결과, 재현 명령은 원문에 �
 원문: https://huntlab.app/ros2-nested-message-array-vs-primitive-arrays-serialization/
 
 #ROS2 #rclpy #DDS #직렬화 #로봇개발 #파이썬 #성능최적화
+
+게시: https://blog.naver.com/sungpyo9053/224442818036 (2026-10-15 17:5x)
