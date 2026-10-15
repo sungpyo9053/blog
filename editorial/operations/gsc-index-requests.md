@@ -4,6 +4,10 @@
 우선순위: URL is unknown / Discovered-not-indexed 중 최신·검색수요 큰 글. 이미 요청한 URL은 2주 내 재요청 안 함.
 
 
+## 2026-10-15 (2건 성공, 10:4x)
+- en/ros-2-rclpy-rate-sleep-blocks-forever-fix (오늘 EN #925)
+- rclpy-rate-sleep-timer-executor-loop-period (오늘 KO #923)
+- 사이트맵 타이머 10:20 두 사이트맵 204.
 ## 2026-10-14 (4건 모두 성공, 10:4x)
 - ros-2-troubleshooting-guide (EN 허브 #898)
 - ros2-troubleshooting (KO 허브 #897)
