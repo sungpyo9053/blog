@@ -1,0 +1,42 @@
+# 네이버 요약 대기 목록 (NAVER 크론이 위에서부터 1편씩 처리하고 [x]와 게시 주소를 적는다)
+
+기준: 검색어가 분명한 글(에러 메시지·'차이'·'몇 GB' 같은 질문형) 우선. 형식은 editorial/naver/2026-10-13-*.md와 같게: 제목 1줄, 첫 문단 질문, ■ 숫자로 보면 / ■ 왜 / ■ 바로 쓸 것, 원문 링크, 해시태그. 원문 복사·쿠팡 링크 금지.
+
+- [ ] #923 2026-10-15 https://huntlab.app/rclpy-rate-sleep-timer-executor-loop-period/ — rclpy에서 rate.sleep()이 멈추거나 주기가 안 맞을 때: Rate가 타이머 콜백의 이벤트를 기다
+- [ ] #893 2026-10-11 https://huntlab.app/ros2-distro-choice-iron-humble-remaining-support-months/ — ROS 2 Iron이냐 Humble이냐: 로봇 프로젝트 배포판을 EOL까지 남은 개월 수로 고르기
+- [ ] #883 2026-10-09 https://huntlab.app/tf-frame-offset-transform-direction-double-error/ — tf 프레임 원점이 base_link에서 어긋나 보일 때 변환 방향부터 의심해야 할까: 1 m 오프셋을 반대
+- [ ] #877 2026-10-08 https://huntlab.app/ros2-real-time-factor-vs-real-time-computing-deadline/ — ROS 2는 왜 ‘실시간’이라고 할까: real time factor 1.0과 마감을 지키는 실시간 컴퓨팅을
+- [ ] #871 2026-10-07 https://huntlab.app/colcon-build-slow-overlay-colcon-ignore-symlink-install-order/ — colcon build가 너무 느릴 때: overlay·COLCON_IGNORE·–symlink-instal
+- [ ] #867 2026-10-06 https://huntlab.app/colcon-build-executor-sequential-memory-budget/ — colcon build 스레드 수를 줄이고 싶을 때: 라즈베리 파이가 멈추면 –executor sequent
+- [ ] #862 2026-10-05 https://huntlab.app/ros2-liveliness-lease-duration-vs-deadline-topic-stall/ — ROS 2 센서 토픽이 멈춘 걸 liveliness로 알 수 있을까: 같은 노드의 다른 토픽이 lease를 
+- [ ] #856 2026-10-04 https://huntlab.app/ros2-message-filter-laser-stamp-clock-mismatch/ — ‘Message Filter dropping message: frame laser’ 로그가 뜰 때: 레이저 
+- [ ] #845 2026-10-03 https://huntlab.app/ros-camera-optical-frame-axis-mapping-check/ — ROS 카메라 _optical 프레임으로 점을 옮길 때 축 부호가 맞는지 확인하기: 오른손 좌표계 행렬식과 
+- [ ] #840 2026-10-02 https://huntlab.app/ros2-sim-time-zero-uninitialized-first-dt-spike/ — ROS 2 use_sim_time 노드가 /clock을 받기 전 시각 0을 저장하면 첫 dt는 몇 초가 될까
+- [ ] #836 2026-10-01 https://huntlab.app/ros-pose-covariance-row-major-index/ — ROS 로봇 자세 공분산 36칸 중 yaw 분산은 몇 번째 칸일까: 6×6 행우선 인덱스와 rad² 단위 계
+- [ ] #832 2026-09-30 https://huntlab.app/robot-joint-p-control-velocity-saturation-boundary/ — 로봇 관절 P 제어 게인을 올려도 왜 시간상수 1/Kp만큼 빨라지지 않을까: 속도 한계에서 선형 모델이 맞는
+- [ ] #827 2026-09-29 https://huntlab.app/ros2-transient-local-late-joiner-sample-age-lifespan/ — ROS 2 로봇 상태 토픽을 transient local로 남기면 늦게 켠 노드는 몇 초 전 데이터를 받을까
+- [ ] #822 2026-09-28 https://huntlab.app/ros2-qos-deadline-period-compatibility/ — ROS 2 센서 토픽에 deadline QoS를 걸 때: 구독자가 더 짧은 deadline을 요청하면 왜 연
+- [ ] #818 2026-09-27 https://huntlab.app/gaussian-policy-action-bound-margin/ — 로봇 관절 속도를 가우시안 정책으로 뽑으면 왜 행동 범위를 넘을까: 경계까지의 여유를 표준편차로 재기
+- [ ] #814 2026-09-26 https://huntlab.app/ros2-sim-time-real-time-factor-latency-budget/ — ROS 2 시뮬레이션을 10배속으로 돌리면 타임스탬프는 얼마나 어긋날까: 통신 지연과 real time fa
+- [ ] #809 2026-09-25 https://huntlab.app/compass-bearing-to-ros-enu-yaw/ — 나침반 방위 30도를 ROS yaw에 그대로 넣으면 로봇은 어디를 볼까: 북쪽 기준 시계방향을 동쪽 기준 반
+- [ ] #805 2026-09-24 https://huntlab.app/robot-rl-termination-truncation-bootstrap/ — 로봇 강화학습 에피소드가 끝났을 때: 추락과 시간 제한의 목표값은 왜 다를까
+- [ ] #801 2026-09-24 https://huntlab.app/ros2-qos-compatibility-before-queue-depth/ — ROS 2 토픽 이름이 같은데 메시지가 안 올 때: QoS 호환성을 먼저 계산하기
+- [ ] #797 2026-09-24 https://huntlab.app/robot-joint-p-control-tracking-error/ — 움직이는 로봇 관절을 P 제어하면 왜 오차가 남을까
+- [ ] #793 2026-09-23 https://huntlab.app/ros2-simulation-time-backward-jump-timer/ — ROS 2 시뮬레이션 시간이 뒤로 가면 로봇 타이머 계산은 어떻게 깨질까
+- [ ] #789 2026-09-22 https://huntlab.app/ros-velocity-unit-boundary-test/ — ROS 로봇 속도 단위가 1000배 어긋나는 순간: mm/s를 m/s로 검증하기
+- [ ] #785 2026-09-21 https://huntlab.app/robot-simulation-energy-drift-check/ — 로봇 동역학 시뮬레이션의 에너지 드리프트는 어떻게 읽을까
+- [ ] #777 2026-09-20 https://huntlab.app/robot-simulation-timestep-position-error/ — 로봇 시뮬레이션의 시간 간격을 줄이면 위치 계산은 왜 달라질까
+- [ ] #773 2026-09-17 https://huntlab.app/physical-ai-coordinate-frames/ — 피지컬 AI 좌표계: 같은 물체의 위치가 다르게 보이는 이유
+- [ ] #771 2026-09-17 https://huntlab.app/sensor-moving-average-noise-delay/ — 이동평균 필터 실습: 센서 노이즈를 줄이면 왜 반응이 늦어질까
+- [ ] #768 2026-09-17 https://huntlab.app/ros2-tf2-roles/ — ROS 2와 tf2: 센서 데이터 전달과 좌표 변환을 구분하는 법
+- [ ] #761 2026-09-17 https://huntlab.app/physical-ai-observation-action-feedback/ — 피지컬 AI 작동 원리: 관측·행동·피드백을 숫자로 이해하기
+- [ ] #749 2026-09-16 https://huntlab.app/wordpress-db-restore-attachment-audit/ — WordPress DB 복원 뒤 첨부파일 누락을 찾는 검사 만들기
+- [ ] #706 2026-09-08 https://huntlab.app/evidence-first-ready-publishing-pipeline/ — 자동발행은 성공했는데 글이 없다면: 미발행과 실패 구분하기
+- [ ] #699 2026-09-06 https://huntlab.app/wordpress-noindex-sitemap-consistency/ — noindex 글이 sitemap에 남는 배포 불일치 잡기
+- [ ] #698 2026-09-06 https://huntlab.app/wordpress-rest-html-200-validation/ — HTTP 200인데 WordPress REST 발행이 실패한 이유
+- [ ] #373 2026-08-14 https://huntlab.app/topic-planner-topics-md-retry/ — AI 작업이 끝났는데 결과 파일이 없다면: 재시도와 중단 기준
+- [ ] #301 2026-08-06 https://huntlab.app/wordpress-quick-summary-regex-fix/ — WordPress 20초 핵심 요약 중복 삽입 버그 제목 정규식 수정 작업 기록
+- [ ] #290 2026-08-06 https://huntlab.app/wordpress-rest-api-fake-client-test/ — WordPress REST API Fake Client 테스트: 실제 게시물 없이 발행 계약 검증하기
+- [ ] #132 2026-08-02 https://huntlab.app/wordpress-rest-api-pagination/ — 첫 REST 응답에서 19개가 빠졌다: WordPress 119개 글 전수 감사
+- [ ] #96 2026-07-28 https://huntlab.app/wordpress-internal-link-backup/ — 내부 링크 백필 전에 JSON 백업과 공개 URL 검증을 넣은 과정
+- [ ] #50 2026-07-27 https://huntlab.app/wordpress-rest-api-retry/ — Retry-After 날짜값에서 재시도가 멈춘 이유와 파서 수정

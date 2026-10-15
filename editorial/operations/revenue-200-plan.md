@@ -53,6 +53,7 @@
 - WEEKLY `7 10 * * 1`: [HuntLab $200 WEEKLY] 09:30 goal_report 결과 + GSC 색인 수로 마일스톤 판정, 미달 시 '미달 시 조치' 반영·주간 기록 추가, 쿠팡 실측 장비 글 1편 진행(측정 서버는 끝나면 반드시 삭제), 카톡 보고. 마지막에 CronList에서 [HuntLab $200 MORNING/MIDDAY/DAILY/WEEKLY]를 지우고 이 절의 cron식·내용으로 재등록(7일 만료 방지).
 - EQUIP `47 22 * * *`: [HuntLab $200 EQUIP] '10/14 피벗' 절의 주제 순서대로 장비 실측 글 1편씩 진행하는 상태 기계. 상태는 editorial/operations/equip-pipeline.md에 기록. 단계: (a) 측정 스크립트 작성(experiments/<주제>/measure.sh, Nav2·MoveIt 방식 재사용) → (b) aws 로그인 확인(만료면 카톡으로 `aws login` 요청 후 종료) → 측정 서버 생성·측정 시작 → (c) 완료 확인·결과 회수·서버 삭제(필수) → (d) 결과로 상품 기준 정해 카톡으로 쿠팡 링크 요청 → (e) KO 초안 작성·품질 확인 후 공개(고지문 필수), IndexNow → (f) 네이버 요약 게시(로그인 만료면 카톡 요청) → 다음 주제. 한 번에 진행 가능한 단계까지 하고 카톡 보고.
 - BLOCKERS `13 8-22/2 * * *`: [HuntLab $200 BLOCKERS] 사용자 대기 항목 재확인 — aws 로그인(되면 EQUIP 측정 즉시 시작), 네이버 로그인(되면 대기 중 요약 게시), Reddit 미제출 글. 진척 있을 때만 카톡, 없으면 조용히 종료.
+- NAVER `13 9,13,17 * * *`: [HuntLab $200 NAVER] editorial/naver/backlog.md 위에서부터 1편씩 네이버 요약 게시(하루 3편). 원문 복사·쿠팡 링크 금지, 형식은 기존 요약과 같게. 게시 순서는 blog.naver.com/sungpyo9053?Redirect=Write& → 도움말 닫기 → 입력 → iframe#mainFrame 안 발행 버튼 → 확인 발행. 원고 editorial/naver/YYYY-MM-DD-<slug>.md 커밋, backlog에 [x]와 주소. 로그아웃이면 카톡 1회 요청 후 종료. 보고는 DAILY에 합침(카톡 없음).
 - 마일스톤 판정 일회성: 10/24 21:43, 11/30 21:43, 12/31 21:43 (이후 것은 12/31 판정 때 등록).
 - 세션(터미널)이 꺼지면 크론도 사라진다. 서버 타이머(goal_report 월 09:30)는 계속 돈다.
 
