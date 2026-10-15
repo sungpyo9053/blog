@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (2 * 10 + 5)
+assert math.isclose(value, 25, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": "인자 '2'와 '5'를 리스트로 이어 붙인 문자열 '25'를 숫자로 읽은 값", "actual": value})
+value = (2 + 5)
+assert math.isclose(value, 7, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '사용자가 의도한 두 인자의 덧셈 결과', "actual": value})
+value = ((2 * 10 + 5) - (2 + 5))
+assert math.isclose(value, 18, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '연결 결과와 의도한 합의 차이 (반례의 크기)', "actual": value})
+value = (2 * 1.5)
+assert math.isclose(value, 3, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '실행 시점 식 평가로 계산한 인덱스 2 로봇의 x 오프셋 (m)', "actual": value})
+value = (21 + 7 + 3)
+assert math.isclose(value, 31, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '공식 예시 파일 이름 example_substitutions + _launch + .py를 이어 붙인 문자열의 글자 수', "actual": value})
+value = (200 - 200)
+assert math.isclose(value, 0, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": 'new_background_r=200일 때 조건 기준값 200과의 차이 (0이면 조건 충족)', "actual": value})
+value = (199 - 200)
+assert math.isclose(value, -1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": 'new_background_r=199일 때 조건 기준값과의 차이 (경계 바깥 반례)', "actual": value})
+print(json.dumps(results, ensure_ascii=False))

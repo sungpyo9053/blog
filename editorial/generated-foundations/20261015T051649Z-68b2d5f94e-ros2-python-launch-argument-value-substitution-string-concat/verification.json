@@ -1,0 +1,58 @@
+{
+  "checked_at": "2026-10-15T14:16:52.786157+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"인자 '2'와 '5'를 리스트로 이어 붙인 문자열 '25'를 숫자로 읽은 값\", \"actual\": 25}, {\"name\": \"사용자가 의도한 두 인자의 덧셈 결과\", \"actual\": 7}, {\"name\": \"연결 결과와 의도한 합의 차이 (반례의 크기)\", \"actual\": 18}, {\"name\": \"실행 시점 식 평가로 계산한 인덱스 2 로봇의 x 오프셋 (m)\", \"actual\": 3.0}, {\"name\": \"공식 예시 파일 이름 example_substitutions + _launch + .py를 이어 붙인 문자열의 글자 수\", \"actual\": 31}, {\"name\": \"new_background_r=200일 때 조건 기준값 200과의 차이 (0이면 조건 충족)\", \"actual\": 0}, {\"name\": \"new_background_r=199일 때 조건 기준값과의 차이 (경계 바깥 반례)\", \"actual\": -1}]\n",
+  "cases": [
+    {
+      "name": "인자 '2'와 '5'를 리스트로 이어 붙인 문자열 '25'를 숫자로 읽은 값",
+      "expression": "2 * 10 + 5",
+      "expected": 25,
+      "actual": 25
+    },
+    {
+      "name": "사용자가 의도한 두 인자의 덧셈 결과",
+      "expression": "2 + 5",
+      "expected": 7,
+      "actual": 7
+    },
+    {
+      "name": "연결 결과와 의도한 합의 차이 (반례의 크기)",
+      "expression": "(2 * 10 + 5) - (2 + 5)",
+      "expected": 18,
+      "actual": 18
+    },
+    {
+      "name": "실행 시점 식 평가로 계산한 인덱스 2 로봇의 x 오프셋 (m)",
+      "expression": "2 * 1.5",
+      "expected": 3,
+      "actual": 3.0
+    },
+    {
+      "name": "공식 예시 파일 이름 example_substitutions + _launch + .py를 이어 붙인 문자열의 글자 수",
+      "expression": "21 + 7 + 3",
+      "expected": 31,
+      "actual": 31
+    },
+    {
+      "name": "new_background_r=200일 때 조건 기준값 200과의 차이 (0이면 조건 충족)",
+      "expression": "200 - 200",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "new_background_r=199일 때 조건 기준값과의 차이 (경계 바깥 반례)",
+      "expression": "199 - 200",
+      "expected": -1,
+      "actual": -1
+    }
+  ],
+  "teaching_context": {
+    "description": "이 글을 위해 고른 설명용 모델로, 실제 launch 실행 결과가 아니다. 인자 robot_index='2', extra='5', 로봇 간격 1.5 m(미터), 그리고 공식 튜토리얼의 new_background_r(빨강 값, 0~255 정수로 다룸)과 PathJoinSubstitution 파일 이름 예시를 쓴다. 공식 문서에 따르면 substitution이나 문자열을 담은 리스트는 문자열 하나로 이어 붙여진다. 이 규칙을 숫자로 옮기려고, 한 자리 숫자 문자열 '2'와 '5'를 이어 붙인 결과를 십진수로 읽은 값(2×10+5)을 의도한 덧셈(2+5)과 비교한다. 공식 예시의 파일 이름 조각 'example_substitutions'(21자), '_launch'(7자), '.py'(3자)의 글자 수를 더하면 이어 붙인 문자열의 길이가 나온다. 조건 분기는 튜토리얼처럼 new_background_r이 200일 때만 동작한다고 보고, 입력값에서 200을 뺀 차이가 0인지로 경계를 확인한다. 오프셋 계산은 Python 식을 평가하는 substitution이 실행 시점에 인덱스와 간격을 곱했을 때의 값이다.",
+    "conclusion": "substitution 리스트는 숫자를 더하지 않고 문자열을 이어 붙이므로, '2'와 '5'는 의도한 7보다 18 큰 25가 된다. 공식 예시의 파일 이름도 세 조각이 이어 붙여진 31자 문자열 하나로 풀린다. 인자로 위치 오프셋 3 m 같은 산술이나 '200과 같은가' 같은 비교가 필요하다면, launch description을 만드는 Python 코드에서 값을 꺼내려 하지 말고 실행 시점에 평가되는 식 평가 substitution이나 조건에 맡겨야 한다. 독자는 자기 launch 파일에서 숫자처럼 쓰려는 LaunchConfiguration이 리스트 연결에 들어가 있는지부터 확인하면 된다.",
+    "limitations": "한 자리 숫자 문자열 연결을 2×10+5로 바꾼 것은 문자열 연결을 숫자로 보여 주려는 교육용 모델이다. launch가 실제로 숫자 변환을 한다는 뜻이 아니다. 공식 문서 원문은 뒷부분이 잘린 상태로 제공됐다. 그래서 Python 식 평가 substitution의 정확한 클래스 이름과 사용법, OpaqueFunction 같은 다른 우회 방법, IfCondition의 문자열 판정 규칙은 이 근거만으로 말할 수 없다. 조건 경계(차이 0)는 튜토리얼의 '200과 같을 때만 실행' 설명을 산술로 옮긴 것일 뿐 launch 내부의 비교 구현이 아니다. 실제 launch 실행 로그, 배포판별 차이(Humble·Jazzy), 실물 로봇 동작은 이 계산으로 추론할 수 없고 별도 컨테이너 실험으로 확인해야 한다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
