@@ -1,24 +1,12 @@
 # 경쟁 글 대비 차별점: ros2-apt-update-signature-invalid-ros2-apt-source
 
-1. https://techoverflow.net/2025/06/09/how-to-fix-expkeysig-f42ed6fbab17c654-open-robotics/ (Uli Köhler, 2025-06-09, EN)
-   - 다루는 것: `EXPKEYSIG F42ED6FBAB17C654 Open Robotics` 출력, `ros.key`를 `/usr/share/keyrings/ros-archive-keyring.gpg`로 다시 받는 명령, `sudo apt update`.
-   - 빠진 것: 원인 설명이 없다. ros2-apt-source가 이미 공식 절차가 된 뒤(2025-05-28)의 글인데 언급하지 않는다. 키 ID가 그대로라는 점, 다음 만료일, 여러 기계 운용, 이전 시 옛 파일 충돌도 없다. 이 방식대로면 2030-06-01에 같은 작업을 반복한다.
-   - 이 글이 더할 것: 키 이력(2021/2025/2030) 파싱 결과, 패키지가 소유하는 파일 목록, n·k·m 수작업 계산. Experiment 단계의 오프라인 apt 측정(충돌 출력과 종료 코드, 만료 재현 시 종료 코드)도 더한다.
-2. https://varhowto.com/fix-ros-package-repo-signature-verification-error/ (VarHowto Editor, 2021-06-03, EN)
-   - 다루는 것: 2021년 5월 만료, 키 생성 도구의 기본 2년 만료라는 설명, ROS 1 `apt-key add`와 ROS 2 `ros.key` 재다운로드, `sudo apt update` 확인.
-   - 빠지거나 낡은 것: ROS 1용으로 이제 권장되지 않는 `apt-key add`를 경고 없이 제시한다. 2025년 이후 패키지 방식이 없다. 만료일 연장이 반복된다는 사실(2025, 2030)도 없다.
-   - 이 글이 더할 것: 현재 공식 절차와 옛 절차의 파일 단위 비교, 재발 조건 계산, 측정된 충돌·만료 출력.
-3. https://hybridego.net/2366 (2021-05-31, KO)
-   - 다루는 것: `NO_PUBKEY F42ED6FBAB17C654` 한국어 출력, `apt-key list`, `apt-key del F42ED6FBAB17C654`, `curl http://repo.ros2.org/repos.key | sudo apt-key add -`.
-   - 빠지거나 틀린 것: EXPKEYSIG와 NO_PUBKEY를 구분하지 않는다. HTTP로 키를 받는다(RSE에서 gvdhoorn이 "not a secure way"라고 지적한 방식). 전역 `apt-key` 키링에 넣기 때문에 `signed-by` 방식과 섞인다. ros2-apt-source가 없다.
-   - 이 글이 더할 것: 두 메시지의 원인 구분, HTTPS·`Signed-By` 기반 현재 절차, 이전 후 확인 순서.
-4. https://velog.io/@gaebalsebal/ROS2-Humble-%EC%84%A4%EC%B9%98-%EB%B0%8F-%EC%84%A4%EC%B9%98-%ED%99%95%EC%9D%B8-%EC%82%AD%EC%A0%9C (2024-06-04, KO)
-   - 다루는 것: Humble 설치 시 옛 방식(`ros.key` → `ros-archive-keyring.gpg`, `ros2.list` echo)과 삭제 시 `ros2.list` 제거.
-   - 빠진 것: 키 만료에 대한 언급이 없다. 이 절차로 설치한 기계는 2025-06-01에 만료 오류를 겪는 구성이었다. 삭제 시 옛 키 파일 제거도 언급하지 않는다.
-   - 이 글이 더할 것: 이런 튜토리얼로 설치한 독자가 지금 남아 있는 파일(`ros2.list`, `ros-archive-keyring.gpg`)을 어떻게 정리하고 패키지 방식으로 옮기는지, 그 이득을 언제 얻는지.
-5. Robotics Stack Exchange 99143 수락 답변(gvdhoorn, 2021-05-29, EN; 원문 확인은 [API](https://api.stackexchange.com/2.3/questions/99143?site=robotics&filter=withbody))
-   - 다루는 것: 정확한 오류 출력, Discourse 사고 보고 인용, ROS 1/ROS 2 명령, Docker 캐시 주의.
-   - 빠진 것: 2021년 시점 답이라 패키지 방식과 2025·2030 만료를 다루지 않는다. 일반 독자를 위한 서명·만료 원리 설명이 없다.
-   - 이 글이 더할 것: 같은 오류가 4년 주기로 반복된 이력과, 반복을 줄이는 현재 공식 단계의 조건부 이득 계산.
+| URL | 그 글이 다루는 것 | 빠졌거나 틀린 것 | 이 글이 실측·검산으로 더할 것 |
+| --- | --- | --- | --- |
+| [Robotics SE 99143 (API 원문)](https://api.stackexchange.com/2.3/questions/99143?site=robotics&filter=withbody) — 영어, 2021 (원 페이지 `robotics.stackexchange.com`은 runner에서 HTTP 오류라 API 원문으로 확인) | 2021-05-28 키 만료, 실제 `EXPKEYSIG` 출력, 채택 답: ROS 2는 `ros.key`를 `/usr/share/keyrings/ros-archive-keyring.gpg`로 다시 받기, Docker 캐시 주의 | 2021 시점 글이라 ros2-apt-source가 없다. 3번 답(점수 13)은 `apt-key add`로 HTTP에서 키를 받는 방법이라 질문자가 비보안이라고 지적했다 | 같은 키가 2025·2030으로 다시 연장된 이력. 현재 공식 단계가 설치하는 파일과 예전 파일의 이름 차이. 패키지 이전의 손익을 n·k로 계산 |
+| [techoverflow.net 2025-06-09](https://techoverflow.net/2025/06/09/how-to-fix-expkeysig-f42ed6fbab17c654-open-robotics/) — 영어 | `EXPKEYSIG` 출력(noble)과 `ros.key` curl 한 줄, `apt update` | 원인 설명이 "update the GPG key"뿐이다. ros2-apt-source, 다음 만료(2030), 재발 방지를 언급하지 않는다 | 이 한 줄이 2030-06-01에 다시 필요해지는 이유(키 만료일 파싱). 반복을 패키지 경로로 바꾸는 조건 |
+| [VarHowto](https://varhowto.com/fix-ros-package-repo-signature-verification-error/) — 영어, 2021 | 2021 만료, 경고 4줄 설명, ROS 1(`apt-key add`)/ROS 2(`ros.key`) 분기, 확인용 `apt update` 출력 | "키 생성 소프트웨어 기본 만료가 2년"이라는 근거 없는 일반화가 있다(2021 공지는 보안 사고 후 2년 만료로 배포했다고만 말한다). 이후 이력이나 패키지 방식이 없다 | 만료 기간을 실제 키 패킷에서 읽어 시점별로 제시. 2021 공지 원문으로 원인 설명을 교정 |
+| [hybridego.net/2366](https://hybridego.net/2366) — 한국어, 2021-05-31 | 한국어 `NO_PUBKEY F42ED6FBAB17C654` 출력 전체, `apt-key del` 후 `repo.ros2.org/repos.key`를 HTTP로 `apt-key add` | 증상이 EXPKEYSIG가 아니라 NO_PUBKEY다. 폐기 예정인 `apt-key`와 HTTP 키 다운로드를 쓴다. 원인 설명이 없다 | EXPKEYSIG와 NO_PUBKEY 구분, `Signed-By`로 저장소별 키를 묶는 현재 방식과 그 파일 위치, 한국어 독자용 재발 방지 순서 |
+| (참고, 중국어) [iThome 2025-07-12](https://ithelp.ithome.com.tw/articles/10340289) | 2025 만료, ros2-apt-source 소개, 자동화 스크립트 | 패키지가 ".list 파일"을 추가한다고 설명하지만 실제로는 deb822 `ros2.sources` 심볼릭 링크다. 예전 `ros2.list`·키링 삭제를 안내하지 않아 공식 가이드가 경고한 충돌 가능성이 남는다. 스크립트는 `ros-archive-keyring.gpg`를 다시 만든다 | .deb 내용 직접 확인, 예전 파일 정리 필요성(공식 가이드 + apt 소스 코드) |
+| (참고, 일본어) [zenn Tiryoh 2025-06-02](https://zenn.dev/tiryoh/articles/2025-06-02-ros-noetic-apt-get-update) | `gpg --show-keys`로 만료 전후(2025-06-01 → 2030-06-01) 비교, apt-key 방식과 Signed-By 방식 분리, Docker 파일명 차이 | 해결책이 수동 `ros.key` 재다운로드 중심이라 ros2-apt-source 이전의 손익과 조건은 다루지 않는다 | 2021 시점을 포함한 3개 시점 이력, 패키지 버전별 키링 동일성, 색인 SHA256 대조, n·k 판단 |
 
-판정: 경쟁 글은 모두 "지금 한 번 고치는 명령"에 머문다. 이 글은 원리(같은 키 ID, 만료일 연장)와 공식 단계가 바꾸는 소유 관계, 기계 대수 기반 판단, 이전 시 충돌 위험을 더할 수 있다. 실측은 Experiment 단계 결과로 보강된다. 더할 것이 있으므로 INSUFFICIENT가 아니다.
+판정: 한국어·영어 상위 글 4개(+참고 2개)를 직접 읽었다. 이 글이 더할 수 있는 것은 위 표의 마지막 열이며, 공식 문서 재요약 이상의 고유 결론이 있다. 따라서 INSUFFICIENT가 아니다.

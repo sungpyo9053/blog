@@ -1,59 +1,92 @@
-# 실험 계획: ros2-apt-source는 무엇을 바꾸고, 키 만료일 연장 때 사람 손은 몇 번 필요한가
+# 실험 계획: ROS 2 저장소 키 만료와 ros2-apt-source 전달 경로
 
 ## 질문
 
-1. `ros:jazzy-ros-base`에 설치된 ros2-apt-source는 어떤 파일을 소유하는가? 저장소 설정에 내장된 공개 키와 키링 파일은 같은 키(F42ED6FBAB17C654)이고 만료일도 같은가?
-2. 옛 공식 절차의 한 줄 형식 `ros2.list`가 남아 있으면 apt는 어떻게 되는가? 옛 파일을 지우면 다시 정상으로 돌아오는가? `signed-by`가 어느 경로를 가리키는지, 또는 아예 없는지에 따라 결과가 달라지는가?
-3. "같은 키 ID로 만료일만 연장"하는 변경이 일어날 때 갱신 창을 놓친 기계의 `apt-get update`는 어떻게 끝나는가(종료 코드, 출력)? 색인을 이미 받아 둔 기계와 색인이 없는 새 기계(예: 옛 키가 캐시에 남은 Docker 이미지)는 다르게 끝나는가? 이것으로 공식 첫 줄 `sudo apt update && ...`의 `&&`가 끊기는지 판단한다.
-4. 기계 n대, 변경 k회, 갱신 창을 놓친 (기계, 변경) 쌍 m개에서 실제로 사람이 손댄 횟수가 research.md 모델 A=n×k, B=n+m과 같은가?
+`apt update`의 `EXPKEYSIG F42ED6FBAB17C654` 오류는 같은 키의 만료일이 연장될 때마다 되풀이된다.
+공식 문서의 `ros2-apt-source` 단계가 바꾸는 것은 키가 아니라 "키·소스 설정이 기계까지 오는 길"이라는
+research.md의 결론이 실제 apt 동작에서도 성립하는가? 구체적으로 세 가지를 확인한다.
 
-## research.md 기준 예측값
+1. ros:jazzy-ros-base 이미지에 실제로 깔린 ROS 키와 소스 설정은 무엇이고, 만료일은 언제인가?
+2. 예전 수동 파일(`ros2.list` + 별도 키링)을 지우지 않고 새 `ros2.sources`와 함께 두면 apt 2.8.x는 실제로 어떻게 반응하는가?
+3. 같은 키의 만료일만 늘리는 사건이 k번 일어날 때, 기계 n대에서 사람이 손을 대야 하는 횟수는
+   방식 A(기계마다 키 파일 수동 관리)와 방식 B(키·소스를 담은 설정 패키지 + 자동 갱신)에서 각각 몇 번인가?
+   그리고 B의 전제("키가 유효할 때 갱신을 받아야 한다")가 깨지면 무슨 일이 생기는가?
 
-- 1: 소유 파일에 `/usr/share/keyrings/ros2-archive-keyring.gpg`, `/usr/share/ros-apt-source/ros2.sources`, `/etc/apt/sources.list.d/ros2.sources`(→ `/usr/share/ros-apt-source/ros2.sources` 링크)가 있다. Jammy 이후이므로 `Signed-By:`에 키 블록이 직접 들어 있다. 내장 키와 키링의 지문은 `C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654`, 생성일 2019-05-30, 만료일 2030-06-01로 같다.
-- 2: 옛 키링 경로를 가리키는 `ros2.list`를 추가하면 `E: Conflicting values set for option Signed-By ...`, `E: The list of sources could not be read.`가 나온다(Tiryoh #72 외부 재현). 종료 코드는 0이 아니다. 옛 파일을 지우면 정상으로 돌아온다. `signed-by` 없는 줄, 새 키링 경로를 가리키는 줄은 research.md에 예측이 없다.
-- 3: RSE 99143 출력처럼 `EXPKEYSIG`와 `E: The repository ... is not signed.`가 나오고 종료 코드는 0이 아니다. 그래서 `&&` 뒤는 실행되지 않는다(research.md는 미확인으로 남겼고, 이 예측은 인용 출력에 근거한다). 색인 유무에 따른 차이는 예측하지 않았다.
-- 4: n=4, k=2, m=3(갱신 창을 한 번 놓친 기계 1대 + 두 번 모두 놓친 기계 1대)이면 A=n×k=8, B=n+m=4+3=7이다.
+## research.md 기준 예측값(실행 전에 적은 값)
+
+- 이미지 키링 `/usr/share/keyrings/ros2-archive-keyring.gpg`: 지문 `C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654`,
+  긴 키 ID `F42ED6FBAB17C654`, 키 생성 2019-05-30, 자기서명 2025-04-30, 만료 2030-06-01 12:39:34 UTC,
+  크기 1,167 bytes(research는 1.0.0~1.3.0 키링 바이트가 모두 같다고 확인했으므로 이미지의 패키지 버전과 관계없이 같아야 한다).
+  `ros2.sources`의 `Signed-By` 내장 키도 같은 지문이어야 한다. `/etc/apt/sources.list.d/ros2.sources`는
+  `/usr/share/ros-apt-source/ros2.sources`를 가리키는 심볼릭 링크이고 dpkg 소유자는 `ros2-apt-source`.
+  이미지 안의 패키지 버전은 research에 예측이 없다(1.3.0이 최신이지만 이미지 빌드 시점에 따라 다를 수 있음).
+- research 6번 점검 명령 `grep -rl "packages.ros.org" … /etc/apt/sources.list.d/`: research는 ROS가 설정된
+  기계의 결과를 확인하지 않았다. 예측: `-r`은 하위 디렉터리를 돌 때 심볼릭 링크를 따라가지 않으므로,
+  ros2-apt-source가 설치된 기계에서 `ros2.sources`(링크)를 놓칠 수 있다. `-R`이면 찾아야 한다.
+- 예전 `ros2.list` + 새 `ros2.sources` 공존: apt 2.8.2 소스 코드대로
+  `E: Conflicting values set for option Signed-By regarding source …` 오류, 0이 아닌 종료 코드.
+  예전 줄이 패키지의 키링 경로(`ros2-archive-keyring.gpg`)를 가리켜도 값(경로 vs 내장 키 블록)이 달라 충돌할 것으로 예측.
+  같은 키 경로의 예전 줄 두 개는 충돌이 아니라 중복 경고만 나올 것으로 예측.
+- 산술 모델(n=3, k=2): A = n×k = 6회, B = n×1 = 3회(이전 작업만), 차이 A−B = n×(k−1) = 3회.
+  1회차 갱신 때 꺼져 있던 B 기계 1대는 이전 1회 + 복구 1회 = 2회.
+- `EXPKEYSIG` 때 `apt-get update` 종료 코드: research는 미확인(2021 출력의 `E: … is not signed`와 2025 출력의
+  `W: … previous index files will be used`가 다르다고만 기록). 예측: 이전 색인이 있는 기계는 `W:`만 나오고
+  종료 코드 0일 수 있다. 색인이 없는 새 기계는 `E:`와 0이 아닌 종료 코드.
+- 모든 키 버전의 지문은 하나(같은 키의 만료 연장)여야 한다.
 
 ## 무엇을 어떻게 재는가
 
-환경: 하네스의 `ros:jazzy-ros-base` 컨테이너(네트워크 없음, 1 CPU, 1 GiB). 모든 숫자는 실행 중에 측정해 JSON 줄로 출력한다.
+환경: 하네스가 `ros:jazzy-ros-base`(네트워크 없음, 1 CPU, 1 GiB)에서 실행한다. 이미지에 있는 apt 2.8.x,
+gpg/gpgv 2.4.x, dpkg/dpkg-deb, Python 3.12 표준 라이브러리만 쓴다. 이 질문은 apt 저장소 설정에 관한 것이라
+ROS 노드(rclpy·tf2_ros)는 실행하지 않는다. 시스템 apt 설정은 읽기만 하고, 쓰기는 모두 `/tmp/lab` 아래에서 한다.
 
-### 1부: 패키지 소유 파일과 키
+1부 `image`(읽기 전용): `dpkg-query`로 `ros2-apt-source` 버전, `/etc/apt/sources.list.d/*ros*`의 링크 여부·대상·dpkg 소유자,
+키링 바이트 수를 잰다. 키링과 `ros2.sources`의 `Signed-By` 내장 키를 표준 라이브러리 OpenPGP 파서(공개키 패킷 SHA-1 지문,
+자기서명 서브패킷 2·9)로 읽고 `gpg --show-keys --with-colons`로 교차 확인한다. 실행 시각 기준 만료까지 남은 일수를 계산한다.
+예전 방식 파일(`ros-archive-keyring.gpg`, `ros2.list`, `ros2-latest.list`) 존재 여부, `grep -rl`과 `grep -Rl`의 종료 코드와 일치 파일을 비교한다.
 
-- `dpkg-query -W ros2-apt-source`로 버전을, `dpkg -L ros2-apt-source`로 소유 파일(일반 파일·링크만)을 센다. `/etc/apt/sources.list.d/ros2.sources`의 링크 대상을 읽는다.
-- `/usr/share/ros-apt-source/ros2.sources`의 deb822 `Signed-By:` 연속 줄을 꺼낸다(` .`은 빈 줄). 이 블록을 키 파일로 저장한다. 이것과 `/usr/share/keyrings/ros2-archive-keyring.gpg`를 각각 `gpg --show-keys --with-colons`로 읽어 지문·생성일·만료일을 비교하고, 남은 일수를 계산한다.
+2부 `conflict`: 격리된 apt 디렉터리(`Dir::Etc::SourceParts` 등을 `/tmp` 아래로 지정)에 이미지의 실제 `ros2.sources` 본문과
+예전 공식 문서 형식의 `ros2.list` 한 줄을 조합해 넣고 `apt-cache policy`를 실행한다(소스 목록 해석 단계라 네트워크가 필요 없다).
+경우 5개: 새 파일만 / 예전 파일만 / 둘 다 / 예전 줄이 패키지 키링 경로를 가리키는 경우 + 새 파일 / 같은 키의 예전 줄 두 개.
+종료 코드, `Conflicting values` 문구, 중복 경고, 첫 오류 줄을 기록한다.
 
-### 2부: 옛 `ros2.list`와 Signed-By 충돌
+3부 `lab`: 실험용 ed25519 서명 키를 gpg로 만들고 `file:` 저장소(Packages·Release를 Python으로 작성, InRelease는 `gpg --clearsign`)를 연다.
+기계는 apt 디렉터리를 따로 가진 루트 7개로 흉내 낸다: A 3대, B 3대, B 오프라인 1대. 모두 예전 수동 방식(키 파일 + 한 줄 `.list`)으로 시작한다.
+B 그룹은 이전 작업 1회(사람)를 한다: 예전 `.list`·키링 삭제 → 설정 패키지 `lab-apt-source 1.0` 설치(`dpkg --root`) → `apt-get update` 확인.
+설정 패키지는 ros2-apt-source와 같은 구조다(키링 파일 + `Signed-By` 키 내장 deb822 소스 + `/etc/apt/sources.list.d`의 심볼릭 링크).
+그다음 k=2번의 "같은 키 만료 연장" 사건을 실제 시계로 일으킨다(만료 간격은 수 초로 압축).
 
-- 실제 `/etc/apt/sources.list.d/`에 `ros2.list`를 쓰고 `apt-cache policy`(네트워크 없이 sources만 읽음)의 종료 코드와 `E:`/`W:` 줄을 기록한다. 경우는 다섯 가지다. 패키지만 있음, 옛 키링 경로 `signed-by`, 새 키링 경로 `signed-by`, `signed-by` 없음, 옛 파일 삭제 후.
-- `dpkg -S`로 `ros2.list`가 어느 패키지에도 속하지 않는지 확인한다.
-- 충돌 상태에서 `apt-get update`의 종료 코드를 재고, 네트워크 요청(`Get:`/`Err:` 등)을 하기 전에 멈추는지 본다. 멈추면 무관한 Ubuntu 저장소 갱신도 함께 막힌다는 뜻이다.
+- 만료 전: 운영자가 `gpg --quick-set-expire`로 같은 키의 만료일을 늘리고, 새 공개키(`lab.key`, 예전 방식이 손으로 받는 `ros.key` 역할)와
+  새 설정 패키지 버전(1.1, 1.2)을 저장소에 올린 뒤 InRelease를 다시 서명한다. B 그룹 중 켜져 있는 기계는 사람 없이
+  `apt-get update` → `apt-cache policy` 후보 확인 → `apt-get download`(서명 검사된 색인의 해시로 검증) → `dpkg --root -i`를 돈다.
+  B 오프라인 기계는 1회차에만 이 단계를 건너뛴다. 예전 만료 시각까지 남은 초(`seconds_left_before_old_expiry`)를 재서 순서가 지켜졌는지 기록한다.
+- 만료 후: 예전 만료 시각이 실제로 지나갈 때까지 기다리고 저장소를 다시 서명한 뒤 모든 기계에서 `apt-get update`를 실행한다.
+  종료 코드, `EXPKEYSIG <긴 키 ID>`, `previous index files will be used`, `is not signed`, `W:`/`E:` 줄 수를 출력에서 센다.
+  서명 검사가 실패한 기계만 사람 복구 1회로 센다(A: `lab.key`를 키링에 덮어씀, B: 최신 .deb를 저장소 밖 경로로 직접 `dpkg -i`).
+  B 실패 기계는 복구 전에 자동 갱신으로 스스로 회복되는지(`self_heal`)를 먼저 시도해 기록한다. 복구 뒤 `apt-get update`를 다시 돌려 통과 여부를 잰다.
+  1회차에는 예전 키만 가진 채 처음 `apt-get update`를 하는 새 기계(이전 색인 없음)의 결과도 따로 잰다.
+- 요약: 그룹별 사람 작업 횟수(실측)와 위 산술 모델 예측값을 나란히 출력하고, 모든 키 버전과 기계의 지문 개수를 센다.
 
-### 3부: 만료일 연장 재현(자체 키 + `file:` 저장소)
+출력은 모두 JSON 한 줄씩이다. 하네스가 stdout의 마지막 8000자만 보관하므로 기계별 줄 대신 그룹별로 묶어 출력한다.
+한 번 실행은 약 20초다(대부분 만료 시각을 기다리는 시간).
 
-- 컨테이너 안에서 `gpg --quick-gen-key ... ed25519 sign seconds=6`으로 수명 6초 서명 키를 만든다. `file:` 저장소(Packages, Release, `gpg --clearsign`으로 서명한 InRelease)를 직접 만든다. 저장소에는 키링 패키지 `huntlab-apt-source`(ros2-apt-source 역할)를 올린다.
-- 기계 8대를 각각 별도 apt 상태 디렉터리(`Dir::State::lists`, `Dir::Cache`, `Dir::Etc::sourceparts`, `Dir::State::status`)로 흉내 낸다. 모두 같은 저장소를 쓰고, deb822 `Signed-By:`가 각 기계의 키 파일을 가리킨다.
-  - A(수동) 4대: 사람이 받아 둔 키 사본. 최초 사본은 이미 있다고 보고 세지 않는다.
-  - B(패키지) 4대: 최초 이전 1회(공식 문서의 `dpkg -i` 대신 v1 .deb를 `dpkg-deb -x`로 풀기)를 사람 작업 1회로 센다.
-  - 일정: on1, on2는 갱신 창을 놓치지 않는다. miss1은 변경 1만 놓친다. missall은 두 변경을 모두 놓친다. 그래서 방식별로 m=3이다.
-- 변경 k=2회. 각 변경에서 만료 전에 `gpg --quick-set-expire`로 같은 키의 만료일을 늘리고(변경 1은 +10초, 변경 2는 +40초) 키링 패키지 새 버전을 저장소에 올린 뒤 재서명한다.
-  - 갱신 창: 켜진 A 기계는 사람이 새 공개 키를 복사한다(1회). 켜진 B 기계는 사람 없이 `apt-get update` → `apt-get download huntlab-apt-source` → `dpkg-deb -x`로 키링을 갱신한다(apt upgrade 대용). 갱신 후 키링 만료일이 저장소의 현재 키와 같은지 확인한다.
-  - 옛 만료 시각 + 1.5초까지 기다린다. 저장소를 다시 서명한 뒤 모든 기계에서 `apt-get update`를 실행해 종료 코드, 출력 속 `EXPKEYSIG`/`NO_PUBKEY`/`is not signed`, 이후 `apt-cache policy`의 Candidate(저장소 최신 버전을 보는지)를 기록한다.
-  - 서명 실패(종료 코드 ≠ 0 또는 서명 오류 문자열)가 나온 기계는 사람이 새 공개 키를 같은 경로에 복사해 복구한다(+1회). 다시 update한 종료 코드와 Candidate를 기록한다. B는 복구 후 패키지 갱신을 이어서 한다.
-- 변경 1 직후에는 색인이 없는 새 기계(C, 옛 v1 키 사본)도 같은 시점에 `apt-get update`를 실행해 색인이 있는 기계와 비교한다.
-- 마지막에 방식별 사람 작업 합계와 기계별 횟수를 출력한다. 비교용으로 입력값 n, k, m에서 계산한 모델값(n×k, n+m)도 함께 출력한다.
+## 한계
 
-### 한계
-
-- 실제 packages.ros.org, 실제 F42ED6FBAB17C654 서명, 실제 `dpkg -i`/`apt upgrade`(maintainer script 실행)는 쓰지 않는다. 키링 패키지 갱신은 검증된 색인으로 .deb를 받고 파일을 푸는 것으로 대신한다.
-- 키 수명은 초 단위로 줄였다. 실제 변경 간격(수년)과 사람의 작업 시간·실수는 재지 않는다. "사람 작업 1회"는 기계 한 대에서 키 복사(또는 이전) 한 번이다.
-- 시뮬레이션이며 로봇 하드웨어나 실제 운영 기계에서 실행하지 않는다.
+- 기계는 한 컨테이너 안의 별도 apt 디렉터리로 흉내 낸 것이며 `apt upgrade` 대신 `apt-get download` + `dpkg --root -i`를 썼다.
+  실제 `apt upgrade`·unattended-upgrades·재부팅·프록시·미러는 재현하지 않았다.
+- 실험 키는 ed25519, 저장소는 `file:`이다. ROS의 실제 키(RSA)와 `http://packages.ros.org`에 접속하지 않았다(네트워크 없음).
+  2부의 충돌은 소스 목록 해석 단계(`apt-cache policy`)에서 잰 것이며 네트워크가 있는 `apt update` 전체 출력은 아니다.
+- 연 단위 만료 주기를 초 단위로 압축했다. 사람 작업 1회는 "기계 한 대에서 하는 설정 묶음 1회"이며 시간·실수 확률은 재지 않는다.
+- 로봇·시뮬레이터·하드웨어 실행은 없다. 따라서 하드웨어 안전 조건과 중지 방법은 이 실험의 범위 밖이다.
 
 ## 시행착오(시험 실행에서 실제로 실패하거나 고친 점)
 
-1. 첫 시험은 도구 확인용이었다. 이미지에 `gpg`/`gpgv` 2.4.4, apt 2.8.3, `dpkg-deb`가 있고 `apt-ftparchive`는 없었다. 그래서 Packages/Release 파일은 Python에서 SHA256을 계산해 직접 쓰도록 바꿨다. 실행 사용자는 root였다.
-2. 두 번째 시험에서 1부 키 비교가 실패했다(`gpg --show-keys` 종료 코드 2, 지문 빈 값). 원인은 3부에서야 만드는 GNUPGHOME을 1부가 먼저 썼기 때문이다. 키 조회 전용 homedir을 따로 만들어 고쳤다.
-3. 같은 시험에서 예측과 다른 동작이 나왔다. 색인을 이미 받아 둔 기계는 키가 만료돼도 `apt-get update` 종료 코드가 0이었다. 출력에는 `EXPKEYSIG`와 "previous index files will be used" 경고만 있었다. 종료 코드 100과 `E: ... is not signed`는 색인이 없는 새 기계에서만 나왔다. 처음 코드는 "종료 코드 ≠ 0"만 실패로 봤으므로 복구 단계가 실행되지 않았고, 사람 작업 수가 모델과 어긋났다. 그래서 실패 판정을 "종료 코드 ≠ 0 또는 출력에 서명 오류 문자열"로 바꿨다. 실패 출력 예시도 색인 있음과 없음으로 나눠 따로 남겼다.
-4. 같은 시험에서 A 방식의 최초 키 사본도 사람 작업으로 세는 바람에 A 합계가 모델(n×k, 이미 수동 설정된 기계 기준)보다 컸다. A의 최초 사본은 세지 않고, B의 최초 이전만 1회로 세도록 고쳤다.
-5. 2부 오류 줄을 150자로 자르니 충돌 상대 값(`!= -----BEGIN PGP PUBLIC KEY BLOCK-----`)이 잘렸다. 200자로 늘리고 `W:` 줄도 함께 남기게 했다.
-6. stdout이 하네스 보관 한도(뒤쪽 8000자)를 넘지 않도록 3부 출력을 기계별 짧은 키로 줄였다.
+1. 첫 시험 실행은 이미지 조사용 탐색 스크립트였다. 이미지에 `ros2-apt-source`가 이미 설치돼 있고(버전은 1.3.0이 아니라 1.2.0~noble),
+   gpg는 있으나 `apt-utils`(apt-ftparchive)는 없다는 것을 확인했다. 그래서 Packages·Release를 Python으로 직접 만들도록 설계했다.
+   같은 실행에서 `grep -rl packages.ros.org /etc/apt/`가 아무것도 찾지 못했다. 원인이 심볼릭 링크라고 보고 `-r`/`-R` 비교를 1부에 넣었다.
+2. 코드 검토 중 `installed_version()`의 `return res.stdout or None if … else None` 연산자 우선순위 오류를 발견해, 실행 전에 괄호로 고쳤다.
+3. 두 번째·세 번째 시험 실행은 성공했다. 하지만 하네스가 stdout 마지막 8000자만 남겨 앞부분(env·image·conflict 줄)이 잘렸다.
+   기계별 줄을 그룹별 요약으로 바꾸고 중복 메시지를 줄였다.
+4. 처음 잡은 첫 만료 간격은 준비 작업 시간보다 훨씬 길어서 대부분 대기 시간이었다. 첫 만료 간격과 다음 만료 간격을 각각 9초로 줄였다.
+   만료 전 여유 시간(`seconds_left_before_old_expiry`)과 `timing_ok`를 출력해, 하네스 실행에서 순서가 깨지면 결과에 그대로 드러나게 했다.
+5. 마지막 시험 실행: 종료 코드 0, stdout이 8000자 안에 모두 들어왔다.
