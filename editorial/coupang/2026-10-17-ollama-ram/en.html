@@ -1,0 +1,55 @@
+<p>How large a local LLM can you run with 8GB or 16GB of RAM? Instead of guessing, I measured it. With Ollama, I ran Qwen2.5 3B, 7B and 14B under RAM caps of 4GB, 8GB and 16GB, three times each: 27 runs, CPU only, no GPU.</p>
+
+<h2>Short answer</h2>
+<ul>
+<li><strong>4GB</strong>: only 3B runs. 7B and 14B were killed for running out of memory while loading.</li>
+<li><strong>8GB</strong>: 3B and 7B run. 7B peaked at 6.2GiB. 14B was killed.</li>
+<li><strong>16GB</strong>: 14B runs, but it peaked at 13.6GiB, close to the cap.</li>
+<li>Leaving 3–4GB for the OS and browser: <strong>an 8GB laptop means 3B</strong>, <strong>16GB handles 7B comfortably</strong>, and <strong>14B needs 32GB</strong>.</li>
+</ul>
+
+<h2>Test setup</h2>
+<p>A 4 vCPU, 16GB Linux server (AWS Lightsail). Each Ollama container had a memory cap with swap disabled (<code>--memory-swap</code> equal to <code>--memory</code>), so "success" means it fit in RAM. Ollama 0.40.4 (image digest <code>926d40fd6eee…</code>), Ollama's default quantization for each model (<code>qwen2.5:3b</code> 1.9GB, <code>7b</code> 4.7GB, <code>14b</code> 9.0GB), default context of 4096. Each run generated up to 128 tokens for the same English prompt (temperature 0). Peak memory was read from the container cgroup's <code>memory.peak</code>. This Ollama version loads the model into memory instead of mmapping it on CPU (log: "disabling mmap"), so the number is close to the RAM the model actually held.</p>
+
+<table>
+<thead><tr><th>Model (file size)</th><th>4GiB RAM</th><th>8GiB RAM</th><th>16GiB RAM</th></tr></thead>
+<tbody>
+<tr><td>Qwen2.5 3B (1.9GB)</td><td>OK 3/3, peak 3.6GiB</td><td>OK 3/3, peak 3.1GiB</td><td>OK 3/3, peak 3.8GiB</td></tr>
+<tr><td>Qwen2.5 7B (4.7GB)</td><td><strong>Failed</strong> 0/3 (out of memory)</td><td>OK 3/3, peak 6.2GiB</td><td>OK 3/3, peak 6.3GiB</td></tr>
+<tr><td>Qwen2.5 14B (9.0GB)</td><td><strong>Failed</strong> 0/3</td><td><strong>Failed</strong> 0/3</td><td>OK 3/3, peak 13.6GiB</td></tr>
+</tbody>
+</table>
+<p>Every failure returned <code>llama-server process has terminated: signal: killed</code> from Ollama, and the cgroup OOM-kill counter went up by one each time.</p>
+
+<h2>Speed: how slow is CPU only?</h2>
+<table>
+<thead><tr><th>Model</th><th>Tokens/s (range of 3 runs)</th><th>First load</th></tr></thead>
+<tbody>
+<tr><td>3B</td><td>5.1–5.7</td><td>11–16 s</td></tr>
+<tr><td>7B</td><td>2.5–2.6</td><td>17 s</td></tr>
+<tr><td>14B</td><td>1.3</td><td>62 s</td></tr>
+</tbody>
+</table>
+<p>The RAM cap barely changed the speed of a given model. Memory decides whether it runs; the CPU decides how fast. At 1.3 tokens/s, a 100-word answer from 14B takes 1–2 minutes, too slow for chat.</p>
+
+<h2>Reading the numbers</h2>
+<ul>
+<li><strong>The server CPU is burstable.</strong> It runs on CPU credits, so speeds may be lower than its full performance. A recent laptop CPU will be faster. The memory results (runs or not) don't depend on the CPU.</li>
+<li><strong>A longer context needs more memory.</strong> These are at the default 4096 tokens. Raising the context to feed long documents makes the same model use more RAM.</li>
+<li><strong>3B's peak varies a little by cap</strong> (3.1–3.8GiB), likely because the kernel keeps more cache when there is room. It still finished all three runs under the 4GB cap.</li>
+<li><strong>A GPU changes the picture.</strong> These are CPU-only results. Loading the model into GPU VRAM changes both system RAM use and speed.</li>
+</ul>
+
+<h2>On my laptop</h2>
+<p>My laptop is a 2020 Intel 13-inch MacBook Pro with 8GB of RAM. The measurements ran on the Linux server above, not on the Mac. Since 7B peaked at 6.2GiB under the 8GB cap, on this laptop, where macOS and a browser take 3–4GB, 7B would lean on swap. On this machine I start with 3B.</p>
+<pre><code>ollama run qwen2.5:3b</code></pre>
+
+<h2>If you're buying or upgrading</h2>
+<ul>
+<li><strong>16GB for comfortable 7B</strong>: it ran under an 8GB cap, but with the OS on top, 16GB is the right size.</li>
+<li><strong>32GB for 14B</strong>: it used 13.6GiB under a 16GB cap. To run it alongside the OS you need 32GB.</li>
+<li><strong>Check whether you can upgrade</strong>: laptops and mini PCs with RAM slots only need a new module. DDR4 and DDR5 SO-DIMM don't fit each other's slots. MacBooks with soldered RAM can't be upgraded, so decide at purchase.</li>
+</ul>
+
+<h2>Reproduce it</h2>
+<p>The measurement script (<code>measure.sh</code>) and the raw results of all 27 runs (<code>results.tsv</code> and per-setting Ollama logs) are in the <a href="https://github.com/sungpyo9053/blog/tree/main/experiments/ollama-ram-local-llm">public experiment folder</a>. On Linux with Docker, <code>bash measure.sh</code> runs the same sequence. For a single combination, use e.g. <code>MODELS=qwen2.5:7b CAPS=8g bash measure.sh</code>.</p>

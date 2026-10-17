@@ -1,0 +1,63 @@
+<p>로컬 LLM을 돌려 보려는데 내 노트북 RAM이 8GB, 16GB라면 어느 크기 모델까지 될까. 감으로 답하지 않고 직접 쟀다. Ollama로 Qwen2.5 3B·7B·14B를 RAM 상한 4GB·8GB·16GB에서 각각 세 번씩, 모두 27번 돌렸다. GPU 없이 CPU만 쓴 결과다.</p>
+
+<h2>결론부터</h2>
+<ul>
+<li><strong>4GB</strong>: 3B만 돈다. 7B·14B는 모델을 올리다가 메모리 부족으로 프로세스가 죽었다.</li>
+<li><strong>8GB</strong>: 3B와 7B가 돈다. 7B는 최대 6.2GiB까지 올라갔다. 14B는 죽었다.</li>
+<li><strong>16GB</strong>: 14B까지 돈다. 다만 최대 13.6GiB를 써서 16GB 상한에 거의 붙는다.</li>
+<li>OS·브라우저 몫(3~4GB)을 빼고 보면 <strong>8GB 노트북은 3B</strong>, <strong>16GB는 7B까지 여유 있게</strong>, <strong>14B를 쓰려면 32GB</strong>가 맞다.</li>
+</ul>
+
+<h2>측정 조건</h2>
+<p>4 vCPU·16GB 리눅스 서버(AWS Lightsail)에서 Ollama 컨테이너마다 메모리 상한을 걸고 스왑은 껐다(<code>--memory-swap</code>을 <code>--memory</code>와 같게). 그래서 "성공"은 RAM 안에서 끝났다는 뜻이다. Ollama 0.40.4(이미지 다이제스트 <code>926d40fd6eee…</code>), 모델은 Ollama 기본 양자화 그대로(<code>qwen2.5:3b</code> 1.9GB, <code>7b</code> 4.7GB, <code>14b</code> 9.0GB), 컨텍스트는 기본값 4096이다. 같은 영어 질문에 최대 128토큰을 생성하게 했다(온도 0). 최대 메모리는 컨테이너 cgroup의 <code>memory.peak</code>로 읽었다. 이 버전의 Ollama는 CPU에서 모델 파일을 mmap하지 않고 메모리에 올리므로(로그 "disabling mmap"), 이 값은 실제로 차지한 RAM에 가깝다.</p>
+
+<table>
+<thead><tr><th>모델 (파일 크기)</th><th>RAM 4GiB</th><th>RAM 8GiB</th><th>RAM 16GiB</th></tr></thead>
+<tbody>
+<tr><td>Qwen2.5 3B (1.9GB)</td><td>성공 3/3, 최대 3.6GiB</td><td>성공 3/3, 최대 3.1GiB</td><td>성공 3/3, 최대 3.8GiB</td></tr>
+<tr><td>Qwen2.5 7B (4.7GB)</td><td><strong>실패</strong> 0/3 (메모리 부족으로 종료)</td><td>성공 3/3, 최대 6.2GiB</td><td>성공 3/3, 최대 6.3GiB</td></tr>
+<tr><td>Qwen2.5 14B (9.0GB)</td><td><strong>실패</strong> 0/3</td><td><strong>실패</strong> 0/3</td><td>성공 3/3, 최대 13.6GiB</td></tr>
+</tbody>
+</table>
+<p>실패한 경우는 모두 Ollama가 <code>llama-server process has terminated: signal: killed</code>를 돌려줬고, cgroup의 OOM 종료 횟수가 매번 1씩 늘었다.</p>
+
+<h2>속도: CPU만으로는 얼마나 느린가</h2>
+<table>
+<thead><tr><th>모델</th><th>초당 토큰 (세 번 범위)</th><th>첫 로딩</th></tr></thead>
+<tbody>
+<tr><td>3B</td><td>5.1~5.7</td><td>11~16초</td></tr>
+<tr><td>7B</td><td>2.5~2.6</td><td>17초</td></tr>
+<tr><td>14B</td><td>1.3</td><td>62초</td></tr>
+</tbody>
+</table>
+<p>RAM 상한이 바뀌어도 같은 모델의 속도는 거의 같았다. 메모리는 "돌아가느냐"를 정하고, 속도는 CPU가 정한다. 14B는 초당 1.3토큰이라 100단어 답 하나에 1~2분이 걸린다. 대화용으로 쓰기엔 느리다.</p>
+
+<h2>숫자를 읽을 때 주의할 점</h2>
+<ul>
+<li><strong>서버 CPU는 버스트형이다.</strong> CPU 크레딧을 쓰는 서버라 속도가 제 성능보다 낮을 수 있다. 최근 노트북 CPU라면 이보다 빠르다. 메모리 결과(되느냐 마느냐)는 CPU와 상관없다.</li>
+<li><strong>컨텍스트를 늘리면 메모리가 더 든다.</strong> 기본 4096 토큰 기준이다. 긴 문서를 넣으려고 컨텍스트를 키우면 같은 모델도 더 많은 RAM을 쓴다.</li>
+<li><strong>3B의 최대 메모리가 상한마다 조금 다르다</strong>(3.1~3.8GiB). 여유가 있으면 커널이 캐시를 더 남겨 두기 때문으로 보인다. 4GB 상한에서도 세 번 모두 끝까지 생성했다.</li>
+<li><strong>GPU가 있으면 이야기가 다르다.</strong> 이 글은 CPU 전용 결과다. 그래픽카드 VRAM에 모델을 올리면 시스템 RAM 부담과 속도가 모두 달라진다.</li>
+</ul>
+
+<h2>내 노트북이라면</h2>
+<p>내 노트북은 2020년 인텔 맥북 프로 13형(RAM 8GB)이다. 측정은 위 리눅스 서버에서 했고 맥에서 직접 돌리지는 않았다. 8GB 상한에서 7B가 최대 6.2GiB를 썼으니, macOS와 브라우저가 3~4GB를 쓰는 이 노트북에서 7B는 스왑에 기대게 된다. 이 사양이면 3B로 시작한다.</p>
+<pre><code>ollama run qwen2.5:3b</code></pre>
+
+<h2>RAM을 사거나 바꾼다면</h2>
+<ul>
+<li><strong>7B를 편하게 쓰려면 16GB</strong>: 8GB 상한에서도 돌았지만 OS 몫까지 생각하면 16GB가 맞다.</li>
+<li><strong>14B를 쓰려면 32GB</strong>: 16GB 상한에서 13.6GiB를 썼다. OS와 함께 쓰려면 32GB가 필요하다.</li>
+<li><strong>업그레이드 가능 여부부터</strong>: RAM 슬롯이 있는 노트북·미니PC는 모듈만 바꾸면 된다. DDR4와 DDR5 SO-DIMM은 서로 끼울 수 없다. 맥북처럼 RAM이 메인보드에 붙은 모델은 교체가 안 되니 살 때 정해야 한다.</li>
+</ul>
+
+<p>위 기준에 맞춰 고른 상품이다. 써 보고 고른 게 아니라 사양으로 고른 것이니, 사기 전에 내 노트북과 맞는지 꼭 확인한다.</p>
+<ul>
+<li><a href="https://link.coupang.com/a/hKmDoLsLDM" rel="sponsored nofollow noopener" target="_blank">삼성 노트북용 DDR5 16GB 5600MHz</a>: 8GB 노트북을 16GB로 올려 7B를 편하게 쓰려는 경우. 내 노트북이 DDR5 SO-DIMM 슬롯을 쓰는지 먼저 확인한다.</li>
+<li><a href="https://link.coupang.com/a/hKmHcKFNHE" rel="sponsored nofollow noopener" target="_blank">삼성전자 노트북용 DDR4 16GB</a>: 그 이전 세대 노트북용이다. DDR4와 DDR5는 서로 끼울 수 없다.</li>
+</ul>
+
+<h2>재현</h2>
+<p>측정 스크립트(<code>measure.sh</code>)와 27번의 원본 결과(<code>results.tsv</code>, 조건별 Ollama 로그)는 <a href="https://github.com/sungpyo9053/blog/tree/main/experiments/ollama-ram-local-llm">실험 공개 폴더</a>에 있다. Docker가 있는 리눅스에서 <code>bash measure.sh</code>로 같은 순서를 다시 돌릴 수 있다. 특정 조합만 보려면 <code>MODELS=qwen2.5:7b CAPS=8g bash measure.sh</code>처럼 쓴다.</p>
+
+<p><small>이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</small></p>
