@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
+from urllib.parse import urlsplit
 import re
 import time
 import socket
@@ -162,7 +163,15 @@ def source_digest(url):
             text = re.sub(r'\s+',' ',' '.join(parser.parts)).strip()
             # Sphinx docs (docs.python.org, ROS docs) restamp "Last updated on Oct 07, 2026 (05:37 UTC)."
             # on every rebuild; that is not a change to the cited text.
-            data = re.sub(r'Last updated on [A-Z][a-z]{2} \d{1,2}, \d{4}(?: \(\d{1,2}:\d{2} UTC\))?\.?', '', text).strip().encode()
+            text = re.sub(r'Last updated on [A-Z][a-z]{2} \d{1,2}, \d{4}(?: \(\d{1,2}:\d{2} UTC\))?\.?', '', text)
+            # Discourse appends a live "Related topics" view-count table and like counters;
+            # on 2026-10-17 they changed within 7 minutes of review and blocked a reviewed article.
+            text = text.split(' Related topics Topic Replies Views Activity ')[0]
+            data = re.sub(r'\b\d+ Likes?\b', '', text).strip().encode()
+        elif urlsplit(url).hostname == 'api.stackexchange.com':
+            # quota_remaining drops on every call and view_count/score drift; the cited claim is the post text.
+            items = json.loads(data).get('items', [])
+            data = '\n'.join(str(i.get('title', '')) + '\n' + str(i.get('body', '')) for i in items).strip().encode()
         if not data:
             raise SourceCheckError('source_empty', url)
         return hashlib.sha256(data).hexdigest()

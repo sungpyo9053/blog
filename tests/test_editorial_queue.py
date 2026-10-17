@@ -83,6 +83,31 @@ class EditorialQueueTests(unittest.TestCase):
                 return queue.source_digest('https://docs.python.org/3/library/copy.html')
         self.assertEqual(digest('Oct 07, 2026 (05:37 UTC)'), digest('Oct 06, 2026 (23:10 UTC)'))
 
+    def _digest(self, url, body, ctype):
+        response = Mock(status_code=200, headers={'Content-Type': ctype})
+        response.iter_content = Mock(return_value=[body.encode()])
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        with patch.object(queue, 'safe_url'), patch.object(queue.requests, 'get', return_value=response):
+            return queue.source_digest(url)
+
+    def test_discourse_live_counters_do_not_change_digest_but_post_text_does(self):
+        url = 'https://discourse.openrobotics.org/t/ros-signing-key-migration-guide/43937/48'
+        page = lambda post, likes, views: (f'<html><p>{post}</p><span>{likes} Likes</span><h3>Related topics</h3>'
+                                           f'<table><tr><th>Topic</th><th>Replies</th><th>Views</th><th>Activity</th></tr>'
+                                           f'<tr><td>GPG keys</td><td>10</td><td>{views}</td></tr></table></html>')
+        base = self._digest(url, page('Use ros2-apt-source.', 2, 31797), 'text/html')
+        self.assertEqual(base, self._digest(url, page('Use ros2-apt-source.', 3, 31802), 'text/html'))
+        self.assertNotEqual(base, self._digest(url, page('Use apt-key.', 2, 31797), 'text/html'))
+
+    def test_stackexchange_quota_and_views_do_not_change_digest(self):
+        url = 'https://api.stackexchange.com/2.3/questions/99143?site=robotics&filter=withbody'
+        api = lambda quota, views, body: json.dumps({'items': [{'title': 'NO_PUBKEY', 'body': body, 'view_count': views}],
+                                                     'quota_max': 300, 'quota_remaining': quota})
+        base = self._digest(url, api(299, 10, '<p>apt update fails</p>'), 'application/json')
+        self.assertEqual(base, self._digest(url, api(250, 11, '<p>apt update fails</p>'), 'application/json'))
+        self.assertNotEqual(base, self._digest(url, api(299, 10, '<p>edited</p>'), 'application/json'))
+
     def test_source_http_failure_has_safe_diagnostic_and_still_blocks(self):
         url = 'https://example.test/document?token=do-not-log'
         response = Mock(status_code=403)
