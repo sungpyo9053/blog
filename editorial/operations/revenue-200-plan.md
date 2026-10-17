@@ -48,7 +48,7 @@
 ## Claude 세션 크론 (SSOT — WEEKLY가 매주 이 절대로 전부 재등록)
 10/17 개편(사용자 지시: "8시까지 출근해서 5시까지 일해"): 흩어진 크론(MORNING·MIDDAY·DAILY·COMMUNITY·EQUIP·BLOCKERS·NAVER)을 출근·업무·퇴근 3개로 합친다. 이유: 10/15 저녁~10/17 저녁 Claude 사용 한도로 세션이 멈춰 측정 서버가 2일 켜져 있었고, 매시 스캔이 한도를 빨리 소모했다.
 - WORK-START `3 8 * * *`: [HuntLab $200 출근] (1) 러너 실패 유닛·02:00 prepare·예약 글 수(posts·hunt_en future)·측정 서버(aws lightsail get-instances, 임시 서버 남아 있으면 회수 후 삭제) 점검, 버그면 고침(품질 반려 우회 금지, push 전 prepare inactive). (2) 어제 plan의 미완료와 이 문서 '10/14 피벗'·'남은 일'을 보고 오늘 editorial/operations/YYYY-MM-DD-plan.md 작성: 수익에 가까운 순서로 업무 블록 4~8개(장비 실측 글, 네이버 요약 3편, 커뮤니티 1곳, GSC 오늘 EN1+KO1 10:30 이후, 고장 수리). 사용자 몫은 카톡 1회 요청 후 기다리지 않는다. (3) kakao-me로 오늘 계획 요약.
-- WORK `7 9-16 * * *`: [HuntLab $200 업무] 오늘 plan의 맨 위 미완료 블록 1개를 끝까지 수행하고 [x]와 결과(주소·커밋)를 적는다. 막히면 사유 적고 다음 블록. 13시대에는 Reddit(r/ROS·r/robotics)·Discourse 새 질문도 확인(답글 하루 최대 3, 9:1 원칙, Discourse AI 표기). 카톡은 사용자 몫이 새로 생겼을 때만.
+- WORK `7 9-16 * * *`: [HuntLab $200 업무] 오늘 plan의 맨 위 미완료 블록 1개를 끝까지 수행하고(실행 전 그 액션용 스킬을 설치 목록→GitHub SKILL.md 순으로 찾아 있으면 그 절차대로, 리포@커밋 기록) [x]와 결과(주소·커밋)를 적는다. 막히면 사유 적고 다음 블록. 13시대에는 Reddit(r/ROS·r/robotics)·Discourse 새 질문도 확인(답글 하루 최대 3, 9:1 원칙, Discourse AI 표기). 카톡은 사용자 몫이 새로 생겼을 때만.
 - WORK-END `3 17 * * *`: [HuntLab $200 퇴근] 평가(상승/보합/하락, 실수익 revenue-actual.tsv와 GA4 activeUsers만), 오늘 한 일·못 한 일·내일 할 일을 kakao-me로 보고, 내일 plan 초안 작성, 임시 측정 서버가 남아 있고 측정이 끝났으면 회수·삭제.
 - WEEKLY `7 10 * * 1`: [HuntLab $200 WEEKLY] 09:30 goal_report 결과 + GSC 색인 수로 마일스톤 판정, 미달 시 조치 반영·주간 기록 추가, 카톡 보고. 마지막에 CronList에서 [HuntLab $200 출근/업무/퇴근/WEEKLY]를 지우고 이 절의 cron식·내용으로 재등록(7일 만료 방지).
 - 마일스톤 판정 일회성: 10/20 21:23(방향), 10/24 21:43, 11/30 21:43, 12/31 21:43 (이후 것은 12/31 판정 때 등록).
