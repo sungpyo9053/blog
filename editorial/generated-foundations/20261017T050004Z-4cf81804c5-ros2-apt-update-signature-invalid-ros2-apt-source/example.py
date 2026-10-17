@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (6 * 2)
+assert math.isclose(value, 12, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '방식 A: 6대, 설정 변경 2회일 때 수동 작업 수', "actual": value})
+value = (6 * 1 + 6 * 0 * 2)
+assert math.isclose(value, 6, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '방식 B: 6대 초기 설치 + 변경 2회의 수동 작업(변경당 0회)', "actual": value})
+value = (6 * 2 - (6 * 1 + 6 * 0 * 2))
+assert math.isclose(value, 6, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '6대·변경 2회에서 B가 줄이는 수동 작업 수', "actual": value})
+value = (1 * 1)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '경계: 1대·변경 1회, 방식 A', "actual": value})
+value = (1 * 1 + 1 * 0 * 1)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '경계: 1대·변경 1회, 방식 B', "actual": value})
+value = ((6 * 1 + 6 * 0 * 0) - 6 * 0)
+assert math.isclose(value, 6, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '반례: 6대·변경 0회일 때 B가 더 쓰는 초기 작업(B − A)', "actual": value})
+value = (6 * 1 - (6 * 1 + 6 * 0 * 1))
+assert math.isclose(value, 0, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '손익 분기: 6대·변경 1회에서 A − B', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
