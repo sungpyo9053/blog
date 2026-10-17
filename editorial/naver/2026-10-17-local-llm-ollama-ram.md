@@ -21,3 +21,5 @@
 원문: https://huntlab.app/local-llm-ollama-ram-8gb-16gb-model-size-measured/
 
 #로컬LLM #Ollama #노트북RAM #LLM사양 #Qwen #개발자노트북 #RAM업그레이드
+
+게시: https://blog.naver.com/sungpyo9053/224444888190 (2026-10-17)
