@@ -232,10 +232,8 @@ def body_text(raw):
 
     Only presentation markup (class/style/alt, WordPress comments, tag syntax) is
     removed. Raw HTML cost ~25% more bytes and the inventory hit its budget on
-    2026-10-15 at 38 lessons.
+    2026-10-15 at 38 lessons; compact_inventory now also limits full bodies.
     """
-    # ponytail: still grows ~25KB per lesson; past ~45 lessons the budget needs a
-    # recency or query-anchor rule for which lessons get full bodies.
     blocks = []
     def keep(match):
         blocks.append(html.unescape(re.sub(r'<[^>]+>', '', match.group(1))))
@@ -253,8 +251,22 @@ def body_text(raw):
     return re.sub('\x00(\\d+)\x00', lambda m: '\n```\n' + blocks[int(m.group(1))] + '\n```\n', text)
 
 
-def compact_inventory(inventory, query=''):
+LEAD_CHARS = 1200
+RECENT_DAYS = 7
+
+
+def _recent(row, now):
+    stamp = row.get('date_gmt') or row.get('date')
+    if not stamp:
+        return True  # unknown age: do not hide it
+    when = datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
+    when = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+    return (now - when).days <= RECENT_DAYS
+
+
+def compact_inventory(inventory, query='', now=None):
     rows = inventory['posts']
+    now = now or datetime.now(timezone.utc)
     # Summaries duplicate selected raw bodies and are not full-content evidence.
     # Keep identities for every post; host full-inventory checks remain unchanged.
     metadata = [{key: row.get(key, '') for key in ('post_id', 'status', 'title', 'slug')} for row in rows]
@@ -282,11 +294,21 @@ def compact_inventory(inventory, query=''):
         # two distinct query anchors. No top-N cut or body truncation follows.
         query_match = sum(matches(term, identity.casefold()) for term in terms) >= 2
         if domain_match or query_match:
-            related.append({'post_id': row['post_id'], 'title': row['title'], 'content': body_text(row['content']),
-                            'selection_reason': 'editorial_domain_full_body' if domain_match else 'candidate_query_full_body'})
+            text = body_text(row['content'])
+            entry = {'post_id': row['post_id'], 'title': row['title'], 'content': text,
+                     'selection_reason': 'editorial_domain_full_body' if domain_match else 'candidate_query_full_body'}
+            # Full bodies for what a new lesson could actually collide with: scheduled or
+            # recent lessons and query-anchored ones. Older domain lessons send a labelled
+            # lead; their titles/slugs stay in all_post_metadata for the mechanical check.
+            # 2026-10-15: every domain body reached 1,006KB at 38 lessons (~20KB each);
+            # with 7 days it is 428KB and grows ~1.2KB per older lesson.
+            if not (query_match or row.get('status') == 'future' or _recent(row, now)):
+                entry.update(content=text[:LEAD_CHARS], selection_reason='editorial_domain_lead',
+                             content_truncated=len(text) > LEAD_CHARS)
+            related.append(entry)
     result = {'inspected_post_count': len(rows), 'all_post_metadata': metadata,
               'related_full_bodies': related, 'scope': 'full_inventory_mechanical_comparison_plus_related_body_review',
-              'body_selection_policy': 'all_domain_titles_slugs_plus_two_distinct_query_anchors',
+              'body_selection_policy': 'domain_full_body_if_recent_7d_scheduled_or_two_query_anchors_else_labelled_lead',
               'unselected_body_count': len(rows) - len(related),
               'semantic_relevance_exhaustive': False}
     # Never silently drop or truncate relevant articles to satisfy the budget.

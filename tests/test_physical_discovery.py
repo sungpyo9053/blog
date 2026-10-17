@@ -43,6 +43,22 @@ class ArithmeticTests(unittest.TestCase):
         for kept in ('A | 0.25','\n x = 1\n  y = 2\n','근거 (https://example.test/)'):
             self.assertIn(kept,body)
 
+    def test_old_domain_lessons_send_labelled_lead_recent_and_anchored_send_full_body(self):
+        now=d.datetime(2026,10,17,tzinfo=d.timezone.utc)
+        body='<p>'+'가'*5000+'</p>'
+        posts=[{'post_id':1,'status':'publish','date_gmt':'2026-08-01T00:00:00','title':'ROS 2 QoS 기초','slug':'ros2-qos','content':body},
+               {'post_id':2,'status':'publish','date_gmt':'2026-10-10T00:00:00','title':'ROS 2 tf2 기초','slug':'ros2-tf2','content':body},
+               {'post_id':3,'status':'future','date_gmt':'2026-10-25T00:00:00','title':'colcon 빌드','slug':'colcon-build','content':body},
+               {'post_id':4,'status':'publish','date_gmt':'2026-07-01T00:00:00','title':'rosbag2 split 크기','slug':'rosbag2-split','content':body}]
+        result=d.compact_inventory({'posts':posts},'rosbag2 split 크기 계산',now=now)
+        by={r['post_id']:r for r in result['related_full_bodies']}
+        self.assertEqual(by[1]['selection_reason'],'editorial_domain_lead')
+        self.assertTrue(by[1]['content_truncated'])
+        self.assertEqual(len(by[1]['content']),d.LEAD_CHARS)
+        for full in (2,3,4):
+            self.assertEqual(len(by[full]['content']),5000)
+        self.assertEqual(len(result['all_post_metadata']),4)
+
     def test_ros_tool_titles_without_ros_word_get_full_bodies(self):
         # Scheduled colcon posts were hidden from the reviewer, which then held every colcon candidate.
         result=d.compact_inventory({'posts':[{'post_id':871,'title':'colcon build가 너무 느릴 때','slug':'colcon-build-slow','content':'body'}]})
