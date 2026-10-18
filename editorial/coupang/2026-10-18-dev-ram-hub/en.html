@@ -1,0 +1,29 @@
+<p>Whether a developer laptop needs 16GB or 32GB of RAM depends on what you run. This table collects only numbers measured on this site under hard memory caps. No estimates, no vendor minimums. Rows are added as new measurements come in.</p>
+
+<h2>Measured RAM by task</h2>
+<table>
+<thead><tr><th>Task</th><th>4GB</th><th>8GB</th><th>16GB</th><th>Peak memory</th></tr></thead>
+<tbody>
+<tr><td><a href="https://huntlab.app/en/local-llm-ollama-ram-8gb-16gb-model-size-measured/">Local LLM 3B (Ollama, Qwen2.5 q4)</a></td><td>ok</td><td>ok</td><td>ok</td><td>3.1–3.8GiB</td></tr>
+<tr><td>Local LLM 7B</td><td>OOM</td><td>ok</td><td>ok</td><td>6.2–6.3GiB</td></tr>
+<tr><td>Local LLM 14B</td><td>OOM</td><td>OOM</td><td>ok</td><td>13.6GiB</td></tr>
+<tr><td><a href="https://huntlab.app/en/colcon-build-how-much-ram-nav2-16gb-8gb-4gb-measured/">ROS 2 Nav2 build, default</a></td><td>failed</td><td>ok</td><td>ok</td><td>8.1GiB (at 16GB)</td></tr>
+<tr><td>Nav2 build, sequential</td><td>ok</td><td>—</td><td>ok</td><td>2.7GiB</td></tr>
+<tr><td><a href="https://huntlab.app/en/colcon-build-moveit2-ram-8gb-fails-sequential-measured/">MoveIt 2 build, default</a></td><td>failed</td><td><strong>failed</strong></td><td>ok</td><td>8.7GiB (at 16GB)</td></tr>
+<tr><td>MoveIt 2 build, sequential</td><td>ok</td><td>ok</td><td>—</td><td>2.4GiB</td></tr>
+</tbody>
+</table>
+<p>4GB, 8GB and 16GB are the caps used in the measurements, not laptop RAM. On a real laptop the OS, browser and IDE take another 2–4GB, so read one column down to be safe. Builds were measured on a 4-core Linux server; LLMs ran on CPU only.</p>
+
+<h2>Add Docker if you are on a Mac</h2>
+<p>In the <a href="https://huntlab.app/en/docker-desktop-mac-memory-usage-measured/">Docker Desktop measurement (8GB Intel MacBook)</a>, Docker's memory on the Mac reached 3,063MiB with the default 4GiB VM, and memory freed inside the VM did not come back to macOS for minutes. If you run any of the tasks above inside Docker on a Mac, add the VM on top.</p>
+
+<h2>Where 16GB and 32GB split</h2>
+<ul>
+<li><strong>16GB is enough for</strong>: a 7B local LLM on CPU, building Nav2 from source, MoveIt 2 with a sequential build, one or two database containers. Every one of these peaked at or below 8.7GiB.</li>
+<li><strong>32GB pays off for</strong>: a 14B local LLM (13.6GiB) with a browser and IDE open, a default MoveIt 2 build (8.7GiB) while Docker or other work runs, and default builds on 8+ core machines (more parallel compilers, more memory).</li>
+<li><strong>Getting by on 8GB</strong>: build sequentially (<code>MAKEFLAGS=-j1 colcon build --parallel-workers 1</code>), stick to 3B models, and lower Docker Desktop's memory limit.</li>
+</ul>
+
+<h2>How these were measured</h2>
+<p>Each value comes from a Docker container with a memory cap and swap disabled (ok = finished inside RAM), read from cgroup <code>memory.peak</code>. The Docker Desktop figures are process RSS on a real Mac. Scripts and raw results are linked from each post.</p>
