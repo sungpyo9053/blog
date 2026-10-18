@@ -1,546 +1,413 @@
 #!/usr/bin/env python3
-"""ROS 2 저장소 키 만료와 ros2-apt-source 전달 경로를 오프라인 컨테이너에서 실제로 잰다.
+"""ros2-apt-source 단계가 무엇을 바꾸는지 오프라인 컨테이너에서 실제로 재는 실험.
 
-1부(image): ros:jazzy-ros-base 이미지에 실제로 깔린 ROS 키·소스 파일을 읽어 지문·만료일을 잰다.
-2부(conflict): 예전 ros2.list와 새 ros2.sources가 함께 있을 때 apt 2.8.x가 실제로 내는 결과를 잰다.
-3부(lab): 실험용 키로 file: 저장소에 서명하고, 같은 키의 만료일만 늘리는 사건을 k번 일으킨다.
-   방식 A(기계마다 키 파일 수동 관리)와 방식 B(키·소스를 담은 설정 패키지)를 기계 n대로 비교해
-   사람이 손을 대야 했던 횟수를 apt-get update의 실제 서명 검사 결과로 센다.
-모든 수치는 실행 중에 측정하며 각 결과를 JSON 한 줄로 출력한다.
+1부 image: 이미지에 실제로 깔린 ros2-apt-source 파일·키·grep -r/-R 차이.
+2부 conflict: 격리된 apt 설정에서 예전 ros2.list와 새 ros2.sources 조합별 apt-cache policy 결과.
+3부 lab: 실험용 키와 file: 저장소로 "같은 키의 만료일 연장" 사건 k번을 초 단위로 압축해,
+        수동 방식(A)과 패키지 방식(B)에서 사람이 손댄 횟수와 만료 후 apt-get update 결과를 센다.
+모든 숫자는 실행 중에 측정해 JSON 줄로 출력한다.
 """
-from __future__ import annotations
-
-import base64
-import glob
+import gzip
 import hashlib
 import json
 import os
-import re
 import shutil
-import struct
 import subprocess
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 T0 = time.monotonic()
-N_MACHINES = 3        # 방식마다 기계 수 n
-K_EVENTS = 2          # 같은 키의 만료일 연장 사건 수 k
-FIRST_WINDOW = 9.0   # 키 생성 후 첫 만료까지(초): 준비 작업과 1회차 사전 갱신을 덮는 시간
-GAP = 9.0            # 다음 만료까지 간격(초)
-LAB = Path("/tmp/lab")
-REPO = LAB / "repo"
-GNUPG = LAB / "gnupg"
-UID = "HuntLab Lab Repo <lab@example.invalid>"
+ROOT = Path("/tmp/lab")
+ROS_URI = "http://packages.ros.org/ros2/ubuntu"
+SOURCES_DIR = "/etc/apt/sources.list.d"
+PKG_KEYRING = "/usr/share/keyrings/ros2-archive-keyring.gpg"
+PKG_SOURCES = "/usr/share/ros-apt-source/ros2.sources"
+OLD_KEYRING = "/usr/share/keyrings/ros-archive-keyring.gpg"
+OLD_LIST = f"{SOURCES_DIR}/ros2.list"
 
 
-def emit(record: dict) -> None:
-    record["t"] = round(time.monotonic() - T0, 3)
+def emit(**record):
+    record["t"] = round(time.monotonic() - T0, 2)
     print(json.dumps(record, ensure_ascii=False), flush=True)
 
 
-def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+def run(cmd, env=None, check=False):
+    p = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    if check and p.returncode != 0:
+        raise RuntimeError(f"{cmd}: {p.returncode} {p.stderr[-400:]}")
+    return p
 
 
-def iso(ts: float | None) -> str | None:
-    return None if ts is None else datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def messages(text, limit=3):
+    """apt가 낸 W:/E: 줄(최대 limit개, 160자)."""
+    return [line.strip()[:160] for line in text.splitlines() if line.startswith(("W:", "E:"))][:limit]
 
 
-# ---------------------------------------------------------------- OpenPGP 정적 파싱(표준 라이브러리)
-def _packets(data: bytes):
-    i = 0
-    while i < len(data):
-        hdr = data[i]
-        i += 1
-        if hdr & 0x40:
-            tag = hdr & 0x3F
-            first = data[i]
-            i += 1
-            if first < 192:
-                length = first
-            elif first < 224:
-                length = ((first - 192) << 8) + data[i] + 192
-                i += 1
-            elif first == 255:
-                length = struct.unpack(">I", data[i:i + 4])[0]
-                i += 4
-            else:
-                raise ValueError("partial body length not supported")
-        else:
-            tag = (hdr >> 2) & 0x0F
-            size = {0: 1, 1: 2, 2: 4}.get(hdr & 3)
-            if size is None:
-                length = len(data) - i
-            else:
-                length = int.from_bytes(data[i:i + size], "big")
-                i += size
-        yield tag, data[i:i + length]
-        i += length
+ALGO = {"1": "RSA", "22": "EdDSA"}
 
 
-def _subpackets(blob: bytes) -> dict:
-    out, i = {}, 0
-    while i < len(blob):
-        first = blob[i]
-        if first < 192:
-            length, i = first, i + 1
-        elif first < 255:
-            length, i = ((first - 192) << 8) + blob[i + 1] + 192, i + 2
-        else:
-            length, i = struct.unpack(">I", blob[i + 1:i + 5])[0], i + 5
-        kind, body = blob[i] & 0x7F, blob[i + 1:i + length]
-        out.setdefault(kind, body)
-        i += length
-    return out
+def key_info(path):
+    out = run(["gpg", "--with-colons", "--show-keys", str(path)], check=True).stdout
+    pub = next(line.split(":") for line in out.splitlines() if line.startswith("pub:"))
+    fpr = next(line.split(":")[9] for line in out.splitlines() if line.startswith("fpr:"))
+    expires = int(pub[6]) if pub[6] else None
+    return {"fingerprint": fpr, "long_id": fpr[-16:], "algo": ALGO.get(pub[3], pub[3]), "bits": int(pub[2]),
+            "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(pub[5]))),
+            "expires_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(expires)) if expires else None}
 
 
-def parse_key(data: bytes) -> dict:
-    """주 키 지문, 긴 키 ID, 생성 시각, 가장 최근 자기서명이 정한 만료 시각."""
-    if data.lstrip().startswith(b"-----BEGIN"):
-        data = dearmor(data.decode())
-    primary, created, sigs, in_primary = None, None, [], True
-    for tag, body in _packets(data):
-        if tag == 6 and primary is None and body[0] == 4:
-            created = struct.unpack(">I", body[1:5])[0]
-            primary = hashlib.sha1(b"\x99" + len(body).to_bytes(2, "big") + body).hexdigest().upper()
-        elif tag == 14:
-            in_primary = False
-        elif tag == 2 and in_primary and body[0] == 4 and (0x10 <= body[1] <= 0x13 or body[1] == 0x1F):
-            hashed_len = struct.unpack(">H", body[4:6])[0]
-            sub = _subpackets(body[6:6 + hashed_len])
-            if 2 in sub:
-                sigs.append((struct.unpack(">I", sub[2])[0],
-                             struct.unpack(">I", sub[9])[0] if 9 in sub else 0))
-    sig_time, offset = max(sigs) if sigs else (None, 0)
-    return {"fingerprint": primary, "long_key_id": primary[-16:] if primary else None,
-            "key_created": iso(created), "selfsig_created": iso(sig_time),
-            "expires_epoch": created + offset if offset else None,
-            "expires": iso(created + offset) if offset else None}
-
-
-def dearmor(text: str) -> bytes:
-    lines, body, started, headers_done = text.splitlines(), [], False, False
-    for line in lines:
-        line = line.strip()
-        if line.startswith("-----BEGIN PGP PUBLIC KEY BLOCK"):
-            started = True
-            continue
-        if not started:
-            continue
-        if line.startswith("-----END"):
-            break
-        if not headers_done:
-            if line == "" or ":" not in line:
-                headers_done = True
-                if line == "":
-                    continue
-            else:
-                continue
-        if line.startswith("=") and len(line) == 5:
-            continue
-        body.append(line)
-    return base64.b64decode("".join(body))
-
-
-def deb822_field(text: str, name: str) -> str | None:
-    lines, value, grab = text.splitlines(), [], False
-    for line in lines:
-        if grab:
-            if line[:1] in (" ", "\t"):
-                value.append("" if line.strip() == "." else line[1:])
-                continue
-            break
-        if line.lower().startswith(name.lower() + ":"):
-            grab = True
-            value.append(line.split(":", 1)[1].strip())
-    return "\n".join(value).strip() if grab else None
-
-
-def gpg_show(path: str) -> dict:
-    home = LAB / "show-home"
-    home.mkdir(parents=True, exist_ok=True, mode=0o700)
-    res = run(["gpg", "--homedir", str(home), "--batch", "--with-colons", "--show-keys", path])
-    fpr, expires = None, None
-    for line in res.stdout.splitlines():
-        f = line.split(":")
-        if f[0] == "pub":
-            expires = iso(int(f[6])) if f[6] else None
-        if f[0] == "fpr" and fpr is None:
-            fpr = f[9]
-    return {"gpg_fingerprint": fpr, "gpg_expires": expires, "gpg_exit": res.returncode}
-
-
-# ---------------------------------------------------------------- 1부: 이미지 안의 실제 ROS 키
-def part_image() -> dict:
-    ver = run(["dpkg-query", "-W", "-f", "${Version}", "ros2-apt-source"])
+# ---------------------------------------------------------------- 1부 image
+def part_image():
+    version = run(["dpkg-query", "-W", "-f", "${Version}", "ros2-apt-source"]).stdout
     entries = []
-    for p in sorted(glob.glob("/etc/apt/sources.list.d/*ros*")):
-        entries.append({"path": p, "is_symlink": os.path.islink(p),
-                        "target": os.readlink(p) if os.path.islink(p) else None,
-                        "owner": (run(["dpkg", "-S", p]).stdout.split(":")[0] or None)})
-    keyring = "/usr/share/keyrings/ros2-archive-keyring.gpg"
-    key = parse_key(Path(keyring).read_bytes())
-    key.update(gpg_show(keyring))
-    sources = Path("/etc/apt/sources.list.d/ros2.sources").read_text()
-    embedded = parse_key(deb822_field(sources, "Signed-By").encode())
-    embedded = {"fingerprint": embedded["fingerprint"], "expires": embedded["expires"]}
-    now = time.time()
-    old_style = [p for p in ("/usr/share/keyrings/ros-archive-keyring.gpg", "/etc/apt/sources.list.d/ros2.list",
-                             "/etc/apt/sources.list.d/ros2-latest.list") if os.path.exists(p)]
-    grep_r = run(["grep", "-rl", "packages.ros.org", "/etc/apt/sources.list.d/"])
-    grep_R = run(["grep", "-Rl", "packages.ros.org", "/etc/apt/sources.list.d/"])
-    out = {"part": "image", "ros2_apt_source_version": ver.stdout or None,
-           "sources_list_d": entries, "keyring": keyring, "keyring_bytes": os.path.getsize(keyring),
-           "keyring_key": key, "embedded_signed_by_key": embedded,
-           "embedded_equals_keyring_fingerprint": embedded["fingerprint"] == key["fingerprint"],
-           "measured_at": iso(now),
-           "days_until_expiry": round((key["expires_epoch"] - now) / 86400, 1) if key["expires_epoch"] else None,
-           "old_style_files_present": old_style,
-           "uris": deb822_field(sources, "URIs"), "suites": deb822_field(sources, "Suites"),
-           "types": deb822_field(sources, "Types"),
-           "grep_r": {"exit": grep_r.returncode, "matches": grep_r.stdout.split()},
-           "grep_R": {"exit": grep_R.returncode, "matches": grep_R.stdout.split()}}
-    out["keyring_key"].pop("expires_epoch", None)
-    out["keyring_key"].pop("gpg_exit", None)
-    return out
+    for name in sorted(os.listdir(SOURCES_DIR)):
+        path = os.path.join(SOURCES_DIR, name)
+        owner = run(["dpkg", "-S", path])
+        entries.append({"name": name, "is_symlink": os.path.islink(path),
+                        "target": os.readlink(path) if os.path.islink(path) else None,
+                        "dpkg_owner": owner.stdout.split(":")[0] if owner.returncode == 0 else None})
+    emit(part="image", ros2_apt_source_version=version, sources_list_d=entries)
+    emit(part="image", keyring=PKG_KEYRING, keyring_bytes=os.path.getsize(PKG_KEYRING),
+         keyring_sha256=hashlib.sha256(Path(PKG_KEYRING).read_bytes()).hexdigest(), **key_info(PKG_KEYRING))
+    # 내장 키 블록(Signed-By)에서 꺼낸 키와 키링 파일의 키가 같은지
+    lines = Path(PKG_SOURCES).read_text().splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("Signed-By:"))
+    block = [lines[start].split(":", 1)[1].strip()]
+    for line in lines[start + 1:]:
+        if not line.startswith(" "):
+            break
+        block.append("" if line.strip() == "." else line.strip())
+    embedded = ROOT / "embedded.asc"
+    embedded.write_text("\n".join(block) + "\n")
+    emb = key_info(embedded)
+    emit(part="image", embedded_signed_by_fingerprint=emb["fingerprint"],
+         embedded_equals_keyring=emb["fingerprint"] == key_info(PKG_KEYRING)["fingerprint"],
+         old_list_exists=os.path.exists(OLD_LIST), old_keyring_exists=os.path.exists(OLD_KEYRING))
+    for flag in ("-rl", "-Rl"):
+        p = run(["grep", flag, "packages.ros.org", SOURCES_DIR + "/"])
+        found = [line for line in p.stdout.splitlines() if line]
+        emit(part="image", grep=f"grep {flag} packages.ros.org {SOURCES_DIR}/", exit_code=p.returncode,
+             files_found=len(found), files=found)
 
 
-# ---------------------------------------------------------------- 공통 apt 호출(격리된 디렉터리)
-def apt_opts(root: Path) -> list[str]:
-    return ["-o", f"Dir::Etc::SourceList={root}/etc/apt/sources.list",
-            "-o", f"Dir::Etc::SourceParts={root}/etc/apt/sources.list.d",
-            "-o", f"Dir::State={root}/var/lib/apt", "-o", f"Dir::Cache={root}/var/cache/apt",
-            "-o", f"Dir::State::status={root}/var/lib/dpkg/status",
-            "-o", f"Dir::Etc::Trusted={root}/etc/apt/trusted.gpg",
-            "-o", f"Dir::Etc::TrustedParts={root}/etc/apt/trusted.gpg.d",
-            "-o", "APT::Sandbox::User=root", "-o", "Acquire::Languages=none"]
+# ------------------------------------------------------- apt 격리 환경 도우미
+def apt_env(machine: Path):
+    """machine 디렉터리만 보는 apt 설정. 시스템 sources·trusted 키·lists를 쓰지 않는다."""
+    for sub in ("sources.list.d", "state/lists/partial", "cache/archives/partial", "conf.d", "pref.d", "trusted.d"):
+        (machine / sub).mkdir(parents=True, exist_ok=True)
+    (machine / "sources.list").touch()
+    (machine / "status").touch()
+    conf = machine / "apt.conf"
+    conf.write_text("\n".join([
+        f'Dir::Etc::SourceList "{machine}/sources.list";',
+        f'Dir::Etc::SourceParts "{machine}/sources.list.d";',
+        f'Dir::Etc::Parts "{machine}/conf.d";',
+        f'Dir::Etc::Preferences "{machine}/preferences";',
+        f'Dir::Etc::PreferencesParts "{machine}/pref.d";',
+        f'Dir::Etc::Trusted "{machine}/trusted.gpg";',
+        f'Dir::Etc::TrustedParts "{machine}/trusted.d";',
+        f'Dir::State "{machine}/state";',
+        f'Dir::State::Status "{machine}/status";',
+        f'Dir::Cache "{machine}/cache";',
+        'APT::Architecture "amd64";',
+        'APT::Sandbox::User "root";',
+        'Acquire::Languages "none";',
+        'Acquire::http::Proxy "false";',
+    ]) + "\n")
+    env = dict(os.environ, APT_CONFIG=str(conf), LC_ALL="C")
+    return env
 
 
-def make_root(root: Path) -> Path:
-    for d in ("etc/apt/sources.list.d", "etc/apt/trusted.gpg.d", "var/lib/apt/lists/partial",
-              "var/cache/apt/archives/partial", "var/lib/dpkg/info", "var/lib/dpkg/updates",
-              "var/lib/dpkg/triggers", "usr/share/keyrings"):
-        (root / d).mkdir(parents=True, exist_ok=True)
-    (root / "var/lib/dpkg/status").touch()
-    (root / "var/lib/dpkg/available").touch()
-    return root
-
-
-def classify(text: str) -> dict:
-    exp = re.findall(r"EXPKEYSIG ([0-9A-F]{16})", text)
-    return {"expkeysig_ids": sorted(set(exp)),
-            "no_pubkey": bool(re.search(r"NO_PUBKEY", text)),
-            "signature_invalid_line": "signatures were invalid" in text,
-            "previous_index_used": "previous index files will be used" in text,
-            "not_signed": "is not signed" in text,
-            "conflicting_signed_by": "Conflicting values set for option Signed-By" in text,
-            "w_lines": sum(1 for l in text.splitlines() if l.startswith("W:")),
-            "e_lines": sum(1 for l in text.splitlines() if l.startswith("E:"))}
-
-
-def apt_update(root: Path) -> dict:
-    start = time.monotonic()
-    res = run(["apt-get", "-q", *apt_opts(root), "update"])
-    text = res.stdout + res.stderr
-    info = classify(text)
-    info.update({"exit": res.returncode, "seconds": round(time.monotonic() - start, 3)})
-    info["signature_ok"] = (res.returncode == 0 and not info["expkeysig_ids"] and not info["no_pubkey"]
-                            and not info["not_signed"] and "GPG error" not in text)
-    lines = [l for l in text.splitlines() if l.startswith(("W:", "E:"))]
-    key = [l for l in lines if "EXPKEYSIG" in l or "not signed" in l or "NO_PUBKEY" in l]
-    info["first_message"] = (key or lines or [""])[0][:170] or None
-    for drop in ("no_pubkey", "signature_invalid_line", "conflicting_signed_by"):
-        info.pop(drop)
-    return info
-
-
-# ---------------------------------------------------------------- 2부: 예전 파일과 새 패키지 공존
-def part_conflict() -> list[dict]:
-    real_sources = Path("/etc/apt/sources.list.d/ros2.sources").read_text()
-    pkg_keyring = "/usr/share/keyrings/ros2-archive-keyring.gpg"
-    base = LAB / "conflict"
-    copied = base / "ros-archive-keyring.gpg"
-    base.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(pkg_keyring, copied)
-    old_line = ("deb [arch=amd64 signed-by={key}] http://packages.ros.org/ros2/ubuntu noble main\n")
+# ---------------------------------------------------------------- 2부 conflict
+def part_conflict():
+    old_key = ROOT / "conflict" / "ros-archive-keyring.gpg"   # 예전 방식 키 파일(같은 키의 사본)
+    old_key.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(PKG_KEYRING, old_key)
+    new_sources = Path(PKG_SOURCES).read_text()
+    old_line = f"deb [arch=amd64 signed-by={old_key}] {ROS_URI} noble main\n"
+    old_line_pkgkey = f"deb [arch=amd64 signed-by={PKG_KEYRING}] {ROS_URI} noble main\n"
     cases = {
-        "new_only": {"ros2.sources": real_sources},
-        "old_only": {"ros2.list": old_line.format(key=copied)},
-        "old_plus_new": {"ros2.sources": real_sources, "ros2.list": old_line.format(key=copied)},
-        "old_pointing_package_keyring_plus_new": {"ros2.sources": real_sources,
-                                                  "ros2.list": old_line.format(key=pkg_keyring)},
-        "old_duplicated_same_key": {"ros2.list": old_line.format(key=copied),
-                                    "ros2-latest.list": old_line.format(key=copied)},
+        "new_only": {"ros2.sources": new_sources},
+        "old_only": {"ros2.list": old_line},
+        "old_and_new": {"ros2.list": old_line, "ros2.sources": new_sources},
+        "old_pointing_pkg_keyring_and_new": {"ros2.list": old_line_pkgkey, "ros2.sources": new_sources},
+        "old_line_twice_same_key": {"ros2.list": old_line, "ros-copy.list": old_line},
     }
-    out = []
     for name, files in cases.items():
-        root = make_root(base / name)
-        for fname, content in files.items():
-            (root / "etc/apt/sources.list.d" / fname).write_text(content)
-        res = run(["apt-cache", *apt_opts(root), "policy"])
-        text = res.stdout + res.stderr
-        info = classify(text)
-        rec = {"part": "conflict", "case": name, "files": sorted(files), "apt_cache_policy_exit": res.returncode,
-               "conflicting_signed_by": info["conflicting_signed_by"],
-               "configured_multiple_times": "configured multiple times" in text,
-               "first_message": next((l[:200] for l in text.splitlines() if l.startswith(("W:", "E:"))), None)}
-        out.append(rec)
-        emit(rec)
-    return out
+        machine = ROOT / "conflict" / name
+        env = apt_env(machine)
+        for fname, text in files.items():
+            (machine / "sources.list.d" / fname).write_text(text)
+        p = run(["apt-cache", "policy"], env=env)
+        text = p.stdout + p.stderr
+        emit(part="conflict", case=name, files=sorted(files), exit_code=p.returncode,
+             first_message=(messages(text, 1) or [""])[0],
+             conflicting_signed_by="Conflicting values set for option Signed-By" in text,
+             configured_multiple_times="configured multiple times" in text)
 
 
-# ---------------------------------------------------------------- 3부: 실험용 저장소와 기계 n대
-def gpg(*args: str) -> subprocess.CompletedProcess:
-    res = run(["gpg", "--homedir", str(GNUPG), "--batch", "--yes", "--pinentry-mode", "loopback",
-               "--passphrase", "", *args])
-    if res.returncode != 0:
-        raise RuntimeError(f"gpg {args[:2]} failed: {res.stderr[-400:]}")
-    return res
+# ---------------------------------------------------------------- 3부 lab
+class Repo:
+    """실험용 서명 키 하나와 file: 저장소 하나. 운영자(Open Robotics 역할)."""
 
+    def __init__(self, base: Path):
+        self.base = base
+        self.home = base / "gnupg"
+        self.home.mkdir(parents=True, mode=0o700)
+        self.repo = base / "repo"
+        (self.repo / "pool").mkdir(parents=True)
+        (self.repo / "dists/lab/main/binary-amd64").mkdir(parents=True)
+        self.env = dict(os.environ, GNUPGHOME=str(self.home))
+        self.packages = []
+        self.serial = 0
 
-def export_key(fpr: str, armor: bool = False) -> bytes:
-    res = subprocess.run(["gpg", "--homedir", str(GNUPG), "--batch", "--export", *(["--armor"] if armor else []), fpr],
-                         capture_output=True)
-    return res.stdout
+    def gpg(self, *args):
+        return run(["gpg", "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase", "", *args],
+                   env=self.env, check=True)
 
+    def create_key(self, lifetime):
+        self.gpg("--quick-gen-key", "HuntLab Lab Archive <lab@example.invalid>", "ed25519", "sign",
+                 f"seconds={lifetime}")
+        out = run(["gpg", "--with-colons", "--list-keys"], env=self.env, check=True).stdout
+        self.fpr = next(line.split(":")[9] for line in out.splitlines() if line.startswith("fpr:"))
 
-def build_config_package(version: str, fpr: str) -> Path:
-    stage = LAB / "build" / version
-    shutil.rmtree(stage, ignore_errors=True)
-    (stage / "DEBIAN").mkdir(parents=True)
-    (stage / "usr/share/keyrings").mkdir(parents=True)
-    (stage / "usr/share/lab-apt-source").mkdir(parents=True)
-    (stage / "etc/apt/sources.list.d").mkdir(parents=True)
-    (stage / "DEBIAN/control").write_text(
-        f"Package: lab-apt-source\nVersion: {version}\nArchitecture: all\n"
-        "Maintainer: HuntLab Experiment <lab@example.invalid>\n"
-        "Description: lab repository key and apt source (ros2-apt-source style)\n")
-    (stage / "usr/share/keyrings/lab2-archive-keyring.gpg").write_bytes(export_key(fpr))
-    armored = export_key(fpr, armor=True).decode().strip().splitlines()
-    block = "\n".join(" " + (l if l.strip() else ".") for l in armored)
-    (stage / "usr/share/lab-apt-source/lab.sources").write_text(
-        f"Types: deb\nURIs: file:{REPO}\nSuites: stable\nComponents: main\nArchitectures: amd64\n"
-        f"Signed-By:\n{block}\n")
-    # ros2-apt-source처럼 /etc 쪽은 심볼릭 링크. 기계 루트 안에서 풀리도록 상대 경로를 쓴다.
-    os.symlink("../../../usr/share/lab-apt-source/lab.sources", stage / "etc/apt/sources.list.d/lab.sources")
-    pool = REPO / "pool"
-    pool.mkdir(parents=True, exist_ok=True)
-    deb = pool / f"lab-apt-source_{version}_all.deb"
-    res = run(["dpkg-deb", "--root-owner-group", "-Zgzip", "--build", str(stage), str(deb)])
-    if res.returncode != 0:
-        raise RuntimeError(res.stderr)
-    return deb
+    def extend(self, lifetime):
+        """같은 키(같은 지문)의 만료일만 늘린다. 비밀키는 그대로다."""
+        self.gpg("--quick-set-expire", self.fpr, f"seconds={lifetime}")
 
+    def public_key(self) -> bytes:
+        return subprocess.run(["gpg", "--export", self.fpr], env=self.env, capture_output=True,
+                              check=True).stdout
 
-def publish_repo(fpr: str) -> None:
-    """Packages·Release를 만들고 현재 서명 키로 InRelease를 다시 서명한다(실제 저장소의 주기적 재서명)."""
-    stanzas = []
-    for deb in sorted((REPO / "pool").glob("*.deb")):
-        control = run(["dpkg-deb", "-f", str(deb)]).stdout.strip()
+    def build_source_package(self, version):
+        """ros2-apt-source를 흉내 낸 lab-apt-source: 키링 + 그 키링을 쓰는 .sources."""
+        root = self.base / f"build-{version}"
+        (root / "DEBIAN").mkdir(parents=True)
+        (root / "usr/share/keyrings").mkdir(parents=True)
+        (root / "usr/share/lab-apt-source").mkdir(parents=True)
+        (root / "usr/share/keyrings/lab-archive-keyring.gpg").write_bytes(self.public_key())
+        (root / "DEBIAN/control").write_text(
+            f"Package: lab-apt-source\nVersion: {version}\nArchitecture: all\n"
+            "Maintainer: lab <lab@example.invalid>\nDescription: lab source and key\n")
+        deb = self.repo / "pool" / f"lab-apt-source_{version}_all.deb"
+        run(["dpkg-deb", "--root-owner-group", "-Zgzip", "--build", str(root), str(deb)], check=True)
         data = deb.read_bytes()
-        stanzas.append(f"{control}\nFilename: pool/{deb.name}\nSize: {len(data)}\n"
-                       f"SHA256: {hashlib.sha256(data).hexdigest()}\n")
-    pkgdir = REPO / "dists/stable/main/binary-amd64"
-    pkgdir.mkdir(parents=True, exist_ok=True)
-    packages = ("\n".join(stanzas)).encode()
-    (pkgdir / "Packages").write_bytes(packages)
-    date = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S UTC")
-    release = (f"Origin: HuntLab Lab\nLabel: HuntLab Lab\nSuite: stable\nCodename: stable\nDate: {date}\n"
-               f"Architectures: amd64\nComponents: main\nSHA256:\n"
-               f" {hashlib.sha256(packages).hexdigest()} {len(packages)} main/binary-amd64/Packages\n")
-    (REPO / "dists/stable/Release").write_text(release)
-    gpg("--local-user", fpr, "--digest-algo", "SHA256", "--clearsign",
-        "-o", str(REPO / "dists/stable/InRelease"), str(REPO / "dists/stable/Release"))
-    (REPO / "lab.key").write_bytes(export_key(fpr))  # 예전 방식이 손으로 다시 받는 'ros.key' 역할
+        self.packages = [
+            f"Package: lab-apt-source\nVersion: {version}\nArchitecture: all\nMaintainer: lab\n"
+            f"Filename: pool/{deb.name}\nSize: {len(data)}\nSHA256: {hashlib.sha256(data).hexdigest()}\n"
+            "Description: lab source and key\n"]
+        self.sign_release()
+
+    def sign_release(self):
+        """색인을 다시 쓰고 InRelease에 새로 서명한다(실제 저장소가 매일 동기화하는 것처럼)."""
+        self.serial += 1
+        body = "\n".join(self.packages).encode()
+        files = {"main/binary-amd64/Packages": body, "main/binary-amd64/Packages.gz": gzip.compress(body, mtime=0)}
+        dist = self.repo / "dists/lab"
+        for rel, content in files.items():
+            (dist / rel).write_bytes(content)
+        date = time.strftime("%a, %d %b %Y %H:%M:%S UTC", time.gmtime(time.time() - 5))
+        release = (f"Origin: HuntLab\nLabel: lab\nSuite: lab\nCodename: lab\nVersion: {self.serial}\nDate: {date}\n"
+                   "Architectures: amd64 all\nComponents: main\nSHA256:\n" +
+                   "".join(f" {hashlib.sha256(c).hexdigest()} {len(c)} {rel}\n" for rel, c in files.items()))
+        (dist / "Release").write_text(release)
+        self.gpg("--local-user", self.fpr, "--clearsign", "--digest-algo", "SHA256",
+                 "-o", str(dist / "InRelease"), str(dist / "Release"))
+
+    def expiry(self):
+        out = run(["gpg", "--with-colons", "--list-keys", self.fpr], env=self.env, check=True).stdout
+        return int(next(line.split(":") for line in out.splitlines() if line.startswith("pub:"))[6])
 
 
-def set_expiry(fpr: str, absolute: float) -> dict:
-    gpg("--quick-set-expire", fpr, f"seconds={max(1, int(round(absolute - time.time())))}")
-    return parse_key(export_key(fpr))
+class Machine:
+    def __init__(self, base: Path, name: str, group: str, repo: Repo):
+        self.name, self.group, self.repo = name, group, repo
+        self.dir = base / "machines" / name
+        self.env = apt_env(self.dir)
+        self.root = self.dir / "root"     # 패키지 파일이 풀리는 기계의 / 역할
+        self.human_touches = 0
+        self.online = True
+        self.installed = None
+
+    # 예전 공식 문서 방식: 사람이 키 파일을 받아 쓰고, signed-by 한 줄 .list를 만든다
+    def manual_key_copy(self):
+        (self.dir / "ros-archive-keyring.gpg").write_bytes(self.repo.public_key())
+        self.human_touches += 1
+
+    def manual_setup(self):
+        self.manual_key_copy()
+        (self.dir / "sources.list.d/lab.list").write_text(
+            f"deb [signed-by={self.dir}/ros-archive-keyring.gpg] file:{self.repo.repo} lab main\n")
+
+    # 이전 작업 1회: 예전 저장소로 패키지 설치 → 예전 파일 삭제 → 패키지 소스로 교체(사람 1회)
+    def migrate_to_package(self):
+        assert self.update()["exit_code"] == 0
+        self.install_candidate()
+        (self.dir / "sources.list.d/lab.list").unlink()
+        (self.dir / "ros-archive-keyring.gpg").unlink()
+        (self.dir / "sources.list.d/lab.sources").write_text(
+            f"Types: deb\nURIs: file:{self.repo.repo}\nSuites: lab\nComponents: main\n"
+            f"Signed-By: {self.root}/usr/share/keyrings/lab-archive-keyring.gpg\n")
+        self.human_touches += 1
+
+    def install_candidate(self):
+        """apt가 고른 후보 버전을 내려받아 키링을 기계 루트에 푼다(dpkg-deb -x)."""
+        policy = run(["apt-cache", "policy", "lab-apt-source"], env=self.env).stdout
+        candidate = next(line.split()[-1] for line in policy.splitlines() if "Candidate:" in line)
+        if candidate in ("(none)", self.installed):
+            return False
+        cache = self.dir / "cache/archives"
+        subprocess.run(["apt-get", "download", f"lab-apt-source={candidate}"], env=self.env, cwd=cache,
+                       capture_output=True, text=True, check=True)
+        deb = next(cache.glob(f"lab-apt-source_{candidate.replace(':', '%3a')}_all.deb"))
+        run(["dpkg-deb", "-x", str(deb), str(self.root)], check=True)
+        self.installed = candidate
+        return True
+
+    # 무인 갱신(사람 손 없음): 켜져 있는 패키지 방식 기계만 apt update 후 새 버전을 받는다
+    def unattended_upgrade(self):
+        if not self.online:
+            return None
+        self.update()
+        return self.install_candidate()
+
+    def update(self):
+        p = run(["apt-get", "update"], env=self.env)
+        text = p.stdout + p.stderr
+        return {"exit_code": p.returncode, "expkeysig": "EXPKEYSIG" in text,
+                "previous_index_used": "previous index files will be used" in text,
+                "not_signed": "is not signed" in text, "messages": messages(text)}
 
 
-def dpkg_install(root: Path, deb: Path) -> int:
-    return run(["dpkg", f"--root={root}", "--force-script-chrootless", "-i", str(deb)]).returncode
+def part_lab(n_per_group=3, k=2, lifetime=6):
+    repo = Repo(ROOT / "lab")
+    repo.create_key(lifetime)
+    repo.build_source_package("1.0")
+    created_fpr = repo.fpr
+    machines = [Machine(ROOT / "lab", f"A{i}", "A_manual", repo) for i in range(1, n_per_group + 1)]
+    machines += [Machine(ROOT / "lab", f"B{i}", "B_package", repo) for i in range(1, n_per_group + 1)]
+    machines.append(Machine(ROOT / "lab", "B_off", "B_package_offline_at_event1", repo))
+    for m in machines:
+        m.manual_setup()                     # 출발점: 모두 예전 수동 방식으로 이미 설정됨
+        m.human_touches = 0                  # 출발 전 설정은 비교에서 제외(두 방식 공통)
+        assert m.update()["exit_code"] == 0
+    for m in machines:
+        if m.group.startswith("B"):
+            m.migrate_to_package()
+    emit(part="lab", stage="migrated", key_long_id=repo.fpr[-16:], key_algo=key_info(
+             machines[0].dir / "ros-archive-keyring.gpg")["algo"],
+         lifetime_seconds=lifetime, machines=len(machines),
+         touches={m.name: m.human_touches for m in machines})
 
-
-def installed_version(root: Path) -> str | None:
-    res = run(["dpkg-query", f"--admindir={root}/var/lib/dpkg", "-W", "-f", "${Version}", "lab-apt-source"])
-    return (res.stdout or None) if res.returncode == 0 else None
-
-
-def auto_upgrade(root: Path) -> dict:
-    """사람 없이 도는 'apt update && apt upgrade' 대역: 서명 검사된 색인에서 새 버전을 받아 설치한다."""
-    upd = apt_update(root)
-    pol = run(["apt-cache", *apt_opts(root), "policy", "lab-apt-source"]).stdout
-    cand = re.search(r"Candidate:\s*(\S+)", pol)
-    candidate = cand.group(1) if cand else None
-    before = installed_version(root)
-    upgraded = False
-    if candidate and candidate != "(none)" and candidate != before:
-        dl_dir = root / "dl"
-        dl_dir.mkdir(exist_ok=True)
-        dl = run(["apt-get", "-q", *apt_opts(root), "download", "lab-apt-source"], cwd=dl_dir)
-        debs = sorted(dl_dir.glob(f"lab-apt-source_{candidate}_all.deb"))
-        if dl.returncode == 0 and debs and dpkg_install(root, debs[-1]) == 0:
-            upgraded = True
-    return {"update_signature_ok": upd["signature_ok"], "candidate": candidate, "before": before,
-            "after": installed_version(root), "upgraded": upgraded}
-
-
-def machine_key(root: Path, method: str) -> dict:
-    if method == "A":
-        return parse_key((root / "usr/share/keyrings/lab-archive-keyring.gpg").read_bytes())
-    text = (root / "etc/apt/sources.list.d/lab.sources").read_text()  # 심볼릭 링크를 따라 읽는다
-    return parse_key(deb822_field(text, "Signed-By").encode())
-
-
-def part_lab() -> dict:
-    GNUPG.mkdir(parents=True, mode=0o700)
-    start = time.monotonic()
-    gpg("--quick-gen-key", UID, "ed25519", "sign", f"seconds={int(FIRST_WINDOW)}")
-    fpr = run(["gpg", "--homedir", str(GNUPG), "--batch", "--with-colons", "--list-keys"]).stdout
-    fpr = [l.split(":")[9] for l in fpr.splitlines() if l.startswith("fpr")][0]
-    versions = [parse_key(export_key(fpr))]
-    expiry = [versions[0]["expires_epoch"]]
-    deb_v = [build_config_package("1.0", fpr)]
-    publish_repo(fpr)
-    emit({"part": "lab_key", "event": 0, "key": {k: v for k, v in versions[0].items() if k != "expires_epoch"},
-          "keygen_and_publish_seconds": round(time.monotonic() - start, 3)})
-
-    machines, manual = [], {"A": 0, "B": 0, "B_offline": 0}
-    old_list = f"deb [arch=amd64 signed-by={{root}}/usr/share/keyrings/lab-archive-keyring.gpg] file:{REPO} stable main\n"
-    specs = [("A", f"A{i}", None) for i in range(1, N_MACHINES + 1)] + \
-            [("B", f"B{i}", None) for i in range(1, N_MACHINES + 1)] + [("B_offline", "B_off", 1)]
-    setup = {}
-    for group, name, offline_event in specs:
-        root = make_root(LAB / "m" / name)
-        # 모든 기계는 예전 수동 방식(키 파일 + 한 줄 .list)으로 이미 설정돼 있다고 놓는다.
-        (root / "usr/share/keyrings/lab-archive-keyring.gpg").write_bytes(export_key(fpr))
-        (root / "etc/apt/sources.list.d/lab.list").write_text(old_list.format(root=root))
-        first = apt_update(root)
-        g = setup.setdefault(group, {"machines": 0, "initial_update_ok": 0})
-        g["machines"] += 1
-        g["initial_update_ok"] += first["signature_ok"]
-        if group != "A":
-            # 이전 작업 1회(사람): 예전 파일 정리 → 설정 패키지 설치 → apt update 확인
-            (root / "etc/apt/sources.list.d/lab.list").unlink()
-            (root / "usr/share/keyrings/lab-archive-keyring.gpg").unlink()
-            rc = dpkg_install(root, deb_v[0])
-            check = apt_update(root)
-            manual[group] += 1
-            g["migration_dpkg_ok"] = g.get("migration_dpkg_ok", 0) + (rc == 0)
-            g["after_migration_update_ok"] = g.get("after_migration_update_ok", 0) + check["signature_ok"]
-            g["installed"] = installed_version(root)
-            g["sources_symlink"] = os.readlink(root / "etc/apt/sources.list.d/lab.sources")
-            g["old_list_files_left"] = g.get("old_list_files_left", 0) + len(
-                list((root / "etc/apt/sources.list.d").glob("*.list")))
-        machines.append({"group": group, "name": name, "root": root, "offline_event": offline_event,
-                         "method": "A" if group == "A" else "B"})
-    emit({"part": "lab_setup", "groups": setup,
-          "seconds_left_before_first_expiry": round(expiry[0] - time.time(), 2)})
-
-    for event in range(1, K_EVENTS + 1):
-        current_exp = expiry[-1]
-        # --- 만료 전: 저장소 운영자가 같은 키의 만료일을 늘리고 새 설정 패키지를 올린다.
-        new_key = set_expiry(fpr, current_exp + GAP)
-        versions.append(new_key)
-        expiry.append(new_key["expires_epoch"])
-        deb_v.append(build_config_package(f"1.{event}", fpr))
-        publish_repo(fpr)
-        pre = {"tried": 0, "upgraded": 0, "update_signature_ok": 0, "skipped_offline": [], "versions_after": []}
+    for event in range(1, k + 1):
+        old_expiry = repo.expiry()
+        # 만료 전: 운영자가 같은 키의 만료일을 연장하고, 새 키링을 담은 패키지 새 버전을 저장소에 올린다
+        repo.extend(lifetime * 2)
+        repo.build_source_package(f"1.{event}")
+        same_fpr = repo.fpr == created_fpr
         for m in machines:
-            if m["method"] != "B":
-                continue
-            if m["offline_event"] == event:
-                pre["skipped_offline"].append(m["name"])
-                continue
-            r = auto_upgrade(m["root"])
-            pre["tried"] += 1
-            pre["upgraded"] += r["upgraded"]
-            pre["update_signature_ok"] += r["update_signature_ok"]
-            pre["versions_after"].append(r["after"])
-        pre["versions_after"] = sorted(set(pre["versions_after"]))
-        margin = round(current_exp - time.time(), 2)
-        emit({"part": "lab_pre_expiry", "event": event,
-              "same_fingerprint": new_key["fingerprint"] == versions[0]["fingerprint"],
-              "old_expires": versions[-2]["expires"], "new_expires": new_key["expires"],
-              "package_version_published": f"1.{event}", "auto_upgrade": pre,
-              "seconds_left_before_old_expiry": margin, "timing_ok": margin > 0})
-        # --- 예전 만료 시각이 실제로 지나갈 때까지 기다린 뒤 저장소를 다시 서명한다.
-        wait = current_exp + 1.5 - time.time()
-        if wait > 0:
-            time.sleep(wait)
-        publish_repo(fpr)
-        if event == 1:
-            # 예전 키를 품은 채 처음 apt update를 하는 기계(예: 오래된 캐시로 만든 이미지)
-            fresh = make_root(LAB / "m" / "A_fresh")
-            (fresh / "usr/share/keyrings/lab-archive-keyring.gpg").write_bytes(
-                (LAB / "m" / "A1" / "usr/share/keyrings/lab-archive-keyring.gpg").read_bytes())
-            (fresh / "etc/apt/sources.list.d/lab.list").write_text(old_list.format(root=fresh))
-            r = apt_update(fresh)
-            r.pop("seconds")
-            emit({"part": "lab_fresh_machine_old_key", "event": event, **r})
-        groups = {}
+            if m.name == "B_off":
+                m.online = event != 1        # 사건 1 때만 꺼져 있었다
+            if m.group == "A_manual":
+                m.manual_key_copy()          # 사람이 기계마다 키 파일을 다시 받아 덮어쓴다
+        upgraded = {m.name: m.unattended_upgrade() for m in machines if m.group.startswith("B")}
+        upgrades_before_old_expiry = time.time() < old_expiry
+        # 예전 사본의 만료 시각이 지날 때까지 기다린 뒤, 저장소가 다시 동기화(재서명)된다
+        while time.time() <= old_expiry + 1:
+            time.sleep(0.2)
+        repo.sign_release()
         for m in machines:
-            root = m["root"]
-            r = apt_update(root)
-            g = groups.setdefault(m["group"], {"machines": 0, "update_exit_codes": [], "signature_ok": 0,
-                                               "expkeysig": 0, "previous_index_used": 0, "manual_fixes": 0,
-                                               "after_fix_ok": 0, "key_expires_on_machines": set()})
-            g["machines"] += 1
-            g["update_exit_codes"].append(r["exit"])
-            g["signature_ok"] += r["signature_ok"]
-            g["expkeysig"] += bool(r["expkeysig_ids"])
-            g["previous_index_used"] += r["previous_index_used"]
-            g["key_expires_on_machines"].add(machine_key(root, m["method"])["expires"])
-            if r["expkeysig_ids"]:
-                g["expkeysig_id"] = r["expkeysig_ids"][0]
-                if m["group"] == "A":
-                    g.setdefault("first_message", r["first_message"])
-            if not r["signature_ok"]:
-                if m["method"] == "B":
-                    heal = auto_upgrade(root)
-                    g["self_heal_upgraded"] = g.get("self_heal_upgraded", 0) + heal["upgraded"]
-                    g["self_heal_candidate"] = heal["candidate"]
-                # 사람이 하는 복구 1회: A는 공개키를 다시 받아 덮어쓰고, B는 최신 .deb를 직접 받아 설치한다.
-                if m["method"] == "A":
-                    (root / "usr/share/keyrings/lab-archive-keyring.gpg").write_bytes((REPO / "lab.key").read_bytes())
+            m.online = True
+        after = {m.name: m.update() for m in machines}
+        repairs = []
+        for m in machines:
+            if after[m.name]["exit_code"] != 0 or after[m.name]["expkeysig"]:
+                # 사람이 고친다: 기계에 직접 새 패키지 파일을 받아 풀거나(B) 키를 다시 받는다(A)
+                if m.group.startswith("B"):
+                    run(["dpkg-deb", "-x", str(next(repo.repo.glob(f"pool/*_1.{event}_all.deb"))),
+                         str(m.root)], check=True)
+                    m.installed = f"1.{event}"
+                    m.human_touches += 1
                 else:
-                    dpkg_install(root, deb_v[-1])
-                manual[m["group"]] += 1
-                g["manual_fixes"] += 1
-                g["after_fix_ok"] += apt_update(root)["signature_ok"]
-            g.setdefault("fingerprints", set()).add(machine_key(root, m["method"])["fingerprint"])
-        for g in groups.values():
-            g["key_expires_on_machines"] = sorted(g["key_expires_on_machines"])
-            g["distinct_fingerprints"] = len(g.pop("fingerprints"))
-        emit({"part": "lab_post_expiry", "event": event, "old_key_expired": time.time() > current_exp,
-              "groups": groups})
+                    m.manual_key_copy()
+                repairs.append(m.name)
+        recheck = {m.name: m.update()["exit_code"] for m in machines if m.name in repairs}
+        emit(part="lab", stage=f"event{event}", same_fingerprint_as_created=same_fpr,
+             upgraded_by_apt={name: v for name, v in upgraded.items()},
+             upgrades_finished_before_old_expiry=upgrades_before_old_expiry,
+             after_expiry_update_exit={name: r["exit_code"] for name, r in after.items()},
+             expkeysig_machines=[name for name, r in after.items() if r["expkeysig"]],
+             previous_index_used_machines=[name for name, r in after.items() if r["previous_index_used"]],
+             failed_messages={name: r["messages"] for name, r in after.items() if r["exit_code"] or r["expkeysig"]},
+             repaired_by_human=repairs, recheck_exit_after_repair=recheck)
+        copies = {"A1": machines[0].dir / "ros-archive-keyring.gpg",
+                  "B1": machines[n_per_group].root / "usr/share/keyrings/lab-archive-keyring.gpg",
+                  "B_off": machines[-1].root / "usr/share/keyrings/lab-archive-keyring.gpg"}
+        infos = {name: key_info(path) for name, path in copies.items()}
+        emit(part="lab", stage=f"event{event}_key_copies", repo_key_expires_utc=time.strftime(
+                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime(repo.expiry())),
+             copies_same_fingerprint=all(i["fingerprint"] == created_fpr for i in infos.values()),
+             copy_expires_utc={name: i["expires_utc"] for name, i in infos.items()})
 
-    fprs = {v["fingerprint"] for v in versions}
-    return {"part": "lab_summary", "n_per_method": N_MACHINES, "k_events": K_EVENTS,
-            "manual_actions_measured": manual,
-            "model_prediction": {"A": N_MACHINES * K_EVENTS, "B": N_MACHINES, "B_offline": 1 + 1},
-            "key_versions": [{"selfsig_created": v["selfsig_created"], "expires": v["expires"]} for v in versions],
-            "distinct_fingerprints": len(fprs), "lab_long_key_id": versions[0]["long_key_id"],
-            "lab_seconds": round(time.monotonic() - start, 2)}
+    # 이전 색인이 없는 새 기계: 만료된(연장 전) 키 사본만 가진 채 처음 apt-get update
+    stale = ROOT / "lab" / "stale-key.gpg"
+    stale_repo = Repo(ROOT / "lab-stale")
+    stale_repo.create_key(3)
+    stale_repo.build_source_package("1.0")
+    stale.write_bytes(stale_repo.public_key())
+    fresh_old = Machine(ROOT / "lab-stale", "fresh_with_index", "x", stale_repo)
+    fresh_new = Machine(ROOT / "lab-stale", "fresh_no_index", "x", stale_repo)
+    line = f"deb [signed-by={stale}] file:{stale_repo.repo} lab main\n"
+    (fresh_old.dir / "sources.list.d/lab.list").write_text(line)
+    first = fresh_old.update()
+    stale_expiry = stale_repo.expiry()
+    while time.time() <= stale_expiry + 1:
+        time.sleep(0.2)
+    stale_repo.extend(60)            # 운영자는 연장했지만 두 기계의 사본은 옛것 그대로
+    stale_repo.sign_release()
+    (fresh_new.dir / "sources.list.d/lab.list").write_text(line)
+    with_index = fresh_old.update()
+    no_index = fresh_new.update()
+
+    def lists(machine):
+        return len([p for p in (machine.dir / "state/lists").iterdir() if p.is_file() and p.name != "lock"])
+
+    def pkg_visible(machine):
+        policy = run(["apt-cache", "policy", "lab-apt-source"], env=machine.env).stdout
+        return "Candidate:" in policy and "Candidate: (none)" not in policy
+
+    emit(part="lab", stage="stale_key_index", before_expiry_exit=first["exit_code"],
+         machine_with_previous_index={**{k_: with_index[k_] for k_ in ("exit_code", "expkeysig",
+                                                                         "previous_index_used", "not_signed")},
+                                      "list_files": lists(fresh_old), "package_visible": pkg_visible(fresh_old),
+                                      "messages": with_index["messages"]},
+         machine_without_index={**{k_: no_index[k_] for k_ in ("exit_code", "expkeysig",
+                                                                 "previous_index_used", "not_signed")},
+                                "list_files": lists(fresh_new), "package_visible": pkg_visible(fresh_new),
+                                "messages": no_index["messages"]})
+
+    totals = {}
+    for m in machines:
+        totals.setdefault(m.group, []).append(m.human_touches)
+    emit(part="lab", stage="summary", n_per_group=n_per_group, k_events=k,
+         human_touches_by_machine={m.name: m.human_touches for m in machines},
+         human_touches_by_group={g: sum(v) for g, v in totals.items()},
+         A_total_3_machines=sum(totals["A_manual"]),
+         B_total_3_online_machines=sum(totals["B_package"]),
+         B_offline_machine_total=sum(totals["B_package_offline_at_event1"]),
+         one_A_machine_total=totals["A_manual"][0])
 
 
-def main() -> int:
-    LAB.mkdir(parents=True, exist_ok=True)
-    env = {"apt": run(["apt-get", "--version"]).stdout.splitlines()[0],
-           "gpg": run(["gpg", "--version"]).stdout.splitlines()[0],
-           "dpkg": run(["dpkg", "--version"]).stdout.splitlines()[0]}
-    emit({"part": "env", **env, "ros_distro": os.environ.get("ROS_DISTRO")})
-    emit(part_image())
+def main():
+    if ROOT.exists():
+        shutil.rmtree(ROOT)
+    ROOT.mkdir(parents=True)
+    os.chmod(ROOT, 0o755)
+    part_image()
     part_conflict()
-    summary = part_lab()
-    run(["gpgconf", "--homedir", str(GNUPG), "--kill", "all"])
-    summary["total_seconds"] = round(time.monotonic() - T0, 2)
-    emit(summary)
-    return 0
+    part_lab()
+    emit(part="done", total_seconds=round(time.monotonic() - T0, 2))
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
