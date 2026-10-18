@@ -120,6 +120,7 @@ class EditorialQueueTests(unittest.TestCase):
         self.assertEqual(diagnostic['http_status'], 403)
         self.assertEqual(diagnostic['reason'], 'source_recheck_http_error')
         self.assertEqual(diagnostic['source_host'], 'example.test')
+        self.assertEqual(diagnostic['source_path'], '/document')
         self.assertNotIn('do-not-log', json.dumps(diagnostic))
         response.iter_content.assert_not_called()
 

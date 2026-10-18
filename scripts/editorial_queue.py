@@ -33,6 +33,8 @@ class SourceCheckError(ValueError):
             'reason': reason,
             'failure_stage': 'source_recheck',
             'source_host': urlparse(url).hostname,
+            # Path without query/fragment so a failing source can be traced; the hash alone could not be.
+            'source_path': urlparse(url).path,
             'source_url_sha256': hashlib.sha256(url.encode()).hexdigest(),
         }
         if status is not None:
