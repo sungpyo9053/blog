@@ -493,6 +493,30 @@ function hunt_news_remove_legacy_home_loop( $posts, $query ) {
 }
 add_filter( 'the_posts', 'hunt_news_remove_legacy_home_loop', 99, 2 );
 
+/**
+ * Home page 2+ is paginated by physical-home.php's own lesson query, but the
+ * main query above is emptied, so WordPress answered /page/2/ with 404.
+ * Skip the 404 only while that lesson query still has posts on this page.
+ */
+function huntlab_home_lesson_pages_not_404( $preempt, $query ) {
+	$page = (int) $query->get( 'paged' );
+	if ( $preempt || ! $query->is_main_query() || ! $query->is_home() || $page < 2 ) {
+		return $preempt;
+	}
+	$ids = array();
+	// Same tracks as physical-home.php.
+	foreach ( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ) as $slug ) {
+		$term = get_category_by_slug( $slug );
+		if ( $term ) { $ids[] = $term->term_id; }
+	}
+	if ( ! $ids ) {
+		return $preempt;
+	}
+	$lessons = new WP_Query( array( 'post_type' => 'post', 'post_status' => 'publish', 'category__in' => $ids, 'posts_per_page' => 12, 'paged' => $page, 'fields' => 'ids', 'no_found_rows' => true, 'ignore_sticky_posts' => true ) );
+	return $lessons->post_count > 0;
+}
+add_filter( 'pre_handle_404', 'huntlab_home_lesson_pages_not_404', 10, 2 );
+
 /** Render an original-analysis homepage while keeping daily reports in their archive. */
 function hunt_news_render_editorial_home() {
 	$explainers       = hunt_news_special_posts( 'technical-explainer', 8 );
