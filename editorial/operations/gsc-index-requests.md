@@ -43,3 +43,4 @@
 - 교훈: 일일 할당량이 약 5~10건으로 보임(10/11 10건 성공, 10/12 5건 후 할당량). 입력 직후 Enter는 무시될 수 있어 5초 대기·재입력 후 Enter.
 
 ## 상태 기준선 (10/11 URL Inspection API): 46편 중 PASS 3
+- 2026-10-18: EN /en/docker-desktop-mac-memory-usage-measured/ 요청됨. KO 실패(검색창 포커스), 10/19 재시도.
