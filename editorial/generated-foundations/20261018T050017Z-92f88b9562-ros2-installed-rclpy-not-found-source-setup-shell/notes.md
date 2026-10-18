@@ -1,0 +1,7 @@
+# Purpose-built educational example
+
+설명용 가정 하나로 계산한다. 한 작업일 동안 터미널을 6개 연다. 그중 몇 개에서 setup 파일을 source했는지, 셸이 bash인지 zsh인지, 셸에 맞는 파일(setup.bash 또는 setup.zsh)을 골랐는지를 센다. 이 수로 'import rclpy가 가능할 것으로 예측되는 터미널 수'를 사칙연산으로 구하는 단순한 모델이다. 공식 문서 기준으로 '맞는 조합'은 source를 했고, bash가 아닌 셸에서는 .bash를 그 셸의 확장자로 바꾼 경우다. 입력값은 계산을 따라가기 쉽게 고른 숫자다. 공식 설치 테스트의 터미널 2개(C++ talker, Python listener), source를 빠뜨린 경우, zsh에서 setup.bash를 source한 불일치, 셸 시작 파일에 한 줄을 넣은 경우, 모든 터미널에서 source했지만 셸·파일이 전부 맞지 않는 경계 사례를 넣었다. 결과의 단위는 터미널 개수, source 명령 횟수, 비율이다.
+
+source를 했는지만 세면 마지막 경계 사례도 6개 모두 준비된 것처럼 보인다. 그러나 셸과 setup 파일이 맞는지까지 세면 예상 가능 터미널은 0개다. 그래서 rclpy가 없다는 오류를 봤을 때는 '어느 터미널에서, 어떤 셸로, 어떤 setup 파일을 source했는가'를 먼저 적어야 한다. 그다음 python3 -c 'import rclpy'와 ros2 run demo_nodes_py listener의 종료 코드로 표의 예측을 확인한다. 같은 작업을 매일 반복한다면 셸 시작 파일에 맞는 setup 파일 한 줄을 넣는 쪽이 손으로 source하는 횟수를 크게 줄인다.
+
+이 계산은 사칙연산 교육 모델이며, ROS 2나 Python을 실행한 결과가 아니다. 'zsh에서 setup.bash를 source하면 import가 실패한다'는 판정은 공식 문서의 '셸에 맞게 확장자를 바꾸라'는 안내를 모델에 넣은 가정이다. 실제로 실패하는지, 어떤 오류가 나는지는 별도 컨테이너 실험으로 재야 한다. 가상환경이나 conda처럼 다른 Python 인터프리터를 쓰는 경우, Humble과 Jazzy 사이의 차이, IDE가 셸 환경을 물려받는 방식은 이 계산과 공급된 공식 문서로 판단할 수 없다. 그러므로 원 질문자의 실제 원인을 이 모델로 단정할 수 없다.
