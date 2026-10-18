@@ -1,0 +1,48 @@
+<p>Docker memory usage looks small in <code>docker stats</code>. On a Mac, that is not what your Mac actually pays. Docker Desktop runs your containers inside a Linux virtual machine, and the VM's memory is what macOS sees. On my MacBook (Intel, 8GB RAM) I started containers, made one hold 1.5GB, then removed them, and recorded the Mac-side memory at each step. Three runs.</p>
+
+<h2>Short answer</h2>
+<ul>
+<li><strong>Containers cost more than <code>docker stats</code> shows.</strong> Three idle containers (Postgres, Redis, Node) totalled about 85MiB in <code>docker stats</code>, but Docker's memory on the Mac (RSS) grew by 320 to 472MiB.</li>
+<li><strong>Memory freed inside the VM does not come straight back to macOS.</strong> After removing the 1.5GB container, usage inside the VM dropped back to about 0.95GB within 60 seconds. On the Mac side, Docker was still 129 to 991MiB above its pre-container level three minutes later.</li>
+<li><strong>Removing every test container still leaves it higher than where it started</strong>: 266 to 1,376MiB above the starting value, two minutes after cleanup.</li>
+<li><strong>The VM does reuse what it already holds.</strong> Running the 1.5GB container again in runs 2 and 3 added only 288 and 442MiB on the Mac, versus 1,126MiB the first time.</li>
+<li><strong>The ceiling is the VM memory setting.</strong> With the default 4GiB VM, the highest Mac-side figure I saw was 3,063MiB. On an 8GB Mac, treat Settings → Resources → Memory limit as the most Docker can take from you.</li>
+</ul>
+
+<h2>Setup</h2>
+<p>MacBook Pro 13-inch 2020 (Intel, 4 cores, 8GB RAM), macOS 14.0, Docker Desktop 4.73.0 (engine 29.4.3), VM memory 4GiB (default). Two containers I normally use (about 540MiB inside the VM) kept running throughout; they are part of every row equally.</p>
+<ul>
+<li><strong>Mac side</strong>: summed RSS of the Docker.app processes and the virtual machine process (<code>com.apple.Virtualization.VirtualMachine</code>).</li>
+<li><strong>Inside the VM</strong>: <code>free -m</code> used, run inside the VM.</li>
+<li><strong>One run</strong>: start → run Postgres 16, Redis 7 and Node 22, wait 60s → add a container that holds 1.5GB in memory, wait 40s → remove it, read at 60s and 180s → remove all test containers, wait 120s. Repeated three times.</li>
+</ul>
+
+<table>
+<thead><tr><th>Step</th><th>Docker on the Mac (MiB), runs 1·2·3</th><th>Used inside VM (MiB), runs 1·2·3</th></tr></thead>
+<tbody>
+<tr><td>Start</td><td>1,422 · 2,394 · 1,812</td><td>904 · 882 · 918</td></tr>
+<tr><td>3 containers running</td><td>1,742 · 2,775 · 2,284</td><td>936 · 966 · 934</td></tr>
+<tr><td>1.5GB container added</td><td>2,868 · 3,063 · 2,726</td><td>2,361 · 2,506 · 2,449</td></tr>
+<tr><td>60s after removing it</td><td>3,026 · 2,899 · 2,791</td><td>992 · 987 · 979</td></tr>
+<tr><td>180s after removing it</td><td>2,733 · 2,904 · 2,561</td><td>946 · 950 · 920</td></tr>
+<tr><td>120s after removing all test containers</td><td>2,798 · 2,660 · 2,618</td><td>889 · 904 · 898</td></tr>
+</tbody>
+</table>
+
+<h2>Caveats</h2>
+<ul>
+<li><strong>This is RSS only.</strong> macOS compresses or pages out memory nobody touches. Between runs (about three minutes) the Mac-side number fell from 2,798 to 2,394 and from 2,660 to 1,812MiB. So the memory is not kept forever; it just does not come back within minutes. I did not measure the compressed amount.</li>
+<li><strong>One machine, three runs.</strong> An Apple silicon Mac or another Docker Desktop version may give different numbers.</li>
+<li>The 320 to 472MiB for three containers includes cache the VM picked up while reading image files. The containers' own processes are closer to the <code>docker stats</code> figures (Postgres 60MiB, Redis 15MiB, Node 9MiB).</li>
+<li>I did not try other VM memory settings. "The setting is the ceiling" means the maximum stayed under it at 4GiB.</li>
+</ul>
+
+<h2>On an 8GB Mac</h2>
+<ul>
+<li>The Memory limit in Settings → Resources is the most Docker can take. 4GiB on an 8GB Mac is tight once a browser and an IDE are open. If you only run one or two databases, lowering it helps the whole Mac.</li>
+<li>If the Mac feels slow after a heavy job in a container (a big build, a large data load), removing the container will not free it right away. Restarting Docker Desktop starts a fresh VM and brings the memory back to the starting state.</li>
+<li>When judging container memory, look at Docker and the virtual machine process in Activity Monitor, not only <code>docker stats</code>.</li>
+</ul>
+
+<h2>Reproduce</h2>
+<p>The script (<code>measure.sh</code>) and the raw results (<code>results.tsv</code>, environment in <code>env.txt</code>) are in the <a href="https://github.com/sungpyo9053/blog/tree/main/experiments/docker-desktop-mac-memory">experiment folder</a>. Run <code>bash measure.sh</code> on a Mac with Docker Desktop running. Test containers are named <code>ddm-</code> and nothing else is touched.</p>

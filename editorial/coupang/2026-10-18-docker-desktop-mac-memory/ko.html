@@ -1,0 +1,48 @@
+<p>도커 램 사용량은 <code>docker stats</code>로 보면 작아 보인다. 그런데 맥에서는 그 숫자만큼만 메모리가 빠져나가지 않는다. Docker Desktop은 리눅스 가상 머신(VM)을 하나 띄우고 그 안에서 컨테이너를 돌리기 때문이다. 내 맥북(인텔, RAM 8GB)에서 컨테이너를 띄우고, 1.5GB를 쓰게 하고, 다시 지우면서 맥 쪽 메모리가 어떻게 움직이는지 세 번 쟀다.</p>
+
+<h2>결론부터</h2>
+<ul>
+<li><strong>컨테이너 비용은 <code>docker stats</code>보다 크다.</strong> Postgres·Redis·Node 컨테이너 3개를 띄웠을 때 <code>docker stats</code> 합계는 약 85MiB였지만, 맥에서 Docker 프로세스 메모리(RSS)는 320~472MiB 늘었다.</li>
+<li><strong>VM 안에서 풀린 메모리가 맥으로 바로 돌아오지 않는다.</strong> 1.5GB를 쓴 컨테이너를 지우면 VM 안의 사용량은 60초 안에 원래대로(약 0.95GB) 내려왔다. 맥 쪽은 3분 뒤에도 지우기 전보다 129~991MiB 높았다.</li>
+<li><strong>컨테이너를 다 지워도 처음보다 높다.</strong> 측정용 컨테이너를 모두 지우고 2분 뒤에도 Docker 프로세스 메모리는 시작할 때보다 266~1,376MiB 많았다.</li>
+<li><strong>대신 한 번 잡은 메모리는 다시 쓴다.</strong> 두 번째·세 번째 반복에서 1.5GB 컨테이너를 다시 띄웠을 때 맥 쪽 증가는 288·442MiB로, 첫 번째(1,126MiB)보다 작았다.</li>
+<li><strong>상한은 설정한 VM 메모리다.</strong> VM 메모리 4GiB 설정에서 측정 중 Docker 프로세스 메모리 최대치는 3,063MiB였다. 8GB 맥이라면 설정의 Memory limit이 맥이 Docker에 내줄 수 있는 최대치라고 보고 정하면 된다.</li>
+</ul>
+
+<h2>측정 조건</h2>
+<p>MacBook Pro 13형 2020(인텔 4코어, RAM 8GB), macOS 14.0, Docker Desktop 4.73.0(엔진 29.4.3), VM 메모리 4GiB(기본값). 측정 중에도 평소 쓰던 컨테이너 2개(VM 안에서 약 540MiB)가 계속 돌고 있었다. 이 몫은 매 단계 똑같이 들어 있다.</p>
+<ul>
+<li><strong>맥 쪽 메모리</strong>: Docker.app 프로세스와 가상 머신 프로세스(<code>com.apple.Virtualization.VirtualMachine</code>)의 RSS 합.</li>
+<li><strong>VM 안 메모리</strong>: VM 안에서 <code>free -m</code>의 used.</li>
+<li><strong>순서(한 번 반복)</strong>: 시작 → Postgres 16·Redis 7·Node 22 컨테이너 3개 실행, 60초 → 1.5GB를 메모리에 쥐는 컨테이너 추가, 40초 → 그 컨테이너 삭제 후 60초·180초 → 측정용 컨테이너 모두 삭제 후 120초. 이 순서를 세 번 돌렸다.</li>
+</ul>
+
+<table>
+<thead><tr><th>단계</th><th>맥 쪽 Docker 메모리 (MiB) 1·2·3회</th><th>VM 안 사용량 (MiB) 1·2·3회</th></tr></thead>
+<tbody>
+<tr><td>시작</td><td>1,422 · 2,394 · 1,812</td><td>904 · 882 · 918</td></tr>
+<tr><td>컨테이너 3개 실행</td><td>1,742 · 2,775 · 2,284</td><td>936 · 966 · 934</td></tr>
+<tr><td>1.5GB 컨테이너 추가</td><td>2,868 · 3,063 · 2,726</td><td>2,361 · 2,506 · 2,449</td></tr>
+<tr><td>1.5GB 컨테이너 삭제 60초 뒤</td><td>3,026 · 2,899 · 2,791</td><td>992 · 987 · 979</td></tr>
+<tr><td>삭제 180초 뒤</td><td>2,733 · 2,904 · 2,561</td><td>946 · 950 · 920</td></tr>
+<tr><td>측정용 컨테이너 모두 삭제 120초 뒤</td><td>2,798 · 2,660 · 2,618</td><td>889 · 904 · 898</td></tr>
+</tbody>
+</table>
+
+<h2>숫자를 읽을 때 주의할 점</h2>
+<ul>
+<li><strong>RSS만 쟀다.</strong> macOS는 쓰지 않는 메모리를 압축하거나 내보낸다. 실제로 반복 사이(약 3분)에 맥 쪽 수치가 2,798→2,394, 2,660→1,812MiB로 줄었다. 메모리를 "영영" 안 돌려준다는 뜻이 아니라, 몇 분 단위로는 바로 돌아오지 않는다는 뜻이다. 압축된 양은 따로 재지 않았다.</li>
+<li><strong>기기 하나, 세 번이다.</strong> 인텔 맥 한 대에서 잰 값이다. 애플 실리콘 맥이나 다른 Docker Desktop 버전에서는 숫자가 다를 수 있다.</li>
+<li><strong>컨테이너 3개의 맥 쪽 증가분(320~472MiB)</strong>에는 이미지 파일을 읽으며 VM이 잡은 캐시도 들어 있다. 컨테이너 프로세스만의 메모리는 <code>docker stats</code> 쪽 숫자(Postgres 60MiB, Redis 15MiB, Node 9MiB)에 가깝다.</li>
+<li>VM 메모리 설정을 바꿔 가며 재지는 않았다. "설정값이 상한"이라는 말은 4GiB 설정에서 최대치가 그 아래에 머물렀다는 관찰이다.</li>
+</ul>
+
+<h2>8GB 맥이라면</h2>
+<ul>
+<li>Docker Desktop 설정 → Resources의 Memory limit이 맥이 Docker에 내줄 수 있는 최대치다. 8GB 맥에서 4GiB 기본값이면 브라우저와 IDE 몫까지 생각해 빠듯하다. 띄우는 컨테이너가 DB 한두 개 정도라면 이 값을 낮추는 게 맥 전체에 낫다.</li>
+<li>무거운 작업(큰 빌드, 대량 데이터 적재)을 컨테이너에서 한 뒤 맥이 느려졌다면, 컨테이너를 지우는 것만으로는 바로 풀리지 않는다. Docker Desktop을 재시작하면 VM이 새로 뜨면서 메모리가 처음 상태로 돌아간다.</li>
+<li>컨테이너 메모리를 판단할 때는 <code>docker stats</code>만 보지 말고 활동 모니터에서 Docker와 가상 머신 프로세스도 같이 본다.</li>
+</ul>
+
+<h2>재현</h2>
+<p>측정 스크립트(<code>measure.sh</code>)와 원본 결과(<code>results.tsv</code>, 환경 기록 <code>env.txt</code>)는 <a href="https://github.com/sungpyo9053/blog/tree/main/experiments/docker-desktop-mac-memory">실험 공개 폴더</a>에 있다. Docker Desktop이 켜진 맥에서 <code>bash measure.sh</code>로 같은 순서를 다시 돌릴 수 있다. 측정용 컨테이너는 이름이 <code>ddm-</code>으로 시작하고, 다른 컨테이너는 건드리지 않는다.</p>
