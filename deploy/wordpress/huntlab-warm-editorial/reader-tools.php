@@ -5,7 +5,7 @@ require_once __DIR__ . '/physical-learning.php';
 require_once __DIR__ . '/physical-article-meta.php';
 
 function huntlab_library_template( $template ) {
-	if ( is_front_page() || is_category( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ) ) ) {
+	if ( is_front_page() || is_category( array_merge( array( 'physical-ai-basics', 'physical-ai-principles', 'physical-ai-frameworks', 'physical-ai-experiments' ), array_keys( huntlab_life_topics() ) ) ) ) {
 		remove_action( 'wp_body_open', 'huntlab_warm_editorial_home_intro', 25 );
 		remove_action( 'wp_body_open', 'hunt_news_home_sections', 26 );
 		return __DIR__ . '/physical-home.php';
@@ -68,20 +68,52 @@ add_action( 'wp_enqueue_scripts', 'huntlab_reader_tools_assets', 110 );
 
 function huntlab_reader_footer() {
 	?>
-	<footer class="huntlab-reader-footer" aria-label="사이트 운영 안내"><strong>HuntLab · 피지컬 AI, 기초에서 실습까지</strong><p>용어와 원리를 쉽게 설명하고, 공식 자료·시뮬레이션·실제 실행의 확인 범위를 구분합니다.</p><nav aria-label="운영 정보"><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">운영자와 작성 방식</a><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">검증·정정 원칙</a><a href="<?php echo esc_url( home_url( '/contact/' ) ); ?>">오류 제보</a><a href="<?php echo esc_url( home_url( '/privacy-policy/' ) ); ?>">개인정보처리방침</a></nav></footer>
+	<footer class="huntlab-reader-footer" aria-label="사이트 운영 안내"><strong>HuntLab · 확인한 근거로 쓰는 생활·개발 정보</strong><p>요금·보험·청약·제도는 공식 출처와 확인 날짜를 남기고, 개발 장비와 피지컬 AI는 직접 측정합니다.</p><nav aria-label="운영 정보"><a href="<?php echo esc_url( home_url( '/about/' ) ); ?>">운영자와 작성 방식</a><a href="<?php echo esc_url( home_url( '/editorial-policy/' ) ); ?>">검증·정정 원칙</a><a href="<?php echo esc_url( home_url( '/contact/' ) ); ?>">오류 제보</a><a href="<?php echo esc_url( home_url( '/privacy-policy/' ) ); ?>">개인정보처리방침</a></nav></footer>
 	<?php
 }
 add_action( 'wp_footer', 'huntlab_reader_footer', 30 );
 
+/** Slug => [menu label, one-line description]. Order is menu and home order. */
+function huntlab_life_topics() {
+	return array(
+		'subscription-fees'    => array( '구독·요금', '음악·OTT·멤버십 요금과 해지 조건' ),
+		'insurance-employment' => array( '보험·고용', '건강보험료·고용보험·실업급여 기준과 계산' ),
+		'housing'              => array( '청약·주거', '청약통장·1순위·주택 공급 규칙' ),
+		'policy-stats'         => array( '제도·통계', '법 절차와 공식 통계 읽는 법' ),
+	);
+}
+
+/** Same-topic links under life posts so no page is orphaned (hub-and-spoke). */
+function huntlab_life_related( $content ) {
+	if ( ! is_singular( 'post' ) || ! in_the_loop() || ! is_main_query() ) { return $content; }
+	foreach ( array_keys( huntlab_life_topics() ) as $slug ) {
+		$term = get_category_by_slug( $slug );
+		if ( ! $term || ! has_category( $term->term_id ) ) { continue; }
+		$related = get_posts( array( 'category' => $term->term_id, 'numberposts' => 3, 'post__not_in' => array( get_the_ID() ), 'post_status' => 'publish' ) );
+		if ( ! $related ) { return $content; }
+		$links = '';
+		foreach ( $related as $entry ) { $links .= '<li><a href="' . esc_url( get_permalink( $entry ) ) . '">' . esc_html( get_the_title( $entry ) ) . '</a></li>'; }
+		return $content . '<nav class="huntlab-learning-navigation" aria-label="같은 주제 글"><h2>같은 주제 글</h2><ul>' . $links . '</ul><a href="' . esc_url( get_category_link( $term->term_id ) ) . '">' . esc_html( $term->name ) . ' 전체 보기 →</a></nav>';
+	}
+	return $content;
+}
+add_filter( 'the_content', 'huntlab_life_related', 41 );
+
 /** Keep desktop and hamburger navigation aligned with the actual reading paths. */
 function huntlab_reader_menu( $items, $args ) {
 	if ( ! in_array( $args->theme_location ?? '', array( 'primary', 'mobile' ), true ) ) { return $items; }
-	$links = array( array( '처음 시작하기', '/#learning-path' ), array( '최근 공개한 글', '/#physical-articles' ), array( '운영 아카이브', '/#operations-archive' ), array( '사이트 소개', '/about/' ) );
+	$links = array();
+	foreach ( huntlab_life_topics() as $slug => $topic ) { $links[] = array( $topic[0], home_url( '/category/' . $slug . '/' ) ); }
+	$links[] = array( '개발 장비', get_category_link( 326 ) ); // Term 326 '개발 장비' (slug is percent-encoded Korean).
+	$links[] = array( '피지컬 AI', home_url( '/#learning-path' ) );
+	$base = reset( $items );
+	if ( ! $base ) { return $items; }
 	$updated = array();
-	foreach ( array_slice( array_values( $items ), 0, 4 ) as $index => $item ) {
-		$item = clone $item;
-		$item->title = $links[ $index ][0];
-		$item->url = home_url( $links[ $index ][1] );
+	foreach ( $links as $index => $link ) {
+		$item = clone $base;
+		$item->ID = $item->db_id = 900000 + $index; // Synthetic IDs, unique per item.
+		$item->title = $link[0];
+		$item->url = $link[1];
 		$item->classes = array( 'menu-item' );
 		$item->current = false;
 		$item->current_item_ancestor = false;
