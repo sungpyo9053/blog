@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-gazebo-nonzero-sim-clock-start-rclpy-negative-time-window",
+  "title": "Gazebo 시뮬레이션 시계를 0이 아닌 시각에서 시작하고 싶을 때: rclpy에서 now() − Duration이 '음수 시각' ValueError를 내는 구간을 시뮬레이션 초로 계산하기",
+  "slug": "gazebo-nonzero-sim-clock-start-rclpy-negative-time-window",
+  "reader_question": "Robotics Stack Exchange 질문 'How can you start gazebo with a non-0 simulated clock time?'(https://robotics.stackexchange.com/questions/104397/how-can-you-start-gazebo-with-a-non-0-simulated-clock-time, 조회 696회)에서 출발합니다. use_sim_time 노드가 시뮬레이션 시작 직후 '지금부터 1초 전' 같은 시각을 now() − Duration으로 계산하면 rclpy에서 무슨 일이 생길까요? 시뮬레이션 시계를 0이 아닌 값에서 시작하면 이 문제가 모두 사라질까요, 아니면 /clock을 받기 전 구간이 여전히 남을까요?",
+  "target_reader": "Gazebo 같은 시뮬레이터와 use_sim_time으로 첫 rclpy 노드를 띄워 본 입문자입니다. 시작 직후 ValueError나 이상한 시각 때문에 시뮬레이션 시작 시각을 바꾸려는 사람이 대상이며, 초 단위 뺄셈과 토픽·타이머 개념만 알면 따라올 수 있습니다.",
+  "learning_outcome": "독자는 rclpy Jazzy의 Time.__sub__(Duration)가 결과 나노초가 음수이면 'Subtraction leads to negative time.' ValueError를 낸다는 사실을 소스 코드로 확인합니다. 자기 노드의 되돌아보기 창 길이 W와 타이머 주파수 f로 시작 직후 실패하는 콜백 수를 W×f−1로 미리 셉니다. 실시간 배율 r에서는 이 구간이 벽시계로 W÷r초 이어진다는 것도 계산합니다. 그런 다음 시작 오프셋을 줄지, 시각이 0이거나 W보다 작을 때 계산을 건너뛰는 가드를 넣을지 고릅니다.",
+  "unique_takeaway": "시뮬레이션 시계를 100초처럼 W보다 큰 값에서 시작하면 첫 /clock 이후의 음수 시각 예외는 사라집니다. 하지만 설계 문서상 /clock을 받기 전 ROS 시간은 0이므로 그 구간의 0 − W는 여전히 음수입니다. 또 now가 정확히 W일 때 결과는 예외 없이 Time 0이 되는데, 0은 '초기화되지 않음'을 뜻하는 값입니다. 그래서 시작 오프셋만으로는 부족하고 'now가 0이거나 W 미만이면 건너뛰는' 가드가 함께 있어야 합니다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/rclpy/jazzy/rclpy/rclpy/time.py",
+      "publisher": "ROS 2 rclpy (Jazzy source)",
+      "claim_scope": "How rclpy Time is constructed in Jazzy (Time() defaults to ClockType.SYSTEM_TIME and zero nanoseconds; comparison and arithmetic require matching clock types); source code, not a behavior guarantee for other distros",
+      "checked_at": "2026-10-25T08:36:07.878563+09:00"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/ros2/design/gh-pages/articles/130_ros_time.md",
+      "publisher": "ROS 2 Design",
+      "claim_scope": "Clock abstractions, simulation time and differences from wall time",
+      "checked_at": "2026-10-25T08:36:07.878563+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261024T233604Z-ae21c7f811-gazebo-nonzero-sim-clock-start-rclpy-negative-time-window/example.py",
+    "sha256": "3180a28f43ee14f7e7e03563dd5275eb94cf6f42b9365fade1c0d3442e52f0ba",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/32b08201cf2681f0dc63af82bf724d11ddd38c8e/editorial/generated-foundations/20261024T233604Z-ae21c7f811-gazebo-nonzero-sim-clock-start-rclpy-negative-time-window/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261024T233604Z-ae21c7f811-gazebo-nonzero-sim-clock-start-rclpy-negative-time-window/verification.json",
+    "sha256": "4bed37ad5ab6d60f110cf390ea4663800c8a7f7944ed5ba9e76c289e196430f4",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/32b08201cf2681f0dc63af82bf724d11ddd38c8e/editorial/generated-foundations/20261024T233604Z-ae21c7f811-gazebo-nonzero-sim-clock-start-rclpy-negative-time-window/verification.json"
+  },
+  "author_id": "discovery-writer-918d285af377432499d5e10852558e3c"
+}
