@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (5/20)
+assert math.isclose(value, 0.25, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설 예측: 갱신 전 캐시로 20개 설치 시 실패 비율(교체 5개)', "actual": value})
+value = (20-5)
+assert math.isclose(value, 15, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설 예측: 갱신 전 캐시로도 정상으로 받아지는 패키지 수', "actual": value})
+value = ((5-0)/5)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설 지지 경우: apt update 뒤 실패 0이면 설명된 실패 비율', "actual": value})
+value = ((5-5)/5)
+assert math.isclose(value, 0, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '반례(가설 기각): apt update 뒤에도 실패 5개 그대로면 설명된 실패 비율', "actual": value})
+value = (0/20)
+assert math.isclose(value, 0, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '경계: 교체한 패키지가 0개면 캐시가 오래됐어도 가설이 예측하는 실패 비율', "actual": value})
+value = (6-4)
+assert math.isclose(value, 2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '6대 중 교체 뒤 apt update를 하지 않아 다시 시도할 기계 수', "actual": value})
+value = ((6-4)*5)
+assert math.isclose(value, 10, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설대로라면 그 2대에서 관측돼야 할 Failed to fetch 총수', "actual": value})
+print(json.dumps(results, ensure_ascii=False))
