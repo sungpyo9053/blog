@@ -1,0 +1,70 @@
+{
+  "checked_at": "2026-10-25T08:36:07.878563+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"시계 0에서 시작, 시뮬레이션 0.5초에 1초 전 시각 계산(음수 → ValueError 영역)\", \"actual\": -0.5}, {\"name\": \"정확히 1.0초 경계: 예외는 없지만 결과가 초기화 안 됨을 뜻하는 시각 0\", \"actual\": 0.0}, {\"name\": \"1.25초: 첫 유효한 양수 시각\", \"actual\": 0.25}, {\"name\": \"반례: 시작 오프셋 100초를 줘도 첫 /clock 전에는 ROS 시간 0이라 음수\", \"actual\": -1.0}, {\"name\": \"시작 오프셋 100초, 첫 /clock 수신 뒤\", \"actual\": 99.0}, {\"name\": \"시계 0 시작, 10 Hz 타이머에서 now가 W보다 작아 실패하는 콜백 수 (W×f−1, 0.1~0.9초 틱)\", \"actual\": 9.0}, {\"name\": \"창 길이 W=5초로 늘리면 실패 콜백 수\", \"actual\": 49}, {\"name\": \"실시간 배율 0.25에서 W=1초 구간이 벽시계로 이어지는 시간(초)\", \"actual\": 4.0}, {\"name\": \"오프셋 여유: 시작 오프셋 0.5초는 W=1초보다 작아 첫 /clock 직후에도 음수\", \"actual\": -0.5}]\n",
+  "cases": [
+    {
+      "name": "시계 0에서 시작, 시뮬레이션 0.5초에 1초 전 시각 계산(음수 → ValueError 영역)",
+      "expression": "0.5 - 1.0",
+      "expected": -0.5,
+      "actual": -0.5
+    },
+    {
+      "name": "정확히 1.0초 경계: 예외는 없지만 결과가 초기화 안 됨을 뜻하는 시각 0",
+      "expression": "1.0 - 1.0",
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "name": "1.25초: 첫 유효한 양수 시각",
+      "expression": "1.25 - 1.0",
+      "expected": 0.25,
+      "actual": 0.25
+    },
+    {
+      "name": "반례: 시작 오프셋 100초를 줘도 첫 /clock 전에는 ROS 시간 0이라 음수",
+      "expression": "0 - 1.0",
+      "expected": -1,
+      "actual": -1.0
+    },
+    {
+      "name": "시작 오프셋 100초, 첫 /clock 수신 뒤",
+      "expression": "100 - 1.0",
+      "expected": 99,
+      "actual": 99.0
+    },
+    {
+      "name": "시계 0 시작, 10 Hz 타이머에서 now가 W보다 작아 실패하는 콜백 수 (W×f−1, 0.1~0.9초 틱)",
+      "expression": "1.0 * 10 - 1",
+      "expected": 9,
+      "actual": 9.0
+    },
+    {
+      "name": "창 길이 W=5초로 늘리면 실패 콜백 수",
+      "expression": "5 * 10 - 1",
+      "expected": 49,
+      "actual": 49
+    },
+    {
+      "name": "실시간 배율 0.25에서 W=1초 구간이 벽시계로 이어지는 시간(초)",
+      "expression": "1.0 / 0.25",
+      "expected": 4,
+      "actual": 4.0
+    },
+    {
+      "name": "오프셋 여유: 시작 오프셋 0.5초는 W=1초보다 작아 첫 /clock 직후에도 음수",
+      "expression": "0.5 - 1.0",
+      "expected": -0.5,
+      "actual": -0.5
+    }
+  ],
+  "teaching_context": {
+    "description": "설명용 산술 모델입니다. 단위는 모두 시뮬레이션 초(s)이고, 마지막 두 사례만 벽시계 초와 콜백 개수입니다. 노드는 매 타이머 콜백에서 '지금부터 W초 전' 시각을 now() − Duration(seconds=W)로 계산한다고 가정하고, 기본값은 W=1.0초, 타이머는 시뮬레이션 시간 기준 10 Hz로 둡니다. 결과가 음수이면 rclpy가 ValueError를 내는 영역이고, 0이면 예외는 없지만 설계 문서가 말하는 '초기화되지 않은 시각 0'입니다. 입력은 시작 직후(0.5초), 정확한 경계(1.0초), 경계를 넘은 직후(1.25초)를 고르고, 시작 오프셋 100초를 준 경우를 /clock 수신 전과 후로 나눠 비교하도록 골랐습니다.",
+    "conclusion": "now − W가 음수가 되는 구간은 시뮬레이션 시각이 W보다 작을 때이고, 길이는 시뮬레이션 W초, 벽시계로는 W÷r초입니다. 시작 오프셋을 W 이상으로 주면 첫 /clock 이후 구간은 해결되지만, /clock 수신 전 시각 0 구간은 남습니다. 독자가 할 일은 두 가지입니다. 자기 노드의 W와 타이머 주파수로 실패 콜백 수를 W×f−1로 계산해 두고, 콜백 맨 앞에 'now.nanoseconds가 0이거나 now < W이면 건너뛴다' 가드를 넣는 것입니다. 이후 Jazzy 컨테이너에서 /clock을 0부터 보내는 경우와 100부터 보내는 경우의 ValueError 개수를 세어 이 예측과 비교할 수 있습니다.",
+    "limitations": "이 계산은 rclpy Jazzy time.py 소스의 동작을 바탕으로 한 사칙연산이며 ROS나 Gazebo를 실행한 결과가 아닙니다. Gazebo에서 시작 시각을 실제로 바꾸는 설정 방법, rclcpp의 동작, 다른 배포판의 차이, tf2 조회 실패 같은 다른 원인은 공급된 공식 자료에 없어서 다루지 않습니다. 타이머가 시뮬레이션 0초에 첫 틱을 내는지, Duration 자체가 음수를 허용하는지도 이 자료로 확인되지 않으므로 W×f−1은 0.1초 간격 틱을 가정한 모델값입니다. 로그 재생 중 시간이 뒤로 뛰는 경우와 실물 로봇은 범위 밖입니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
