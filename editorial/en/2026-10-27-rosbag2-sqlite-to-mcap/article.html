@@ -1,0 +1,113 @@
+<p>Short answer: <code>ros2 bag convert -i my_bag -o out.yaml</code>, where <code>out.yaml</code> sets <code>storage_id: mcap</code>. On Humble you first need <code>sudo apt install ros-humble-rosbag2-storage-mcap</code>. Without it, the convert fails and leaves an empty output folder behind, and that folder blocks your next try. If the bag came from Jazzy, Humble can't read its <code>metadata.yaml</code>. Point Humble at the <code>.mcap</code> file itself and pass a QoS override file.</p>
+
+<h2>What happened when I ran it</h2>
+
+<p>I recorded a small bag (<code>/chatter</code>, <code>std_msgs/msg/String</code> at 10 Hz for about 5 seconds) in the official <code>ros:humble-ros-base</code> and <code>ros:jazzy-ros-base</code> Docker images on 2026-10-26. Then I converted it in both directions and opened the Jazzy bag from Humble.</p>
+
+<h3>1. Humble: sqlite3 → MCAP</h3>
+
+<p>Humble records to sqlite3 by default. Its help text says so:</p>
+
+<pre><code>-s {sqlite3,my_test_plugin}, --storage {sqlite3,my_test_plugin}
+                      storage identifier to be used, defaults to 'sqlite3'</code></pre>
+
+<p>The output YAML I used:</p>
+
+<pre><code class="language-yaml">output_bags:
+- uri: h_mcap
+  storage_id: mcap
+  all_topics: true</code></pre>
+
+<p>On the stock image the convert fails:</p>
+
+<pre><code>$ ros2 bag convert -i h_sqlite -o to_mcap.yaml
+[ERROR] [rosbag2_storage]: Could not load/open plugin with storage id 'mcap'
+No storage could be initialized. Abort</code></pre>
+
+<p>The MCAP plugin is a separate package on Humble. Install it:</p>
+
+<pre><code>sudo apt install ros-humble-rosbag2-storage-mcap</code></pre>
+
+<p>(The version I got was 0.15.17.) After that, <code>mcap</code> shows up in <code>--storage</code>. But running the same convert again failed in a new way:</p>
+
+<pre><code>Database directory already exists (h_mcap), can't overwrite existing database</code></pre>
+
+<p>The first failed run had already created an empty <code>h_mcap/</code> directory. Delete it (<code>rm -rf h_mcap</code>) and the convert works:</p>
+
+<pre><code>$ ros2 bag info h_mcap
+Files:             h_mcap_0.mcap
+Bag size:          5.5 KiB
+Storage id:        mcap
+Duration:          4.672787243s
+Messages:          48
+Topic information: Topic: /chatter | Type: std_msgs/msg/String | Count: 48 | Serialization Format: cdr</code></pre>
+
+<p>All 48 messages came through. The data file went from 24,576 bytes (<code>.db3</code>) to 4,674 bytes (<code>.mcap</code>). That ratio comes from a tiny test bag, so don't expect the same on a real one.</p>
+
+<h3>2. Jazzy: MCAP is already the default</h3>
+
+<pre><code>-s {sqlite3,mcap}, --storage {sqlite3,mcap}
+                      Storage identifier to be used, defaults to 'mcap'.</code></pre>
+
+<p>The MCAP plugin ships with <code>ros:jazzy-ros-base</code>, so there's nothing to install. Converting back to sqlite3 with <code>storage_id: sqlite3</code> worked on the first try (42 of 42 messages). Bags recorded on Jazzy are already MCAP.</p>
+
+<h3>3. Opening a Jazzy bag in Humble</h3>
+
+<p>Jazzy writes <code>metadata.yaml</code> as <code>version: 9</code>. Humble writes <code>version: 5</code>. Pointing Humble at the bag directory fails for both <code>info</code> and <code>play</code>:</p>
+
+<pre><code>$ ros2 bag info j_mcap
+Exception on parsing info file: yaml-cpp: error at line 15, column 11: bad conversion</code></pre>
+
+<p>Line 15 is <code>offered_qos_profiles</code>. Jazzy writes it as a YAML list with <code>history: unknown</code>. Humble expects it as a string. The plain <code>info</code> problem goes away if you pass the <code>.mcap</code> file instead of the directory, which skips the file Humble can't read:</p>
+
+<pre><code>$ ros2 bag info j_mcap/j_mcap_0.mcap
+Files:             j_mcap/j_mcap_0.mcap
+Bag size:          6.1 KiB
+Storage id:        mcap</code></pre>
+
+<p>Playing it was a different story. Each of these failed with <code>yaml-cpp: error at line 1, column 12: bad conversion</code> and published nothing (a recorder running alongside caught 0 messages):</p>
+
+<ul>
+<li><code>ros2 bag reindex</code> on a copy of the <code>.mcap</code>. It writes a fresh <code>version: 5</code> metadata.yaml and <code>info</code> works, but <code>play</code> still fails.</li>
+<li>A sqlite3 bag converted from the Jazzy <code>.mcap</code> inside Humble. The convert reports 42 messages, but the bad QoS string comes along with them.</li>
+</ul>
+
+<p>What worked is overriding the recorded QoS at play time:</p>
+
+<pre><code class="language-yaml"># qos.yaml
+/chatter:
+  reliability: reliable
+  durability: volatile
+  history: keep_last
+  depth: 10</code></pre>
+
+<pre><code>ros2 bag play j_mcap/j_mcap_0.mcap --qos-profile-overrides-path qos.yaml</code></pre>
+
+<p>With that, a recorder on the Humble side got all 42 messages, both from the <code>.mcap</code> file directly and from the reindexed copy. If your bag has many topics, the override file needs an entry for each topic you want to play.</p>
+
+<h2>Gotchas</h2>
+
+<ul>
+<li><strong>Delete the output folder after a failed convert.</strong> Otherwise you get "Database directory already exists" and it looks like a new problem.</li>
+<li><strong>Set <code>all_topics: true</code> anyway.</strong> The rosbag2 README warns that the output bag is empty if no topic selection is given. In my Humble run, a YAML with only <code>uri</code> and <code>storage_id</code> still copied all 48 messages. Your version may follow the README, so don't rely on that.</li>
+<li><strong>The <code>-i</code> second value is the input storage.</strong> <code>-i bag.mcap mcap</code> tells convert how to read the input. The output format always comes from the YAML.</li>
+<li><strong>Not tested:</strong> Humble bags played on Jazzy, Iron or Rolling, compressed bags, and multi-GB bags.</li>
+</ul>
+
+<h2>Copy-paste version</h2>
+
+<pre><code># Humble only: add the plugin
+sudo apt install ros-humble-rosbag2-storage-mcap
+
+cat &gt; to_mcap.yaml &lt;&lt;'EOF'
+output_bags:
+- uri: my_bag_mcap
+  storage_id: mcap
+  all_topics: true
+EOF
+
+rm -rf my_bag_mcap          # leftovers from a failed run block the write
+ros2 bag convert -i my_bag -o to_mcap.yaml
+ros2 bag info my_bag_mcap</code></pre>
+
+<p>Sources: <a href="https://github.com/ros2/rosbag2/blob/humble/README.md">rosbag2 README (humble)</a>, <a href="https://github.com/ros2/rosbag2/blob/jazzy/README.md">rosbag2 README (jazzy)</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104976">Convert ROS2 SQLite bag to MCAP format</a> and <a href="https://robotics.stackexchange.com/questions/114246">Convert ROS2 bags from Jazzy to Humble</a>. Related: <a href="https://huntlab.app/en/ros-2-bag-record-split-max-bag-size-vs-max-bag-duration/">splitting bags by size vs duration</a>.</p>
