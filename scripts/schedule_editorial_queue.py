@@ -31,7 +31,10 @@ def next_slot(posts, now):
         if date.tzinfo is None:
             from datetime import timezone
             date = date.replace(tzinfo=timezone.utc)
-        occupied.add(date.astimezone(queue.KST).date())
+        # One runner post per day in the 10:00 lane; other hours (hand-written life posts at 08:00) are a separate lane.
+        local = date.astimezone(queue.KST)
+        if local.hour == 10:
+            occupied.add(local.date())
     for offset in range(1, 8):
         slot = (now + timedelta(days=offset)).replace(hour=10, minute=0, second=0, microsecond=0)
         if slot.date() not in occupied and slot - now <= timedelta(days=7):

@@ -31,9 +31,13 @@ class ScheduleSlotTests(unittest.TestCase):
         posts = [{'status':'future','date_gmt':f'2026-09-{day}T01:00:00'} for day in range(21,28)]
         self.assertIsNone(next_slot(posts, datetime(2026,9,20,16,tzinfo=queue.KST)))
 
-    def test_any_published_post_occupies_whole_korean_day(self):
-        posts = [{'status': 'publish', 'date_gmt': '2026-09-20T23:30:00Z'}]
+    def test_ten_oclock_post_occupies_korean_day(self):
+        posts = [{'status': 'publish', 'date_gmt': '2026-09-21T01:30:00Z'}]
         self.assertEqual(next_slot(posts, datetime(2026,9,20,16,tzinfo=queue.KST)).day, 22)
+
+    def test_other_hour_lane_does_not_occupy(self):
+        posts = [{'status': 'future', 'date_gmt': '2026-09-20T23:00:00'}]  # 08:00 KST life post
+        self.assertEqual(next_slot(posts, datetime(2026,9,20,16,tzinfo=queue.KST)).day, 21)
 
 
 class ScheduleSafetyTests(unittest.TestCase):
