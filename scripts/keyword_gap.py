@@ -37,7 +37,7 @@ def related(seeds):
     data = get(f"https://api.searchad.naver.com{path}?{q}", {
         "X-Timestamp": ts, "X-API-KEY": os.environ["NAVER_SEARCHAD_API_KEY"],
         "X-Customer": os.environ["NAVER_SEARCHAD_CUSTOMER_ID"], "X-Signature": sig})
-    return {k["relKeyword"]: count(k["monthlyPcQcCnt"]) + count(k["monthlyMobileQcCnt"]) for k in data["keywordList"]}
+    return {k["relKeyword"]: (count(k["monthlyPcQcCnt"]) + count(k["monthlyMobileQcCnt"]), k.get("compIdx", "")) for k in data["keywordList"]}
 
 
 def blog_docs(keyword):
@@ -46,11 +46,14 @@ def blog_docs(keyword):
         "X-Naver-Client-Id": os.environ["NAVER_CLIENT_ID"], "X-Naver-Client-Secret": os.environ["NAVER_CLIENT_SECRET"]})["total"]
 
 
-def verdict(volume, docs):
+def verdict(volume, docs, comp=""):
     # ponytail: fixed thresholds, tune after a few weeks of GSC results.
-    ratio = docs / max(volume, 1)
     if volume < 300:
         return "수요 적음"
+    if docs is None:
+        # No Search API key (new sign-ups closed 2026-07): fall back to the ad competition index.
+        return {"낮음": "공략", "중간": "가능"}.get(comp, "경쟁 심함")
+    ratio = docs / max(volume, 1)
     return "공략" if ratio < 3 else "가능" if ratio < 10 else "경쟁 심함"
 
 
@@ -61,13 +64,13 @@ def main(argv):
     vols = {}
     for i in range(0, len(seeds), 5):
         vols.update(related(seeds[i:i + 5]))
-    rows = []
-    for kw, vol in sorted(vols.items(), key=lambda x: -x[1])[:top]:
-        docs = blog_docs(kw)
-        rows.append((kw, vol, docs, verdict(vol, docs)))
+    rows, has_docs = [], bool(os.environ.get("NAVER_CLIENT_ID"))
+    for kw, (vol, comp) in sorted(vols.items(), key=lambda x: -x[1][0])[:top]:
+        docs = blog_docs(kw) if has_docs else None
+        rows.append((kw, vol, docs, comp, verdict(vol, docs, comp)))
         time.sleep(0.1)
-    rows.sort(key=lambda r: (r[3] != "공략", r[3] != "가능", -r[1] / max(r[2], 1)))
-    print("키워드\t월검색량\t블로그문서\t판정")
+    rows.sort(key=lambda r: (r[4] != "공략", r[4] != "가능", -r[1] / max(r[2] or 1, 1)))
+    print("키워드\t월검색량\t블로그문서\t광고경쟁\t판정")
     for r in rows:
         print("\t".join(map(str, r)))
 
@@ -77,6 +80,7 @@ if __name__ == "__main__":
         assert count("< 10") == 5 and count(1200) == 1200
         assert verdict(100, 1) == "수요 적음" and verdict(1000, 2000) == "공략"
         assert verdict(1000, 5000) == "가능" and verdict(1000, 50000) == "경쟁 심함"
+        assert verdict(1000, None, "낮음") == "공략" and verdict(1000, None, "높음") == "경쟁 심함"
         print("ok")
     else:
         main(sys.argv[1:])
