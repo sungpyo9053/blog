@@ -20,7 +20,7 @@
 - 최신 배포판(Lyrical) 문제 해결 글 경쟁 적음(automaticaddison만 진입).
 
 ## 적용 순서
-1. EN ROS 노출 상위 글에 실측 그림(터미널 출력·비교 차트) 추가.
+1. EN ROS 노출 상위 글에 실측 그림(터미널 출력·비교 차트) 추가. — (20:50) #874 colcon 글에 빌드시간·메모리 차트(results.json 5회 중앙값) 삽입, 백업 /var/backups/post874.20261026.html. 주의: wp media import URL이 127.0.0.1로 나와 https://huntlab.app 로 교체 필요.
 2. 새 EN 글: Lyrical 문제 해결 + dev 일반 고검색량 주제.
 3. 커뮤니티 실측 답변으로 백링크·유입(3번).
 
