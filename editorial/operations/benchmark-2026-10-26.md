@@ -24,10 +24,21 @@
 2. 새 EN 글: Lyrical 문제 해결 + dev 일반 고검색량 주제.
 3. 커뮤니티 실측 답변으로 백링크·유입(3번).
 
-## KO
-(에이전트 분석 대기 — 도착 후 같은 표)
+## KO (7곳: blanclucy, aboda, yellowit, foxcg, benefitshub, patross0303, thecheck — 원표 scratchpad bench/ko.md)
+| 항목 | 상위 공통(중앙값) | 우리 | loss |
+|---|---|---|---|
+| 관련 글 블록·BlogPosting JSON-LD·날짜/바이라인·FAQ 섹션·목차 | 7/7·7/7·7/7·7/7·6/7 | 있음 | 0 |
+| 본문 3,057자·h2 7·표 1 | | 비슷 | 0 |
+| AdSense 수동 슬롯 | 5/6, 페이지당 3(본문 1+) | 0(자동만) | **큼, 수익 직결** — 슬롯 ID 사용자 필요 |
+| 캐시 플러그인 | 6/7, 홈 TTFB 0.23s | 없음 0.7s | (10/26 21시 Cache Enabler 적용) |
+| 이미지 | 4 | 0~3 | 중간 |
+| 글 수 | ~2,000 | KO ~70 | 큼 — 검색량 큰 주제로 늘림 |
+| 제목 패턴 | '총정리/비교/가이드' 7/7, 연도 5/14 | '비교' 일부 | 작음 |
+| FAQPage 스키마 | 2/7 | 없음 | 차별화 여지 |
 
 ## 같이 찾아 고친 것
 - 빈 태그 225·빈 카테고리 22 삭제(NOINDEX 210의 대부분).
 - 비활성 UI 백업 플러그인 13개가 웹에서 200으로 열림 → /var/backups/plugin-backups-20261026 으로 이동, 404 확인.
 - 감사(116 URL): 깨진 내부 링크 0, canonical·noindex 정상, ads.txt 정상, 수동 광고 단위 0(자동광고만).
+- (21:00) Cache Enabler 적용: WP_CACHE 추가(백업 /var/backups/wp-config.20261026.php), 12시간 만료·글 저장 시 전체 비움. 브라우저 요청(Accept: text/html)에서 캐시 HTML 확인. 롤백: 플러그인 비활성 + wp-config 1행 삭제.
+- (20:50) EN #1060 'Lyrical Unknown CMake command ament_target_dependencies' 10/29 10시 예약 — Docker humble/jazzy/kilted/lyrical 실측, 결과 매트릭스 이미지 포함(이미지 loss 대응). SE 118519 조회 417(Lyrical 질문 1위).
