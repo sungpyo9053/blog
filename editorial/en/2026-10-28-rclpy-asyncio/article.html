@@ -1,0 +1,87 @@
+<p>Short answer: rclpy doesn't run on asyncio. An <code>async def</code> callback is driven by rclpy's own executor, so <code>await asyncio.sleep()</code> inside it raises <code>RuntimeError: no running event loop</code>. You can await rclpy futures there, like <code>client.call_async()</code>, but on a single-threaded executor the call hung in every setup I tried except one: the async callback in a <code>ReentrantCallbackGroup</code>. If you need real asyncio (websockets, aiohttp), give asyncio the main thread and run <code>rclpy.spin</code> in a background thread.</p>
+
+<h2>What I ran</h2>
+
+<p>One Python script, one node, run in the official <code>ros:humble-ros-base</code> (rclpy 3.3.22, Python 3.10.12) and <code>ros:jazzy-ros-base</code> (rclpy 7.1.12, Python 3.12.3) Docker images on 2026-10-26. Both distros gave the same results except where noted. The script and raw output are linked at the end.</p>
+
+<h3>1. <code>await asyncio.sleep()</code> in an rclpy callback</h3>
+
+<pre><code class="language-python">async def cb():
+    await asyncio.sleep(0.1)
+
+node.create_timer(0.5, cb)
+rclpy.spin(node)</code></pre>
+
+<pre><code>[A] cb start
+[A] EXC RuntimeError no running event loop</code></pre>
+
+<p>That happened on every tick, on both distros. rclpy accepts the coroutine and steps it itself. No asyncio loop is running in that thread, so anything that needs one fails. A plain (non-async) callback that calls <code>asyncio.run(asyncio.sleep(0.1))</code> does work. It took 0.10 s each time. But it blocks the executor for as long as the coroutine runs, so it only suits short one-off work.</p>
+
+<h3>2. <code>await client.call_async()</code> in an async callback</h3>
+
+<p>This is the pattern rclpy is built for: the client future is an rclpy future, so the executor can resume your coroutine when the response arrives. I gave each variant 3 seconds on a <code>SingleThreadedExecutor</code>. The service server was a trivial <code>std_srvs/Trigger</code> handler in the same process.</p>
+
+<table>
+<thead><tr><th>Setup</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Timer, client and server all in the node's default group</td><td>Hung (no response in 3 s)</td></tr>
+<tr><td>Server moved to a second node on the same executor</td><td>Hung</td></tr>
+<tr><td>Client given its own <code>MutuallyExclusiveCallbackGroup</code></td><td>Hung</td></tr>
+<tr><td>Timer in a <code>ReentrantCallbackGroup</code></td><td>Response at once (<code>success= True</code>)</td></tr>
+</tbody>
+</table>
+
+<p>My reading of this: while the coroutine sits at <code>await</code>, rclpy still counts the timer callback as running, so it keeps its mutually exclusive group busy. The default group also holds the client (which has to process the response) and, in the first row, the server. Moving only one of them out of that group wasn't enough. Putting the awaiting callback in a reentrant group was. The ROS 2 guide on callback groups gives the same rule for synchronous calls: the callback and the client making the call need to be in different groups, or in a reentrant group (<a href="https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html">Using callback groups</a>).</p>
+
+<pre><code class="language-python">from rclpy.callback_groups import ReentrantCallbackGroup
+
+async def cb():
+    res = await cli.call_async(Trigger.Request())
+
+node.create_timer(0.5, cb, callback_group=ReentrantCallbackGroup())</code></pre>
+
+<h3>3. <code>spin_until_future_complete</code> inside a callback</h3>
+
+<p>This is the sync-style version people try next. It fails, and the two distros fail differently:</p>
+
+<ul>
+<li><strong>Humble:</strong> no error. It waits the full <code>timeout_sec=2.0</code> and returns with <code>future.done() == False</code>. If you don't check <code>done()</code>, you get a silent 2-second stall and no result.</li>
+<li><strong>Jazzy:</strong> raises <code>RuntimeError: Executor is already spinning</code> right away.</li>
+</ul>
+
+<p>Don't call any <code>spin*</code> function from inside a callback. Use an async callback (section 2) or the thread split below.</p>
+
+<h3>4. asyncio on the main thread, rclpy in a thread</h3>
+
+<p>When you need actual asyncio libraries, let asyncio own the main thread and hand ROS messages over with <code>loop.call_soon_threadsafe</code>:</p>
+
+<pre><code class="language-python">async def main():
+    loop = asyncio.get_running_loop()
+    q = asyncio.Queue()
+    node.create_subscription(
+        String, "chat",
+        lambda m: loop.call_soon_threadsafe(q.put_nowait, m.data), 10)
+    threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
+    while True:
+        data = await q.get()
+        ...  # await websockets, aiohttp, etc. here
+
+rclpy.init()
+node = Node("bridge")
+asyncio.run(main())</code></pre>
+
+<p>Publishing 5 messages from the asyncio side and reading them back through the subscription gave <code>received 5 ['msg0', 'msg1', 'msg2', 'msg3', 'msg4']</code> on both distros. Calling <code>publisher.publish()</code> straight from a coroutine worked here. To start a coroutine from a ROS callback, use <code>asyncio.run_coroutine_threadsafe(coro, loop)</code>. Don't call <code>q.put_nowait</code> directly from the ROS thread. <code>asyncio.Queue</code> isn't thread-safe, which is why the callback goes through <code>call_soon_threadsafe</code>.</p>
+
+<h2>Which one to use</h2>
+
+<ul>
+<li><strong>Only need to await service or action results:</strong> an async callback in a <code>ReentrantCallbackGroup</code>. No asyncio involved.</li>
+<li><strong>Need asyncio libraries:</strong> asyncio on the main thread, <code>rclpy.spin</code> in a daemon thread, and <code>call_soon_threadsafe</code> / <code>run_coroutine_threadsafe</code> across the boundary.</li>
+<li><strong>Short one-off async call from a sync callback:</strong> <code>asyncio.run()</code> works, but it blocks every other callback on that executor until it returns.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p><code>MultiThreadedExecutor</code>, action clients, Iron and Rolling, and third-party asyncio executors for rclpy. I only used a timer as the calling callback. Subscription callbacks may behave the same, but I didn't measure them.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-10-28-rclpy-asyncio/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/24304">How to bridge rclpy with Python's asyncio?</a>, <a href="https://robotics.stackexchange.com/questions/110318">Deadlock with spin_until_future_complete in a timer</a>. Related: <a href="https://huntlab.app/en/ros-2-rclpy-rate-sleep-blocks-forever-fix/">rclpy Rate.sleep() blocking forever</a>.</p>
