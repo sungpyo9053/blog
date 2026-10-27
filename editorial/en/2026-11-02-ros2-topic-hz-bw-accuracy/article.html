@@ -1,0 +1,50 @@
+<p>Short answer: <code>ros2 topic hz</code> was accurate at the rates most robots use. At 400 Hz and 1,000 Hz it matched a C++ subscriber counting every message to within 0.2% on Humble and Jazzy. It only fell behind at very high rates. On a 2-vCPU machine it topped out around 4,600–5,000 Hz, so a 10 kHz topic was reported at about half its real rate. <code>ros2 topic bw</code> averages only the last 100 messages and counts a little more than the serialized message size, so don't use it to work out a rate. If <code>hz</code> shows 750 Hz at 1 kHz, check whether the publisher really reaches 1 kHz before you blame the tool.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-27 I built two small C++ nodes in the official <code>ros:humble-ros-base</code> and <code>ros:jazzy-ros-base</code> Docker images, on a 2-vCPU Intel Xeon Platinum 8259CL host. The publisher sends a <code>sensor_msgs/JointState</code> with two joints (108 bytes serialized, like a small <code>/joint_states</code>) from a wall timer at a set rate. The counter subscribes with a queue depth of 1000, waits 2 s, then counts messages and bytes for 10 s. For each rate I ran the counter, then <code>ros2 topic hz</code> for 14 s, then <code>ros2 topic bw</code> for 14 s, one at a time so they didn't compete for CPU.</p>
+
+<figure class="wp-block-image"><img src="__CHART_URL__" alt="ros2 topic hz matches a C++ counter up to 5000 Hz, then flattens near 4600 to 5000 Hz while the C++ counter keeps rising" width="1400" height="660" loading="lazy"/><figcaption>Up to 5,000 Hz the lines overlap. At 10,000 Hz, hz reports about half of what the C++ subscriber received.</figcaption></figure>
+
+<table>
+<thead><tr><th>Target</th><th>Humble: counted / <code>hz</code></th><th>Jazzy: counted / <code>hz</code></th></tr></thead>
+<tbody>
+<tr><td>400 Hz</td><td>400.0 / 400.0</td><td>400.0 / 400.0</td></tr>
+<tr><td>1,000 Hz</td><td>1,000.0 / 999.9</td><td>999.8 / 1,000.0</td></tr>
+<tr><td>2,000 Hz</td><td>1,780.4 / 1,999.4</td><td>1,997.7 / 2,000.4</td></tr>
+<tr><td>5,000 Hz</td><td>4,499.8 / 4,992.5</td><td>4,986.6 / 4,985.0</td></tr>
+<tr><td>10,000 Hz</td><td>8,861.6 / 4,948.4</td><td>6,918.6 / 4,568.7</td></tr>
+</tbody>
+</table>
+
+<p>Up to 5,000 Hz, <code>hz</code> agreed with the publisher's target. In two Humble runs (2,000 and 5,000 Hz), my C++ counter received fewer messages than <code>hz</code> reported. A busy subscriber can fall behind too, so the counter isn't a perfect reference either. At 10,000 Hz the two diverge in the other direction. The C++ counter received 6,900–8,900 messages per second, while <code>hz</code> stayed below 5,000.</p>
+
+<h2>Why <code>ros2 topic bw</code> doesn't line up</h2>
+
+<table>
+<thead><tr><th>Target</th><th>Counted (serialized bytes)</th><th><code>ros2 topic bw</code></th></tr></thead>
+<tbody>
+<tr><td>400 Hz</td><td>42.2 KB/s</td><td>43.3–43.5 KB/s</td></tr>
+<tr><td>1,000 Hz</td><td>105.5 KB/s</td><td>108.1–108.8 KB/s</td></tr>
+<tr><td>5,000 Hz</td><td>474.6–525.9 KB/s</td><td>540.4–540.7 KB/s</td></tr>
+<tr><td>10,000 Hz</td><td>729.7–934.6 KB/s</td><td>535.4–575.5 KB/s</td></tr>
+</tbody>
+</table>
+
+<p>Every <code>bw</code> line ends with <code>from 100 messages</code>. It averages a window of the latest 100 messages, which at 1 kHz is a tenth of a second. Where my counter kept up with the publisher (both distros at 400 and 1,000 Hz, Jazzy at 2 and 5 kHz), it read about 3% higher than the serialized size my counter summed. At 10 kHz it fell behind just like <code>hz</code>. So rate × message size from <code>hz</code> won't match <code>bw</code> exactly even when both work. Treat <code>bw</code> as a rough bandwidth figure, not a second rate meter.</p>
+
+<h2>What this means for the 1 kHz controller case</h2>
+
+<p>The question this answers saw about 750 Hz from <code>hz</code> with the controller manager set to 1 kHz, on a Raspberry Pi 4. In my test, <code>hz</code> measured a real 1 kHz topic correctly. That was on faster x86 cores, and I didn't test a Pi 4. So before trusting the tool's limits, check how many messages actually arrive. A small counting subscriber like mine (in the evidence folder) takes a minute to build. If it also shows about 750 Hz, the publisher isn't keeping up with 1 kHz. If it shows 1,000, <code>hz</code> is the bottleneck on that machine.</p>
+
+<p>Run <code>hz</code> and <code>bw</code> one at a time, and not on the machine that is already at full load. Each one is a Python process that receives every message.</p>
+
+<h2>Not explained</h2>
+
+<p>With <code>ros2 topic hz -w 2000</code> (a larger averaging window), Jazzy printed 394.1 Hz at 400 Hz and 963.9 Hz at 1,000 Hz. The default window gave 400.0 and 1,000.0 in the same runs. Humble didn't show this. I didn't track down why.</p>
+
+<h2>Not tested</h2>
+
+<p>Raspberry Pi or other ARM boards, Lyrical, Cyclone DDS (all runs used the default Fast DDS), larger messages such as images, and running <code>hz</code> on a different machine from the publisher.</p>
+
+<p>Source, scripts and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-02-ros2-topic-hz-bw-accuracy/evidence">evidence folder</a>. Question this answers: <a href="https://robotics.stackexchange.com/questions/110419">Inconsistency between ros2 topic hz and bw</a>. Related: <a href="https://huntlab.app/en/ros-2-rclpy-publish-slow-large-custom-message-arrays/">rclpy publish slow with large custom message arrays</a>.</p>

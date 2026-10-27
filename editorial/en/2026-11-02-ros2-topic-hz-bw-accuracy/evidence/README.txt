@@ -1,0 +1,1 @@
+out_discarded_publishers_stacked.txt: first run killed the ros2 run wrapper, not the C++ publisher, so publishers stacked (400+800=1200 Hz). Discarded. res2_* run the binary directly and print "pubs left: 0" after each step.
