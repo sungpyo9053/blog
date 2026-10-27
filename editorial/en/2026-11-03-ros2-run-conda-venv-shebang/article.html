@@ -1,0 +1,58 @@
+<p>Short answer: <code>ros2 run</code> doesn't use the Python from your conda or venv environment. <code>colcon build</code> writes <code>#!/usr/bin/python3</code> as the first line of each Python node script, so the node runs on the system Python and can't see <code>torch</code>, <code>tensorflow</code> or anything else you installed with that environment's <code>pip</code>. Add two lines to the package's <code>setup.cfg</code> so the script uses whichever <code>python3</code> is first on your PATH, then rebuild with the environment active. That fixed it for a venv and a conda env on Humble and Jazzy. On Jazzy with conda, also <code>pip install pyyaml</code> into the environment, or <code>import rclpy</code> fails next.</p>
+
+<pre><code class="language-ini"># setup.cfg of your ament_python package
+[build_scripts]
+executable = /usr/bin/env python3</code></pre>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-27 I used the official <code>ros:humble-ros-base</code> and <code>ros:jazzy-ros-base</code> Docker images. I created an <code>ament_python</code> package with <code>ros2 pkg create</code>. Its node prints <code>sys.executable</code>, imports a package that only exists in the environment (<code>tqdm</code>, standing in for torch), and then imports <code>rclpy</code>. I tried two environments with the same Python version as the distro (3.10 on Humble, 3.12 on Jazzy): a venv created with <code>--system-site-packages</code>, and a conda env from conda-forge. In each one I built with the environment active, read the first line of <code>install/demo/lib/demo/n</code>, and ran <code>ros2 run demo n</code>.</p>
+
+<figure class="wp-block-image"><img src="__CHART_URL__" alt="Result matrix: ros2 run fails with ModuleNotFoundError in all four venv and conda cases with the default build; setup.cfg executable /usr/bin/env python3 fixes all except Jazzy conda, which then needs pyyaml" width="1500" height="470" loading="lazy"/><figcaption>Same node and same commands. Only the environment and setup.cfg change.</figcaption></figure>
+
+<h2>Why it happens</h2>
+
+<p>With the default package, the installed script starts with <code>#!/usr/bin/python3</code> in all four cases, even though <code>python3</code> on the PATH was the venv's or conda's at build time. When <code>ros2 run</code> starts it, the node printed <code>python: /usr/bin/python3</code> and then:</p>
+
+<pre><code>ModuleNotFoundError: No module named 'tqdm'</code></pre>
+
+<p><code>rclpy</code> still imported, because sourcing <code>setup.bash</code> puts ROS on <code>PYTHONPATH</code> for any interpreter. That's why the error looks like an environment problem when it's really about which interpreter runs the node. It also explains a common misdiagnosis: the package is installed correctly, and <code>python -c "import torch"</code> works in the same terminal. It's just not the Python that <code>ros2 run</code> starts.</p>
+
+<h2>Fix 1: <code>setup.cfg</code> (what I'd use)</h2>
+
+<p>With the <code>[build_scripts]</code> block above and a fresh build, the first line became <code>#!/usr/bin/env python3</code>. The node then printed the environment's interpreter (<code>/venv/bin/python3</code> or <code>/mc/envs/env/bin/python3</code>) and imported both <code>tqdm</code> and <code>rclpy</code> on Humble (venv and conda) and on Jazzy (venv).</p>
+
+<p>Two things to keep in mind:</p>
+<ul>
+<li>The script now uses whatever <code>python3</code> comes first on the PATH <em>when you run it</em>. Activate the same environment in every terminal where you run the node, including terminals that run <code>ros2 launch</code>.</li>
+<li>I moved <code>build/</code> and <code>install/</code> out of the way before each build, so every run started clean. If an old script is still in <code>install/</code>, check its first line with <code>head -1 install/&lt;pkg&gt;/lib/&lt;pkg&gt;/&lt;node&gt;</code>.</li>
+</ul>
+
+<h2>Jazzy with conda: "No module named 'yaml'"</h2>
+
+<p>On Jazzy, the conda run got past <code>tqdm</code> and then stopped inside rclpy:</p>
+
+<pre><code>  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/parameter.py", line 27, in &lt;module&gt;
+    import yaml
+ModuleNotFoundError: No module named 'yaml'</code></pre>
+
+<p>Jazzy's rclpy imports PyYAML, which comes from the system package <code>python3-yaml</code>, and a conda env doesn't see system packages. After <code>pip install pyyaml</code> inside the conda env, <code>import rclpy</code> worked. A plain venv created <em>without</em> <code>--system-site-packages</code> hit the same <code>yaml</code> error on Jazzy. On Humble it imported rclpy without it. Creating the venv with <code>python3 -m venv --system-site-packages</code> avoided it on both.</p>
+
+<h2>Fix 2: point PYTHONPATH at the environment</h2>
+
+<p>Leaving the script on the system Python and adding the venv's <code>site-packages</code> to <code>PYTHONPATH</code> also worked, on both distros:</p>
+
+<pre><code class="language-bash">export PYTHONPATH=$(python3 -c 'import site; print(site.getsitepackages()[0])'):$PYTHONPATH
+ros2 run demo n</code></pre>
+
+<p>This only works when the environment's Python version matches the system's exactly, as it did here. Compiled packages like torch are built for one Python version. I tested this with a venv only, not conda. If the versions differ, you're back to the problem in <a href="https://huntlab.app/en/no-module-named-rclpy-rclpy-pybind11-ros-2/">No module named 'rclpy._rclpy_pybind11'</a>. rclpy itself won't load in a conda Python of another version.</p>
+
+<h2>Side note: conda in scripts</h2>
+
+<p>With the Miniconda installer, <code>conda create</code> in a non-interactive script stopped with <code>CondaToSNonInteractiveError: Terms of Service have not been accepted</code> for the default Anaconda channels. I used <code>--override-channels -c conda-forge</code> instead. If you build in CI or Docker, make that choice explicitly.</p>
+
+<h2>Not tested</h2>
+
+<p>Lyrical, <code>ament_cmake</code> packages with Python scripts installed by <code>install(PROGRAMS ...)</code>, <code>colcon build --symlink-install</code>, environment Python versions that differ from the system's, and real torch or TensorFlow installs (tqdm stood in for them).</p>
+
+<p>Scripts and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-03-ros2-run-conda-venv-shebang/evidence">evidence folder</a>. Question this answers: <a href="https://robotics.stackexchange.com/questions/109651">Running a ros2 package in virtual anaconda environment in ROS2 Humble</a>. Related: <a href="https://huntlab.app/en/no-module-named-rclpy-rclpy-pybind11-ros-2/">No module named 'rclpy' or 'rclpy._rclpy_pybind11' in ROS 2</a>.</p>

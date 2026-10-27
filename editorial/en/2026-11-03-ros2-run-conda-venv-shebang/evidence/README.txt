@@ -1,0 +1,1 @@
+res1_*: first run. The conda env was never created (Anaconda default channel needs Terms of Service acceptance in non-interactive mode), so the "conda" lines ran the system python. Discarded. res2_* use conda-forge.
