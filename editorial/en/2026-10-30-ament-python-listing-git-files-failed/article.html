@@ -1,0 +1,84 @@
+<p>Short answer: <code>listing git files failed - pretending there aren't any</code> comes from <code>setuptools_scm</code>, a pip package that hooks into every <code>setup.py</code> build once it's installed. It isn't an error. In my tests the build finished and the node ran every time this line appeared, so if <code>colcon build</code> failed, the cause is another line in the output. The line shows up when setuptools_scm 7.x or 8.x is installed and the workspace either isn't a git repository or is owned by a different user. If you don't use setuptools_scm, <code>pip3 uninstall setuptools-scm</code> removes it. The other common advice is to downgrade setuptools to 58.2.0. I didn't test that version, but the message appeared with setuptools 59.6.0 and with 84.2.1, so the setuptools version doesn't seem to be what triggers it.</p>
+
+<h2>The message</h2>
+
+<pre><code>listing git files failed - pretending there aren't any</code></pre>
+
+<p>In my runs it was printed twice per package, and <code>colcon build</code> still reported the package as finished.</p>
+
+<p>With setuptools_scm 8.x the same text is prefixed with <code>ERROR setuptools_scm._file_finders.git</code>. That looks worse, but the build still exited with code 0.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-27 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images. In each one I created a package with <code>ros2 pkg create --build-type ament_python demo_py --node-name talker</code>, ran <code>colcon build</code>, and then ran the node. I repeated this with setuptools_scm 7.1.0, 8.1.0 and 10.3.4 installed through pip, in a workspace that wasn't a git repository, a git repository I owned, and a git repository owned by another user. "Builds" below means <code>colcon build</code> exited with 0 <em>and</em> <code>ros2 run demo_py talker</code> printed <code>Hi from demo_py.</code></p>
+
+<figure class="wp-block-image"><img src="__MATRIX_URL__" alt="Result matrix: setuptools_scm 7.1.0 and 8.1.0 print 'listing git files failed' when the workspace is not a git repo or is owned by another user but still build; setuptools_scm 10.3.4 is quiet except that a repo owned by another user fails with git introspection failed; safe.directory fixes it" width="1500" height="560" loading="lazy"/><figcaption>Same package and same commands. Only setuptools_scm and the git situation change.</figcaption></figure>
+
+<table>
+<thead><tr><th>Distro</th><th>Python</th><th>setuptools (apt)</th><th>colcon-ros</th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>3.10.12</td><td>59.6.0</td><td>0.5.0</td></tr>
+<tr><td>Jazzy</td><td>3.12.3</td><td>68.1.2</td><td>0.5.0</td></tr>
+<tr><td>Lyrical</td><td>3.14.4</td><td>78.1.1</td><td>0.5.0</td></tr>
+</tbody>
+</table>
+
+<h2>When the message appears</h2>
+
+<ul>
+<li><strong>No setuptools_scm:</strong> never.</li>
+<li><strong>setuptools_scm 7.1.0 (Humble and Jazzy) or 8.1.0 (Humble):</strong> when the workspace isn't a git repository, and when it is one but owned by a different user (git refuses with <code>detected dubious ownership</code>). Not inside a git repository you own.</li>
+<li><strong>setuptools_scm 10.3.4 (Humble and Jazzy):</strong> never. But see the next section.</li>
+</ul>
+
+<p>The most common way to end up with setuptools_scm is a <code>pip install</code> of some unrelated Python project that depends on it. On Humble that just works. On Jazzy a plain <code>pip install setuptools_scm</code> (with <code>PIP_BREAK_SYSTEM_PACKAGES=1</code>) failed for me with <code>Cannot uninstall packaging 24.0, RECORD file not found. Hint: The package was installed by debian.</code>, so nothing got installed. Lyrical failed the same way. Forcing it with <code>--ignore-installed</code> worked, but it also pulled in setuptools 84.2.1, and pip warned <code>colcon-core 0.21.3 requires setuptools&lt;80,&gt;=30.3.0</code>. The builds in my test still passed.</p>
+
+<h2>The case that does fail</h2>
+
+<p>With setuptools_scm 10.3.4, a workspace inside a git repository owned by another user stopped the build on both Humble and Jazzy:</p>
+
+<pre><code>git introspection failed: fatal: detected dubious ownership in repository at '/ws'
+Failed   &lt;&lt;&lt; demo_py [1.04s, exited with code 1]</code></pre>
+
+<p>You hit this when you build as a different user than the one who cloned the repo. Typical cases are <code>sudo colcon build</code>, a Docker container running as root on a bind-mounted checkout, or a shared workspace. Either fix worked:</p>
+
+<pre><code class="language-bash"># tell git the repo is fine (use your workspace path)
+git config --global --add safe.directory /path/to/ws
+
+# or remove setuptools_scm if nothing you use needs it
+pip3 uninstall setuptools-scm</code></pre>
+
+<p>Building as the user who owns the files avoids it too. The same <code>safe.directory</code> line also silenced the 7.x/8.x message in a repo owned by another user.</p>
+
+<h2>The other ament_python warning: "doesn't explicitly install a marker"</h2>
+
+<p>This one comes from colcon, not setuptools:</p>
+
+<pre><code>WARNING:colcon.colcon_ros.task.ament_python.build:Package 'demo_py' doesn't explicitly install a marker in the package index (colcon-ros currently does it implicitly but that fallback will be removed in the future)</code></pre>
+
+<p>The "marker" is an empty file named after your package, installed into <code>share/ament_index/resource_index/packages/</code>. It's how <code>ros2 run</code> and <code>ros2 pkg list</code> find the package. <code>ros2 pkg create</code> adds the file and the <code>setup.py</code> line that installs it. On all three distros (colcon-ros 0.5.0):</p>
+
+<table>
+<thead><tr><th>setup.py / files</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>As generated by <code>ros2 pkg create</code></td><td>Builds, no warning</td></tr>
+<tr><td><code>data_files</code> entry for <code>resource_index/packages</code> removed</td><td>Builds with the marker warning. <code>ros2 run</code> still worked because colcon installs the marker for you.</td></tr>
+<tr><td><code>resource/demo_py</code> file deleted, entry kept</td><td>Fails: <code>error: can't copy 'resource/demo_py': doesn't exist or not a regular file</code></td></tr>
+</tbody>
+</table>
+
+<p>To fix the warning, put this back in <code>data_files</code> and make sure the empty file <code>resource/&lt;package_name&gt;</code> exists:</p>
+
+<pre><code class="language-python">data_files=[
+    ('share/ament_index/resource_index/packages',
+        ['resource/' + package_name]),
+    ('share/' + package_name, ['package.xml']),
+],</code></pre>
+
+<p>If you renamed the package, rename the file in <code>resource/</code> too. A leftover file with the old name gives you the <code>can't copy</code> error above.</p>
+
+<h2>Not tested</h2>
+
+<p>setuptools_scm versions other than 7.1.0, 8.1.0 and 10.3.4. I didn't run setuptools_scm on Lyrical, because pip refused to install it there just as on Jazzy. I also didn't test virtual environments, packages that use <code>setup.cfg</code>/<code>pyproject.toml</code> only, or builds without git installed while setuptools_scm 10.x is present. I tried that last one only with a repository owned by another user, and it built.</p>
+
+<p>Build scripts and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-10-30-ament-python-listing-git-files-failed/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104326">colcon build on ROS2 humble outputs "listing git files failed - pretending there aren't any"</a>, <a href="https://robotics.stackexchange.com/questions/97794">ament_python: Package doesn't explicitly install a marker in the package index</a>. Related: <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">ros2: command not found after sourcing local_setup.bash</a>.</p>
