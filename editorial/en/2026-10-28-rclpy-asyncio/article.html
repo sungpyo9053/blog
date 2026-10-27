@@ -17,6 +17,24 @@ rclpy.spin(node)</code></pre>
 
 <p>That happened on every tick, on both distros. rclpy accepts the coroutine and steps it itself. No asyncio loop is running in that thread, so anything that needs one fails. A plain (non-async) callback that calls <code>asyncio.run(asyncio.sleep(0.1))</code> does work. It took 0.10 s each time. But it blocks the executor for as long as the coroutine runs, so it only suits short one-off work.</p>
 
+<p>If all you need is to <em>wait</em> inside an async callback, there's an rclpy-native way that doesn't block. Create a one-shot timer that completes an rclpy <code>Future</code>, and await that future. I ran 50 waits of 0.02 s on Humble (rclpy 3.3.22), Jazzy (7.1.12) and Lyrical (10.0.11). They took 1.02–1.03 s in total, the worst overshoot was 0.6–1.6 ms, and a 20 Hz timer on the same node kept firing. One catch: if the timer only calls <code>cancel()</code>, it stays on the node. After 50 waits the node held 51 timers. Calling <code>destroy_timer</code> left just the 20 Hz one:</p>
+
+<pre><code class="language-python">from rclpy.task import Future
+
+def async_sleep(node, sec):
+    fut = Future()
+    timer = None
+    def done():
+        fut.set_result(None)
+        node.destroy_timer(timer)  # cancel() alone leaves the timer on the node
+    timer = node.create_timer(sec, done)
+    return fut
+
+# inside an async callback:
+#     await async_sleep(self, 0.5)</code></pre>
+
+<p>On Lyrical there's also <code>rclpy.experimental.AsyncNode</code>, which runs the node on an asyncio loop without an rclpy executor. There, <code>await node.get_clock().sleep(0.02)</code> worked. 50 sleeps took 1.02 s, worst overshoot 1.5 ms, and a timer on the node kept ticking. It's marked experimental and is only exported on Python 3.12 or newer.</p>
+
 <h3>2. <code>await client.call_async()</code> in an async callback</h3>
 
 <p>This is the pattern rclpy is built for: the client future is an rclpy future, so the executor can resume your coroutine when the response arrives. I gave each variant 3 seconds on a <code>SingleThreadedExecutor</code>. The service server was a trivial <code>std_srvs/Trigger</code> handler in the same process.</p>
@@ -77,11 +95,12 @@ asyncio.run(main())</code></pre>
 <ul>
 <li><strong>Only need to await service or action results:</strong> an async callback in a <code>ReentrantCallbackGroup</code>. No asyncio involved.</li>
 <li><strong>Need asyncio libraries:</strong> asyncio on the main thread, <code>rclpy.spin</code> in a daemon thread, and <code>call_soon_threadsafe</code> / <code>run_coroutine_threadsafe</code> across the boundary.</li>
+<li><strong>Only need to wait inside an async callback:</strong> await a one-shot timer future and destroy the timer when it fires. On Lyrical, <code>AsyncNode</code> with <code>get_clock().sleep()</code> is an experimental alternative.</li>
 <li><strong>Short one-off async call from a sync callback:</strong> <code>asyncio.run()</code> works, but it blocks every other callback on that executor until it returns.</li>
 </ul>
 
 <h2>Not tested</h2>
 
-<p><code>MultiThreadedExecutor</code>, action clients, Iron and Rolling, and third-party asyncio executors for rclpy. I only used a timer as the calling callback. Subscription callbacks may behave the same, but I didn't measure them.</p>
+<p><code>MultiThreadedExecutor</code>, action clients, Iron and Rolling, the rest of Lyrical's <code>AsyncNode</code> API (I only measured its sleep), and third-party asyncio executors for rclpy. I only used a timer as the calling callback. Subscription callbacks may behave the same, but I didn't measure them.</p>
 
 <p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-10-28-rclpy-asyncio/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/24304">How to bridge rclpy with Python's asyncio?</a>, <a href="https://robotics.stackexchange.com/questions/110318">Deadlock with spin_until_future_complete in a timer</a>. Related: <a href="https://huntlab.app/en/ros-2-rclpy-rate-sleep-blocks-forever-fix/">rclpy Rate.sleep() blocking forever</a>.</p>
