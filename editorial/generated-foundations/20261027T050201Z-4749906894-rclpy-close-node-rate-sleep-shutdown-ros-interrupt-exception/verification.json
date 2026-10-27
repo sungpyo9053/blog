@@ -1,0 +1,64 @@
+{
+  "checked_at": "2026-10-27T14:02:04.968821+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"10 Hz 루프의 주기(ms)\", \"actual\": 100.0}, {\"name\": \"2350 ms 셧다운 전에 정상 반환된 sleep 횟수(마지막 틱 2300 ms)\", \"actual\": 23.0}, {\"name\": \"마지막 sleep이 셧다운 전까지 이미 기다린 시간\", \"actual\": 50}, {\"name\": \"소스대로 이벤트가 즉시 깨울 때 셧다운 후 추가 대기\", \"actual\": 0}, {\"name\": \"반례 가정: 10 Hz에서 다음 틱 2400 ms까지 기다린다면 추가 대기\", \"actual\": 50}, {\"name\": \"반례 가정: 1 Hz 루프에서 다음 틱 3000 ms까지 기다린다면 추가 대기\", \"actual\": 650}, {\"name\": \"경계: 셧다운이 틱 2400 ms와 정확히 겹칠 때 그 틱까지의 틱 번호\", \"actual\": 24.0}, {\"name\": \"반례 가정에서 0.5 m/s 명령이 650 ms 더 유지될 때 이동 거리(m)\", \"actual\": 0.325}]\n",
+  "cases": [
+    {
+      "name": "10 Hz 루프의 주기(ms)",
+      "expression": "1000 / 10",
+      "expected": 100,
+      "actual": 100.0
+    },
+    {
+      "name": "2350 ms 셧다운 전에 정상 반환된 sleep 횟수(마지막 틱 2300 ms)",
+      "expression": "(2350 - 50) / 100",
+      "expected": 23,
+      "actual": 23.0
+    },
+    {
+      "name": "마지막 sleep이 셧다운 전까지 이미 기다린 시간",
+      "expression": "2350 - 2300",
+      "expected": 50,
+      "actual": 50
+    },
+    {
+      "name": "소스대로 이벤트가 즉시 깨울 때 셧다운 후 추가 대기",
+      "expression": "2350 - 2350",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "반례 가정: 10 Hz에서 다음 틱 2400 ms까지 기다린다면 추가 대기",
+      "expression": "2400 - 2350",
+      "expected": 50,
+      "actual": 50
+    },
+    {
+      "name": "반례 가정: 1 Hz 루프에서 다음 틱 3000 ms까지 기다린다면 추가 대기",
+      "expression": "3000 - 2350",
+      "expected": 650,
+      "actual": 650
+    },
+    {
+      "name": "경계: 셧다운이 틱 2400 ms와 정확히 겹칠 때 그 틱까지의 틱 번호",
+      "expression": "2400 / 100",
+      "expected": 24,
+      "actual": 24.0
+    },
+    {
+      "name": "반례 가정에서 0.5 m/s 명령이 650 ms 더 유지될 때 이동 거리(m)",
+      "expression": "0.5 * 650 / 1000",
+      "expected": 0.325,
+      "actual": 0.325
+    }
+  ],
+  "teaching_context": {
+    "description": "단위는 모두 밀리초(ms)입니다. 루프의 첫 sleep이 t=0에서 시작하고, 틱은 주기의 정수배 시각에 온다고 가정한 교육용 산술 모델입니다. 10 Hz(주기 100 ms) 루프에서 rclpy.shutdown()이 2350 ms에 호출되는 경우를 기본으로 둡니다. 2350 ms는 틱(2300·2400 ms) 사이에 끼도록 일부러 고른 값입니다. 첫째로 셧다운 전에 정상 반환된 sleep 횟수를, 둘째로 소스대로 이벤트가 즉시 깨울 때의 탈출 지연을 계산합니다. 셋째로 '이벤트 없이 다음 틱까지 기다린다'는 반례 가정의 대기 시간을 10 Hz와 1 Hz에서 비교합니다. 넷째로 셧다운이 틱과 정확히 겹치는 경계를 봅니다. 마지막으로 반례 가정에서 0.5 m/s 이동 명령이 그대로 유지된다고 칠 때 늘어나는 이동 거리를 m 단위로 환산해 물리적 의미를 보입니다. 이 숫자는 이후 ROS 2 Jazzy 컨테이너 실험의 예측표가 됩니다. 실험에서는 spin을 별도 스레드에서 돌리고 2350 ms에 rclpy.shutdown()을 호출해 각 반복의 단조 시각, 예외 종류, 셧다운부터 예외까지의 지연을 기록합니다. SIGINT로 같은 루프를 끝낼 때의 결과는 소스로 주장하지 않고 측정값으로만 남깁니다.",
+    "conclusion": "Rate.sleep()은 셧다운 시 등록된 종료 함수가 이벤트를 set하므로, 기다리던 스레드가 다음 틱을 기다리지 않고 깨어나 ROSInterruptException을 던집니다. 따라서 셧다운 뒤 추가 대기의 이론값은 0 ms이고, 셧다운 전에 끝난 반복 수는 (셧다운 시각 − 셧다운 시각의 주기 나머지) ÷ 주기로 셀 수 있습니다. 반례 가정처럼 다음 틱까지 기다린다면 추가 대기는 10 Hz에서 50 ms, 1 Hz에서 650 ms이고, 최악의 경우 한 주기 전체가 됩니다. 0.5 m/s 명령이 그만큼 유지된다고 가정하면 0.325 m를 더 움직이는 셈입니다. 독자가 할 일은 세 가지입니다. 루프를 try/except ROSInterruptException으로 감싸 이 예외를 정상 종료 경로로 처리하고, executor를 별도 스레드에서 돌리며, 실험에서 측정한 실제 탈출 지연과 위 예측을 비교합니다. 셧다운이 틱과 정확히 겹치는 경계(2400 ms)에서는 그 틱의 sleep이 정상 반환될지 예외가 날지 스레드 순서에 달린 경합이므로, 반복 수가 23인지 24인지는 측정으로 확인합니다.",
+    "limitations": "근거는 rclpy Jazzy 브랜치 timer.py 소스 하나이며, 다른 배포판의 동작은 보장하지 않습니다. 산술은 틱이 주기의 정수배에 정확히 온다고 가정합니다. 실제 탈출 지연은 스레드 스케줄링과 executor 상태에 따라 0보다 클 수 있고, 이 값은 실험으로만 알 수 있습니다. '다음 틱까지 기다린다'는 rclpy의 동작이 아니라 비교용 반례 가정입니다. 0.5 m/s 이동 거리도 모터 드라이버가 마지막 명령을 유지한다는 가정 위의 환산이며, 실제 로봇의 정지 동작을 뜻하지 않습니다. Ctrl+C(SIGINT)가 context 셧다운을 일으키는지, destroy_node()와 rclpy.shutdown()의 호출 순서, 셧다운 뒤 마지막 정지 명령을 publish할 수 있는지, ExternalShutdownException 같은 executor 쪽 예외는 공급된 원문에 없습니다. 그래서 이 글에서 주장하지 않고 측정 항목이나 범위 밖으로 남깁니다. Rate 문서 주석이 경고하듯, 콜백 안에서 SingleThreadedExecutor와 함께 sleep()을 부르면 영영 멈출 수 있으므로 이 계산은 executor가 다른 스레드에서 돈다는 전제에서만 성립합니다. 실물 로봇이나 시뮬레이터 결과는 이 산술에서 추론할 수 없습니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
