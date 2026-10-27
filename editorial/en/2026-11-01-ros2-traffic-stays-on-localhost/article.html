@@ -1,0 +1,64 @@
+<p>Short answer: on one machine, ROS 2 already keeps the message data off your network. In my test, 50 messages a second of 1 KB each produced only DDS discovery traffic on <code>eth0</code>: 3–4 KB in 10 seconds, while the 500 KB of messages never left the host. To stop even that, set <code>ROS_LOCALHOST_ONLY=1</code> on Humble or <code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code> on Jazzy and newer. With either one, <code>eth0</code> sent 0 bytes with both Fast DDS and Cyclone DDS. If <code>ros2 topic list</code> then shows nothing, call it again after a few seconds. The first call ran before discovery finished.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-27 I used the official <code>ros:humble-ros-base</code> and <code>ros:jazzy-ros-base</code> Docker images on a Linux host. Each container gets a normal network interface (<code>eth0</code>) plus loopback (<code>lo</code>). Inside one container, <code>ros2 topic pub -r 50</code> published a <code>std_msgs/String</code> with 1,000 characters, and <code>ros2 topic hz</code> subscribed for 10 seconds. I read the kernel's transmit counters for <code>eth0</code> and <code>lo</code> (<code>/sys/class/net/*/statistics/tx_*</code>) before and after those 10 seconds. Every run received the messages at 50 Hz.</p>
+
+<figure class="wp-block-image"><img src="https://huntlab.app/wp-content/uploads/2026/10/ros2-localhost-eth0-bytes.png" alt="Bytes sent on eth0 in 10 seconds: about 1 to 4 KB of discovery by default, 0 bytes with ROS_LOCALHOST_ONLY or ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST" width="1400" height="640" loading="lazy"/><figcaption>Kernel transmit counters for eth0, before and after 10 seconds of publishing.</figcaption></figure>
+
+<table>
+<thead><tr><th>Distro / RMW</th><th>Setting</th><th>eth0 sent in 10 s</th></tr></thead>
+<tbody>
+<tr><td>Humble, Fast DDS 6.2.10</td><td>default</td><td>10 packets, 3,056 B</td></tr>
+<tr><td>Humble, Fast DDS</td><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>0</td></tr>
+<tr><td>Humble, Cyclone DDS 1.3.5</td><td>default</td><td>4 packets, 1,121 B</td></tr>
+<tr><td>Humble, Cyclone DDS</td><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>0</td></tr>
+<tr><td>Jazzy, Fast DDS 8.4.4</td><td>default</td><td>8 packets, 4,040 B</td></tr>
+<tr><td>Jazzy, Fast DDS</td><td><code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code></td><td>0</td></tr>
+<tr><td>Jazzy, Fast DDS</td><td><code>ROS_LOCALHOST_ONLY=1</code> (deprecated name)</td><td>0</td></tr>
+<tr><td>Jazzy, Cyclone DDS 2.2.4</td><td>default</td><td>4 packets, 1,121 B</td></tr>
+<tr><td>Jazzy, Cyclone DDS</td><td><code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code></td><td>0</td></tr>
+<tr><td>Jazzy, Cyclone DDS</td><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>0</td></tr>
+</tbody>
+</table>
+
+<p>The messages themselves would be about 500 KB in 10 seconds (500 × 1 KB). Nothing close to that crossed <code>eth0</code> in any configuration. The few packets in the default rows are discovery announcements, which go out every few seconds so that other machines can find the nodes.</p>
+
+<h2>So why is my network slow?</h2>
+
+<p>The question this answers describes a router slowing down while all nodes run on one machine. In my single-host test, the message data stayed on the host and only a few KB of discovery went out. If you see much more than that, something on another machine is probably subscribed. Examples are RViz on a laptop, <code>ros2 bag record</code> on another host, or a second robot on the same <code>ROS_DOMAIN_ID</code>. Once a subscriber exists on another machine, the data has to cross the network to reach it. I didn't measure that multi-machine case here. Either way, the localhost settings above stop it, because they also stop other machines from discovering your nodes.</p>
+
+<p>To check quickly, compare your interface counters before and after 10 seconds, the same way I did:</p>
+
+<pre><code class="language-bash">cat /sys/class/net/eth0/statistics/tx_bytes; sleep 10; cat /sys/class/net/eth0/statistics/tx_bytes</code></pre>
+
+<p>Replace <code>eth0</code> with your interface name (<code>ip link</code> lists them). Other programs on the machine count too, so stop large downloads before you test.</p>
+
+<h2>Cyclone DDS: "selected interface "lo" is not multicast-capable"</h2>
+
+<p>With Cyclone DDS and <code>ROS_LOCALHOST_ONLY=1</code> on Humble, every command printed:</p>
+
+<pre><code>selected interface "lo" is not multicast-capable: disabling multicast</code></pre>
+
+<p>In my test this was only a warning. The subscriber still got 50 Hz, and <code>eth0</code> sent nothing. You don't need the <code>ifconfig lo multicast</code> / <code>route add</code> workaround from the question for nodes on one host to talk. On Jazzy with Cyclone DDS 2.2.4 the warning didn't appear.</p>
+
+<h2><code>ros2 topic list</code> shows nothing</h2>
+
+<p>The other half of that question is that <code>ros2 topic list</code> stayed empty. I tested this on Jazzy with Fast DDS, three times per setting, with a publisher already running:</p>
+
+<table>
+<thead><tr><th>Setting</th><th>First <code>ros2 topic list</code></th><th><code>--no-daemon</code></th><th>Again 3 s later</th></tr></thead>
+<tbody>
+<tr><td>default</td><td>found it 1 of 3</td><td>1 of 3</td><td>3 of 3</td></tr>
+<tr><td><code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code></td><td>0 of 3</td><td>0 of 3</td><td>3 of 3</td></tr>
+<tr><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>0 of 3</td><td>0 of 3</td><td>3 of 3</td></tr>
+</tbody>
+</table>
+
+<p>The first call after the ROS 2 daemon starts often comes back empty, because the daemon hasn't finished discovery yet. With the localhost settings it was empty every time. A second call a few seconds later listed the topic every time. Before you change network settings, run the command twice. Also make sure the shell running <code>ros2</code> has the same <code>RMW_IMPLEMENTATION</code>, <code>ROS_DOMAIN_ID</code> and localhost variables as your nodes. I ran <code>ros2 daemon stop</code> before every test so that each one started a fresh daemon. Do the same after you change any of these variables.</p>
+
+<h2>Not tested</h2>
+
+<p>Traffic between two machines, Wi-Fi, Zenoh (<code>rmw_zenoh_cpp</code>), large messages such as images and point clouds, Fast DDS shared-memory settings, and Lyrical. I counted bytes per interface and didn't decode packets. I only measured what crossed <code>eth0</code>, not how each DDS moved the data inside the host.</p>
+
+<p>Scripts and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-01-ros2-traffic-stays-on-localhost/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/112557">How to avoid ROS2 topic messages to be transferred over the network while used on the same machine?</a>, <a href="https://robotics.stackexchange.com/questions/107632">CycloneDDS is not working well ROS_LOCALHOST_ONLY=1 in ros2 humble</a>. Related: <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">ROS 2 nodes can't see each other: ROS_AUTOMATIC_DISCOVERY_RANGE</a>.</p>
