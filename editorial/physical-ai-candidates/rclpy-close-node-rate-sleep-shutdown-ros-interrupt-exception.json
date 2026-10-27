@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-rclpy-close-node-rate-sleep-shutdown-ros-interrupt-exception",
+  "title": "rclpy 노드를 제대로 종료하려면: rate.sleep() 루프가 rclpy.shutdown() 뒤 ROSInterruptException으로 빠져나오는 시점 계산하기",
+  "slug": "rclpy-close-node-rate-sleep-shutdown-ros-interrupt-exception",
+  "reader_question": "Robotics Stack Exchange 질문 'Actual good way to close nodes'(https://robotics.stackexchange.com/questions/113602/actual-good-way-to-close-nodes)는 rclpy 노드를 깔끔하게 끝내는 실제로 좋은 방법이 무엇인지 묻습니다. 이 글은 그중 초보자가 가장 먼저 부딪히는 경우로 범위를 좁힙니다. while 루프 안에서 rate.sleep()으로 주기를 맞추는 제어 노드를 rclpy.shutdown()으로 끝내면, 루프는 다음 주기까지 기다린 뒤 빠져나올까, 아니면 바로 깨어날까? 그리고 그때 어떤 예외를 받아서 처리해야 할까?",
+  "target_reader": "rclpy로 while 루프와 node.create_rate()를 써서 센서 읽기나 속도 명령 루프를 처음 만들어 본 ROS 2 Jazzy 입문자입니다. 노드를 종료할 때 나오는 트레이스백이 정상인지 오류인지 구분하지 못하는 사람을 대상으로 합니다.",
+  "learning_outcome": "rclpy Jazzy의 Rate 구현을 근거로 다음을 설명할 수 있게 됩니다. Rate는 타이머 콜백이 set하는 threading.Event를 기다리는 래퍼입니다. 생성될 때 context.on_shutdown에 종료 함수를 등록하므로, 셧다운이 일어나면 destroy()가 이벤트를 set해 잠든 sleep()이 다음 틱을 기다리지 않고 깨어나고, _postsleep에서 ROSInterruptException을 던집니다. 셧다운 뒤에 sleep()을 다시 부르면 _presleep에서 같은 예외가 납니다. 독자는 자기 루프의 주기(ms)와 셧다운 시각으로 셧다운 전에 끝난 반복 수와 탈출 지연을 직접 계산합니다. 그리고 루프를 try/except ROSInterruptException으로 감싸고 executor를 별도 스레드에서 돌리는 구조로 고칠 수 있습니다.",
+  "unique_takeaway": "rate.sleep()은 셧다운 순간 이벤트로 즉시 깨어나 예외를 던지게 설계되어 있습니다. 그래서 1 Hz처럼 느린 루프에서도 종료가 최대 한 주기(1000 ms)만큼 늦어지지 않습니다. ROSInterruptException 트레이스백은 정상적인 종료 신호이며, 오류로 볼 것이 아니라 잡아서 처리할 대상입니다. 이 차이는 '다음 틱까지 기다린다'는 가정을 반례로 세워 ms 단위로 비교하면 드러납니다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/rclpy/jazzy/rclpy/rclpy/timer.py",
+      "publisher": "ROS 2 rclpy (Jazzy source)",
+      "claim_scope": "How rclpy Timer and Rate are implemented in Jazzy (Rate.sleep waits on a timer driven by the node's clock and executor); source code, not a behavior guarantee for other distros",
+      "checked_at": "2026-10-27T14:02:04.968821+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261027T050201Z-4749906894-rclpy-close-node-rate-sleep-shutdown-ros-interrupt-exception/example.py",
+    "sha256": "285a456b16196d13c0dbb054cdbbeadfc8cf77017bcd762539fa068f4b96eba8",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/c853b691bd82b36151a6e66f7af22c307a712346/editorial/generated-foundations/20261027T050201Z-4749906894-rclpy-close-node-rate-sleep-shutdown-ros-interrupt-exception/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261027T050201Z-4749906894-rclpy-close-node-rate-sleep-shutdown-ros-interrupt-exception/verification.json",
+    "sha256": "a894946ff64624d99db38384ae8c9ac9ccc0abbfe9b5cf8f49362a2f996566e5",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/c853b691bd82b36151a6e66f7af22c307a712346/editorial/generated-foundations/20261027T050201Z-4749906894-rclpy-close-node-rate-sleep-shutdown-ros-interrupt-exception/verification.json"
+  },
+  "author_id": "discovery-writer-39d5806adde043f4991455190f15e38e"
+}
