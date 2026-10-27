@@ -42,3 +42,7 @@
 - 감사(116 URL): 깨진 내부 링크 0, canonical·noindex 정상, ads.txt 정상, 수동 광고 단위 0(자동광고만).
 - (21:00) Cache Enabler 적용: WP_CACHE 추가(백업 /var/backups/wp-config.20261026.php), 12시간 만료·글 저장 시 전체 비움. 브라우저 요청(Accept: text/html)에서 캐시 HTML 확인. 롤백: 플러그인 비활성 + wp-config 1행 삭제.
 - (20:50) EN #1060 'Lyrical Unknown CMake command ament_target_dependencies' 10/29 10시 예약 — Docker humble/jazzy/kilted/lyrical 실측, 결과 매트릭스 이미지 포함(이미지 loss 대응). SE 118519 조회 417(Lyrical 질문 1위).
+- (10/27 08:45) 외부 도메인 복제 차단: api.cokoedu.com·서버 IP가 우리 글 전체를 200+자기 canonical로 내보내던 것 → .htaccess Host 301(상위 사이트는 vhost ServerName으로 기본 차단, 우리만 HTTP_HOST 그대로 쓰던 구조).
+- (10/27 08:55) 제목 패턴 loss: 멜론 #514 '총정리(2026)'+가격 답 첫 문단, EN #890 'ros2: command not found on Jazzy?'+Short answer.
+- (10/27 09:05) 차별화: 생활글 #1063 근로장려금에 공식 산정표 447구간 계산기(상위 KO 사이트들의 계산기형 유입 대응).
+- (10/27 09:15) 이미지 loss: EN #890(노출 2위)에 실측 막대그래프. EN 이미지 있는 글 2→3편(#874·#890·#1060).
