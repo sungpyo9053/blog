@@ -1,0 +1,73 @@
+<p>Short answer: in a ROS 2 Python node, catch <code>KeyboardInterrupt</code> (Ctrl+C) and <code>ExternalShutdownException</code> (<code>kill</code>/SIGTERM) around <code>rclpy.spin()</code>, do your cleanup in <code>finally</code>, and end with <code>rclpy.try_shutdown()</code> instead of <code>rclpy.shutdown()</code>. On Humble and Jazzy the plain <code>rclpy.shutdown()</code> raised <code>rcl_shutdown already called</code> after every Ctrl+C or SIGTERM in my tests. On Lyrical, SIGTERM doesn't produce <code>ExternalShutdownException</code> at all, so the exit code changes. If your node runs under <code>ros2 launch</code> and cleanup takes more than 5 seconds, raise <code>sigterm_timeout</code>, or launch kills the node about 10 seconds after Ctrl+C.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-27 I ran one small node in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images. The node spins a 10 Hz timer. After 2–3 seconds the test script sends it SIGINT (what Ctrl+C sends) or SIGTERM (what <code>kill</code>, <code>docker stop</code> and launch's escalation send). The node logs which exception reached it, whether <code>finally</code> ran, and what the shutdown call did. The SIGTERM case was repeated 5 times with the timer and 5 times without it on each distro. Every repeat gave the same result.</p>
+
+<figure class="wp-block-image"><img src="__MATRIX_URL__" alt="Shutdown behavior by distro: SIGINT gives KeyboardInterrupt everywhere; SIGTERM gives ExternalShutdownException on Humble and Jazzy but RCLError on Lyrical; rclpy.shutdown after Ctrl+C raises already called on Humble and Jazzy; try_shutdown is fine everywhere; with rclpy.init works only on Lyrical" width="1500" height="600" loading="lazy"/><figcaption>One row per thing that can go wrong at shutdown.</figcaption></figure>
+
+<h2>The pattern that worked on all three</h2>
+
+<pre><code class="language-python">import rclpy
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
+
+def main():
+    rclpy.init()
+    node = Node("my_node")
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        # save files, stop motors, etc.
+        node.destroy_node()
+        rclpy.try_shutdown()</code></pre>
+
+<p>On Humble and Jazzy this handled both signals and exited with code 0. On Lyrical it handled Ctrl+C the same way, but SIGTERM raised an exception the <code>except</code> line doesn't catch. More on that below.</p>
+
+<h2>"rcl_shutdown already called"</h2>
+
+<p>Swap <code>rclpy.try_shutdown()</code> for <code>rclpy.shutdown()</code> in the code above, and Humble and Jazzy print this after every Ctrl+C and every SIGTERM:</p>
+
+<pre><code>RCLError: failed to shutdown: rcl_shutdown already called on the given context</code></pre>
+
+<p>rclpy's signal handler has already shut the context down by the time your <code>finally</code> runs. <code>try_shutdown()</code> skips the call when that's the case. On Lyrical, plain <code>rclpy.shutdown()</code> after Ctrl+C returned without an error, but <code>try_shutdown()</code> works there too, so it's the one to use if your code has to run on several distros.</p>
+
+<h2>SIGTERM on Lyrical: RCLError instead of ExternalShutdownException</h2>
+
+<p>On Humble (rclpy 3.3.22) and Jazzy (7.1.12), SIGTERM made <code>rclpy.spin()</code> raise <code>ExternalShutdownException</code> 10 times out of 10. On Lyrical (rclpy 10.0.11) it raised this 10 times out of 10:</p>
+
+<pre><code>rclpy._rclpy_pybind11.RCLError: failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:110</code></pre>
+
+<p>That exception isn't one of the two in the <code>except</code> line, so it goes past it. In my test the <code>finally</code> block was still reached (it logged a line), and then the exception propagated: the process ended with a traceback and exit code 1. That matters if a supervisor such as systemd or a container restart policy treats a non-zero exit as a crash. Ctrl+C on Lyrical behaved like on the other distros. A related report is open as <a href="https://github.com/ros2/rclpy/issues/1731">ros2/rclpy#1731</a>. It describes the same <code>RCLError</code>-instead-of-<code>ExternalShutdownException</code> behavior when shutdown happens between <code>spin_once</code> calls.</p>
+
+<h2><code>with rclpy.init():</code> works on Lyrical only</h2>
+
+<p>Newer examples use <code>rclpy.init()</code> as a context manager, without <code>destroy_node()</code> or <code>shutdown()</code>. On Lyrical that worked, and Ctrl+C left the <code>with</code> block cleanly. On Humble it failed immediately with <code>AttributeError: __enter__</code>, and on Jazzy with <code>TypeError: 'NoneType' object does not support the context manager protocol</code>. If you copy an example from the rolling branch into a Humble or Jazzy package, use the try/finally form above instead.</p>
+
+<h2>ros2 launch: "failed to terminate '5' seconds after receiving 'SIGINT'"</h2>
+
+<p>When you press Ctrl+C on <code>ros2 launch</code>, it sends SIGINT to each process. If a process hasn't exited 5 seconds later, launch sends SIGTERM, and later SIGKILL. I launched the node with a cleanup step in <code>finally</code> that takes a fixed time, then pressed Ctrl+C. All three distros behaved the same:</p>
+
+<table>
+<thead><tr><th>Cleanup time</th><th>Launch setting</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td>8 s</td><td>default</td><td><code>failed to terminate '5' seconds after receiving 'SIGINT', escalating to 'SIGTERM'</code>, but cleanup still finished (rclpy handles the SIGTERM, and the node was already in <code>finally</code>). Launch exited about 8 s after Ctrl+C.</td></tr>
+<tr><td>14 s</td><td>default</td><td>Same SIGTERM message, then <code>escalating to 'SIGKILL'</code>. The node died with exit code -9 about 10 s after Ctrl+C, and cleanup never finished.</td></tr>
+<tr><td>14 s</td><td><code>ros2 launch my.launch.py sigterm_timeout:=20</code></td><td>No escalation. Cleanup finished, and launch exited about 14 s after Ctrl+C.</td></tr>
+<tr><td>14 s</td><td><code>ExecuteProcess(..., sigterm_timeout='15', sigkill_timeout='15')</code></td><td>No escalation. Cleanup finished, and launch exited about 14 s after Ctrl+C.</td></tr>
+</tbody>
+</table>
+
+<p>So you don't need to edit launch's source to change the timeout. Pass <code>sigterm_timeout:=</code> on the command line for everything in the launch, or set it on the one action that needs it. I tested the keyword on <code>ExecuteProcess</code>. <code>launch_ros</code>'s <code>Node</code> action is built on <code>ExecuteProcess</code>, but I didn't test the keyword there.</p>
+
+<h2>A killed node that stays in <code>ros2 node list</code></h2>
+
+<p>After <code>kill -9</code> on the node, <code>ros2 node list --no-daemon</code> no longer showed it straight away. Plain <code>ros2 node list</code>, which asks the ROS 2 daemon, kept showing <code>/sd_node</code> for 18–20 seconds on all three distros. <code>ros2 daemon stop</code> cleared it immediately. So a stale entry from the daemon went away by itself within about 20 seconds here. A node that is still listed after a reboot is more likely still running somewhere, for example on another machine or in a container on the same network, but I didn't test that case.</p>
+
+<h2>Not tested</h2>
+
+<p>C++ nodes (<code>rclcpp::on_shutdown</code>), <code>MultiThreadedExecutor</code>, lifecycle nodes, <code>launch_ros</code> <code>Node(...)</code> with the timeout keywords, Kilted and Rolling. All runs used Docker as root on Linux.</p>
+
+<p>Scripts and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-10-31-ros2-node-shutdown-sigint-sigterm/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/113602">Actual good way to close nodes</a>, <a href="https://robotics.stackexchange.com/questions/113257">Setting the SIGINT and SIGTERM timeout in ROS2</a>, <a href="https://robotics.stackexchange.com/questions/110924">ros2 humble to kill the "zombie" node</a>. Related: <a href="https://huntlab.app/en/ros-2-rclpy-rate-sleep-blocks-forever-fix/">rclpy Rate.sleep() blocking forever</a>.</p>
