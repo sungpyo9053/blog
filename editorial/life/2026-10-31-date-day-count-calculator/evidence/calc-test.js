@@ -1,0 +1,46 @@
+// ko.html의 계산기 <script>를 그대로 뽑아 node에서 실행하는 검산
+const fs = require('fs'), path = require('path'), assert = require('assert');
+const html = fs.readFileSync(path.join(__dirname, '..', 'ko.html'), 'utf8');
+const src = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+if (src.indexOf('&') >= 0) throw new Error('& found in script');
+for (const lit of src.match(/'[^'\n]*'/g)) if (lit.indexOf('<') >= 0) throw new Error('< in string literal: ' + lit);
+global.window = {};
+global.document = { getElementById: () => null };
+eval(src);
+const c = window.dateCalc;
+function t(name, got, exp) { assert.deepStrictEqual(got, exp, name + ' got ' + JSON.stringify(got)); console.log('PASS', name, JSON.stringify(got)); }
+t('두 날짜 사이: 2026-10-31~12-25 불산입 55 / 산입 56', c.between('2026-10-31', '2026-12-25'), { days: 55, incl: 56 });
+t('윤년: 2028-02-28~03-01 = 2일', c.between('2028-02-28', '2028-03-01').days, 2);
+t('평년: 2027-02-28~03-01 = 1일', c.between('2027-02-28', '2027-03-01').days, 1);
+t('D-day: 2026-10-31 -> 2027-01-01 = D-62', c.dday('2026-10-31', '2027-01-01').label, 'D-62');
+t('D-day 당일', c.dday('2027-01-01', '2027-01-01').label, 'D-day');
+t('100일 후: 2026-10-31 + 100', c.addDays('2026-10-31', 100), '2027-02-08');
+t('청약철회 7일: 11/7(토) 수령 -> 말일 11/14(토) -> 11/16(월)', c.legalEnd('2026-11-07', 7, 'day', false), { start: '2026-11-08', raw: '2026-11-14', end: '2026-11-16', why: ['2026-11-14(토) 토요일', '2026-11-15(일) 일요일'] });
+t('초일 산입(0시 시작) 7일: 11/7 -> 11/13', c.legalEnd('2026-11-07', 7, 'day', true).end, '2026-11-13');
+t('월말 역계산: 2027-01-31 + 1개월 -> 2/28(일) -> 3/1 3·1절 -> 3/2', c.legalEnd('2027-01-31', 1, 'month', false), { start: '2027-02-01', raw: '2027-02-28', end: '2027-03-02', why: ['2027-02-28(일) 일요일', '2027-03-01(월) 양력 고정 공휴일'] });
+t('윤년 월말: 2028-01-31 + 1개월 -> 2/29', c.legalEnd('2028-01-31', 1, 'month', false).end, '2028-02-29');
+t('2028-01-29 + 1개월(기산 1/30) -> 2/29 해당일 없음... 2/29', c.legalEnd('2028-01-29', 1, 'month', false).raw, '2028-02-29');
+t('2027-01-28 + 1개월(기산 1/29, 평년) -> 2/28', c.legalEnd('2027-01-28', 1, 'month', false).raw, '2027-02-28');
+t('퇴사 통보 11/2 + 1개월 -> 12/2(수)', c.legalEnd('2026-11-02', 1, 'month', false), { start: '2026-11-03', raw: '2026-12-02', end: '2026-12-02', why: [] });
+t('1년 계약 11/2 0시 시작 -> 2027-11-01', c.legalEnd('2026-11-02', 1, 'year', true).end, '2027-11-01');
+t('2주: 2026-11-02 -> 11/16', c.legalEnd('2026-11-02', 2, 'week', false).end, '2026-11-16');
+t('만 나이 생일 전날: 2000-11-01, 2026-10-31 -> 25', c.age('2000-11-01', '2026-10-31').age, 25);
+t('만 나이 생일 당일: 2000-11-01, 2026-11-01 -> 26', c.age('2000-11-01', '2026-11-01').age, 26);
+t('2/29생 평년 2/28 -> 22', c.age('2004-02-29', '2027-02-28').age, 22);
+t('2/29생 평년 3/1 -> 23', c.age('2004-02-29', '2027-03-01').age, 23);
+t('1세 미만 개월수: 2026-03-15 -> 2026-10-14 = 6개월', c.age('2026-03-15', '2026-10-14'), { age: 0, months: 6, yearAge: 0 });
+t('시간 차이: 10/31 09:00 ~ 11/1 18:30', c.timeDiff('2026-10-31T09:00', '2026-11-01T18:30'), { minutes: 2010, h: 33, m: 30, days: 1, dh: 9 });
+t('잘못된 날짜 2027-02-30 -> NaN', isNaN(c.P('2027-02-30')), true);
+// UI 기본값 렌더 — 최소 DOM 스텁
+const vals = { 'dc-a1': '2026-10-31', 'dc-a2': '2026-12-25', 'dc-b1': '', 'dc-b2': '2027-01-01', 'dc-c1': '', 'dc-c2': '100', 'dc-d1': '2026-11-07', 'dc-d2': '7', 'dc-d3': 'day', 'dc-d4': '', 'dc-e1': '2000-11-01', 'dc-e2': '', 'dc-f1': '2026-10-31T09:00', 'dc-f2': '2026-11-01T18:30' };
+const outs = {};
+const els = {};
+Object.keys(vals).forEach(id => els[id] = { value: vals[id], checked: false, addEventListener() {} });
+['dc-a-out', 'dc-b-out', 'dc-c-out', 'dc-d-out', 'dc-e-out', 'dc-f-out'].forEach(id => { outs[id] = []; els[id] = { set innerHTML(v) { outs[id].length = 0; }, appendChild(p) { outs[id].push(p.textContent); } }; });
+els['dc-calc'] = {};
+const todays = ['dc-b1', 'dc-c1', 'dc-e2'].map(id => els[id]);
+global.document = { getElementById: id => els[id], createElement: () => ({ style: {} }), querySelectorAll: () => todays };
+eval(src);
+Object.keys(outs).forEach(k => console.log('UI', k, outs[k].join(' | ')));
+assert.ok(outs['dc-d-out'].join().includes('2026-11-16(월)'));
+assert.ok(outs['dc-a-out'].join().includes('56일'));
