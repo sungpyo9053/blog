@@ -1,0 +1,666 @@
+##### distro: humble
+== versions
+Python 3.10.12
+cmake version 3.22.1
+python3-catkin-pkg 
+python3-catkin-pkg-modules 1.1.1-1
+python3-colcon-core 0.21.3+upstream-1
+python3-empy 3.3.4-2
+python3-lark 1.1.1-1
+python3-numpy 1:1.21.5-1ubuntu22.04.1
+ros-humble-ament-cmake-core 1.3.14-1jammy.20260224.185609
+ros-humble-rosidl-adapter 3.1.9-1jammy.20260605.103907
+ros-humble-rosidl-generator-py 0.14.6-1jammy.20260907.200655
+system em: 3.3.4 /usr/lib/python3/dist-packages/em.py
+-- how ament_cmake_core parses package.xml (catkin_pkg import lines):
+22:from catkin_pkg.package import parse_package_string
+95:    :param package: catkin_pkg.package.Package
+colcon: /usr/bin/colcon shebang: #!/usr/bin/python3
+
+=== CASE: A: system python, no venv
+python3 on PATH: /usr/bin/python3  VIRTUAL_ENV=none
+colcon exit code: 0
+Finished <<< my_interfaces [6.71s]
+Summary: 1 package finished [6.94s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/local/lib/python3.10/dist-packages/my_interfaces/msg/_num.py
+ModuleNotFoundError: No module named 'catkin_pkg'
+ModuleNotFoundError: No module named 'numpy'
+
+=== CASE: B: venv without system site packages, nothing installed
+python3 on PATH: /venv/bare/bin/python3  VIRTUAL_ENV=/venv/bare
+
+colcon exit code: 1
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/bare/bin/python3 -m rosidl_adapter --package-name
+  ModuleNotFoundError: No module named 'em'
+Summary: 0 packages finished [1.03s]
+  1 package failed: my_interfaces
+-- cmake chose: Python3_EXECUTABLE:FILEPATH=/venv/bare/bin/python3 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/bare/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  Traceback (most recent call last):
+
+    File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+      exec(code, run_globals)
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__init__.py", line 18, in convert_to_idl
+      from rosidl_adapter.msg import convert_msg_to_idl
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/msg/__init__.py", line 16, in <module>
+      from rosidl_adapter.resource import expand_template
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 19, in <module>
+      import em
+
+  ModuleNotFoundError: No module named 'em'
+
+Call Stack (most recent call first):
+  /opt/ros/humble/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:130 (rosidl_adapt_interfaces)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [0.81s, exited with code 1]
+
+Summary: 0 packages finished [1.03s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/bare/bin/python3 -m rosidl_adapter --package-name
+28:  ModuleNotFoundError: No module named 'em'
+
+=== CASE: B2: same venv + --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/bare/bin/python3  VIRTUAL_ENV=/venv/bare
+
+colcon exit code: 2
+ImportError: cannot import name 'generate_py' from 'rosidl_generator_py' (/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/__init__.py)
+Summary: 0 packages finished [6.08s]
+  1 package failed: my_interfaces
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/bare/bin/python3 Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+Traceback (most recent call last):
+  File "/opt/ros/humble/share/rosidl_generator_py/cmake/../../../lib/rosidl_generator_py/rosidl_generator_py", line 8, in <module>
+    from rosidl_generator_py import generate_py
+ImportError: cannot import name 'generate_py' from 'rosidl_generator_py' (/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/__init__.py)
+gmake[2]: *** [my_interfaces__py/CMakeFiles/my_interfaces__py.dir/build.make:91: rosidl_generator_py/my_interfaces/_my_interfaces_s.ep.rosidl_typesupport_fastrtps_c.c] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:609: my_interfaces__py/CMakeFiles/my_interfaces__py.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+gmake: *** [Makefile:146: all] Error 2
+---
+Failed   <<< my_interfaces [5.86s, exited with code 2]
+
+Summary: 0 packages finished [6.08s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+6:ImportError: cannot import name 'generate_py' from 'rosidl_generator_py' (/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/__init__.py)
+
+=== CASE: B3: same venv + -DPython3_EXECUTABLE and -DPYTHON_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/bare/bin/python3  VIRTUAL_ENV=/venv/bare
+
+colcon exit code: 0
+Finished <<< my_interfaces [6.93s]
+Summary: 1 package finished [7.15s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/local/lib/python3.10/dist-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: C1: venv + catkin_pkg
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;
+colcon exit code: 1
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+  ModuleNotFoundError: No module named 'em'
+Summary: 0 packages finished [1.03s]
+  1 package failed: my_interfaces
+-- cmake chose: Python3_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  Traceback (most recent call last):
+
+    File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+      exec(code, run_globals)
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__init__.py", line 18, in convert_to_idl
+      from rosidl_adapter.msg import convert_msg_to_idl
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/msg/__init__.py", line 16, in <module>
+      from rosidl_adapter.resource import expand_template
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 19, in <module>
+      import em
+
+  ModuleNotFoundError: No module named 'em'
+
+Call Stack (most recent call first):
+  /opt/ros/humble/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:130 (rosidl_adapt_interfaces)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [0.81s, exited with code 1]
+
+Summary: 0 packages finished [1.03s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+28:  ModuleNotFoundError: No module named 'em'
+
+=== CASE: C2: venv + catkin_pkg + empy (latest from PyPI)
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 4.2.1;
+colcon exit code: 1
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+  AttributeError processing template 'msg.idl.em'
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+  AttributeError: 'NoneType' object has no attribute 'shutdown'
+Summary: 0 packages finished [1.04s]
+  1 package failed: my_interfaces
+-- cmake chose: Python3_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  AttributeError processing template 'msg.idl.em'
+
+  Traceback (most recent call last):
+
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 51, in evaluate_template
+      em.BUFFERED_OPT: True,
+
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+  
+
+  During handling of the above exception, another exception occurred:
+
+  
+
+  Traceback (most recent call last):
+
+    File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+      exec(code, run_globals)
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__init__.py", line 19, in convert_to_idl
+      return convert_msg_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/msg/__init__.py", line 39, in convert_msg_to_idl
+      expand_template('msg.idl.em', data, output_file, encoding='iso-8859-1')
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 23, in expand_template
+      content = evaluate_template(template_name, data)
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+11:  AttributeError processing template 'msg.idl.em'
+16:      em.BUFFERED_OPT: True,
+18:  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+=== CASE: C3: venv + catkin_pkg + empy==3.3.4
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;
+colcon exit code: 2
+ModuleNotFoundError: No module named 'lark'
+ModuleNotFoundError: No module named 'lark'
+Summary: 0 packages finished [2.01s]
+  1 package failed: my_interfaces
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+Traceback (most recent call last):
+  File "/opt/ros/humble/share/rosidl_generator_cpp/cmake/../../../lib/rosidl_generator_cpp/rosidl_generator_cpp", line 8, in <module>
+Traceback (most recent call last):
+  File "/opt/ros/humble/share/rosidl_generator_rs/cmake/../../../lib/rosidl_generator_rs/rosidl_generator_rs", line 8, in <module>
+    from rosidl_generator_rs import generate_rs
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_rs/__init__.py", line 21, in <module>
+    import rosidl_cmake as rosidl_pycommon
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_cmake/__init__.py", line 24, in <module>
+    from rosidl_parser.parser import parse_idl_file
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_parser/parser.py", line 20, in <module>
+    from lark import Lark
+ModuleNotFoundError: No module named 'lark'
+    from rosidl_generator_cpp import generate_cpp
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_cpp/__init__.py", line 17, in <module>
+    from rosidl_cmake import generate_files
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_cmake/__init__.py", line 24, in <module>
+    from rosidl_parser.parser import parse_idl_file
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_parser/parser.py", line 20, in <module>
+    from lark import Lark
+ModuleNotFoundError: No module named 'lark'
+gmake[2]: *** [my_interfaces__rs/CMakeFiles/my_interfaces__rs.dir/build.make:90: rosidl_generator_rs/my_interfaces/rust/src/lib.rs] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:635: my_interfaces__rs/CMakeFiles/my_interfaces__rs.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+gmake[2]: *** [CMakeFiles/my_interfaces__cpp.dir/build.make:93: rosidl_generator_cpp/my_interfaces/msg/num.hpp] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:336: CMakeFiles/my_interfaces__cpp.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2
+---
+Failed   <<< my_interfaces [1.79s, exited with code 2]
+
+Summary: 0 packages finished [2.01s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+14:ModuleNotFoundError: No module named 'lark'
+22:ModuleNotFoundError: No module named 'lark'
+
+=== CASE: C4: venv + catkin_pkg + empy==3.3.4 + lark
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;
+colcon exit code: 0
+Finished <<< my_interfaces [6.86s]
+Summary: 1 package finished [7.08s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/lib/python3.10/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: C5: venv + catkin_pkg + empy==3.3.4 + lark + numpy
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;numpy                                2.2.6;
+colcon exit code: 0
+Finished <<< my_interfaces [6.86s]
+Summary: 1 package finished [7.07s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/lib/python3.10/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: C6: venv + catkin_pkg + empy==3.3.4 + lark + numpy + setuptools
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;numpy                                2.2.6;
+colcon exit code: 0
+Finished <<< my_interfaces [6.77s]
+Summary: 1 package finished [6.98s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv/ladder/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/lib/python3.10/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: E1: venv with empy latest + catkin_pkg lark numpy
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.2.6;
+colcon exit code: 1
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/e4/bin/python3 -m rosidl_adapter --package-name
+  AttributeError processing template 'msg.idl.em'
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+  AttributeError: 'NoneType' object has no attribute 'shutdown'
+Summary: 0 packages finished [1.04s]
+  1 package failed: my_interfaces
+-- cmake chose: Python3_EXECUTABLE:FILEPATH=/venv/e4/bin/python3 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/e4/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  AttributeError processing template 'msg.idl.em'
+
+  Traceback (most recent call last):
+
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 51, in evaluate_template
+      em.BUFFERED_OPT: True,
+
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+  
+
+  During handling of the above exception, another exception occurred:
+
+  
+
+  Traceback (most recent call last):
+
+    File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+      exec(code, run_globals)
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__init__.py", line 19, in convert_to_idl
+      return convert_msg_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/msg/__init__.py", line 39, in convert_msg_to_idl
+      expand_template('msg.idl.em', data, output_file, encoding='iso-8859-1')
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 23, in expand_template
+      content = evaluate_template(template_name, data)
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/e4/bin/python3 -m rosidl_adapter --package-name
+11:  AttributeError processing template 'msg.idl.em'
+16:      em.BUFFERED_OPT: True,
+18:  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+=== CASE: E1b: venv with empy latest + catkin_pkg lark numpy setuptools
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.2.6;
+colcon exit code: 1
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/e4/bin/python3 -m rosidl_adapter --package-name
+  AttributeError processing template 'msg.idl.em'
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+  AttributeError: 'NoneType' object has no attribute 'shutdown'
+Summary: 0 packages finished [1.04s]
+  1 package failed: my_interfaces
+-- cmake chose: Python3_EXECUTABLE:FILEPATH=/venv/e4/bin/python3 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/e4/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  AttributeError processing template 'msg.idl.em'
+
+  Traceback (most recent call last):
+
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 51, in evaluate_template
+      em.BUFFERED_OPT: True,
+
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+  
+
+  During handling of the above exception, another exception occurred:
+
+  
+
+  Traceback (most recent call last):
+
+    File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+      exec(code, run_globals)
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__init__.py", line 19, in convert_to_idl
+      return convert_msg_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/msg/__init__.py", line 39, in convert_msg_to_idl
+      expand_template('msg.idl.em', data, output_file, encoding='iso-8859-1')
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 23, in expand_template
+      content = evaluate_template(template_name, data)
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/e4/bin/python3 -m rosidl_adapter --package-name
+11:  AttributeError processing template 'msg.idl.em'
+16:      em.BUFFERED_OPT: True,
+18:  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+=== CASE: E2: same venv + --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.2.6;
+colcon exit code: 2
+Error processing idl file: /ws/build/my_interfaces/rosidl_adapter/my_interfaces/msg/Num.idl
+AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+Summary: 0 packages finished [6.13s]
+  1 package failed: my_interfaces
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/e4/bin/python3 Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+Error processing idl file: /ws/build/my_interfaces/rosidl_adapter/my_interfaces/msg/Num.idl
+Traceback (most recent call last):
+  File "/opt/ros/humble/share/rosidl_generator_py/cmake/../../../lib/rosidl_generator_py/rosidl_generator_py", line 40, in <module>
+    sys.exit(main())
+  File "/opt/ros/humble/share/rosidl_generator_py/cmake/../../../lib/rosidl_generator_py/rosidl_generator_py", line 36, in main
+    generate_py(args.generator_arguments_file, args.typesupport_impls.split(';'))
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/generate_py_impl.py", line 61, in generate_py
+    generated_files = generate_files(generator_arguments_file, mapping)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_cmake/__init__.py", line 96, in generate_files
+    raise(e)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_cmake/__init__.py", line 87, in generate_files
+    expand_template(
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_cmake/__init__.py", line 131, in expand_template
+    em.BUFFERED_OPT: True,
+AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+gmake[2]: *** [my_interfaces__py/CMakeFiles/my_interfaces__py.dir/build.make:91: rosidl_generator_py/my_interfaces/_my_interfaces_s.ep.rosidl_typesupport_fastrtps_c.c] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:609: my_interfaces__py/CMakeFiles/my_interfaces__py.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2
+---
+Failed   <<< my_interfaces [5.91s, exited with code 2]
+
+Summary: 0 packages finished [6.13s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+3:Error processing idl file: /ws/build/my_interfaces/rosidl_adapter/my_interfaces/msg/Num.idl
+16:    em.BUFFERED_OPT: True,
+17:AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+=== CASE: E2b: same venv + -DPython3_EXECUTABLE and -DPYTHON_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.2.6;
+colcon exit code: 0
+Finished <<< my_interfaces [6.88s]
+Summary: 1 package finished [7.10s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/local/lib/python3.10/dist-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: E3: same shell after deactivate
+python3 on PATH: /usr/bin/python3  VIRTUAL_ENV=none
+colcon exit code: 0
+Finished <<< my_interfaces [6.76s]
+Summary: 1 package finished [6.97s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/local/lib/python3.10/dist-packages/my_interfaces/msg/_num.py
+
+=== CASE: E4: venv E1 after pip install empy==3.3.4
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;numpy                                2.2.6;
+colcon exit code: 0
+Finished <<< my_interfaces [7.56s]
+Summary: 1 package finished [7.89s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/e4/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv/e4/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/lib/python3.10/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: K: venv + empy==3.3.4 only (no catkin_pkg)
+python3 on PATH: /venv/nocatkin/bin/python3  VIRTUAL_ENV=/venv/nocatkin
+empy                                 3.3.4;
+colcon exit code: 1
+ModuleNotFoundError: No module named 'catkin_pkg'
+CMake Error at /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:95 (message):
+  execute_process(/venv/nocatkin/bin/python3
+Summary: 0 packages finished [1.09s]
+  1 package failed: my_interfaces
+-- cmake chose: Python3_EXECUTABLE:FILEPATH=/venv/nocatkin/bin/python3 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+Traceback (most recent call last):
+  File "/opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 22, in <module>
+    from catkin_pkg.package import parse_package_string
+ModuleNotFoundError: No module named 'catkin_pkg'
+CMake Error at /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:95 (message):
+  execute_process(/venv/nocatkin/bin/python3
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py
+  /ws/src/my_interfaces/package.xml
+  /ws/build/my_interfaces/ament_cmake_core/package.cmake) returned error code
+  1
+Call Stack (most recent call first):
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:49 (_ament_package_xml)
+  /opt/ros/humble/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:226 (ament_package_xml)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [0.86s, exited with code 1]
+
+Summary: 0 packages finished [1.09s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+6:ModuleNotFoundError: No module named 'catkin_pkg'
+8:  execute_process(/venv/nocatkin/bin/python3
+
+=== CASE: S1: venv --system-site-packages, nothing installed
+python3 on PATH: /venv/ssp/bin/python3  VIRTUAL_ENV=/venv/ssp
+empy                                 3.3.4;lark                                 1.1.1;numpy                                1.21.5;
+colcon exit code: 0
+Finished <<< my_interfaces [6.70s]
+Summary: 1 package finished [6.91s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/ssp/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv/ssp/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/lib/python3.10/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: S2: venv --system-site-packages + pip install empy (no -U)
+python3 on PATH: /venv/ssp/bin/python3  VIRTUAL_ENV=/venv/ssp
+empy                                 3.3.4;lark                                 1.1.1;numpy                                1.21.5;
+colcon exit code: 0
+Finished <<< my_interfaces [6.96s]
+Summary: 1 package finished [7.17s]
+-- cmake chose: PYTHON_EXECUTABLE:FILEPATH=/venv/ssp/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv/ssp/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: 
+-- generated py: install/my_interfaces/lib/python3.10/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: S3: venv --system-site-packages + pip install -U empy
+python3 on PATH: /venv/ssp/bin/python3  VIRTUAL_ENV=/venv/ssp
+empy                                 4.2.1;lark                                 1.1.1;numpy                                1.21.5;
+colcon exit code: 1
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/ssp/bin/python3 -m rosidl_adapter --package-name
+  AttributeError processing template 'msg.idl.em'
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+  AttributeError: 'NoneType' object has no attribute 'shutdown'
+Summary: 0 packages finished [1.05s]
+  1 package failed: my_interfaces
+-- cmake chose: Python3_EXECUTABLE:FILEPATH=/venv/ssp/bin/python3 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/ssp/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  AttributeError processing template 'msg.idl.em'
+
+  Traceback (most recent call last):
+
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 51, in evaluate_template
+      em.BUFFERED_OPT: True,
+
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+  
+
+  During handling of the above exception, another exception occurred:
+
+  
+
+  Traceback (most recent call last):
+
+    File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+      exec(code, run_globals)
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/__init__.py", line 19, in convert_to_idl
+      return convert_msg_to_idl(
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/msg/__init__.py", line 39, in convert_msg_to_idl
+      expand_template('msg.idl.em', data, output_file, encoding='iso-8859-1')
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 23, in expand_template
+      content = evaluate_template(template_name, data)
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/ssp/bin/python3 -m rosidl_adapter --package-name
+11:  AttributeError processing template 'msg.idl.em'
+16:      em.BUFFERED_OPT: True,
+18:  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+
+##### part 2: ament_python + custom message
+colcon exit code: 0
+Starting >>> py_with_msg
+Finished <<< py_with_msg [0.86s]
+Summary: 1 package finished [1.07s]
+-- generated msg files under install/: 
+-- interface registered: none
+-- ros2 run py_with_msg talker:
+  File "/ws2/install/py_with_msg/lib/python3.10/site-packages/py_with_msg/talker.py", line 1, in <module>
+    from py_with_msg.msg import Num
+ModuleNotFoundError: No module named 'py_with_msg.msg'
+[ros2run]: Process exited with failure 1
+-- ros2 interface show py_with_msg/msg/Num:
+Could not find the resource 'py_with_msg' of type 'rosidl_interfaces'
+
+=== FIX: separate interfaces package
+colcon exit code: 0
+Finished <<< my_interfaces [6.70s]
+Finished <<< py_node [0.84s]
+Summary: 2 packages finished [7.76s]
+-- ros2 run py_node talker:
+OK my_interfaces.msg.Num(num=5)
+##### end humble

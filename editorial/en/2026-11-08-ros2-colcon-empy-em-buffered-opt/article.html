@@ -1,0 +1,236 @@
+<pre><code>--- stderr: my_interfaces
+CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  execute_process(/venv/e4/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file ...
+  returned error code 1:
+
+  AttributeError processing template 'msg.idl.em'
+
+  Traceback (most recent call last):
+
+    File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_adapter/resource/__init__.py", line 51, in evaluate_template
+      em.BUFFERED_OPT: True,
+
+  AttributeError: module 'em' has no attribute 'BUFFERED_OPT'
+...
+Summary: 0 packages finished [1.04s]
+  1 package failed: my_interfaces</code></pre>
+
+<p>Short answer: CMake built your interfaces with the Python from your active venv or conda env, not with <code>/usr/bin/python3</code>. Look at the path inside <code>execute_process(...)</code>. If it is your venv, that interpreter is missing the build-time modules ROS needs, or has the wrong version of one. <code>BUFFERED_OPT</code> means empy 4.x on Humble. Humble's <code>rosidl_adapter</code> only works with empy 3.x. The fix that worked on Humble, Jazzy and Lyrical was the simplest one: build in a shell where the venv is not active.</p>
+
+<pre><code>deactivate            # or: conda deactivate
+cd ~/ros2_ws
+rm -rf build install log
+colcon build</code></pre>
+
+<p>If you need the venv active while you build, pin the old empy in it on Humble and add the other missing modules:</p>
+
+<pre><code>pip install empy==3.3.4 catkin_pkg lark
+# Jazzy and Lyrical venvs also needed:
+pip install numpy setuptools</code></pre>
+
+<p>This post is about build time. If the build works but <code>ros2 run</code> can't import a package from your venv, that's the shebang problem covered in <a href="https://huntlab.app/en/ros2-run-conda-venv-no-module-named-torch-shebang/">ros2 run ignores my conda or venv Python</a>.</p>
+
+<h2>Find your error text</h2>
+
+<p>Each row is one Python module missing from (or wrong in) the interpreter CMake picked. The error you see first depends on which module is missing first. I started from a venv with nothing in it and added one package at a time.</p>
+
+<table>
+<thead><tr><th>Error text</th><th>Where it happens</th><th>Distros</th><th>colcon exit code</th><th>Fix in the venv</th></tr></thead>
+<tbody>
+<tr><td><code>ModuleNotFoundError: No module named 'em'</code></td><td><code>rosidl_adapt_interfaces.cmake:59</code>, at configure</td><td>Humble, Jazzy, Lyrical</td><td>1</td><td><code>pip install empy==3.3.4</code></td></tr>
+<tr><td><code>AttributeError: module 'em' has no attribute 'BUFFERED_OPT'</code></td><td><code>rosidl_adapter</code> template <code>msg.idl.em</code>, at configure</td><td>Humble only, with empy 4.2.1</td><td>1</td><td><code>pip install empy==3.3.4</code></td></tr>
+<tr><td><code>ModuleNotFoundError: No module named 'catkin_pkg'</code></td><td><code>package_xml_2_cmake.py</code> line 22, <code>ament_package_xml.cmake:95</code></td><td>Humble, Jazzy, Lyrical</td><td>1</td><td><code>pip install catkin_pkg</code></td></tr>
+<tr><td><code>Could NOT find Python3 (missing: Python3_NumPy_INCLUDE_DIRS NumPy)</code></td><td><code>rosidl_generator_py_generate_interfaces.cmake</code>, at configure</td><td>Jazzy, Lyrical</td><td>1</td><td><code>pip install numpy</code></td></tr>
+<tr><td><code>ModuleNotFoundError: No module named 'lark'</code></td><td><code>rosidl_parser/parser.py</code>, during make</td><td>Humble (the only one that got this far without lark)</td><td>2</td><td><code>pip install lark</code></td></tr>
+<tr><td><code>ModuleNotFoundError: No module named 'setuptools'</code></td><td><code>build/.../ament_cmake_python/my_interfaces/setup.py</code>, during make</td><td>Jazzy, Lyrical</td><td>2</td><td><code>pip install setuptools</code></td></tr>
+</tbody>
+</table>
+
+<p>colcon reported every one of these as a failure: <code>Failed &lt;&lt;&lt; my_interfaces</code>, then <code>Summary: 0 packages finished</code> and <code>1 package failed: my_interfaces</code>. Configure-time errors exited with code 1 within 1 to 3 seconds. The make-time errors (<code>lark</code>, <code>setuptools</code>) exited with code 2 after 2 to 10 seconds. If you get no error at all but your messages can't be imported, see the ament_python section below.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-28 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images. The test package was the smallest one possible: an <code>ament_cmake</code> package called <code>my_interfaces</code> with one file, <code>msg/Num.msg</code> (<code>int64 num</code>), and one <code>rosidl_generate_interfaces</code> call. I created venvs with the distro's own <code>python3 -m venv</code>, so the Python version always matched the one ROS was built for. Before every build I deleted <code>build</code>, <code>install</code> and <code>log</code>. I counted a build as working only if colcon exited 0 and the generated <code>msg/_num.py</code> was in <code>install/</code>.</p>
+
+<p>First, what each distro ships. The apt package is what <code>rosidl</code> was built and tested against:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Python</td><td>3.10.12</td><td>3.12.3</td><td>3.14.4</td></tr>
+<tr><td><code>python3-empy</code> (apt)</td><td>3.3.4-2</td><td>3.3.4-2</td><td>4.2.1-1</td></tr>
+<tr><td><code>rosidl_adapter</code></td><td>3.1.9</td><td>4.6.9</td><td>5.2.1</td></tr>
+<tr><td><code>rosidl_generator_py</code></td><td>0.14.6</td><td>0.22.2</td><td>0.27.2</td></tr>
+<tr><td><code>python3-colcon-core</code></td><td>0.21.3</td><td>0.21.3</td><td>0.21.3</td></tr>
+<tr><td>CMake</td><td>3.22.1</td><td>3.28.3</td><td>4.2.3</td></tr>
+</tbody>
+</table>
+
+<p>Then the builds. "venv" means a venv created without <code>--system-site-packages</code> and activated with <code>source bin/activate</code>. pip installed empy 4.2.1 when I asked for plain <code>empy</code>, plus catkin_pkg 1.1.1 and lark 1.3.1.</p>
+
+<table>
+<thead><tr><th>Setup</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>No venv, system Python</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Empty venv active</td><td><code>No module named 'em'</code></td><td><code>No module named 'em'</code></td><td><code>No module named 'em'</code></td></tr>
+<tr><td>venv with only <code>empy==3.3.4</code></td><td><code>No module named 'catkin_pkg'</code></td><td>same</td><td>same</td></tr>
+<tr><td>venv + catkin_pkg + empy 4.2.1</td><td><code>BUFFERED_OPT</code></td><td>NumPy not found</td><td>NumPy not found</td></tr>
+<tr><td>venv + catkin_pkg + empy 3.3.4</td><td><code>No module named 'lark'</code></td><td>NumPy not found</td><td>NumPy not found</td></tr>
+<tr><td>... + lark</td><td>works</td><td>NumPy not found</td><td>NumPy not found</td></tr>
+<tr><td>... + numpy</td><td>works</td><td><code>No module named 'setuptools'</code></td><td><code>No module named 'setuptools'</code></td></tr>
+<tr><td>... + setuptools (empy 3.3.4)</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>venv with empy 4.2.1 + catkin_pkg, lark, numpy, setuptools</td><td><code>BUFFERED_OPT</code></td><td>works</td><td>works</td></tr>
+<tr><td>Same venv, then <code>pip install empy==3.3.4</code></td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Same venv, <code>deactivate</code>, build again</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>venv <code>--system-site-packages</code>, nothing installed</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>That venv + <code>pip install -U empy</code></td><td><code>BUFFERED_OPT</code></td><td>works</td><td>works</td></tr>
+<tr><td>Active venv + <code>--cmake-args -DPython3_EXECUTABLE=/usr/bin/python3</code></td><td>fails (see below)</td><td>works</td><td>works</td></tr>
+<tr><td>Active venv + <code>-DPython3_EXECUTABLE</code> and <code>-DPYTHON_EXECUTABLE</code></td><td>works</td><td>works</td><td>works</td></tr>
+</tbody>
+</table>
+
+<p>A successful build of the package took 6.7 to 7.6 seconds on Humble, 8.7 to 9.6 on Jazzy and 9.6 to 11.4 on Lyrical.</p>
+
+<h2>Why the venv Python gets used</h2>
+
+<p>The <code>colcon</code> command itself is not the problem. Its shebang is <code>#!/usr/bin/python3</code> on all three images, so it runs on the system Python even with a venv active. The problem is CMake. When <code>VIRTUAL_ENV</code> is set, CMake's <code>FindPython3</code> picks the venv interpreter. In <code>CMakeCache.txt</code> the empty-venv build had <code>Python3_EXECUTABLE:FILEPATH=/venv/bare/bin/python3</code>. The no-venv build had <code>/usr/bin/python3</code>. Every rosidl step that runs Python then runs that interpreter.</p>
+
+<p>The ROS Python packages (<code>rosidl_adapter</code>, <code>rosidl_parser</code> and the others) still load in the venv, because <code>setup.bash</code> puts <code>/opt/ros/&lt;distro&gt;</code> on <code>PYTHONPATH</code>. Their third-party dependencies come from apt and live in <code>/usr/lib/python3/dist-packages</code>, which a normal venv doesn't see. That's why the errors name <code>em</code>, <code>catkin_pkg</code>, <code>lark</code> and <code>numpy</code> and never a ROS package. To check which interpreter your build used, read the path at the start of <code>execute_process(...)</code> in the error, or run:</p>
+
+<pre><code>grep -E '^(Python3_EXECUTABLE|PYTHON_EXECUTABLE)' build/&lt;your_pkg&gt;/CMakeCache.txt</code></pre>
+
+<h2>BUFFERED_OPT: empy 4 on Humble</h2>
+
+<p>empy 4 removed options that empy 3 had. Humble's <code>rosidl_adapter</code> 3.1.9 still passes <code>em.BUFFERED_OPT</code> to <code>em.Interpreter</code> (line 51 of <code>rosidl_adapter/resource/__init__.py</code>). With empy 4.2.1 in the venv the build fails, and a second traceback follows: <code>AttributeError: 'NoneType' object has no attribute 'shutdown'</code>. That second error comes from the cleanup code. It isn't a separate problem.</p>
+
+<p>Jazzy (<code>rosidl_adapter</code> 4.6.9) and Lyrical (5.2.1) built with both empy 4.2.1 and 3.3.4. Lyrical's own apt package is 4.2.1. So <code>BUFFERED_OPT</code> only showed up on Humble in my runs. On Jazzy and Lyrical, a venv build that fails will hit one of the other rows first.</p>
+
+<p>How you get empy 4 matters on Humble:</p>
+
+<ul>
+<li><code>pip install empy</code> in a normal venv installs the newest version (4.2.1 on the test date).</li>
+<li><code>pip install empy</code> in a <code>--system-site-packages</code> venv did nothing on Humble, because the apt 3.3.4 already satisfies it. The build kept working.</li>
+<li><code>pip install -U empy</code> in that same venv installed 4.2.1 over it, and the build failed with <code>BUFFERED_OPT</code>.</li>
+</ul>
+
+<p>The fix is <code>pip install empy==3.3.4</code> in that interpreter. In the venv that had failed with <code>BUFFERED_OPT</code>, that one command was enough on Humble.</p>
+
+<h2>No module named 'em', 'catkin_pkg', 'lark'</h2>
+
+<p>These three mean the module isn't in the venv at all. In an empty venv <code>em</code> failed first on every distro, because <code>rosidl_generate_interfaces</code> runs <code>rosidl_adapter</code> before it parses <code>package.xml</code>. With empy present and catkin_pkg missing, <code>package_xml_2_cmake.py</code> failed on its import at line 22. <code>lark</code> is used by <code>rosidl_parser</code>, which only runs during the make step. That's why its exit code was 2, not 1, and why it printed twice: once from <code>rosidl_generator_cpp</code> and once from <code>rosidl_generator_rs</code>, which run in parallel.</p>
+
+<p>Install the PyPI name, not the import name. The package is <code>empy</code>, not <code>em</code>. They share the <code>em</code> namespace. Then add <code>catkin_pkg</code> and <code>lark</code>.</p>
+
+<h2>No module named 'numpy' and 'setuptools' (Jazzy, Lyrical)</h2>
+
+<p>On Jazzy and Lyrical, <code>rosidl_generator_py</code> calls <code>find_package(Python3 ... NumPy)</code> at configure time. Without numpy in the venv, the message is CMake's, not Python's:</p>
+
+<pre><code>CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+  Could NOT find Python3 (missing: Python3_NumPy_INCLUDE_DIRS NumPy) (found
+  version "3.12.3")
+Call Stack (most recent call first):
+  ...
+  /opt/ros/jazzy/share/rosidl_generator_py/cmake/rosidl_generator_py_generate_interfaces.cmake:22 (find_package)</code></pre>
+
+<p>After numpy, the venvs on these two distros were missing setuptools. That error came from the setup.py that <code>ament_cmake_python</code> generates in the build directory:</p>
+
+<pre><code>  File "/ws/build/my_interfaces/ament_cmake_python/my_interfaces/setup.py", line 1, in &lt;module&gt;
+    from setuptools import find_packages
+ModuleNotFoundError: No module named 'setuptools'</code></pre>
+
+<p>On Humble the venv built with empy 3.3.4, catkin_pkg and lark, and I didn't install numpy or setuptools. Neither was asked for.</p>
+
+<h2>-DPython3_EXECUTABLE works on Jazzy and Lyrical, not alone on Humble</h2>
+
+<p>Pointing CMake back at the system Python is the other way to keep the venv active:</p>
+
+<pre><code>colcon build --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3</code></pre>
+
+<p>On Jazzy and Lyrical that was enough, both with an empty venv and with the empy 4.2.1 venv. On Humble it failed. With the empy 4.2.1 venv the error was <code>Error processing idl file: .../Num.idl</code> followed by the same <code>BUFFERED_OPT</code> traceback, this time from <code>rosidl_generator_py</code> during make (exit code 2). With the empty venv it was:</p>
+
+<pre><code>ImportError: cannot import name 'generate_py' from 'rosidl_generator_py' (/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/__init__.py)</code></pre>
+
+<p>The cache shows why. On Humble there is a second variable, <code>PYTHON_EXECUTABLE</code>, and it still held the venv path. Humble's <code>rosidl_generator_py</code> step ran with it. Setting both fixed Humble:</p>
+
+<pre><code>colcon build --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3 -DPYTHON_EXECUTABLE=/usr/bin/python3</code></pre>
+
+<p>The same two flags also worked on Jazzy and Lyrical. If you script one command for all distros, use both.</p>
+
+<h2>ament_python package with custom messages</h2>
+
+<p>This is a different case. There is no error at build time. I made an <code>ament_python</code> package, <code>py_with_msg</code>, with <code>msg/Num.msg</code>, <code>rosidl_default_generators</code> as a buildtool dependency, <code>rosidl_default_runtime</code> as an exec dependency and <code>member_of_group rosidl_interface_packages</code> in <code>package.xml</code>. It had a node that imports <code>from py_with_msg.msg import Num</code>. On all three distros, without a venv:</p>
+
+<pre><code>Starting &gt;&gt;&gt; py_with_msg
+Finished &lt;&lt;&lt; py_with_msg [0.86s]
+Summary: 1 package finished [1.07s]</code></pre>
+
+<p>colcon exited 0. Nothing was generated. There was no <code>msg</code> directory under <code>install/</code> and no <code>rosidl_interfaces</code> entry in the ament index. At runtime:</p>
+
+<pre><code>$ ros2 run py_with_msg talker
+  File "/ws2/install/py_with_msg/lib/python3.10/site-packages/py_with_msg/talker.py", line 1, in &lt;module&gt;
+    from py_with_msg.msg import Num
+ModuleNotFoundError: No module named 'py_with_msg.msg'
+[ros2run]: Process exited with failure 1
+
+$ ros2 interface show py_with_msg/msg/Num
+Could not find the resource 'py_with_msg' of type 'rosidl_interfaces'</code></pre>
+
+<p>The reason is that an ament_python build only runs setup.py. <code>rosidl_generate_interfaces</code> is a CMake function, and nothing in that build calls it. The dependencies in <code>package.xml</code> don't change that. The fix is a separate <code>ament_cmake</code> package for the interfaces, with the Python node depending on it:</p>
+
+<pre><code>src/
+  my_interfaces/          # ament_cmake
+    CMakeLists.txt        # find_package(rosidl_default_generators REQUIRED)
+                          # rosidl_generate_interfaces(${PROJECT_NAME} "msg/Num.msg")
+    package.xml           # buildtool_depend rosidl_default_generators,
+                          # exec_depend rosidl_default_runtime,
+                          # member_of_group rosidl_interface_packages
+    msg/Num.msg
+  py_node/                # ament_python
+    package.xml           # exec_depend my_interfaces
+    py_node/talker.py     # from my_interfaces.msg import Num</code></pre>
+
+<p>colcon builds <code>my_interfaces</code> first because of the dependency. On all three distros it printed <code>Summary: 2 packages finished</code>, and the node printed:</p>
+
+<pre><code>OK my_interfaces.msg.Num(num=5)</code></pre>
+
+<p>Build this interfaces package without a venv, or with the fixes above. It's a normal <code>rosidl_generate_interfaces</code> package, so every error in the first table applies to it.</p>
+
+<h2>Version notes</h2>
+
+<p>The error texts matched across distros where the same step failed. Line numbers in the call stack differ: <code>ament_package_xml</code> is called from <code>rosidl_generate_interfaces.cmake:226</code> on Humble and <code>:220</code> on Jazzy and Lyrical. Humble needs empy 3.x. Jazzy and Lyrical accepted 3.3.4 and 4.2.1. Only Jazzy and Lyrical needed numpy and setuptools in the venv, and only Humble needed <code>-DPYTHON_EXECUTABLE</code> in addition to <code>-DPython3_EXECUTABLE</code>. Lyrical's CMake 4.2.3 also printed a <code>CMake Deprecation Warning</code> for <code>cmake_minimum_required(VERSION 3.8)</code>. That warning is harmless.</p>
+
+<h2>Not tested</h2>
+
+<p>Conda environments (I used venv only; the same check on <code>execute_process(...)</code> applies, but I didn't run it). uv, pyenv and Python versions different from the distro's. colcon installed with pip inside the venv. The unrelated PyPI package <code>em</code>, and an <code>em.py</code> under <code>/opt/ros</code> breaking colcon itself (<code>cannot import name 'OVERRIDE_OPT' from 'em'</code>). A stale <code>CMakeCache.txt</code> from an earlier build (I deleted <code>build/</code> every time). A single <code>ament_cmake</code> package that holds both messages and Python nodes. Windows, macOS, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I fix module 'em' has no attribute 'BUFFERED_OPT'?</h3>
+<p>You have empy 4.x in the Python that CMake used, and you are on Humble. Run <code>pip install empy==3.3.4</code> in that venv, or deactivate the venv and build again. Both worked. Jazzy and Lyrical built fine with empy 4.2.1.</p>
+
+<h3>Which empy version does ROS 2 need?</h3>
+<p>The apt package was empy 3.3.4 on Humble and Jazzy and 4.2.1 on Lyrical. Humble failed with 4.2.1. Jazzy and Lyrical built with both 3.3.4 and 4.2.1.</p>
+
+<h3>Why does colcon build fail with No module named 'em' when empy is installed?</h3>
+<p>It's installed for a different Python. With a venv active, CMake used the venv's interpreter, which can't see the apt packages in /usr/lib/python3/dist-packages. Check the path in execute_process(...). Either deactivate the venv, install empy==3.3.4 into it, or create it with --system-site-packages.</p>
+
+<h3>Does -DPython3_EXECUTABLE=/usr/bin/python3 fix it?</h3>
+<p>On Jazzy and Lyrical, yes. On Humble, not by itself. <code>PYTHON_EXECUTABLE</code> kept the venv path, and the Python generator still failed. Pass both <code>-DPython3_EXECUTABLE=/usr/bin/python3</code> and <code>-DPYTHON_EXECUTABLE=/usr/bin/python3</code> in <code>--cmake-args</code>.</p>
+
+<h3>Can an ament_python package have custom messages?</h3>
+<p>No. colcon finished it with exit code 0 but generated nothing, and the import failed with <code>No module named 'py_with_msg.msg'</code>. Put the .msg files in a separate ament_cmake package and add it as a dependency of the Python package.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I fix module 'em' has no attribute 'BUFFERED_OPT'?", "acceptedAnswer": {"@type": "Answer", "text": "You have empy 4.x in the Python that CMake used, and you are on Humble. Run pip install empy==3.3.4 in that venv, or deactivate the venv and build again. Both worked. Jazzy and Lyrical built fine with empy 4.2.1."}},
+{"@type": "Question", "name": "Which empy version does ROS 2 need?", "acceptedAnswer": {"@type": "Answer", "text": "The apt package was empy 3.3.4 on Humble and Jazzy and 4.2.1 on Lyrical. Humble failed with 4.2.1. Jazzy and Lyrical built with both 3.3.4 and 4.2.1."}},
+{"@type": "Question", "name": "Why does colcon build fail with No module named 'em' when empy is installed?", "acceptedAnswer": {"@type": "Answer", "text": "It is installed for a different Python. With a venv active, CMake used the venv interpreter, which cannot see the apt packages in /usr/lib/python3/dist-packages. Check the path in execute_process. Either deactivate the venv, install empy==3.3.4 into it, or create it with --system-site-packages."}},
+{"@type": "Question", "name": "Does -DPython3_EXECUTABLE=/usr/bin/python3 fix it?", "acceptedAnswer": {"@type": "Answer", "text": "On Jazzy and Lyrical, yes. On Humble, not by itself. PYTHON_EXECUTABLE kept the venv path and the Python generator still failed. Pass both -DPython3_EXECUTABLE=/usr/bin/python3 and -DPYTHON_EXECUTABLE=/usr/bin/python3 in --cmake-args."}},
+{"@type": "Question", "name": "Can an ament_python package have custom messages?", "acceptedAnswer": {"@type": "Answer", "text": "No. colcon finished it with exit code 0 but generated nothing, and the import failed with No module named py_with_msg.msg. Put the .msg files in a separate ament_cmake package and add it as a dependency of the Python package."}}
+]}
+</script>
+
+<p>Measured on 2026-10-28 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Python 3.10.12, python3-empy 3.3.4, rosidl_adapter 3.1.9, rosidl_generator_py 0.14.6, colcon-core 0.21.3), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Python 3.12.3, python3-empy 3.3.4, rosidl_adapter 4.6.9, rosidl_generator_py 0.22.2, colcon-core 0.21.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Python 3.14.4, python3-empy 4.2.1, rosidl_adapter 5.2.1, rosidl_generator_py 0.27.2, colcon-core 0.21.3). The venvs got empy 4.2.1 or 3.3.4, catkin_pkg 1.1.1 and lark 1.3.1 from PyPI, plus numpy 2.2.6 on Humble and 2.5.4 on Jazzy and Lyrical. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-08-ros2-colcon-empy-em-buffered-opt/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/110804">Can't build with colcon on ROS2 Humble. Issue with empy library</a>, <a href="https://robotics.stackexchange.com/questions/107984">rosidl_adapter AttributeError: module 'em' has no attribute 'Interpreter'</a>, <a href="https://robotics.stackexchange.com/questions/105587">colcon build uses wrong Python version: No module named</a>, <a href="https://github.com/RobotecAI/ROSCon2023Demo/issues/287">Em error BUFFERED_OPT</a>, <a href="https://robotics.stackexchange.com/questions/117557">Python ROS2 (Humble) package (ament_python) with custom messages</a>, <a href="https://robotics.stackexchange.com/questions/114128">ROS2 Jazzy Python Custom Messages</a>.</p>

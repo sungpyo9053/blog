@@ -1,0 +1,213 @@
+<pre><code>[WARN] [1793163962.254306106] [qos_pub]: New subscription discovered on topic '/x', requesting incompatible QoS. No messages will be sent to it. Last incompatible policy: RELIABILITY
+[WARN] [1793163962.254307173] [qos_sub]: New publisher discovered on topic '/x', offering incompatible QoS. No messages will be received from it. Last incompatible policy: RELIABILITY</code></pre>
+
+<p>The first line is printed by the publisher's process, the second by the subscriber's. You see one or both, depending on which terminal you are looking at. The last word can also be <code>DURABILITY</code>, <code>DEADLINE</code> or <code>LIVELINESS</code>.</p>
+
+<p>Short answer: the two endpoints never connected. The subscription asked for more than the publisher offers, so DDS refused to match them, and no message goes across. It isn't a timing problem and it doesn't fix itself. The typical case is a sensor driver that publishes with <code>qos_profile_sensor_data</code> (BEST_EFFORT) and a node that subscribes with the default profile or a plain depth of 10 (RELIABLE). Make the subscriber ask for less:</p>
+
+<pre><code class="language-python">from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import LaserScan
+
+# BEST_EFFORT subscription: matches BEST_EFFORT and RELIABLE publishers
+self.sub = self.create_subscription(LaserScan, '/scan', self.on_scan, qos_profile_sensor_data)</code></pre>
+
+<p>A BEST_EFFORT subscription received all 30 messages from a RELIABLE publisher and from a BEST_EFFORT one in my runs, so it is the safe choice when you don't control the publisher. For the other policies the rule is the same. The subscription must not request a stronger guarantee than the publisher offers.</p>
+
+<h2>The compatibility matrix</h2>
+
+<p>Each row is a publisher and a subscriber in two separate rclpy processes on topic <code>/x</code>. The publisher waited up to 4 seconds for a matched subscription, then sent 30 <code>std_msgs/Int32</code> messages at 20 Hz. The reliability and durability rows ran 3 times each on Humble, Jazzy and Lyrical. All 9 runs of each row gave the same count.</p>
+
+<table>
+<thead><tr><th>Publisher offers</th><th>Subscriber requests</th><th>Received (of 30)</th><th>Warning</th></tr></thead>
+<tbody>
+<tr><td>RELIABLE</td><td>RELIABLE</td><td>30</td><td>none</td></tr>
+<tr><td>RELIABLE</td><td>BEST_EFFORT</td><td>30</td><td>none</td></tr>
+<tr><td>BEST_EFFORT</td><td>RELIABLE</td><td>0</td><td>both sides, <code>RELIABILITY</code></td></tr>
+<tr><td>BEST_EFFORT</td><td>BEST_EFFORT</td><td>30</td><td>none</td></tr>
+<tr><td>VOLATILE</td><td>VOLATILE</td><td>30</td><td>none</td></tr>
+<tr><td>VOLATILE</td><td>TRANSIENT_LOCAL</td><td>0</td><td>both sides, <code>DURABILITY</code></td></tr>
+<tr><td>TRANSIENT_LOCAL</td><td>VOLATILE</td><td>30</td><td>none</td></tr>
+<tr><td>TRANSIENT_LOCAL</td><td>TRANSIENT_LOCAL</td><td>30</td><td>none</td></tr>
+</tbody>
+</table>
+
+<p>The durability rows used RELIABLE on both sides. The other policies ran once per distro, with the same result on all three:</p>
+
+<table>
+<thead><tr><th>Publisher offers</th><th>Subscriber requests</th><th>Received (of 30)</th><th>Last incompatible policy</th></tr></thead>
+<tbody>
+<tr><td>BEST_EFFORT + VOLATILE</td><td>RELIABLE + TRANSIENT_LOCAL</td><td>0</td><td><code>RELIABILITY</code> only</td></tr>
+<tr><td>deadline 1.0 s</td><td>deadline 0.5 s</td><td>0</td><td><code>DEADLINE</code></td></tr>
+<tr><td>deadline 0.5 s</td><td>deadline 1.0 s</td><td>30</td><td>compatible</td></tr>
+<tr><td>no deadline (default)</td><td>deadline 1.0 s</td><td>0</td><td><code>DEADLINE</code></td></tr>
+<tr><td>liveliness AUTOMATIC</td><td>liveliness MANUAL_BY_TOPIC</td><td>0</td><td><code>LIVELINESS</code></td></tr>
+<tr><td>liveliness MANUAL_BY_TOPIC</td><td>liveliness AUTOMATIC</td><td>30</td><td>compatible</td></tr>
+<tr><td>lease 2.0 s</td><td>lease 1.0 s</td><td>0</td><td><code>LIVELINESS</code></td></tr>
+<tr><td>lease 1.0 s</td><td>lease 2.0 s</td><td>30</td><td>compatible</td></tr>
+<tr><td><code>qos_profile_sensor_data</code></td><td>RELIABLE, depth 10</td><td>0</td><td><code>RELIABILITY</code></td></tr>
+<tr><td><code>qos_profile_sensor_data</code></td><td>BEST_EFFORT, depth 10</td><td>30</td><td>compatible</td></tr>
+</tbody>
+</table>
+
+<p>Every incompatible pair printed exactly one warning line in each process, at discovery. The subscriber's own <code>get_publisher_count()</code> stayed at 0 (Jazzy and Lyrical; Humble's <code>Subscription</code> has no such method), and the publisher's <code>get_subscription_count()</code> was 0 before and after sending. When two policies were wrong at once, the message named only one of them. Fixing that one and running again can show you the next.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-28 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images with the default RMW (Fast DDS). The containers ran one after another, each with its own <code>ROS_DOMAIN_ID</code> (11, 12, 13), so no other DDS participant could join the test.</p>
+
+<p>The script has a small QoS helper, a publisher (<code>pub.py</code>) and a subscriber (<code>sub.py</code>). Each prints its QoS, the warnings rclpy logs, and its counts. The subscriber starts first and spins for 9 seconds. The CLI tests use a publisher that runs for 50 seconds at 20 Hz, so <code>ros2 topic info -v</code> can see both endpoints while they are alive.</p>
+
+<h2>RELIABILITY: the sensor driver case</h2>
+
+<p>RELIABLE means the subscription wants lost samples resent. A BEST_EFFORT publisher doesn't keep anything to resend, so it can't serve that request. The opposite direction works: a RELIABLE publisher can always send to a subscriber that accepts losses. This is why a camera or lidar driver that uses <code>qos_profile_sensor_data</code> goes silent for a node written as <code>create_subscription(Msg, topic, cb, 10)</code>, because the integer is only a queue depth. My "RELIABLE, depth 10" subscriber was <code>QoSProfile(depth=10)</code> with nothing else set, and it printed <code>reliability=RELIABLE</code>. In my run that pair received 0 of 30, and changing only the subscriber to BEST_EFFORT gave 30 of 30.</p>
+
+<p>Change the subscriber when you can. If you change the publisher to RELIABLE instead, every BEST_EFFORT subscriber still works (row 2 of the matrix). But a reliable publisher on a high-rate topic will try to resend, and I didn't measure the cost of that.</p>
+
+<h2>DURABILITY: TRANSIENT_LOCAL on the wrong side</h2>
+
+<p>A TRANSIENT_LOCAL subscription asks the publisher to keep old samples for late joiners. A VOLATILE publisher keeps nothing, so that pair failed with <code>Last incompatible policy: DURABILITY</code>. A TRANSIENT_LOCAL publisher with a VOLATILE subscriber connected and delivered all 30 messages. It just doesn't replay history to that subscriber. The usual mistake is copying a <code>/map</code> or <code>/robot_description</code> style subscription (TRANSIENT_LOCAL) onto a topic whose publisher uses the defaults. What a matched TRANSIENT_LOCAL pair delivers to a late subscriber, and how depth and lifespan limit it, is covered in <a href="https://huntlab.app/en/ros2-transient-local-late-joiner-lifespan/">TRANSIENT_LOCAL late joiners and lifespan, measured</a>. This post only covers whether the pair matches at all.</p>
+
+<h2>DEADLINE and LIVELINESS</h2>
+
+<p>A deadline is a promise from the publisher to send at least once per period. The subscriber's requested period must be equal to or longer than the publisher's. A subscriber asking for 0.5 s from a publisher offering 1.0 s failed, and the reverse worked. A publisher with no deadline set offers an infinite period, so any subscriber that sets a deadline doesn't match it. That's the easy one to miss. You add a deadline to your subscriber to detect a stalled sensor, and the result is a subscriber that never receives anything from it.</p>
+
+<p>Liveliness works the same way. MANUAL_BY_TOPIC is stronger than AUTOMATIC, so a subscriber requesting MANUAL_BY_TOPIC from an AUTOMATIC publisher failed, and the reverse worked. For the lease duration, a subscriber requesting 1.0 s from a publisher offering 2.0 s failed, and the reverse worked. Both cases print <code>Last incompatible policy: LIVELINESS</code>.</p>
+
+<h2>What ros2 topic echo and hz subscribe with</h2>
+
+<p>The CLI tools pick their own QoS, and that's where "echo works but my node doesn't" comes from. I ran each command against a BEST_EFFORT publisher and against a RELIABLE + TRANSIENT_LOCAL publisher, and read the subscription's QoS from <code>ros2 topic info -v</code> while the command was running.</p>
+
+<table>
+<thead><tr><th>Command</th><th>Distro</th><th>vs BEST_EFFORT pub</th><th>vs RELIABLE + TRANSIENT_LOCAL pub</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 topic echo /x</code></td><td>all three</td><td>BEST_EFFORT, VOLATILE, received</td><td>RELIABLE, TRANSIENT_LOCAL, received</td></tr>
+<tr><td><code>echo --qos-reliability reliable</code></td><td>all three</td><td>0 messages, incompatible warning</td><td>received</td></tr>
+<tr><td rowspan="2"><code>echo --qos-profile services_default</code></td><td>Humble</td><td>RELIABLE, VOLATILE: 0 messages, warning</td><td>RELIABLE, VOLATILE</td></tr>
+<tr><td>Jazzy, Lyrical</td><td>BEST_EFFORT, VOLATILE, received</td><td>RELIABLE, TRANSIENT_LOCAL</td></tr>
+<tr><td rowspan="2"><code>ros2 topic hz /x</code></td><td>Humble, Jazzy</td><td>BEST_EFFORT, VOLATILE</td><td>BEST_EFFORT, VOLATILE</td></tr>
+<tr><td>Lyrical</td><td>BEST_EFFORT, VOLATILE</td><td>RELIABLE, TRANSIENT_LOCAL</td></tr>
+</tbody>
+</table>
+
+<p>So <code>ros2 topic echo</code> with no QoS options matched the publisher on every distro I tested, including Humble. A working echo proves the publisher is sending. It says nothing about your subscriber's QoS. An echo started before any publisher existed also received all 80 messages from a BEST_EFFORT publisher that started 2 seconds later, on all three distros.</p>
+
+<p>An explicit <code>--qos-reliability reliable</code> is respected on all three, and it reproduces your node's problem from the terminal:</p>
+
+<pre><code>$ ros2 topic echo --qos-reliability reliable /x std_msgs/msg/Int32
+[WARN] [1793164761.860513932] [_ros2cli_1384]: New publisher discovered on topic '/x', offering incompatible QoS. No messages will be received from it. Last incompatible policy: RELIABILITY</code></pre>
+
+<p>The <code>--qos-profile</code> option changed between Humble and Jazzy. On Humble, <code>--qos-profile services_default</code> is used as given, RELIABLE, and against a BEST_EFFORT publisher it printed the warning and nothing else. On Jazzy and Lyrical the same command subscribed BEST_EFFORT and printed data. The help text points at the reason. From Jazzy, <code>--qos-reliability</code>, <code>--qos-durability</code> and <code>--qos-liveliness</code> accept <code>best_available</code>, and <code>--qos-profile</code> lists <code>best_available</code> as well. With a profile given and no explicit reliability, the newer echo still adapted reliability and durability to the publisher. If you want echo to behave like a specific subscriber on Jazzy or newer, set <code>--qos-reliability</code> and <code>--qos-durability</code> explicitly.</p>
+
+<p><code>ros2 topic hz</code> has no <code>--qos</code> options on Humble and Jazzy. It subscribed BEST_EFFORT and VOLATILE against both publishers. That's compatible with anything, which is why hz shows a rate on a topic your node can't receive. On Lyrical, hz has the same <code>--qos-*</code> options as echo and adapted to the publisher. Against the TRANSIENT_LOCAL publisher it subscribed RELIABLE and TRANSIENT_LOCAL, and the stored samples arrived at once. The first window printed <code>average rate: 23.575</code> with <code>min: 0.000s</code>, where the same publisher measured <code>average rate: 19.328</code> on Humble. The publisher's loop is nominally 20 Hz, and every other hz run reported between 19.093 and 19.340. On Lyrical, ignore the first windows of hz on a TRANSIENT_LOCAL topic.</p>
+
+<h2>See the mismatch with ros2 topic info -v</h2>
+
+<p>The warning names the policy, but not the values. <code>ros2 topic info -v</code> shows both endpoints. This is the BEST_EFFORT publisher and RELIABLE subscriber pair on Humble, with the GID lines and the subscriber's last four lines removed:</p>
+
+<pre><code>$ ros2 topic info -v /x
+Type: std_msgs/msg/Int32
+
+Publisher count: 1
+
+Node name: qos_pub
+Node namespace: /
+Topic type: std_msgs/msg/Int32
+Endpoint type: PUBLISHER
+QoS profile:
+  Reliability: BEST_EFFORT
+  History (Depth): UNKNOWN
+  Durability: VOLATILE
+  Lifespan: Infinite
+  Deadline: Infinite
+  Liveliness: AUTOMATIC
+  Liveliness lease duration: Infinite
+
+Subscription count: 1
+
+Node name: qos_sub
+Node namespace: /
+Topic type: std_msgs/msg/Int32
+Endpoint type: SUBSCRIPTION
+QoS profile:
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: VOLATILE
+  ...</code></pre>
+
+<p>Both endpoints are listed, so discovery worked. The counts don't tell you whether they matched. Compare the Reliability, Durability, Deadline and Liveliness lines between the PUBLISHER and SUBSCRIPTION blocks, and use the table above. Jazzy and Lyrical add a <code>Topic type hash</code> line. Lyrical prints the real history, <code>KEEP_LAST (10)</code>, where Humble and Jazzy print <code>UNKNOWN</code>.</p>
+
+<h2>Detect it in code</h2>
+
+<p>rclpy logs the warning by default. To act on it, pass an incompatible QoS callback when you create the subscription or publisher:</p>
+
+<pre><code class="language-python">try:
+    from rclpy.event_handler import SubscriptionEventCallbacks, PublisherEventCallbacks
+except ImportError:  # older rclpy
+    from rclpy.qos_event import SubscriptionEventCallbacks, PublisherEventCallbacks
+
+def on_incompatible(event):
+    node.get_logger().error(
+        f'QoS mismatch on /x: total_count={event.total_count} '
+        f'last_policy_kind={event.last_policy_kind}')
+
+sub = node.create_subscription(
+    Int32, '/x', cb, qos,
+    event_callbacks=SubscriptionEventCallbacks(incompatible_qos=on_incompatible))
+
+pub = node.create_publisher(
+    Int32, '/x', qos,
+    event_callbacks=PublisherEventCallbacks(incompatible_qos=on_incompatible))</code></pre>
+
+<p>The callback fired once per incompatible peer on both sides, with the same output on all three distros:</p>
+
+<pre><code>SUB EVENT incompatible_qos total_count=1 total_count_change=1 last_policy_kind=rmw_qos_policy_kind_t.RMW_QOS_POLICY_RELIABILITY
+PUB EVENT incompatible_qos total_count=1 total_count_change=1 last_policy_kind=rmw_qos_policy_kind_t.RMW_QOS_POLICY_RELIABILITY</code></pre>
+
+<p>For the durability and deadline mismatches it reported <code>RMW_QOS_POLICY_DURABILITY</code> and <code>RMW_QOS_POLICY_DEADLINE</code>. With the callback set, the default <code>[WARN]</code> line wasn't printed, so log it yourself if you still want it in the console.</p>
+
+<h2>Fix it without a rebuild: QoS overrides</h2>
+
+<p>If the node opts in, a parameter can change the QoS at startup. I created the subscription with <code>qos_overriding_options=QoSOverridingOptions.with_default_policies()</code> and RELIABLE in code, then started it with:</p>
+
+<pre><code>python3 sub.py ... --ros-args -p "qos_overrides./x.subscription.reliability:=best_effort"</code></pre>
+
+<p>It printed <code>SUB qos reliability=BEST_EFFORT</code> and received 30 of 30 from the BEST_EFFORT publisher. The same node without the parameter stayed RELIABLE, warned, and received 0. This only works for nodes that pass <code>qos_overriding_options</code>. For a node that doesn't, the parameter has nothing to override.</p>
+
+<h2>Version notes</h2>
+
+<p>The matrix, the warning texts, the event output and the override behavior were identical on Humble (rclpy 3.3.22, Fast DDS 2.6.12), Jazzy (rclpy 7.1.12, Fast DDS 2.14.7) and Lyrical (rclpy 10.0.11, Fast DDS 3.6.2). The differences were all in the CLI. <code>--qos-profile</code> adapts on Jazzy and Lyrical but not on Humble. <code>ros2 topic hz</code> got <code>--qos-*</code> options and QoS adaptation only on Lyrical. Lyrical's <code>--qos-profile</code> list also includes <code>rosout_default</code>. One Jazzy <code>ros2 topic echo</code>, started before its publisher, kept running after <code>timeout</code> sent SIGTERM, and I had to kill it with <code>kill -9</code>. It had already printed all 80 messages. I saw this once and didn't investigate it.</p>
+
+<h2>Not tested</h2>
+
+<p>rclcpp, other RMWs (Cyclone DDS, Zenoh), nodes on different machines, history (KEEP_ALL) and lifespan compatibility, <code>QoSSubscriptionEventType.SUBSCRIPTION_INCOMPATIBLE_QOS</code> used through a separate event handler API, <code>best_available</code> passed explicitly, <code>ros2 bag record</code> and RViz, launch-file QoS overrides, and Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "requesting incompatible QoS. No messages will be sent to it" mean?</h3>
+<p>The publisher printing it found a subscription that asks for a stronger QoS than it offers, and DDS won't connect them. No message goes to that subscription. The policy after <code>Last incompatible policy:</code> is the one to fix. In my runs the subscriber printed the matching "offering incompatible QoS" line at the same moment.</p>
+
+<h3>Why does ros2 topic echo show data but my subscriber gets nothing?</h3>
+<p>With no QoS options, <code>ros2 topic echo</code> matched the publisher's reliability and durability on Humble, Jazzy and Lyrical. Your node uses whatever is in its code, usually RELIABLE. Run <code>ros2 topic echo --qos-reliability reliable</code> to see what your node sees, and subscribe with <code>qos_profile_sensor_data</code> for sensor topics.</p>
+
+<h3>Is a BEST_EFFORT subscriber compatible with a RELIABLE publisher?</h3>
+<p>Yes. It received 30 of 30 on all three distros. Only a RELIABLE subscriber with a BEST_EFFORT publisher fails.</p>
+
+<h3>Does a TRANSIENT_LOCAL publisher work with a VOLATILE subscriber?</h3>
+<p>Yes, it received 30 of 30. The failing pair is a TRANSIENT_LOCAL subscriber with a VOLATILE publisher, which prints <code>Last incompatible policy: DURABILITY</code>.</p>
+
+<h3>How do I detect incompatible QoS in Python?</h3>
+<p>Pass <code>event_callbacks=SubscriptionEventCallbacks(incompatible_qos=cb)</code> to <code>create_subscription</code>, or <code>PublisherEventCallbacks</code> to <code>create_publisher</code>. The callback gets <code>total_count</code> and <code>last_policy_kind</code>, for example <code>RMW_QOS_POLICY_RELIABILITY</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does requesting incompatible QoS. No messages will be sent to it mean?", "acceptedAnswer": {"@type": "Answer", "text": "The publisher printing it found a subscription that asks for a stronger QoS than it offers, and DDS won't connect them. No message goes to that subscription. The policy after Last incompatible policy: is the one to fix. In my runs the subscriber printed the matching offering incompatible QoS line at the same moment."}},
+{"@type": "Question", "name": "Why does ros2 topic echo show data but my subscriber gets nothing?", "acceptedAnswer": {"@type": "Answer", "text": "With no QoS options, ros2 topic echo matched the publisher's reliability and durability on Humble, Jazzy and Lyrical. Your node uses whatever is in its code, usually RELIABLE. Run ros2 topic echo --qos-reliability reliable to see what your node sees, and subscribe with qos_profile_sensor_data for sensor topics."}},
+{"@type": "Question", "name": "Is a BEST_EFFORT subscriber compatible with a RELIABLE publisher?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It received 30 of 30 on all three distros. Only a RELIABLE subscriber with a BEST_EFFORT publisher fails."}},
+{"@type": "Question", "name": "Does a TRANSIENT_LOCAL publisher work with a VOLATILE subscriber?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, it received 30 of 30. The failing pair is a TRANSIENT_LOCAL subscriber with a VOLATILE publisher, which prints Last incompatible policy: DURABILITY."}},
+{"@type": "Question", "name": "How do I detect incompatible QoS in Python?", "acceptedAnswer": {"@type": "Answer", "text": "Pass event_callbacks=SubscriptionEventCallbacks(incompatible_qos=cb) to create_subscription, or PublisherEventCallbacks to create_publisher. The callback gets total_count and last_policy_kind, for example RMW_QOS_POLICY_RELIABILITY."}}
+]}
+</script>
+
+<p>Measured on 2026-10-28 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rmw_fastrtps_cpp 6.2.10, ros2cli 0.18.20), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rmw_fastrtps_cpp 8.4.4, ros2cli 0.32.13) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rmw_fastrtps_cpp 9.4.10, ros2cli 0.40.9), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-07-ros2-incompatible-qos-reliability-durability/evidence">evidence folder</a>. Questions this answers: <a href="https://answers.ros.org/question/411046/">Getting QoS error on running code</a>, <a href="https://answers.ros.org/question/416740/">Last incompatible policy: RELIABILITY_QOS_POLICY - Ros2 bag problem</a>, <a href="https://answers.ros.org/question/417559/">New publisher discovered on topic, offering incompatible QoS</a>, <a href="https://answers.ros.org/question/394442/">New publisher discovered on topic 'zed/right/image_rect_color', offering incompatible QoS</a>, <a href="https://answers.ros.org/question/371257/">ROS2 Foxy incompatible QoS policies no warnings</a>.</p>

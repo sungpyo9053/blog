@@ -1,0 +1,483 @@
+##### distro: jazzy
+== versions
+Python 3.12.3
+cmake version 3.28.3
+python3-catkin-pkg 
+python3-catkin-pkg-modules 1.1.1-1
+python3-colcon-core 0.21.3+upstream-1
+python3-empy 3.3.4-2
+python3-lark 1.1.9-1
+python3-numpy 1:1.26.4+ds-6ubuntu1
+ros-jazzy-ament-cmake-core 2.5.6-2noble.20260224.191131
+ros-jazzy-rosidl-adapter 4.6.9-1noble.20260612.045507
+ros-jazzy-rosidl-generator-py 0.22.2-1noble.20260911.050634
+system em: 3.3.4 /usr/lib/python3/dist-packages/em.py
+-- how ament_cmake_core parses package.xml (catkin_pkg import lines):
+22:from catkin_pkg.package import parse_package_string
+95:    :param package: catkin_pkg.package.Package
+colcon: /usr/bin/colcon shebang: #!/usr/bin/python3
+
+=== CASE: A: system python, no venv
+python3 on PATH: /usr/bin/python3  VIRTUAL_ENV=none
+colcon exit code: 0
+Finished <<< my_interfaces [8.85s]
+Summary: 1 package finished [9.00s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+ModuleNotFoundError: No module named 'catkin_pkg'
+ModuleNotFoundError: No module named 'numpy'
+
+=== CASE: B: venv without system site packages, nothing installed
+python3 on PATH: /venv/bare/bin/python3  VIRTUAL_ENV=/venv/bare
+
+colcon exit code: 1
+CMake Error at /opt/ros/jazzy/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:57 (message):
+  execute_process(/venv/bare/bin/python3 -m rosidl_adapter --package-name
+  ModuleNotFoundError: No module named 'em'
+Summary: 0 packages finished [1.13s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/jazzy/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:57 (message):
+  execute_process(/venv/bare/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  Traceback (most recent call last):
+
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+               ^^^^^^
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+                     ^^^^^^^^^^^^^^^
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/__init__.py", line 18, in convert_to_idl
+      from rosidl_adapter.msg import convert_msg_to_idl
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/msg/__init__.py", line 16, in <module>
+      from rosidl_adapter.resource import expand_template
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/resource/__init__.py", line 19, in <module>
+      import em
+
+  ModuleNotFoundError: No module named 'em'
+
+Call Stack (most recent call first):
+  /opt/ros/jazzy/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:132 (rosidl_adapt_interfaces)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [0.98s, exited with code 1]
+
+Summary: 0 packages finished [1.13s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/bare/bin/python3 -m rosidl_adapter --package-name
+28:  ModuleNotFoundError: No module named 'em'
+
+=== CASE: B2: same venv + --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/bare/bin/python3  VIRTUAL_ENV=/venv/bare
+
+colcon exit code: 0
+Finished <<< my_interfaces [8.75s]
+Summary: 1 package finished [8.89s]
+-- cmake chose: Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: B3: same venv + -DPython3_EXECUTABLE and -DPYTHON_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/bare/bin/python3  VIRTUAL_ENV=/venv/bare
+
+colcon exit code: 0
+Finished <<< my_interfaces [9.03s]
+Summary: 1 package finished [9.17s]
+-- cmake chose: PYTHON_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: C1: venv + catkin_pkg
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;
+colcon exit code: 1
+CMake Error at /opt/ros/jazzy/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:57 (message):
+  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+  ModuleNotFoundError: No module named 'em'
+Summary: 0 packages finished [1.15s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /opt/ros/jazzy/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:57 (message):
+  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+  my_interfaces --arguments-file
+  /ws/build/my_interfaces/rosidl_adapter__arguments__my_interfaces.json
+  --output-dir /ws/build/my_interfaces/rosidl_adapter/my_interfaces
+  --output-file /ws/build/my_interfaces/rosidl_adapter/my_interfaces.idls)
+  returned error code 1:
+
+  Traceback (most recent call last):
+
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/__main__.py", line 19, in <module>
+      sys.exit(main())
+               ^^^^^^
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/main.py", line 53, in main
+      abs_idl_file = convert_to_idl(
+                     ^^^^^^^^^^^^^^^
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/__init__.py", line 18, in convert_to_idl
+      from rosidl_adapter.msg import convert_msg_to_idl
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/msg/__init__.py", line 16, in <module>
+      from rosidl_adapter.resource import expand_template
+    File "/opt/ros/jazzy/lib/python3.12/site-packages/rosidl_adapter/resource/__init__.py", line 19, in <module>
+      import em
+
+  ModuleNotFoundError: No module named 'em'
+
+Call Stack (most recent call first):
+  /opt/ros/jazzy/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:132 (rosidl_adapt_interfaces)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [1.00s, exited with code 1]
+
+Summary: 0 packages finished [1.15s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+4:  execute_process(/venv/ladder/bin/python3 -m rosidl_adapter --package-name
+28:  ModuleNotFoundError: No module named 'em'
+
+=== CASE: C2: venv + catkin_pkg + empy (latest from PyPI)
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 4.2.1;
+colcon exit code: 1
+CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+Summary: 0 packages finished [2.87s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=_Python3_NumPy_INCLUDE_DIR-NOTFOUND 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+  Could NOT find Python3 (missing: Python3_NumPy_INCLUDE_DIRS NumPy) (found
+  version "3.12.3")
+Call Stack (most recent call first):
+  /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:600 (_FPHSA_FAILURE_MESSAGE)
+  /usr/share/cmake-3.28/Modules/FindPython/Support.cmake:3862 (find_package_handle_standard_args)
+  /usr/share/cmake-3.28/Modules/FindPython3.cmake:545 (include)
+  /opt/ros/jazzy/share/rosidl_generator_py/cmake/rosidl_generator_py_generate_interfaces.cmake:22 (find_package)
+  /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_execute_extensions.cmake:48 (include)
+  /opt/ros/jazzy/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:280 (ament_execute_extensions)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [2.72s, exited with code 1]
+
+Summary: 0 packages finished [2.87s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+
+=== CASE: C3: venv + catkin_pkg + empy==3.3.4
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;
+colcon exit code: 1
+CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+Summary: 0 packages finished [2.84s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=_Python3_NumPy_INCLUDE_DIR-NOTFOUND 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+  Could NOT find Python3 (missing: Python3_NumPy_INCLUDE_DIRS NumPy) (found
+  version "3.12.3")
+Call Stack (most recent call first):
+  /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:600 (_FPHSA_FAILURE_MESSAGE)
+  /usr/share/cmake-3.28/Modules/FindPython/Support.cmake:3862 (find_package_handle_standard_args)
+  /usr/share/cmake-3.28/Modules/FindPython3.cmake:545 (include)
+  /opt/ros/jazzy/share/rosidl_generator_py/cmake/rosidl_generator_py_generate_interfaces.cmake:22 (find_package)
+  /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_execute_extensions.cmake:48 (include)
+  /opt/ros/jazzy/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:280 (ament_execute_extensions)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [2.69s, exited with code 1]
+
+Summary: 0 packages finished [2.84s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+
+=== CASE: C4: venv + catkin_pkg + empy==3.3.4 + lark
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;
+colcon exit code: 1
+CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+Summary: 0 packages finished [2.88s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=_Python3_NumPy_INCLUDE_DIR-NOTFOUND 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+  Could NOT find Python3 (missing: Python3_NumPy_INCLUDE_DIRS NumPy) (found
+  version "3.12.3")
+Call Stack (most recent call first):
+  /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:600 (_FPHSA_FAILURE_MESSAGE)
+  /usr/share/cmake-3.28/Modules/FindPython/Support.cmake:3862 (find_package_handle_standard_args)
+  /usr/share/cmake-3.28/Modules/FindPython3.cmake:545 (include)
+  /opt/ros/jazzy/share/rosidl_generator_py/cmake/rosidl_generator_py_generate_interfaces.cmake:22 (find_package)
+  /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_execute_extensions.cmake:48 (include)
+  /opt/ros/jazzy/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:280 (ament_execute_extensions)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [2.73s, exited with code 1]
+
+Summary: 0 packages finished [2.88s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+
+=== CASE: C5: venv + catkin_pkg + empy==3.3.4 + lark + numpy
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;numpy                                2.5.4;
+colcon exit code: 2
+ModuleNotFoundError: No module named 'setuptools'
+Summary: 0 packages finished [4.40s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/venv/ladder/lib/python3.12/site-packages/numpy/_core/include 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+Traceback (most recent call last):
+  File "/ws/build/my_interfaces/ament_cmake_python/my_interfaces/setup.py", line 1, in <module>
+    from setuptools import find_packages
+ModuleNotFoundError: No module named 'setuptools'
+gmake[2]: *** [CMakeFiles/ament_cmake_python_build_my_interfaces_egg.dir/build.make:70: CMakeFiles/ament_cmake_python_build_my_interfaces_egg] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:497: CMakeFiles/ament_cmake_python_build_my_interfaces_egg.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+gmake: *** [Makefile:146: all] Error 2
+---
+Failed   <<< my_interfaces [4.25s, exited with code 2]
+
+Summary: 0 packages finished [4.40s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+6:ModuleNotFoundError: No module named 'setuptools'
+
+=== CASE: C6: venv + catkin_pkg + empy==3.3.4 + lark + numpy + setuptools
+python3 on PATH: /venv/ladder/bin/python3  VIRTUAL_ENV=/venv/ladder
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;numpy                                2.5.4;
+colcon exit code: 0
+Finished <<< my_interfaces [8.82s]
+Summary: 1 package finished [8.96s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/venv/ladder/lib/python3.12/site-packages/numpy/_core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: E1: venv with empy latest + catkin_pkg lark numpy
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.5.4;
+colcon exit code: 2
+ModuleNotFoundError: No module named 'setuptools'
+Summary: 0 packages finished [4.85s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/venv/e4/lib/python3.12/site-packages/numpy/_core/include 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+Traceback (most recent call last):
+  File "/ws/build/my_interfaces/ament_cmake_python/my_interfaces/setup.py", line 1, in <module>
+    from setuptools import find_packages
+ModuleNotFoundError: No module named 'setuptools'
+gmake[2]: *** [CMakeFiles/ament_cmake_python_build_my_interfaces_egg.dir/build.make:70: CMakeFiles/ament_cmake_python_build_my_interfaces_egg] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:497: CMakeFiles/ament_cmake_python_build_my_interfaces_egg.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+gmake: *** [Makefile:146: all] Error 2
+---
+Failed   <<< my_interfaces [4.70s, exited with code 2]
+
+Summary: 0 packages finished [4.85s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+6:ModuleNotFoundError: No module named 'setuptools'
+
+=== CASE: E1b: venv with empy latest + catkin_pkg lark numpy setuptools
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.5.4;
+colcon exit code: 0
+Finished <<< my_interfaces [9.32s]
+Summary: 1 package finished [9.47s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/venv/e4/lib/python3.12/site-packages/numpy/_core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: E2: same venv + --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.5.4;
+colcon exit code: 0
+Finished <<< my_interfaces [8.84s]
+Summary: 1 package finished [8.98s]
+-- cmake chose: Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: E2b: same venv + -DPython3_EXECUTABLE and -DPYTHON_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 4.2.1;lark                                 1.3.1;numpy                                2.5.4;
+colcon exit code: 0
+Finished <<< my_interfaces [9.10s]
+Summary: 1 package finished [9.24s]
+-- cmake chose: PYTHON_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 PYTHON_EXECUTABLE-ADVANCED:INTERNAL=1 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+=== CASE: E3: same shell after deactivate
+python3 on PATH: /usr/bin/python3  VIRTUAL_ENV=none
+colcon exit code: 0
+Finished <<< my_interfaces [8.76s]
+Summary: 1 package finished [8.91s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: E4: venv E1 after pip install empy==3.3.4
+python3 on PATH: /venv/e4/bin/python3  VIRTUAL_ENV=/venv/e4
+catkin-pkg                           1.1.1;empy                                 3.3.4;lark                                 1.3.1;numpy                                2.5.4;
+colcon exit code: 0
+Finished <<< my_interfaces [9.03s]
+Summary: 1 package finished [9.17s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/venv/e4/lib/python3.12/site-packages/numpy/_core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: K: venv + empy==3.3.4 only (no catkin_pkg)
+python3 on PATH: /venv/nocatkin/bin/python3  VIRTUAL_ENV=/venv/nocatkin
+empy                                 3.3.4;
+colcon exit code: 1
+ModuleNotFoundError: No module named 'catkin_pkg'
+CMake Error at /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:95 (message):
+  execute_process(/venv/nocatkin/bin/python3
+Summary: 0 packages finished [1.19s]
+  1 package failed: my_interfaces
+-- cmake chose: 
+-- numpy in cache: 
+-- generated py: 
+-- full stderr of last build (first 40 lines):
+--- stderr: my_interfaces
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 22, in <module>
+    from catkin_pkg.package import parse_package_string
+ModuleNotFoundError: No module named 'catkin_pkg'
+CMake Error at /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:95 (message):
+  execute_process(/venv/nocatkin/bin/python3
+  /opt/ros/jazzy/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py
+  /ws/src/my_interfaces/package.xml
+  /ws/build/my_interfaces/ament_cmake_core/package.cmake) returned error code
+  1
+Call Stack (most recent call first):
+  /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:49 (_ament_package_xml)
+  /opt/ros/jazzy/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:220 (ament_package_xml)
+  CMakeLists.txt:5 (rosidl_generate_interfaces)
+
+
+---
+Failed   <<< my_interfaces [1.04s, exited with code 1]
+
+Summary: 0 packages finished [1.19s]
+  1 package failed: my_interfaces
+  1 package had stderr output: my_interfaces
+-- interpreter / generator lines in the log:
+6:ModuleNotFoundError: No module named 'catkin_pkg'
+8:  execute_process(/venv/nocatkin/bin/python3
+
+=== CASE: S1: venv --system-site-packages, nothing installed
+python3 on PATH: /venv/ssp/bin/python3  VIRTUAL_ENV=/venv/ssp
+empy                                 3.3.4;lark                                 1.1.9;numpy                                1.26.4;
+colcon exit code: 0
+Finished <<< my_interfaces [9.63s]
+Summary: 1 package finished [9.78s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: S2: venv --system-site-packages + pip install empy (no -U)
+python3 on PATH: /venv/ssp/bin/python3  VIRTUAL_ENV=/venv/ssp
+empy                                 3.3.4;lark                                 1.1.9;numpy                                1.26.4;
+colcon exit code: 0
+Finished <<< my_interfaces [8.83s]
+Summary: 1 package finished [8.98s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+
+=== CASE: S3: venv --system-site-packages + pip install -U empy
+python3 on PATH: /venv/ssp/bin/python3  VIRTUAL_ENV=/venv/ssp
+empy                                 4.2.1;lark                                 1.1.9;numpy                                1.26.4;
+colcon exit code: 0
+Finished <<< my_interfaces [8.93s]
+Summary: 1 package finished [9.07s]
+-- cmake chose: 
+-- numpy in cache: _Python3_NumPy_INCLUDE_DIR:INTERNAL=/usr/lib/python3/dist-packages/numpy/core/include 
+-- generated py: install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+-- full stderr of last build (first 40 lines):
+-- interpreter / generator lines in the log:
+
+##### part 2: ament_python + custom message
+colcon exit code: 0
+Starting >>> py_with_msg
+Finished <<< py_with_msg [1.23s]
+Summary: 1 package finished [1.38s]
+-- generated msg files under install/: 
+-- interface registered: none
+-- ros2 run py_with_msg talker:
+  File "/ws2/install/py_with_msg/lib/python3.12/site-packages/py_with_msg/talker.py", line 1, in <module>
+    from py_with_msg.msg import Num
+ModuleNotFoundError: No module named 'py_with_msg.msg'
+[ros2run]: Process exited with failure 1
+-- ros2 interface show py_with_msg/msg/Num:
+Could not find the resource 'py_with_msg' of type 'rosidl_interfaces'
+
+=== FIX: separate interfaces package
+colcon exit code: 0
+Finished <<< my_interfaces [8.71s]
+Finished <<< py_node [1.23s]
+Summary: 2 packages finished [10.1s]
+-- ros2 run py_node talker:
+OK my_interfaces.msg.Num(num=5)
+##### end jazzy
