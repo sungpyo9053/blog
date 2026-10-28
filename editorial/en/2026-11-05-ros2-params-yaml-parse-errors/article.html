@@ -1,0 +1,124 @@
+<pre><code>[ERROR] [rcl]: Failed to parse global arguments
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'
+  what():  failed to initialize rcl: Couldn't parse params file: '--params-file /y/no_ros_parameters.yaml'. Error: Cannot have a value before ros__parameters at line 2, at ./src/parse.c:787, at ./src/rcl/arguments.c:406</code></pre>
+
+<p>In Python the same failure ends in <code>rclpy._rclpy_pybind11.RCLError: failed to initialize rcl: Couldn't parse params file: ...</code>, with the same text after <code>Error:</code>.</p>
+
+<p>Short answer: "Failed to parse global arguments" isn't the real error. It's the line rcl prints before it rejects your <code>--ros-args</code>. The cause is the text after the last <code>Error:</code>, and it comes from one of two places. Either the YAML parser rejected the file, or the command-line parser rejected a <code>-p</code> rule. The node never starts, so nothing in your code runs. The file layout that worked on Humble, Jazzy and Lyrical has the node name, then <code>ros__parameters</code>, then the parameters, indented with spaces:</p>
+
+<pre><code class="language-yaml">/number_publisher:        # node name, as the node calls itself (or /** for every node)
+  ros__parameters:        # required, exactly this key
+    number: 5
+    timer_period: 1.5     # 1.5 or 1.0, not 1, if the node declared a double
+    label: from_yaml</code></pre>
+
+<pre><code>ros2 run my_pkg my_node --ros-args --params-file params.yaml</code></pre>
+
+<p>Two mistakes produce no error at all. A YAML key that doesn't match the node name is skipped, and so is a <code>--params-file</code> (or <code>-p</code>) placed before <code>--ros-args</code>. In both cases the node starts with its default values. If your parameters seem to be ignored, check those two first.</p>
+
+<h2>Find your error text</h2>
+
+<p>Take the part after <code>Error:</code> and look it up in this table. Every row behaved the same in an <code>rclpy</code> node and an <code>rclcpp</code> node, on all three distros.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Text after <code>Error:</code> (or the exception)</th></tr></thead>
+<tbody>
+<tr><td>No <code>ros__parameters:</code> key under the node name</td><td><code>Cannot have a value before ros__parameters at line 2</code></td></tr>
+<tr><td>File not indented at all (every key at column 0)</td><td><code>Cannot have a value before ros__parameters at line 1</code></td></tr>
+<tr><td>Tabs used for indentation</td><td><code>Error parsing a event near line 1</code></td></tr>
+<tr><td>A key with no value (<code>number:</code>)</td><td><code>No value at line 3</code></td></tr>
+<tr><td>List mixing types (<code>[1, 2.5]</code>)</td><td><code>Sequence should be of same type. Value type 'double' do not belong at line_num 3</code></td></tr>
+<tr><td>Path to the file is wrong</td><td><code>Error opening YAML file</code></td></tr>
+<tr><td><code>-p timer_period:= 1.0</code> (space after <code>:=</code>)</td><td><code>Couldn't parse parameter override rule: '-p timer_period:='. Error: error not set</code></td></tr>
+<tr><td><code>-p -publish_rate:=100.0</code> (dash before the name)</td><td><code>Couldn't parse parameter override rule: '-p -publish_rate:=100.0'. Error: Expecting token or wildcard</code></td></tr>
+<tr><td><code>--param-file</code> (typo) after <code>--ros-args</code></td><td>Python: <code>rclpy._rclpy_pybind11.UnknownROSArgsError: ['--param-file', '/y/good.yaml']</code>. C++: <code>found unknown ROS arguments: '--param-file', '/y/good.yaml'</code></td></tr>
+<tr><td><code>timer_period: 1</code> for a parameter declared as <code>0.5</code></td><td>Python: <code>InvalidParameterTypeException: Trying to set parameter 'timer_period' to '1' of type 'INTEGER', expecting type 'DOUBLE'</code>. C++: <code>Wrong parameter type, parameter {timer_period} is of type {double}, setting it to {integer} is not allowed.</code></td></tr>
+<tr><td><code>number: "5"</code> for a parameter declared as <code>1</code></td><td>Same exception, <code>of type 'STRING', expecting type 'INTEGER'</code></td></tr>
+</tbody>
+</table>
+
+<p>The last two rows aren't parse errors. The file parsed fine, and <code>declare_parameter</code> threw afterwards, so you get a traceback that points into your own node code with no "Failed to parse global arguments" line. In C++ every row ends with <code>terminate called after throwing an instance of ...</code> and the process aborts.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-28 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images. One package held two nodes, a Python script and a C++ executable, both named <code>number_publisher</code>. Each declares <code>number</code> (default <code>1</code>), <code>timer_period</code> (default <code>0.5</code>) and <code>label</code> (default <code>"default"</code>), logs the three values and exits. I started each node with <code>ros2 run</code> 30 times, each time with a different file or argument. The results below were the same for both nodes on all three distros:</p>
+
+<table>
+<thead><tr><th>Input</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Layout above, key <code>/number_publisher:</code></td><td>applied (<code>number=5 timer_period=1.5 label=from_yaml</code>)</td></tr>
+<tr><td>Key <code>number_publisher:</code> (no leading slash)</td><td>applied</td></tr>
+<tr><td>Key <code>/**:</code></td><td>applied</td></tr>
+<tr><td>Key <code>/number_node:</code> (not the node's name)</td><td>no error, defaults kept (<code>number=1</code>)</td></tr>
+<tr><td>Node in namespace <code>/robot1</code>, key <code>/robot1/number_publisher:</code></td><td>applied</td></tr>
+<tr><td>Node in <code>/robot1</code>, nested <code>robot1:</code> then <code>number_publisher:</code></td><td>applied</td></tr>
+<tr><td>Comments: full line, indented, inline, and <code>#</code> inside quotes</td><td>applied, the quoted <code>#</code> kept in the string</td></tr>
+<tr><td><code>label: 00 13 a2 00 41</code> (unquoted, with spaces)</td><td>applied as the string <code>00 13 a2 00 41</code></td></tr>
+<tr><td>Empty file</td><td>no error, defaults kept</td></tr>
+<tr><td><code>--params-file good.yaml</code> without <code>--ros-args</code></td><td>no error, defaults kept</td></tr>
+<tr><td><code>-p number:=7</code> without <code>--ros-args</code></td><td>no error, defaults kept</td></tr>
+<tr><td><code>--ros-args -p number:=7 -p timer_period:=1.0</code></td><td>applied</td></tr>
+<tr><td><code>--ros-args -p "label:=hello world"</code></td><td>applied as <code>hello world</code></td></tr>
+<tr><td><code>--ros-args -p timer_period:=1</code></td><td><code>InvalidParameterTypeException</code>, same as the YAML case</td></tr>
+<tr><td><code>--ros-args --log-level number_publisher:=DEBUG</code></td><td>works, only that logger at DEBUG</td></tr>
+<tr><td><code>--ros-args --log-level debug</code> (lowercase)</td><td>works, everything at DEBUG</td></tr>
+<tr><td>Each broken input in the first table</td><td>the error shown there</td></tr>
+</tbody>
+</table>
+
+<h2>The node name is the key, and a wrong one is skipped silently</h2>
+
+<p>The top-level key has to match the node's fully qualified name, the name it passed to <code>Node(...)</code>, plus its namespace. It doesn't have to match the executable, the package or the file name. The leading slash is optional, and a namespace can be written as a path (<code>/robot1/number_publisher:</code>) or as nested keys. A key that matches no node isn't an error. The file parses, the node finds nothing for itself, and you get the defaults. If you aren't sure of the name, use <code>/**:</code>, which matched in every run. The <a href="https://docs.ros.org/en/jazzy/How-To-Guides/Node-arguments.html">Passing ROS arguments to nodes</a> guide gives the rule: "<code>*</code> matches a single token delimited by slashes (/). <code>**</code> matches zero or more tokens delimited by slashes. Partial matches are not allowed (e.g. foo*)."</p>
+
+<p>The structure comes from the parser's README (<a href="https://github.com/ros2/rcl/tree/rolling/rcl_yaml_param_parser">rcl_yaml_param_parser</a>): <code>&lt;node_namespace_string&gt;</code> (optional), then <code>&lt;node1_name&gt;</code>, then <code>ros__parameters</code>, then the fields. It also says: "It only supports canonical int and float types".</p>
+
+<h2>Everything must come after --ros-args</h2>
+
+<p>The same guide says: "All ROS-specific arguments have to be specified after a --ros-args flag". Without the flag, rcl treats <code>--params-file</code> and <code>-p</code> as your program's own arguments. It doesn't parse them and doesn't warn, so the node starts with defaults. With the flag, a misspelled option like <code>--param-file</code> is rejected with <code>UnknownROSArgsError</code>, and that error is the easier one to debug. A value needs to be in the same shell word as <code>:=</code>. With <code>-p timer_period:= 1.0</code> the shell splits off <code>1.0</code>, and rcl sees an empty value. To pass a string with spaces, quote the whole rule: <code>-p "label:=hello world"</code>.</p>
+
+<h2>1 is not a double</h2>
+
+<p>The YAML parser types each value from how it's written: <code>1</code> is an integer, <code>1.0</code> is a double, and <code>"5"</code> is a string. A declared parameter keeps the type of its default value, and the docs say "By default, attempts to change the type of a declared parameter at runtime will fail" (<a href="https://docs.ros.org/en/jazzy/Concepts/Basic/About-Parameters.html">About parameters</a>). The initial override from a file or <code>-p</code> got the same treatment in my run: <code>declare_parameter</code> threw on both. The fix is to write the value the way the type expects (<code>1.0</code>, not <code>1</code>). The same page describes the other option. You declare the parameter "using a ParameterDescriptor with the dynamic_typing member variable set to true" so it can accept more than one type. I didn't test that.</p>
+
+<h2>Comments are fine</h2>
+
+<p>One <a href="https://robotics.stackexchange.com/questions/109663">question</a> blames <code>#</code> comments for <code>Error parsing a event near line 3</code>. In my run, comments on their own line, indented comments, inline comments and a <code>#</code> inside a quoted string all parsed on every distro. The same "Error parsing a event" message did appear for a file indented with tabs. It said <code>near line 1</code>, although the first tab was on line 2, so check the named line and the one after it. If you see this error, look for tabs there before you remove your comments.</p>
+
+<h2>Version notes</h2>
+
+<p>The error texts were identical on Humble, Jazzy and Lyrical. Only two things changed. The <code>parse.c</code> and <code>arguments.c</code> line numbers in the message differ: <code>Cannot have a value before ros__parameters</code> was at <code>parse.c:787</code> on Humble, <code>parse.c:800</code> on Jazzy and <code>parse.c:1117</code> on Lyrical. And on Jazzy and Lyrical, rclpy's <code>InvalidParameterTypeException</code> message ends with <code>: timer_period</code>, the parameter name repeated. When you search for the error, drop the line numbers. Per-logger <code>--log-level name:=DEBUG</code> worked on all three. The <a href="https://robotics.stackexchange.com/questions/115099">question</a> where it failed with <code>Argument does not use a valid severity level</code> was on Foxy, which I didn't test.</p>
+
+<h2>Not tested</h2>
+
+<p>Parameter files passed through a launch file (<code>Node(parameters=[...])</code>) or to a component container, <code>dynamic_typing=True</code>, <code>allow_undeclared_parameters</code>, byte arrays, <code>ros2 param load</code> at runtime, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Failed to parse global arguments" mean?</h3>
+<p>rcl couldn't parse something after <code>--ros-args</code>, either a <code>--params-file</code> or a <code>-p</code> rule, so the node didn't start. The useful part is the last <code>Error:</code> in the next line, for example <code>Cannot have a value before ros__parameters</code> or <code>Expecting token or wildcard</code>.</p>
+
+<h3>How do I fix "Cannot have a value before ros__parameters"?</h3>
+<p>Put a <code>ros__parameters:</code> key between the node name and the parameters, and indent with spaces. The same error showed up when the key was missing (at line 2) and when the whole file had no indentation (at line 1).</p>
+
+<h3>My params file loads without errors but the values are not applied. Why?</h3>
+<p>Two causes gave exactly that in my run. The top-level key didn't match the node's name, or <code>--params-file</code> came before <code>--ros-args</code> or without it. Use the name passed to <code>Node(...)</code> including any namespace, or <code>/**</code>, and put every ROS option after <code>--ros-args</code>.</p>
+
+<h3>Why do I get InvalidParameterTypeException expecting type DOUBLE?</h3>
+<p>The node declared the parameter with a double default and the file or <code>-p</code> gave an integer such as <code>1</code>. Write <code>1.0</code>. A quoted <code>"5"</code> for an integer parameter fails the same way with type STRING.</p>
+
+<h3>Can I use comments in a ROS 2 params YAML file?</h3>
+<p>Yes. Full-line, indented and inline <code>#</code> comments all parsed on Humble, Jazzy and Lyrical. <code>Error parsing a event</code> came from tab indentation, not from comments.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Failed to parse global arguments mean?", "acceptedAnswer": {"@type": "Answer", "text": "rcl couldn't parse something after --ros-args, either a --params-file or a -p rule, so the node didn't start. The useful part is the last Error: in the next line, for example Cannot have a value before ros__parameters or Expecting token or wildcard."}},
+{"@type": "Question", "name": "How do I fix Cannot have a value before ros__parameters?", "acceptedAnswer": {"@type": "Answer", "text": "Put a ros__parameters: key between the node name and the parameters, and indent with spaces. The same error showed up when the key was missing (at line 2) and when the whole file had no indentation (at line 1)."}},
+{"@type": "Question", "name": "My params file loads without errors but the values are not applied. Why?", "acceptedAnswer": {"@type": "Answer", "text": "Two causes gave exactly that in my run. The top-level key didn't match the node's name, or --params-file came before --ros-args or without it. Use the name passed to Node(...) including any namespace, or /**, and put every ROS option after --ros-args."}},
+{"@type": "Question", "name": "Why do I get InvalidParameterTypeException expecting type DOUBLE?", "acceptedAnswer": {"@type": "Answer", "text": "The node declared the parameter with a double default and the file or -p gave an integer such as 1. Write 1.0. A quoted 5 for an integer parameter fails the same way with type STRING."}},
+{"@type": "Question", "name": "Can I use comments in a ROS 2 params YAML file?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Full-line, indented and inline # comments all parsed on Humble, Jazzy and Lyrical. Error parsing a event came from tab indentation, not from comments."}}
+]}
+</script>
+
+<p>Measured on 2026-10-28 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rcl and rcl_yaml_param_parser 5.3.13, rclpy 3.3.22, rclcpp 16.0.21, libyaml 0.2.2), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rcl 9.2.11, rclpy 7.1.12, rclcpp 28.1.22, libyaml 0.2.5) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rcl 10.4.5, rclpy 10.0.11, rclcpp 32.0.3, libyaml 0.2.5), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-05-ros2-params-yaml-parse-errors/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103191">failed to initialize rcl: Couldn't parse parameter override rule</a>, <a href="https://robotics.stackexchange.com/questions/110996">parser error Couldn't parse parameter override rule</a>, <a href="https://robotics.stackexchange.com/questions/109663">rclcpp ROS2 params yaml file comments</a>, <a href="https://robotics.stackexchange.com/questions/95037">ros2 component_container yaml parsing</a>, <a href="https://robotics.stackexchange.com/questions/115453">Running node with YAML file gives me error: UnknownROSArgsError</a>.</p>
