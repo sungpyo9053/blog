@@ -23,6 +23,10 @@ add_filter(
         if ( $n >= 12 ) {
             $starts[] = (int) floor( $n * 0.75 );
         }
+        if ( $n >= 24 ) { // long calculator guides (5k+ chars): third slot near the end, benchmark median is 3
+            $starts[1] = (int) floor( $n * 0.65 );
+            $starts[]  = (int) floor( $n * 0.9 );
+        }
         $placed = 0;
         $last   = -99;
         foreach ( $parts as $i => $part ) {
@@ -32,9 +36,10 @@ add_filter(
             }
             $out .= '</p>';
             // Only at top level: never inside a table, list, details, figure or script.
-            // Not right before a calculator/form either (accidental-click policy).
-            $next = substr( $parts[ $i + 1 ], 0, 600 );
-            if ( $placed < count( $starts ) && $i + 1 >= $starts[ $placed ] && $i - $last >= 3 && ! preg_match( '/<(input|select|button|textarea|form|script)\b/i', $next ) && ! preg_match( '/<(table|ul|ol|details|figure|script|blockquote)\b(?:(?!<\/\1>).)*$/is', $out ) ) {
+            // Not right before or right after a calculator/form either (accidental-click policy).
+            // Two blocks back: calculators end with <p><script></p>, so the block before the caption holds the form.
+            $near = substr( $parts[ $i + 1 ], 0, 600 ) . $part . ( $i > 0 ? $parts[ $i - 1 ] : '' );
+            if ( $placed < count( $starts ) && $i + 1 >= $starts[ $placed ] && $i - $last >= 3 && ! preg_match( '/<(input|select|button|textarea|form|script)\b/i', $near ) && ! preg_match( '/<(table|ul|ol|details|figure|script|blockquote)\b(?:(?!<\/\1>).)*$/is', $out ) ) {
                 $out .= $ad;
                 $placed++;
                 $last = $i;
