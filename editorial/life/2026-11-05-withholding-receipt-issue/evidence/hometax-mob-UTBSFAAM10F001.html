@@ -1,0 +1,1015 @@
+
+
+<!DOCTYPE HTML>
+<html lang="ko">
+<head>
+<title>국세청 차세대 모바일</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<!--  Nts Common CSS Import -->
+<link rel="stylesheet" href="css/comm/NtsCommonTb.css;jsessionid=Evx3ZtNgE4wWJY95Hc7G9upoDA5r8N6bpiNGoQlpFOoQwaY3TAzsi9QIQemp6D31.tumbwsp04_servlet_TBHT02" />
+<!-- Nts Common JS Import -->
+<script type="text/javascript" charset="utf-8" src="js/comm/NtsCommonTb.js" ></script>
+<script type="text/javascript" charset="utf-8" src="js/comm/realgrid/NtsRealGrid.js" ></script>
+<script type="text/javascript" charset="utf-8" src="js/ht/common_teht.js" ></script>
+<script type="text/javascript" charset="utf-8" src="js/comm/netfunnel/netfunnel2.js"></script>
+<script type="text/javascript" charset="utf-8" src="js/comm/netfunnel/nts_skin.js"></script>
+<script type="text/javascript" charset="utf-8" src="js/comm/ui/NtsMobileTb_report_util.js"></script>
+<script type="text/javaScript" language="javascript" defer="defer">
+	/************************************************************************
+	파일명 : UTESFAAM10_모바일지급명세서조회
+	프로그램명 : 모바일지급명세서조회
+	설 명 :  지급명세서 제출내역을 조회한다.
+	작성자 : 김민규
+	작성일 : 2019년 09월 05일
+
+	수정일자			수정자			수정내용
+	=============================================
+	2019.09.05			전형권			최초작성
+	2019.09.17			홍완표			리얼그리드 공통 적용
+	2020.12.01			전형권			2020년 귀속 서식 적용
+	2022.09.29			전형권			2018귀속부터 제공되고 있던 서비스를 2017년도 부터 제공하도록 수정함
+	************************************************************************/
+	
+	//************************************************************************
+	// 전역 변수 영역
+	//************************************************************************
+	var selCvaId = "";			//선택한 민원ID
+	var selAttrYr = "";			//선택한 귀속년도
+	var selLvyRperTin = "";		//선택한 징수의무자TIN
+	var selMateKndNm = "";		//선택한 자료종류명
+	var selSbmtNm = "";			//선택한 상호
+	var selSbmtNo = "";			//선택한 사업자번호
+	var selCvaAplnDtm = "";		//선택한 제출일자
+	var selLstAltDtm = "";		//선택한 최종수정일자
+
+	var pageInfoVO = {pageNum : 1, pageSize : 5, totalCount:0};
+
+	//조회조건
+	var search =  {
+					keywords : {	
+							ieTin 		: "" 
+					},
+					keywords2 : {
+						  cvaId			: "" 
+		   				, lvyRperTin	: ""
+		   				, attrYr		: ""
+		   				, ieTin			: ""
+					}
+	};
+	var dsdEtcSbmsBrkdNtplDVOList = [];
+	var bmanBscMttrAdmDVOList = [];
+	var rsltMenuId = "";			// ASIS / TOBE 동시 서비스 중이므로 구분자 20191212
+	//************************************************************************
+	// mapper 설정
+	//************************************************************************
+	var mapper = [
+	    {
+	        action : {
+	            id : "ATXPPBAA001R16",
+	            indatalist : [
+	                { type:"search", src :"search[@id='keywords']", des:"DsdSbmsBrkdSVO" }
+	            ],
+	            outdatalist : [
+	                { type:"list", src:"dsdEtcSbmsBrkdNtplDVOList", des:"dsdEtcSbmsBrkdNtplDVOList" }
+	            ]
+	        }
+	    } ,
+	    {
+	        action : {
+	            id : "ATTSFAAA005R01",
+	            indatalist : [
+	                { type:"search", src :"search[@id='keywords2']", des:"ErinPymnSpcfAdmSVO" }
+	            ],
+	            outdatalist : [
+	                { type:"list", src:"bmanBscMttrAdmDVOList", des:"bmanBscMttrAdmDVOList" }
+	            ]
+	        }
+	    }
+	];
+	
+	// 손택스 Header스타일 변경 건으로 인한 srcript 
+	$("document").ready(function() {
+		// openPage param
+		nts_setPageParametersToPageSession("{actionId=UTBSFAAM10F001}");
+		
+		// myhts로 들어왔을 경우
+		var results = new RegExp('[\?&]menuId=([^&#]*)').exec(window.location.href); 
+		if(results != undefined && !nts_isNull(results)){
+			rsltMenuId = results[1]||0;
+			if(rsltMenuId == "7020000000"){
+				$('#header').show();
+				$('#footer').show();
+				$('#container').removeClass();
+				$('#container').addClass('sub');
+				$('#title_wrap').addClass('myhts');
+			}
+			else if(rsltMenuId == "8004000000"){
+				$('#header').hide();
+				$('#footer').hide();
+			}
+			else{
+				// 손택스 기타경로
+				$('#header').show();
+				$('#footer').show();
+				$('#container').removeClass();
+				$('#container').addClass('sub');
+			}
+		} else {
+			// 손택스 기타경로
+			$('#header').show();
+			$('#footer').show();
+			$('#container').removeClass();
+			$('#container').addClass('sub');
+		}
+		 
+	});
+	
+	//************************************************************************
+	// 최초 화면 로딩 시 호출 함수
+	//************************************************************************
+	function nts_start() {
+		fn_gridMakeStart();
+		
+		
+		//매년 1월에 중도퇴사자가 제출가능해짐에 따라 근로만 먼저 오픈
+		//따라서 1월에는 근로는 7개년, 나머지 지급명세서는 6개년
+		//8월 수시오픈때는 모든 지급명세서 6개년으로 통일
+		//ex) 2024년 1월에 근로는 2018~2024, 나머지는 2018~2023
+		//    2024년 8월(수시오픈)에는 근로 및 나머지 지급명세서 모두 2019~2024
+		
+		// 귀속년도 셋팅 후 조회 (최근귀속년도, 지급명세서 종류는 전체)
+		$("#selectSrchAttrYr").val("2026");
+		$("#selectSrchMateKndCd").val("");
+		fn_search();
+		
+	}
+	
+	function fn_gridMakeStart(){
+	    
+		var fields = [
+  			{fieldName: "sbmtNm"},
+  			{fieldName: "attrYrView"},
+  			{fieldName: "sbmtNoView"},
+  			{fieldName: "cvaId"},
+  			{fieldName: "attrYr"},
+  			{fieldName: "lvyRperTin"},
+  			{fieldName: "mateKndNm"},
+  			{fieldName: "sbmtNm"},
+  			{fieldName: "sbmtNo"},
+  			{fieldName: "cvaAplnDtm"},
+  			{fieldName: "cvaAplnDtmView"},
+  			{fieldName: "mateKndNm"}
+  		];
+  	    
+       	var columns = [{
+  			name: "group0",type: "group",width: 40,
+  			header: { visible: false},
+  			orientation: "vertical",
+  			columns:[{
+  	 			name: "group1",type: "group",width: 40,
+  	 	        header: { visible: false},
+  	 	        orientation: "horizontal",
+  	 	        columns: [{
+  	 	        	name: "attrYrView", fieldName: "attrYrView",
+  	   		        styles: {textAlignment: "center"},
+  	   		        header: {text: "귀속년도"}
+  				}]
+  			},{
+  	 			name: "group2",type: "group",width: 40,
+  	 	        header: { visible: false},
+  	 	        orientation: "horizontal",
+  	 	        columns: [{
+  					name: "mateKndNm",  fieldName: "mateKndNm", 
+  					renderer : { showTooltip : true },
+  					styles: {textAlignment: "center",textWrap : "ellipse"},
+  					header: {text: "지급명세서 종류"}
+  				},{
+  					name: "cvaAplnDtmView",  fieldName: "cvaAplnDtmView", 
+  	   		        styles: {textAlignment: "center"},
+  	   		        header: {text: "제출일자"}
+  				}]
+  			},{
+  	 			name: "group3",type: "group",width: 40,
+  	 	        header: { visible: false},
+  	 	        orientation: "horizontal",
+  	 	        columns: [{
+  	 	        	name: "sbmtNm",  fieldName: "sbmtNm", 
+  					renderer : { showTooltip : true },
+  					styles: {textAlignment: "center",textWrap : "ellipse"},
+  					header: {text: "상호명"}
+  				},{
+  	   		        name: "cvaId",  fieldName: "cvaId", visible: false,
+  	   		        styles: {textAlignment: "center"}
+     		    	},{
+  	   		        name: "attrYr",  fieldName: "attrYr", visible: false,
+  	   		        styles: {textAlignment: "center"}
+     		    	},{
+  	   		        name: "lvyRperTin",  fieldName: "lvyRperTin", visible: false,
+  	   		        styles: {textAlignment: "center"}
+     		    	},{
+  	   		        name: "mateKndNm",  fieldName: "mateKndNm", visible: false,
+  	   		        styles: {textAlignment: "center"}
+     		    	},{
+  	   		        name: "sbmtNm",  fieldName: "sbmtNm", visible: false,
+  	   		        styles: {textAlignment: "center"}
+     		    	},{
+  	   		        name: "sbmtNo",  fieldName: "sbmtNo", visible: false,
+  	   		        styles: {textAlignment: "center"}
+     		    	},{
+  	   		        name: "cvaAplnDtm",  fieldName: "cvaAplnDtm", visible: false,
+  	   		        styles: {textAlignment: "center"}
+     		    	},{
+   		    		name: "sbmtNoView",  fieldName: "sbmtNoView", 
+   	   		        styles: {textAlignment: "center",fontUnderline:true ,foreground:"#0d4dae"  },
+   	   		        header: {text: "사업자번호"}
+     		    	}]
+  			}]
+  		}];
+		
+     	gridOpt.fields = fields;
+		gridOpt.columns = columns;
+		
+		//리얼그리드 호출
+		NtsRealGrid.initialize();
+     	
+		ntsframework.moreview("divMore", pageInfoVO);
+	}
+	
+	/*******************************************
+	* 더보기 버튼 클릭 이벤트 함수
+	********************************************/
+	function pgMoreView_onClick(pageNum){
+		pageInfoVO.pageNum = pageNum;
+		ntsframework.moreview("divMore", pageInfoVO);
+		NtsRealGrid.setPaging(true, pageInfoVO.pageNum*pageInfoVO.pageSize);
+	}
+	
+	/***************************************
+	* callback 이벤트 함수
+	****************************************/
+	function fn_callBack(actionId, msgArr) {
+		var result		= msgArr[0];	// result : 메시지 구분 ( "S" : 성공 (메시지 유무 상관 없음) , "E" : 실패 (Exception) )
+		var msg			= msgArr[1];	// msg : 메시지 Value (AFT_MESSAGE 테이블) 성공하더라도 메시지코드 추가하지 않으면 메시지 정보 없음;
+		
+		if (actionId == "ATXPPBAA001R16") {
+			//넷퍼넬 트래픽제어 적용 20210422
+			//종소신고기간에만 넷퍼넬 적용 할 것
+			NetFunnel_Complete();	//조회후 넷퍼넬 해제
+			if (result == "S") {
+				fn_result();
+			} else {
+				nts_getMsgAlert(msg);	
+			}
+		}
+		else if (actionId == "ATTSFAAA005R01") {
+			if (result == "S") {
+				fn_result2();
+			} else {
+				nts_getMsgAlert(msg);	
+				ntsframework.moreview("divMore", pageInfoVO);
+			}
+		}
+	}
+
+	/***************************************
+	* 납세자 번호 formater
+	
+	* @param value : 1234567890
+	* @returns 123-45-67890
+	
+	* @param value : 1234567890123
+	* @returns 123456-7890123
+	****************************************/
+	function fn_txprNoFormat(value){
+		if(nts_isNull(value)) return "";
+		value = "" + value.replace(/-/g,"");
+		
+		if(value.length == 10){
+			value = value.substring(0, 3) + "-" + value.substring(3,5) + "-" + value.substring(5);
+		}else if(value.length == 13){
+			value = value.substring(0, 6) + "-" + value.substring(6);
+		}
+	    return value;
+	}
+
+	/***************************************
+	* callback 이벤트 함수
+	****************************************/
+	function fn_result() {
+		
+		if (dsdEtcSbmsBrkdNtplDVOList == null
+				|| dsdEtcSbmsBrkdNtplDVOList.length == 0) {
+			
+			//데이터 초기화
+			NtsRealGrid.clearRows();
+		    
+			ntsframework.moreview("divMore", nts_isNull);
+		}else{
+			var data = []; // data array
+			$.each(dsdEtcSbmsBrkdNtplDVOList, function(key, val) {
+				var attrYr				= val.attrYr;				// 귀속년도
+				var mateKndNm 			= val.mateKndNm; 			// 지급명세서 종류
+				var sbmtNo 				= val.sbmtNo; 				// 사업자등록번호
+				var cvaAplnDtm 			= val.cvaAplnDtm; 			// 제출일자
+				var sbmtNm 				= val.sbmtNm; 				// 징수의무자
+				//var rcatMthdCdNm 		= val.rcatMthdCdNm; 		// 신고방법
+				var cvaId 				= val.cvaId; 				// 민원ID
+				var lvyRperTin 			= val.lvyRperTin; 			// 징수의무자납세자통합관리번호
+				
+				//근로소득지급명세서만 서비스 하기 때문에 나머지 명세서는 생략한다. 언젠가 다 추가될거임...
+				//2017년도 귀속 지급명세서부터 제공하는 서비스임
+				//if(mateKndNm != "근로소득지급명세서" || Number(attrYr) < 2017){
+					//데이터를 쌓지 않음.
+					
+				//}
+				if(Number(attrYr) >= 2017){
+					//javascript:btnView_onClick('"+cvaId+"','"+attrYr+"','"+lvyRperTin+"','"+mateKndNm+"','"+sbmtNm+"','"+sbmtNo+"','"+cvaAplnDtm+"')
+					data.push({
+		    			"sbmtNm" : sbmtNm,
+		    			"attrYrView" : +attrYr+" 귀속",
+		    			"cvaId" : cvaId,
+		    			"attrYr" : attrYr,
+		    			"lvyRperTin" : lvyRperTin,
+		    			"mateKndNm" : mateKndNm,
+		    			"sbmtNm" : sbmtNm,
+		    			"sbmtNo" : sbmtNo,
+		    			"sbmtNoView" : fn_txprNoFormat(sbmtNo),
+		    			"cvaAplnDtm" : cvaAplnDtm,
+		    			"sbmtNo" : sbmtNo,
+		    			"cvaAplnDtm" : cvaAplnDtm,
+		    			"cvaAplnDtmView" : nts_cvtDateFormat('yyyy-MM-dd', cvaAplnDtm),
+		    			"mateKndNm" : mateKndNm
+		    		});
+				}
+			});
+			
+			//데이터 초기화
+			NtsRealGrid.clearRows();
+			
+			NtsRealGrid.setRows(data);
+		    pageInfoVO.totalCount = data.length;
+		  	pageInfoVO.pageNum = 1;
+		  	NtsRealGrid.setPaging(true, 5);
+			
+		  	ntsframework.moreview("divMore", pageInfoVO);
+			
+		  	NtsRealGrid.gridDataCellClick();
+
+		}
+	}
+	
+	//그리드 클릭 이벤트의 리턴 받을 이벤트
+	function fn_rtnGridDataCellClick(id, index) {
+		if (index.fieldName == "sbmtNoView") {
+			var cvaId = grid.getValue(index.itemIndex, "cvaId");
+			var attrYr = grid.getValue(index.itemIndex, "attrYr");
+			var lvyRperTin = grid.getValue(index.itemIndex, "lvyRperTin");
+			var mateKndNm = grid.getValue(index.itemIndex, "mateKndNm");
+			var sbmtNm = grid.getValue(index.itemIndex, "sbmtNm");
+			var sbmtNo = grid.getValue(index.itemIndex, "sbmtNo");
+			var cvaAplnDtm = grid.getValue(index.itemIndex, "cvaAplnDtm");
+	
+			btnView_onClick(cvaId,attrYr,lvyRperTin,mateKndNm,sbmtNm,sbmtNo,cvaAplnDtm);
+		}
+	}
+	
+	//사업자번호 선택시 민원ID에 해당하는 제출건 조회
+	function btnView_onClick(cvaId, attrYr, lvyRperTin, mateKndNm, sbmtNm, sbmtNo, cvaAplnDtm){
+		
+		var ieTin = ntsframework.session.get("tin");
+		
+		selCvaId = cvaId;				//선택한 민원ID
+		selAttrYr = attrYr;				//선택한 귀속년도
+		selLvyRperTin = lvyRperTin;		//선택한 징수의무자TIN
+		selMateKndNm = mateKndNm;		//선택한 자료종류명
+		selSbmtNm = sbmtNm;				//선택한 상호
+		selSbmtNo = sbmtNo;				//선택한 사업자번호
+		selCvaAplnDtm = cvaAplnDtm;		//선택한 제출일자
+		
+		ntsframework.object.set("search[@id='keywords2']/cvaId", cvaId);
+		ntsframework.object.set("search[@id='keywords2']/lvyRperTin", lvyRperTin);
+		ntsframework.object.set("search[@id='keywords2']/attrYr", attrYr);
+		ntsframework.object.set("search[@id='keywords2']/ieTin", ieTin);
+		
+		nts_doService("ATTSFAAA005R01");
+		
+	}
+	
+	//민원ID에 해당하는 제출건 callBack
+	function fn_result2(){
+		
+		//단건인 경우 이미지 변환페이지로 이동한다.
+		if(bmanBscMttrAdmDVOList.length == 1){
+			
+			ntsframework.session.del("cvaId");
+			ntsframework.session.del("intgMateBrkdSn");
+			ntsframework.session.del("lvyRperTin");
+			ntsframework.session.del("attrYr");
+			ntsframework.session.del("ieTin");
+			ntsframework.session.del("mateKndCd");
+			ntsframework.session.del("lstAltDtm");
+
+			ntsframework.session.set("cvaId", bmanBscMttrAdmDVOList[0].cvaId);	
+			ntsframework.session.set("intgMateBrkdSn", bmanBscMttrAdmDVOList[0].intgMateBrkdSn);	
+			ntsframework.session.set("lvyRperTin", bmanBscMttrAdmDVOList[0].lvyRperTin);	
+			ntsframework.session.set("attrYr", bmanBscMttrAdmDVOList[0].attrYr);	
+			ntsframework.session.set("ieTin", bmanBscMttrAdmDVOList[0].indvTin);	
+			ntsframework.session.set("mateKndCd", bmanBscMttrAdmDVOList[0].mateKndCd);	
+			ntsframework.session.set("lstAltDtm", bmanBscMttrAdmDVOList[0].lstAltDtm);
+			
+			var actionId = "";
+	        var reportUrl = "";
+	        var conStr = "";
+	        var paramCount = 0;
+	        var zoomNum = "75";
+			
+			var param = {
+	             indvTin : bmanBscMttrAdmDVOList[0].indvTin
+				,cvaId : bmanBscMttrAdmDVOList[0].cvaId
+				,intgMateBrkdSn : bmanBscMttrAdmDVOList[0].intgMateBrkdSn
+	            ,mateKndCd : bmanBscMttrAdmDVOList[0].mateKndCd
+	            ,myntsYn : "Y"
+	            ,attrYr : bmanBscMttrAdmDVOList[0].attrYr
+	            //사업소득, 기타소득, 비거주사업기타 myNTS에서만 쓰는 항목
+	            ,pblsRpt : "N"	//기타3종 발행자보고서 Y/N
+	            ,etcBsIncClCd : bmanBscMttrAdmDVOList[0].etcBsIncClCd
+	            ,lvyRperTin : bmanBscMttrAdmDVOList[0].lvyRperTin
+	            ,mskApplcYn : "Y" //마스킹적용여부 Y/N
+			};
+				
+			 //근로소득
+			if(param.mateKndCd == "A0051") {
+	           	
+	            //근로소득(근로소득지급명세)
+	            actionId = "ATESFAAA011P01";
+	            if(param.attrYr >= "2026") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE83";
+	                conStr = "RTISFAAE83";	            	
+	            }else if(param.attrYr == "2025") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE82";
+	                conStr = "RTISFAAE82";
+	            }else if(param.attrYr == "2024") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE81";
+	                conStr = "RTISFAAE81";
+	            }else if( param.attrYr == "2023") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE80";
+	                conStr = "RTISFAAE80";
+	            } else if( param.attrYr == "2022") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE74";
+	                conStr = "RTISFAAE74";
+	            } else if( param.attrYr == "2021") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE73";
+	                conStr = "RTISFAAE73";
+	            } else if( param.attrYr == "2020") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE72";
+	                conStr = "RTISFAAE72";
+	            } else if( param.attrYr == "2019") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE71";
+	                conStr = "RTISFAAE71";
+	            } else if( param.attrYr == "2018") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE70";
+	                conStr = "RTISFAAE70";
+	            } else if( param.attrYr == "2017") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE99";
+	                conStr = "RTISFAAE99";
+	            } else if( param.attrYr == "2016") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAE98";
+	                conStr = "RTISFAAE98";
+	            } else if( param.attrYr == "2015") {
+	                reportUrl = "/tt/sf/a/a/RTISFAAE97";
+	                conStr = "RTISFAAE97";
+	            } else if( param.attrYr == "2014") {
+	                reportUrl = "/tt/sf/a/a/RTISFAAE28";
+	                conStr = "RTISFAAE28";
+	            } else if( param.attrYr == "2013") {
+	                reportUrl = "/tt/sf/a/a/RTISFAAE39";
+	                conStr = "RTISFAAE39";
+	            } else if( param.attrYr == "2012") {
+	                reportUrl = "/tt/sf/a/a/RTISFAAE42";
+	                conStr = "RTISFAAE42";
+	            } else if( param.attrYr == "2011") {
+	                reportUrl = "/tt/sf/a/a/RTISFAAE43";
+	                conStr = "RTISFAAE43";
+	            } else if( param.attrYr == "2010") {
+	                reportUrl = "/tt/sf/a/a/RTISFAAE44";
+	                conStr = "RTISFAAE44";
+	            }  else {
+	            	reportUrl = "";
+	                conStr = "";
+	            }	            
+	        } 
+			 
+			//기타소득
+	        if(param.mateKndCd == "A0088") {
+	        	if(param.myntsYn!="Y"){
+			        btn_bsicPrn.show();//20150505.사업소득 발행자/소득자 출력 분리.
+		        }            
+	            actionId = "ATESFAAA005R31";
+	            if(param.pblsRpt == "Y"){
+	                if( param.attrYr >= "2019" ) {
+	                    reportUrl = "/te/sf/a/a/RTESFAAE85"; //발행자보관용
+	                } else if( param.attrYr == "2018" ) {
+		                reportUrl = "/te/sf/a/a/RTESFAAE88"; //발행자보관용
+		            } else if( param.attrYr == "2017" ) {
+		                reportUrl = "/te/sf/a/a/RTESFAAE06"; //발행자보관용
+		            } else {
+		                reportUrl = "/te/sf/a/a/RTESFAAE27"; //발행자보관용
+		            }
+	            }else{	            
+	                if( param.attrYr >= "2019") {
+	                    reportUrl = "/te/sf/a/a/RTESFAAE24";
+		            } else if( param.attrYr == "2018" ) {
+		                //reportUrl = "/te/sf/a/a/RTESFAAE91"; //소득자보관용
+		                reportUrl = "/te/sf/a/a/RTESFAAE89"; //소득자보관용
+		            } else if( param.attrYr == "2017" ) {
+		                reportUrl = "/te/sf/a/a/RTESFAAE90"; //소득자보관용
+		            } else {
+		                reportUrl = "/te/sf/a/a/RTESFAAE92"; //소득자보관용
+		            }
+	            }
+	            conStr = "XML1";
+	        } 
+			
+	        //퇴직소득
+	        if(param.mateKndCd == "A0053") {
+	        
+	        	if( Number(param.attrYr) >= "2026" ) { // 26귀속도 서식 추가.
+	        		actionId = "ATESFABA013R01";
+	                reportUrl = "/tt/sf/a/a/RTISFAAD40";
+	                conStr = "XML1";	        	
+	        	}else if( Number(param.attrYr) >= "2020" ) { // 20귀속도 서식 추가. 2020.05.19	        		
+	        		actionId = "ATESFABA013R01";
+	                reportUrl = "/tt/sf/a/a/RTISFAAE48";
+	                conStr = "XML1";
+	        	} else if( param.attrYr == "2019" || param.attrYr == "2018" || param.attrYr == "2017" || param.attrYr == "2016" ) { // 17귀속도 동일 서식으로 수정 20170803 정성원
+	        		actionId = "ATESFABA013R01";
+	                reportUrl = "/tt/sf/a/a/RTISFAAE20";
+	                conStr = "XML1";
+	        	} else if( param.attrYr == "2015" || param.attrYr == "2014" || param.attrYr == "2013" ) {
+	            	actionId = "ATESFABA013R01";
+	                reportUrl = "/tt/sf/a/a/RTISFAAE23";
+	                conStr = "XML1";
+	            } else if( param.attrYr == "2012") {
+	            	actionId= "ATESFABA013R05";
+	                reportUrl = "/tt/sf/a/a/RTISFAAE45";
+	                conStr = "XML1";
+	            } else if( param.attrYr == "2011" || param.attrYr == "2010") {
+	            	actionId= "ATESFABA013R05";
+	                reportUrl = "/tt/sf/a/a/RTISFAAE46";
+	                conStr = "XML1";
+	            }  else {
+	            	reportUrl = "";
+	                conStr = "";
+	            }
+	            
+	        }
+			
+	        //사업소득
+	        if(param.mateKndCd == "A0086") {
+	            actionId = "ATESFABA008R05"; // ATESFABA008R01
+	            
+	            if(param.pblsRpt == "Y") {
+	            	if( nts_parseNumber(param.attrYr) >= "2022" ) {
+	            		reportUrl = "/te/sf/a/a/RTESFAAE30"; // 발행자보관용
+	                } else if( nts_parseNumber(param.attrYr) >= "2021" ) {
+	                	reportUrl = "/te/sf/a/a/RTESFAAE29"; // 발행자보관용
+	                } else if( nts_parseNumber(param.attrYr) >= "2019" ) {
+	            		reportUrl = "/te/sf/a/a/RTESFAAE22";//발행자보관용
+	            	} else {
+	            	    reportUrl = "/te/sf/a/a/RTESFAAE05";//발행자보관용
+	            	}
+	            } else {
+	            	if( nts_parseNumber(param.attrYr) >= "2022" ) {
+	            		reportUrl = "/te/sf/a/a/RTESFAAE31";//소득자보관용
+	                } else if( nts_parseNumber(param.attrYr) >= "2021" ) {
+	                	reportUrl = "/te/sf/a/a/RTESFAAE28";//소득자보관용
+	            	} else if( nts_parseNumber(param.attrYr) >= "2019" ) {
+	            		reportUrl = "/te/sf/a/a/RTESFAAE23";//소득자보관용
+	            	} else {
+	            	    reportUrl = "/te/sf/a/a/RTESFAAE93";//소득자보관용
+	            	}
+	            }
+	            conStr = "XML1";
+	        }
+	        
+	        //비거주자(수정완료)
+	        if(param.mateKndCd == "A0055") {
+		        if(param.myntsYn!="Y"){
+			        btn_bsicPrn.show();//20150505.사업소득 발행자/소득자 출력 분리.
+		        }
+	            actionId = "ATESFAAA008R04";
+	            if(param.pblsRpt == "Y"){
+		            reportUrl = "/te/sf/a/a/RTESFAAE78"; //발행자보관용
+	            }else{
+		            reportUrl = "/te/sf/a/a/RTESFAAE84"; //소득자보관용
+	            }
+	            conStr = "RTESFAAE78_XML1";
+	        }
+	        
+	        //사업연말
+	        if(param.mateKndCd == "A0085") { 
+	            actionId = "ATESFAAA011R10";
+	            
+	            if(param.attrYr >= "2026") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAF06";
+	                conStr = "RTISFAAF06_XML1";	            	
+	            }else if(param.attrYr == "2025") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAF04";
+	                conStr = "RTISFAAF04_XML1";
+	            }else if(param.attrYr == "2024") {
+	            	reportUrl = "/tt/sf/a/a/RTISFAAF03";
+	                conStr = "RTISFAAF03_XML1";
+	            }else if(param.attrYr == "2023") { //20230721
+	            	 reportUrl = "/tt/sf/a/a/RTISFAAF02";
+	                 conStr = "RTISFAAF02_XML1";
+	            }else if(param.attrYr == "2021" || param.attrYr == "2022") { //20210705
+	            	 reportUrl = "/tt/sf/a/a/RTISFAAF01";
+	                 conStr = "RTISFAAF01_XML1";
+	            }else if( param.attrYr == "2018" ||  param.attrYr == "2019" || param.attrYr == "2020" ) { //20180703
+	            	 reportUrl = "/tt/sf/a/a/RTISFAAE32";
+	                 conStr = "RTISFAAE32_XML1";
+	            }else if(param.attrYr == "2017") { //20170712
+	            	 reportUrl = "/tt/sf/a/a/RTISFAAE30";
+	                 conStr = "RTISFAAE30_XML1";
+	            } else  if(param.attrYr == "2016") { //20160714
+	            	 reportUrl = "/tt/sf/a/a/RTISFAAE26";
+	                 conStr = "RTISFAAE26_XML1";
+	            } else if( param.attrYr == "2015" || param.attrYr == "2014") { //20160711 
+	                reportUrl = "/tt/sf/a/a/RTISFAAE24";
+	                conStr = "RTISFAAE24_XML1";
+	            } else if( param.attrYr == "2013") {
+	                reportUrl = "/tt/sf/a/a/RTISFAAE40";
+	                conStr = "RTISFAAE24_XML1";
+	            } else if( param.attrYr == "2012") {
+                    reportUrl = "/tt/sf/a/a/RTISFAAE93";
+                    conStr = "RTISFAAE93_XML";
+                } else if( param.attrYr == "2011") {
+                    reportUrl = "/tt/sf/a/a/RTISFAAE91";
+                    conStr = "RTISFAAE91_XML";
+                } else if( param.attrYr == "2010") {
+                    reportUrl = "/tt/sf/a/a/RTISFAAE93";
+                    conStr = "RTISFAAE93_XML";
+                }
+	        }
+	        
+	        //연금연말
+            if(param.mateKndCd == "A0089") {
+                actionId = "ATESFAAA005R26";
+                if(Number(param.attrYr) >= "2019") {
+                    reportUrl = "/tt/sf/a/a/RTISFAAE33";
+                    conStr = "RTISFAAE33";
+                } else if(Number(param.attrYr) >= "2014" && Number(param.attrYr) <= "2018" ) {
+                    reportUrl = "/tt/sf/a/a/RTISFAAE19";
+                    conStr = "RTISFAAE19";
+                } else if(param.attrYr == "2013") {
+                    reportUrl = "/tt/sf/a/a/RTISFAAE41";
+                    conStr = "RTISFAAE41";
+                } else if(param.attrYr == "2012" || param.attrYr == "2011" || param.attrYr == "2010") {
+                    reportUrl = "/tt/sf/a/a/RTISFAAE90";
+                    conStr = "RTISFAAE90_XML";
+                }
+            }
+	        
+            //연금계좌
+	        if( param.mateKndCd == "A0283" ) {
+	         	actionId = "ATESFAAA005R25";
+	         	
+	         	if( Number(param.attrYr) >= "2026" ) {
+					reportUrl = "/tt/sf/a/a/RTISFAAF11";	         		
+	         	}
+	         	//2015귀속 신규 레포트 추가 20151021 정성원
+	         	//2016귀속 추가 20170413 정성원
+	         	//2020.05.22 20귀속 신규서식 추가	         	
+	         	else if (Number(param.attrYr) == 2025) { 
+            		reportUrl = "/tt/sf/a/a/RTISFAAE57";
+        		}else if( Number(param.attrYr) >= 2020 && Number(param.attrYr) <= 2024 ) {
+					reportUrl = "/tt/sf/a/a/RTISFAAE53";
+				}
+				else if( Number(param.attrYr) >= "2015" && Number(param.attrYr) <= "2019" ) { // 17귀속도 동일 서식으로 수정 20170803 정성원
+					reportUrl = "/tt/sf/a/a/RTISFAAE35";
+				} else {
+					reportUrl = "/tt/sf/a/a/RTISFAAE34"; 
+				}
+	           	conStr = "XML1";
+	        }
+	        
+	        //종교인소득 연말정산 지급명세서 서식 C203100 추가 2018.07.05
+			// - 2020년서식 보고서로 변경 (종전 표현방식변경) 2020.11.11
+			if( param.mateKndCd == "A0087") {
+				actionId = "ATESFAAA029P01";
+			    conStr = "RTISFAAE30_XML1";
+			    if( Number(param.attrYr) >= "2026" ) {
+			    	reportUrl = "/tt/sf/a/a/RTISFAAB07";			    	
+			    }else if( Number(param.attrYr) == "2025" ) {
+			    	reportUrl = "/tt/sf/a/a/RTISFAAB06";
+			    }else if( Number(param.attrYr) == "2024" ) {
+			    	reportUrl = "/tt/sf/a/a/RTISFAAB05";
+			    }else if( Number(param.attrYr) == "2023" ) {
+			    	reportUrl = "/tt/sf/a/a/RTISFAAB04";
+			    }else if( Number(param.attrYr) == "2021" || Number(param.attrYr) == "2022") {
+			    	reportUrl = "/tt/sf/a/a/RTISFAAB03";
+			    }else if( Number(param.attrYr) == "2020" ) {
+					reportUrl = "/tt/sf/a/a/RTISFAAB02";
+				}else{
+					reportUrl = "/tt/sf/a/a/RTISFAAB01";
+				}
+			}
+            
+		    if(param.mateKndCd == "A0086" || param.mateKndCd == "A0088"){
+		    	var newParam = {
+	                    options : { zoom : zoomNum, removeChar : true },
+	                    //리포트 출력 설정
+	                    type : SVC_TYPE,//SVC_TYPE
+	                    reqParams : {
+	                    "cvaId" : param.cvaId
+	                    ,"intgMateBrkdSn" : param.intgMateBrkdSn
+	                    ,"ieTin" : param.indvTin
+	                    ,"myntsYn" : param.myntsYn
+	                    ,"attrYr" : param.attrYr
+	                    ,"etcBsIncClCd" : param.etcBsIncClCd
+	                    ,"pblsRpt" : param.pblsRpt
+	                    ,"lvyRperTin" : param.lvyRperTin
+	                    ,"mskApplcYn" : param.mskApplcYn	//세무대리인 마스킹 적용여부
+	                    },
+	                    //리포트 파라미터
+	                    rptParams : {
+	                    	"myntsYn" : param.myntsYn
+	                    },
+	                    fileName : reportUrl, // 리포트 파일 경로
+	                    xpath : "{%dataset.xml.root%}", 
+	                    actionId : actionId,//ActionID
+	                    con : conStr,
+	                    viewType : "frame",	                        
+	                    frameName : "iframe2_UTESFAAZ01"	                        
+	            };
+	            if(param.pblsRpt == "Y") {
+	                newParam.reqParams.pageSz = param.pageSz;
+	                newParam.reqParams.pageNum = param.pageNum;
+	            }
+		    }else if( param.mateKndCd != "A0084" && param.mateKndCd != "A0259" && param.mateKndCd != "A0056" && param.mateKndCd != "A0057" && param.mateKndCd != "A0055" && param.mateKndCd != "A0283") { // 기존 파라미터 사용
+		    	var newParam = {
+                  options : { zoom : zoomNum, removeChar : true },
+                  //리포트 출력 설정
+                  type : SVC_TYPE,//SVC_TYPE
+                  reqParams : {
+                  "cvaId" : param.cvaId
+                  ,"intgMateBrkdSn" : param.intgMateBrkdSn
+                  ,"ieTin" : param.indvTin
+                  ,"myntsYn" : param.myntsYn
+                  ,"attrYr" : param.attrYr
+                  ,"etcBsIncClCd" : param.etcBsIncClCd
+                  ,"pblsRpt" : param.pblsRpt
+                  ,"lvyRperTin" : param.lvyRperTin
+                  ,"mskApplcYn" : param.mskApplcYn	//세무대리인 마스킹 적용여부	                        
+                  },
+                  //리포트 파라미터
+                  rptParams : {
+                  	"myntsYn" : param.myntsYn
+                  },
+                  fileName : reportUrl, // 리포트 파일 경로
+                  xpath : "{%dataset.xml.root%}", 
+                  actionId : actionId,//ActionID
+                  con : conStr,
+                  viewType : "frame",	                        
+                  frameName : "iframe2_UTESFAAZ01"	                        
+               };	
+			} else if(param.mateKndCd == "A0055" || param.mateKndCd == "A0056" || param.mateKndCd == "A0057" || param.mateKndCd == "A0283"){
+            	var newParam = {
+                        options : { zoom : zoomNum, removeChar : true },
+                        //리포트 출력 설정
+                        type : SVC_TYPE,//SVC_TYPE
+                        reqParams : {
+                        "cvaId" : param.cvaId
+                        ,"intgMateBrkdSn" : param.intgMateBrkdSn
+                        ,"ieTin" : param.indvTin
+                        ,"myntsYn" : param.myntsYn
+                        ,"rptYn" : "Y"
+                        ,"attrYr" : param.attrYr
+                        ,"nresEtcDsdIncClCd" : param.etcBsIncClCd
+                        ,"pblsRpt" : param.pblsRpt
+                        ,"lvyRperTin" : param.lvyRperTin
+                        ,"mskApplcYn" : param.mskApplcYn	//세무대리인 마스킹 적용여부
+                        },
+                        //리포트 파라미터
+                        rptParams : {
+                        	"myntsYn" : param.myntsYn
+                        },
+                        fileName : reportUrl, // 리포트 파일 경로
+                        xpath : "{%dataset.xml.root%}", 
+                        actionId : actionId,//ActionID
+                        con : conStr,
+                        viewType : "frame",
+                        frameName : "iframe2_UTESFAAZ01"
+                };
+            }
+			
+		    newParam.rptSort = "HTML";
+            var op = {	 visibles : { "export" : 0, "save" : 0, "print" : 1, "exporthwp" : 0, "exportpdf" : 0, "exportxls" : 0 } };
+			
+			newParam.options = op;		
+	  		
+			var NTS_SERVER_TYPE = nts_serverType();
+			
+			if(  NTS_SERVER_TYPE == 'L' || 
+	   			(NTS_SERVER_TYPE == 'D' && ntsframework.session.get("userAgent") != "iOS" && ntsframework.session.get("userAgent") != "Android") ||
+	   			(NTS_SERVER_TYPE == 'V' && ntsframework.session.get("userAgent") != "iOS" && ntsframework.session.get("userAgent") != "Android") ){
+	    		nts_previewReport(newParam);					
+    		}else{					
+    			nts_mobPreviewReport(newParam); 
+    		}  
+		}
+		else{
+			
+			//다건인경우 근무기간목록 화면으로 이동
+			
+			var ieTin = ntsframework.session.get("tin");
+			
+			ntsframework.session.del("cvaId");
+			ntsframework.session.del("lvyRperTin");
+			ntsframework.session.del("attrYr");
+			ntsframework.session.del("ieTin");
+			ntsframework.session.del("mateKndNm");
+			ntsframework.session.del("sbmtNm");
+			ntsframework.session.del("sbmtNo");
+			ntsframework.session.del("cvaAplnDtm");
+			
+			ntsframework.session.set("cvaId", selCvaId);	
+			ntsframework.session.set("lvyRperTin", selLvyRperTin);	
+			ntsframework.session.set("attrYr", selAttrYr);	
+			ntsframework.session.set("ieTin", ieTin);	
+			ntsframework.session.set("mateKndNm", selMateKndNm);
+			ntsframework.session.set("sbmtNm", selSbmtNm);
+			ntsframework.session.set("sbmtNo", selSbmtNo);
+			ntsframework.session.set("cvaAplnDtm", selCvaAplnDtm);
+			nts_openPage("UTBSFAAM23F001", "", "",rsltMenuId);
+		}
+	}
+	
+	/************************************
+	*  조회 버튼 클릭 함수
+	************************************/
+	function btnSearch_onClick(){
+
+		//과부하 문제때문에 귀속년도, 지급명세서 종류 둘 다 전체선택은 X
+		if( nts_isNull($("#selectSrchAttrYr").val()) && nts_isNull($("#selectSrchMateKndCd").val()) ){
+			jAlert("귀속년도 또는 지급명세서 종류를 선택해주세요.");
+			return false;
+		}
+		
+		//매년 1월에 중도퇴사자가 제출가능해짐에 따라 근로만 먼저 오픈
+		//따라서 1월에는 근로는 7개년, 나머지 지급명세서는 6개년
+		//8월 수시오픈때는 모든 지급명세서 6개년으로 통일
+		//ex) 2024년 1월에 근로는 2018~2024, 나머지는 2018~2023
+		//    2024년 8월(수시오픈)에는 근로 및 나머지 지급명세서 모두 2019~2024
+		//if(($("#selectSrchAttrYr").val() == "2017" && $("#selectSrchMateKndCd").val() != "A0051") &&
+		//   ($("#selectSrchAttrYr").val() == "2017" && $("#selectSrchMateKndCd").val() != "")){
+		//	jAlert("해당 귀속은 근로소득지급명세서만 조회할 수 있습니다.");
+		//	return false;
+		//}
+		
+		//26귀속 중도퇴사자 오픈으로 근로만 25귀속 제공
+		/*
+ 		if(		($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0088") ||
+ 				($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0086") ||
+ 				($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0055") ||
+ 				($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0085") ||
+ 				($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0283") ||
+ 				($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0089") ||
+ 				($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0087") ||
+ 				($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == "A0053")	){
+			
+ 			jAlert("현재 해당 귀속은 근로소득지급명세서만 조회할 수 있습니다.");
+ 			return false;
+ 		}
+		*/
+		// 조회
+		fn_search();
+	}
+	
+	/************************************
+	*  조회 함수
+	************************************/
+	function fn_search(){
+		
+		// 세션 정보 셋팅 
+		var ieTin = ntsframework.session.get("tin");
+		
+		ntsframework.object.set("search[@id='keywords']/ieTin", ieTin);
+		ntsframework.object.set("search[@id='keywords']/attrYr", $("#selectSrchAttrYr").val());		
+		
+		ntsframework.object.set("search[@id='keywords']/mateKndCd", $("#selectSrchMateKndCd").val());
+		
+		//2026귀속은 근로소득지급명세서만 조회가능(근로는 7개년, 나머지는 6개년이기 때문에)
+		/*
+ 		if($("#selectSrchAttrYr").val() == "2026" && $("#selectSrchMateKndCd").val() == ""){
+ 			ntsframework.object.set("search[@id='keywords']/mateKndCd", "A0051");	
+ 		}else{
+ 			ntsframework.object.set("search[@id='keywords']/mateKndCd", $("#selectSrchMateKndCd").val());
+ 		}
+		*/
+		
+		//넷퍼넬 트래픽제어 적용 20210422
+		//종소신고기간에만 넷퍼넬 적용 할 것
+		NetFunnel_Action({service_id:"service_4",action_id:"ATXPPBAA001R16"},function(){
+			nts_doService("ATXPPBAA001R16");
+		});		//넷퍼넬 트래픽제어 적용 끝	
+		
+	}
+	
+</script>
+</head>
+<body>
+	<header id="header" class="header_sub" style="display:none">
+	    <div class="header_wrap">
+	        <h1><a href="javascript:void(0);">손택스</a></h1>
+	        <button class="user"></button>
+	        <button class="sub btn_search"><span class="vh">조회</span></button>
+	        <button class="all_menu"><span class="vh">전체메뉴보기</span></button>
+	    </div>
+	    <aside id="allMenu"></aside>
+	</header>
+	<div id="container" class="myhts">
+		<div id="wrap">
+		<div class="title_wrap" id="title_wrap">
+			<h2><button class="btn_prev">이전 화면</button>지급명세서(원천징수영수증) 제출내역<!--<button class="add_fav">즐겨찾기 추가</button>--></h2>
+		</div>
+		<div class="content_wrap">
+			<div class="content_area">
+				<div class="info_wrap">
+					<ul class="info_list_top">
+						<li>제출된 지급명세서 목록을 확인할 수 있습니다.</li>
+						<li>목록에서 <span class="txt point">&apos;사업자번호&apos;</span>를 선택하면 <span class="txt point">원천징수내역</span>을 확인 할 수 있습니다.
+							<div>
+								<ol>
+									<li>근로자 확인용 서비스이며, 타 기관(은행, 관공서 등) 제출용이 아닙니다.</li>
+								</ol>
+							</div>
+						</li>
+					</ul>
+				</div>
+				<div class="search_wrap top_line">
+	                <ul class="form">
+	                    <li>
+	                        <label for="selectSrchAttrYr"><strong>귀속년도</strong></label>
+	                        <div class="flex">
+	                            <div class="select f1">
+	                                <select id="selectSrchAttrYr" title="귀속년도">
+	                                	<option value="">전체</option>
+	                                	<option value="2026">2026</option>
+	                                	<option value="2025">2025</option>
+	                                    <option value="2024">2024</option>
+	                                    <option value="2023">2023</option>
+	                                    <option value="2022">2022</option>
+	                                    <option value="2021">2021</option>
+	                                    <option value="2020">2020</option>
+	                                </select>
+	                            </div>
+	                        </div>
+	                    </li>
+	                    <li>
+	                        <label for="selectSrchMateKndCd"><strong>지급명세서 종류</strong></label>
+	                        <div class="flex">
+	                            <div class="select f1">
+	                                <select id="selectSrchMateKndCd" title="지급명세서 종류">
+	                                	<option value="">전체</option>
+	                                    <option value="A0088">거주자 기타소득지급명세서</option>
+	                                    <option value="A0086">거주자 사업소득지급명세서</option>
+	                                    <option value="A0051">근로소득지급명세서</option>
+	                                    <option value="A0055">비거주자사업기타소득지급명세서</option>
+	                                    <option value="A0085">사업소득 지급명세서(연말정산용)</option>
+	                                    <option value="A0283">연금계좌지급명세서</option>
+	                                    <option value="A0089">연금소득 지급명세서(연말정산용)</option>
+	                                    <option value="A0087">종교인소득(연말정산)</option>
+	                                    <option value="A0053">퇴직소득지급명세서</option>
+	                                </select>
+	                            </div>
+	                        </div>
+	                    </li>
+	                </ul>
+	                <div class="btn_wrap">
+	                    <button class="btn conf act" onclick="btnSearch_onClick()">조회</button>
+	                </div>
+	            </div>
+				<div class="grid_wrap">
+					<div class="topbox">
+						<div class="fr">
+							<span class="legend">(단위 : 원)</span>
+						</div>
+					</div>
+					<div class="grid_area" id="realgrid" style="width: 1500; height: 226px;">
+					</div>
+					<div class="paging" id="divMore">
+						<a href="#" class="more">더보기(1/5)</a>
+					</div>
+				</div>
+			</div>
+		</div>
+		</div>
+	</div>
+	<footer id="footer" style="display:none"></footer>
+</body>
+</html>

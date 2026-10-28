@@ -1,0 +1,333 @@
+
+
+<!DOCTYPE HTML>
+<html lang="ko">
+	<head>
+		<title>국세청 차세대 모바일</title>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<!--  Nts Common CSS Import -->
+		<link rel="stylesheet" href="css/comm/NtsCommon.css;jsessionid=EEWbBMaoc0JCUoaEHQu61G8ijDhm3ax4pacaM4abIkRnxpaLT4uAQad3LsJmIEBS.tumbwsp04_servlet_TBHT02" />
+		<!-- Nts Common JS Import -->
+		<script type="text/javascript" charset="utf-8" src="js/comm/NtsCommon.js" ></script>
+		<script type="text/javascript" charset="utf-8" src="js/ht/common_teht.js" ></script>
+		<script type="text/javascript" charset="utf-8" src="js/comm/netfunnel/netfunnel2.js"></script>
+		<script type="text/javascript" charset="utf-8" src="js/comm/netfunnel/nts_skin.js"></script>
+		<script type="text/javaScript" language="javascript" defer="defer">
+					
+			/************************************************************************
+			파일명 : UTESFAAM10_모바일지급명세서조회
+			프로그램명 : 모바일지급명세서조회
+			설 명 :  지급명세서 제출내역을 조회한다.
+			작성자 : 전형권
+			작성일 : 2019년 04월 03일
+
+			수정일자			수정자			수정내용
+			=============================================
+			2019.04.03		전형권			최초작성
+
+			************************************************************************/
+			
+			//************************************************************************
+			// 전역 변수 영역
+			//************************************************************************
+			
+			var selCvaId = "";			//선택한 민원ID
+			var selAttrYr = "";			//선택한 귀속년도
+			var selLvyRperTin = "";		//선택한 징수의무자TIN
+			var selMateKndNm = "";		//선택한 자료종류명
+			var selSbmtNm = "";			//선택한 상호
+			var selSbmtNo = "";			//선택한 사업자번호
+			var selCvaAplnDtm = "";		//선택한 제출일자
+			var selLstAltDtm = "";		//선택한 최종수정일자
+			
+			//조회조건
+			var search =  {
+							keywords : {	
+									ieTin 	 : "" 
+							},
+							keywords2 : {
+								  cvaId			: "" 
+				   				, lvyRperTin	: ""
+				   				, attrYr		: ""
+				   				, ieTin			: ""
+							}
+			};
+			var dsdEtcSbmsBrkdNtplDVOList = [];
+			var bmanBscMttrAdmDVOList = [];
+			//************************************************************************
+			// mapper 설정
+			//************************************************************************
+			var mapper = [
+			    {
+			        action : {
+			            id : "ATXPPBAA001R16",
+			            indatalist : [
+			                { type:"search", src :"search[@id='keywords']", des:"DsdSbmsBrkdSVO" }
+			            ],
+			            outdatalist : [
+			                { type:"list", src:"dsdEtcSbmsBrkdNtplDVOList", des:"dsdEtcSbmsBrkdNtplDVOList" }
+			            ]
+			        }
+			    } ,
+			    
+			    {
+			        action : {
+			            id : "ATTSFAAA005R01",
+			            indatalist : [
+			                { type:"search", src :"search[@id='keywords2']", des:"ErinPymnSpcfAdmSVO" }
+			            ],
+			            outdatalist : [
+			                { type:"list", src:"bmanBscMttrAdmDVOList", des:"bmanBscMttrAdmDVOList" }
+			            ]
+			        }
+			    }
+			];
+			
+			//************************************************************************
+			// 최초 화면 로딩 시 호출 함수
+			//************************************************************************
+			function nts_start() {
+								
+				// 세션 정보 셋팅 
+				var ieTin = ntsframework.session.get("tin");
+				
+				ntsframework.object.set("search[@id='keywords']/ieTin", ieTin);
+				
+				
+				//넷퍼넬 트래픽제어 적용 시작
+				NetFunnel_Action({service_id:"service_4",action_id:"ATXPPBAA001R16"},function(){
+					nts_doService("ATXPPBAA001R16");
+				});	//넷퍼넬 트래픽제어 적용 끝	
+				
+			}
+							
+			
+			/***************************************
+			* callback 이벤트 함수
+			****************************************/
+			function fn_callBack(actionId, msgArr) {
+
+				var result		= msgArr[0];	// result : 메시지 구분 ( "S" : 성공 (메시지 유무 상관 없음) , "E" : 실패 (Exception) )
+				var msg			= msgArr[1];	// msg : 메시지 Value (AFT_MESSAGE 테이블) 성공하더라도 메시지코드 추가하지 않으면 메시지 정보 없음;
+				
+				if (actionId == "ATXPPBAA001R16") {
+					NetFunnel_Complete();
+					if (result == "S") {
+						//넷퍼넬 트래픽제어 해제
+						fn_result();
+					} else {
+						nts_getMsgAlert(msg);	
+					}
+				}
+				else if (actionId == "ATTSFAAA005R01") {
+					if (result == "S") {
+						fn_result2();
+					} else {
+						nts_getMsgAlert(msg);	
+					}
+				}
+			}
+
+			/***************************************
+			* 사업자번호 formater
+			* @param value : 1234567890
+			* @returns 123-45-67890
+			****************************************/
+			function fn_bsnoFormat(value){
+				if(nts_isNull(value)) return "";
+				value = "" + value;
+				if(value.length == 10) value = value.substring(0, 3) + "-" + value.substring(3,5) + "-" + value.substring(5);
+			    return value;
+			}
+
+			/***************************************
+			* callback 이벤트 함수
+			****************************************/
+			function fn_result() {
+				var htmlList = "";
+				
+				if (dsdEtcSbmsBrkdNtplDVOList == null
+						|| dsdEtcSbmsBrkdNtplDVOList.length == 0) {
+					htmlList += "<tr>";
+					htmlList += "<td class='title tac' colspan='4'>";
+					htmlList += "조회된 결과가 존재하지 않습니다.";
+					htmlList += "</td>";
+					htmlList += "</tr>";
+				}else{
+					$.each(dsdEtcSbmsBrkdNtplDVOList, function(key, val) {
+						var attrYr				= val.attrYr;				// 귀속년도
+						var mateKndNm 			= val.mateKndNm; 			// 지급명세서 종류
+						var sbmtNo 				= val.sbmtNo; 				// 사업자등록번호
+						var cvaAplnDtm 			= val.cvaAplnDtm; 			// 제출일자
+						var sbmtNm 				= val.sbmtNm; 				// 징수의무자
+						//var rcatMthdCdNm 		= val.rcatMthdCdNm; 		// 신고방법
+						var cvaId 				= val.cvaId; 				// 민원ID
+						var lvyRperTin 			= val.lvyRperTin; 			// 징수의무자납세자통합관리번호
+						
+						//근로소득지급명세서만 서비스 하기 때문에 나머지 명세서는 생략한다. 언젠가 다 추가될거임...
+						if(mateKndNm != "근로소득지급명세서" || attrYr != "2018"){
+							return true;
+						}
+						
+						htmlList += "<tr>";
+						// 상호
+						htmlList += "<td class='wid80'>"+sbmtNm+"</td>";
+						// 귀속년도
+						htmlList += "<td class='wid20 tar'>"+attrYr+" 귀속"+"</td>";
+						// 사업자등록번호
+						htmlList += "<td class='wid60'>";
+						htmlList += "<a class='txt_link' href=\"javascript:btnView_onClick('"+cvaId+"','"+attrYr+"','"+lvyRperTin+"','"+mateKndNm+"','"+sbmtNm+"','"+sbmtNo+"','"+cvaAplnDtm+"')\">"+ fn_bsnoFormat(sbmtNo) +"</a>";
+						htmlList += "</td>";
+						// 제출일자
+						htmlList += "<td class='wid40 tar'>"+nts_cvtDateFormat('yyyy-MM-dd', cvaAplnDtm)+"</td>";
+						htmlList += "</tr>";
+					});
+					
+					//2018년도 데이터는 없고 과거 귀속년도 데이터만 있는경우가 있음. 
+					if(htmlList == ""){
+						htmlList += "<tr>";
+						htmlList += "<td class='title tac' colspan='4'>";
+						htmlList += "조회된 결과가 존재하지 않습니다.";
+						htmlList += "</td>";
+						htmlList += "</tr>";
+					}
+				}
+				
+				$('tbody[id="listview"]').append(htmlList);		
+			}
+			
+			
+			//사업자번호 선택시 민원ID에 해당하는 제출건 조회
+			function btnView_onClick(cvaId, attrYr, lvyRperTin, mateKndNm, sbmtNm, sbmtNo, cvaAplnDtm){
+				
+				var ieTin = ntsframework.session.get("tin");
+				
+				selCvaId = cvaId;				//선택한 민원ID
+				selAttrYr = attrYr;				//선택한 귀속년도
+				selLvyRperTin = lvyRperTin;		//선택한 징수의무자TIN
+				selMateKndNm = mateKndNm;		//선택한 자료종류명
+				selSbmtNm = sbmtNm;				//선택한 상호
+				selSbmtNo = sbmtNo;				//선택한 사업자번호
+				selCvaAplnDtm = cvaAplnDtm;		//선택한 제출일자
+				
+				ntsframework.object.set("search[@id='keywords2']/cvaId", cvaId);
+				ntsframework.object.set("search[@id='keywords2']/lvyRperTin", lvyRperTin);
+				ntsframework.object.set("search[@id='keywords2']/attrYr", attrYr);
+				ntsframework.object.set("search[@id='keywords2']/ieTin", ieTin);
+				
+				nts_doService("ATTSFAAA005R01");
+				
+			}
+			
+			//민원ID에 해당하는 제출건 callBack
+			function fn_result2(){
+				//단건인 경우 이미지 변환페이지로 이동한다.
+				if(bmanBscMttrAdmDVOList.length == 1){
+					
+					ntsframework.session.del("cvaId");
+					ntsframework.session.del("intgMateBrkdSn");
+					ntsframework.session.del("lvyRperTin");
+					ntsframework.session.del("attrYr");
+					ntsframework.session.del("ieTin");
+					ntsframework.session.del("mateKndCd");
+					ntsframework.session.del("lstAltDtm");
+
+					ntsframework.session.set("cvaId", bmanBscMttrAdmDVOList[0].cvaId);	
+					ntsframework.session.set("intgMateBrkdSn", bmanBscMttrAdmDVOList[0].intgMateBrkdSn);	
+					ntsframework.session.set("lvyRperTin", bmanBscMttrAdmDVOList[0].lvyRperTin);	
+					ntsframework.session.set("attrYr", bmanBscMttrAdmDVOList[0].attrYr);	
+					ntsframework.session.set("ieTin", bmanBscMttrAdmDVOList[0].indvTin);	
+					ntsframework.session.set("mateKndCd", bmanBscMttrAdmDVOList[0].mateKndCd);	
+					ntsframework.session.set("lstAltDtm", bmanBscMttrAdmDVOList[0].lstAltDtm);
+					
+					
+					nts_openPage("UTESFAAM21F001", "", "");
+					
+				}
+				else{
+					
+					//다건인경우 근무기간목록 화면으로 이동
+					
+					var ieTin = ntsframework.session.get("tin");
+					
+					ntsframework.session.del("cvaId");
+					ntsframework.session.del("lvyRperTin");
+					ntsframework.session.del("attrYr");
+					ntsframework.session.del("ieTin");
+					ntsframework.session.del("mateKndNm");
+					ntsframework.session.del("sbmtNm");
+					ntsframework.session.del("sbmtNo");
+					ntsframework.session.del("cvaAplnDtm");
+					
+					ntsframework.session.set("cvaId", selCvaId);	
+					ntsframework.session.set("lvyRperTin", selLvyRperTin);	
+					ntsframework.session.set("attrYr", selAttrYr);	
+					ntsframework.session.set("ieTin", ieTin);	
+					ntsframework.session.set("mateKndNm", selMateKndNm);
+					ntsframework.session.set("sbmtNm", selSbmtNm);
+					ntsframework.session.set("sbmtNo", selSbmtNo);
+					ntsframework.session.set("cvaAplnDtm", selCvaAplnDtm);
+					
+					nts_openPage("UTESFAAM23F001", "", "");
+				}
+			}
+			
+		</script>
+</head>
+<body>
+	<div id="wrap">
+		<div class="tit_h2">
+			<h2 id="headTitle">근로소득 지급명세서 제출내역</h2>
+		</div>
+		<div id="container">
+            <div class="list_style01">
+				<ul>
+					<li>제출된 근로소득 지급명세서 목록을 확인할 수 있습니다.</li>
+					<li>목록에서 <strong class="txt_blue04">‘사업자번호’</strong>를 선택하면 <strong class="txt_blue04">원천징수내역</strong>을 확인 할 수 있습니다.
+						<div class="list_style02">
+							<ul>
+								<li>근로자 확인용 서비스이며, 타 기관(은행, 관공서 등) 제출용이 아닙니다.</li>
+								<li>개인정보 보호를 위해 일부 자료(주민번호 등)는 마스킹(*) 처리됩니다.</li>
+							</ul>
+						</div>
+		  			</li>
+				</ul>
+            </div>
+			<div class="space01 pt5 border_top">
+				<div class="tbl_box">
+					<div class="tbl_row bt_none">
+						<table>
+							<caption>제출내역</caption> 
+							<thead>
+								<tr>
+									<th class="wid80 txt_size04" scope="col">상호</th>
+									<th class="wid20 txt_size04 tar" scope="col">귀속년도</th>
+									<th class="wid60 txt_size04" scope="col">사업자등록번호</th>
+									<th class="wid40 txt_size04 tar" scope="col">제출일자</th>
+								</tr>
+							</thead>
+							<tbody id="listview">
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+		<!-- //container -->
+		<!-- footer -->
+		<div id="footer">
+			<ul class="h_list">
+				<li><a href="">이전</a></li>
+				<li><a href="">다음</a></li>
+				<li><a href=""><span><span class="h">홈</span></span></a></li>
+				<li><a href="">환경설정</a></li>
+			</ul>
+		</div>
+		<!-- //footer -->
+	</div>
+	<!-- //wrap -->
+
+</body>
+</html>

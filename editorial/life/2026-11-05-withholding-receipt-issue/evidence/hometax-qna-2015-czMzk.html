@@ -1,0 +1,1274 @@
+
+
+
+
+
+<!DOCTYPE html PUBLIC"-//W3C//DTD XHTML 1.0 Transitional//EN""http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!-- 아래 링크는 반드시 DOCTYPE 및에 존재해야 UI가 흔들리지 않음 -->
+
+
+
+
+
+
+
+<!-- common script start -->
+<script type="text/javascript">
+	
+</script>
+<script type="text/javascript" src="js/jquery-1.8.3.min.js" ></script>
+<script type="text/javascript">
+	(function(global) {
+	    'use strict';
+	    // existing version for noConflict()
+	    var _Base64 = global.Base64;
+	    var version = "2.1.9";
+	    // if node.js, we use Buffer
+	    var buffer;
+	    if (typeof module !== 'undefined' && module.exports) {
+	        try {
+	            buffer = require('buffer').Buffer;
+	        } catch (err) {}
+	    }
+	    // constants
+	    var b64chars
+	        = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+	    var b64tab = function(bin) {
+	        var t = {};
+	        for (var i = 0, l = bin.length; i < l; i++) t[bin.charAt(i)] = i;
+	        return t;
+	    }(b64chars);
+	    var fromCharCode = String.fromCharCode;
+	    // encoder stuff
+	    var cb_utob = function(c) {
+	        if (c.length < 2) {
+	            var cc = c.charCodeAt(0);
+	            return cc < 0x80 ? c
+	                : cc < 0x800 ? (fromCharCode(0xc0 | (cc >>> 6))
+	                                + fromCharCode(0x80 | (cc & 0x3f)))
+	                : (fromCharCode(0xe0 | ((cc >>> 12) & 0x0f))
+	                   + fromCharCode(0x80 | ((cc >>>  6) & 0x3f))
+	                   + fromCharCode(0x80 | ( cc         & 0x3f)));
+	        } else {
+	            var cc = 0x10000
+	                + (c.charCodeAt(0) - 0xD800) * 0x400
+	                + (c.charCodeAt(1) - 0xDC00);
+	            return (fromCharCode(0xf0 | ((cc >>> 18) & 0x07))
+	                    + fromCharCode(0x80 | ((cc >>> 12) & 0x3f))
+	                    + fromCharCode(0x80 | ((cc >>>  6) & 0x3f))
+	                    + fromCharCode(0x80 | ( cc         & 0x3f)));
+	        }
+	    };
+	    var re_utob = /[\uD800-\uDBFF][\uDC00-\uDFFFF]|[^\x00-\x7F]/g;
+	    var utob = function(u) {
+	        return u.replace(re_utob, cb_utob);
+	    };
+	    var cb_encode = function(ccc) {
+	        var padlen = [0, 2, 1][ccc.length % 3],
+	        ord = ccc.charCodeAt(0) << 16
+	            | ((ccc.length > 1 ? ccc.charCodeAt(1) : 0) << 8)
+	            | ((ccc.length > 2 ? ccc.charCodeAt(2) : 0)),
+	        chars = [
+	            b64chars.charAt( ord >>> 18),
+	            b64chars.charAt((ord >>> 12) & 63),
+	            padlen >= 2 ? '=' : b64chars.charAt((ord >>> 6) & 63),
+	            padlen >= 1 ? '=' : b64chars.charAt(ord & 63)
+	        ];
+	        return chars.join('');
+	    };
+	    var btoa = global.btoa ? function(b) {
+	        return global.btoa(b);
+	    } : function(b) {
+	        return b.replace(/[\s\S]{1,3}/g, cb_encode);
+	    };
+	    var _encode = buffer ? function (u) {
+	        return (u.constructor === buffer.constructor ? u : new buffer(u))
+	        .toString('base64')
+	    }
+	    : function (u) { return btoa(utob(u)) }
+	    ;
+	    var encode = function(u, urisafe) {
+	        return !urisafe
+	            ? _encode(String(u))
+	            : _encode(String(u)).replace(/[+\/]/g, function(m0) {
+	                return m0 == '+' ? '-' : '_';
+	            }).replace(/=/g, '');
+	    };
+	    var encodeURI = function(u) { return encode(u, true) };
+	    // decoder stuff
+	    var re_btou = new RegExp([
+	        '[\xC0-\xDF][\x80-\xBF]',
+	        '[\xE0-\xEF][\x80-\xBF]{2}',
+	        '[\xF0-\xF7][\x80-\xBF]{3}'
+	    ].join('|'), 'g');
+	    var cb_btou = function(cccc) {
+	        switch(cccc.length) {
+	        case 4:
+	            var cp = ((0x07 & cccc.charCodeAt(0)) << 18)
+	                |    ((0x3f & cccc.charCodeAt(1)) << 12)
+	                |    ((0x3f & cccc.charCodeAt(2)) <<  6)
+	                |     (0x3f & cccc.charCodeAt(3)),
+	            offset = cp - 0x10000;
+	            return (fromCharCode((offset  >>> 10) + 0xD800)
+	                    + fromCharCode((offset & 0x3FF) + 0xDC00));
+	        case 3:
+	            return fromCharCode(
+	                ((0x0f & cccc.charCodeAt(0)) << 12)
+	                    | ((0x3f & cccc.charCodeAt(1)) << 6)
+	                    |  (0x3f & cccc.charCodeAt(2))
+	            );
+	        default:
+	            return  fromCharCode(
+	                ((0x1f & cccc.charCodeAt(0)) << 6)
+	                    |  (0x3f & cccc.charCodeAt(1))
+	            );
+	        }
+	    };
+	    var btou = function(b) {
+	        return b.replace(re_btou, cb_btou);
+	    };
+	    var cb_decode = function(cccc) {
+	        var len = cccc.length,
+	        padlen = len % 4,
+	        n = (len > 0 ? b64tab[cccc.charAt(0)] << 18 : 0)
+	            | (len > 1 ? b64tab[cccc.charAt(1)] << 12 : 0)
+	            | (len > 2 ? b64tab[cccc.charAt(2)] <<  6 : 0)
+	            | (len > 3 ? b64tab[cccc.charAt(3)]       : 0),
+	        chars = [
+	            fromCharCode( n >>> 16),
+	            fromCharCode((n >>>  8) & 0xff),
+	            fromCharCode( n         & 0xff)
+	        ];
+	        chars.length -= [0, 0, 2, 1][padlen];
+	        return chars.join('');
+	    };
+	    var atob = global.atob ? function(a) {
+	        return global.atob(a);
+	    } : function(a){
+	        return a.replace(/[\s\S]{1,4}/g, cb_decode);
+	    };
+	    var _decode = buffer ? function(a) {
+	        return (a.constructor === buffer.constructor
+	                ? a : new buffer(a, 'base64')).toString();
+	    }
+	    : function(a) { return btou(atob(a)) };
+	    var decode = function(a){
+	        return _decode(
+	            String(a).replace(/[-_]/g, function(m0) { return m0 == '-' ? '+' : '/' })
+	                .replace(/[^A-Za-z0-9\+\/]/g, '')
+	        );
+	    };
+	    var noConflict = function() {
+	        var Base64 = global.Base64;
+	        global.Base64 = _Base64;
+	        return Base64;
+	    };
+	    // export Base64
+	    global.Base64 = {
+	        VERSION: version,
+	        atob: atob,
+	        btoa: btoa,
+	        fromBase64: decode,
+	        toBase64: encode,
+	        utob: utob,
+	        encode: encode,
+	        encodeURI: encodeURI,
+	        btou: btou,
+	        decode: decode,
+	        noConflict: noConflict
+	    };
+	    // if ES5 is available, make Base64.extendString() available
+	    if (typeof Object.defineProperty === 'function') {
+	        var noEnum = function(v){
+	            return {value:v,enumerable:false,writable:true,configurable:true};
+	        };
+	        global.Base64.extendString = function () {
+	            Object.defineProperty(
+	                String.prototype, 'fromBase64', noEnum(function () {
+	                    return decode(this)
+	                }));
+	            Object.defineProperty(
+	                String.prototype, 'toBase64', noEnum(function (urisafe) {
+	                    return encode(this, urisafe)
+	                }));
+	            Object.defineProperty(
+	                String.prototype, 'toBase64URI', noEnum(function () {
+	                    return encode(this, true)
+	                }));
+	        };
+	    }
+	    // that's it!
+	    if (global['Meteor']) {
+	       Base64 = global.Base64; // for normal export in Meteor.js
+	    }
+	    
+	    window.global = global;
+	    window.encB64 = function (input){
+	    	input = global.Base64.encode(input);
+	    	
+	    	var halfSize = (input.length / 2) + (input.length % 2);  
+	    	var enc1 = input.substring(0, halfSize);
+    	  	var enc2 = input.substring(halfSize, input.length);
+    	  	
+    	  	return enc2 + enc1;
+	    }
+	})(this);
+</script> 
+<script type="text/javascript" >
+	
+	document.domain="hometax.go.kr";
+	
+	//도메인 체크
+	function checkValidDomain(strText) {
+		if(strText.match(/^[-\w]+[\.]+[\w]+$/) || strText.match(/^[-\w]+[\.]+[\w]+[\.]+[\w]+$/)) {
+			return true;
+		}
+		return false;
+	}
+
+	// 한글, 영문, 숫자 체크
+	function checkValidCharacterAll(strText) {
+		if(strText.match(/^[가-힣\w]+$/)) {
+			return true;
+		}
+		return false;
+	}
+
+	// 영문, 숫자 체크 (이메일)
+	function checkValidCharacterEng(strText) {
+		if(strText.match(/^[a-zA-Z0-9.-_]+$/)) {
+			return true;
+		}
+		return false;
+	}
+
+	// 숫자 포함여부 체크
+	function checkValidContainNum(strText) {
+		for(var i=0; i<strText.length; i++) {
+			if(!isNaN(strText.substring(i, i+1))) return true;
+		}
+		return false;
+	}
+
+	// 브라우저 호환성 문제로 trim 함수를 별도 작성
+	function trim(str) {
+		var temp = "";
+		var s, e;
+		
+		for(var i=0; i<str.length; i++) {
+			if(str.charAt(i) != " ") {
+				s = i; break;
+			}
+		}
+		
+		for(var i=str.length-1; i>=0; i--) {
+			if(str.charAt(i) != " ") {
+				e = i; break;
+			}
+		}
+		
+		for(i=s; i<=e; i++) {
+			temp = temp + str.charAt(i);
+		}
+		
+		return temp;
+	}
+
+	function view_file(path, name, id, seq, name_org) {
+		
+		var url = '/download.do';
+		var $form 			= $('<form></form>').prop({method:'post', action:url, target:'hidfd'});
+		var $tmplHdnInput 	= $('<input/>').prop('type', 'hidden');
+		
+		var $attachDocumPath    = $tmplHdnInput.clone().prop('name', 'attach_docum_path').val(path);
+		var $attachDocumNm      = $tmplHdnInput.clone().prop('name', 'attach_docum_nm').val(name_org);
+		var $attachDocumId 	    = $tmplHdnInput.clone().prop('name', 'attach_docum_id').val(id);
+		var $attachDocumRealNm  = $tmplHdnInput.clone().prop('name', 'attach_docum_realNm').val(name);
+		var $attachSeqNo 	    = $tmplHdnInput.clone().prop('name', 'attach_seq_no').val(seq);
+		
+		$form.append($attachDocumPath).append($attachDocumNm).append($attachDocumId)
+				.append($attachDocumRealNm).append($attachSeqNo);
+				/* .append($tmplHdnInput.clone().prop('name', 'test').val(encoded)); */
+		
+		$form.appendTo('body').submit().remove();
+	}
+	
+	function replaceAll(org, src, trg) {
+		return org.replace(new RegExp(src, "gi"), trg);
+	}
+
+	var datepickerOption = {
+        changeMonth: true,
+        changeYear:true,
+        yearRange: '2015' + ':' + (new Date).getFullYear(),
+        dateFormat: 'yy/mm/dd',
+        defaultDate: getToday(),
+        closeText: '닫기',
+        prevText: '이전달',
+        nextText: '다음달',
+        currentText: '오늘',
+        monthNames: ['1월(JAN)','2월(FEB)','3월(MAR)','4월(APR)','5월(MAY)','6월(JUN)','7월(JUL)','8월(AUG)','9월(SEP)','10월(OCT)','11월(NOV)','12월(DEC)'],
+        monthNamesShort: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+        dayNames: ['일','월','화','수','목','금','토'],
+        dayNamesShort: ['일','월','화','수','목','금','토'],
+        dayNamesMin: ['일','월','화','수','목','금','토'],
+        weekHeader: 'Wk',
+        showOn: "both"
+    };
+  
+	var datepickerOption_ListA01 = {                      
+	        changeMonth: true,
+	        changeYear:true,
+	        yearRange: '2020' + ':' + (new Date).getFullYear(),
+	        dateFormat: 'yy/mm/dd',
+	        defaultDate: getToday(),
+	        closeText: '닫기',
+	        prevText: '이전달',
+	        nextText: '다음달',
+	        currentText: '오늘',
+	        monthNames: ['1월(JAN)','2월(FEB)','3월(MAR)','4월(APR)','5월(MAY)','6월(JUN)','7월(JUL)','8월(AUG)','9월(SEP)','10월(OCT)','11월(NOV)','12월(DEC)'],
+	        monthNamesShort: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+	        dayNames: ['일','월','화','수','목','금','토'],
+	        dayNamesShort: ['일','월','화','수','목','금','토'],
+	        dayNamesMin: ['일','월','화','수','목','금','토'],
+	        weekHeader: 'Wk',
+	        showOn: "both"
+	        
+	    };
+  
+	var datepickerOption_ListA01_tax = {                      
+	        changeMonth: true,
+	        changeYear:true,
+	        yearRange: '2018' + ':' + (new Date).getFullYear(),
+	        dateFormat: 'yy/mm/dd',
+	        defaultDate: getToday(),
+	        closeText: '닫기',
+	        prevText: '이전달',
+	        nextText: '다음달',
+	        currentText: '오늘',
+	        monthNames: ['1월(JAN)','2월(FEB)','3월(MAR)','4월(APR)','5월(MAY)','6월(JUN)','7월(JUL)','8월(AUG)','9월(SEP)','10월(OCT)','11월(NOV)','12월(DEC)'],
+	        monthNamesShort: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+	        dayNames: ['일','월','화','수','목','금','토'],
+	        dayNamesShort: ['일','월','화','수','목','금','토'],
+	        dayNamesMin: ['일','월','화','수','목','금','토'],
+	        weekHeader: 'Wk',
+	        showOn: "both"
+	        
+	    };
+	
+	function dateValid(day) {
+		if(day == '' || day.length != 10) {
+			return false;
+		}
+		var thisYear = (new Date).getFullYear();
+		var val = day.substring(0, 4);
+		if(isNaN(val)) {
+			// console.log('not a number 1');
+			return false;
+		}
+		var iVal = parseInt(val);
+		if(iVal < 1950 || iVal > thisYear) {
+			// console.log('date invalid 1');
+			return false;
+		}
+		if(day.substring(4,5) != '/' || day.substring(7,8) != '/') {
+			// console.log('date invalid 2');
+			return false;
+		}
+		val = day.substring(5,7);
+		if(isNaN(val)) {
+			// console.log('not a number 2');
+			return false;
+		}
+		if(val == '00' || val > '12') {
+			// console.log('date invalid 3');
+			return false;
+		}
+		val = day.substring(8,10);
+		// console.log('val 8,10 : ' + val);
+		if(isNaN(val)) {
+			// console.log('not a number 3');
+			return false;
+		}
+		if(val == '00' || val > '31') {
+			// console.log('date invalid 4 : ' + val);
+			return false;
+		}
+		var today = getTodayType('/');
+		if(day > today) {
+			// console.log(day + ', ' + today);
+			return false;
+		}
+		
+		// console.log(iVal + ', ' + thisYear + ', diff : ' +  (thisYear - iVal));
+		return true;
+	}
+
+	
+	
+	
+	function getToday() {
+		var today = new Date(); // 현재날짜
+		return new Date(today.getFullYear(),today.getMonth(),today.getDate());
+	}
+
+	function getTodayType(delim) {
+		var today = new Date(); // 현재날짜
+		var day = new Date(today.getFullYear(),today.getMonth(),today.getDate());
+		return dateType(today, delim);
+	}
+
+	function dateType(today, delim) {
+		var result = today.getFullYear() + delim;
+		var mm = today.getMonth() + 1;
+		if(mm < 10) {
+			result += '0';
+		}
+		result += mm + delim;
+		var dd = today.getDate();
+		if(dd < 10) {
+			result += '0';
+		}
+		result += dd;
+			
+		return  result;
+	}
+	
+	 function date_before(diff, delim) {
+		 var newDay = new Date(Date.parse(new Date()) - 1000*3600*24*diff);
+		 return dateType(newDay, delim);
+	 }
+ 
+	Number.prototype.formatNumber = function(n,x,s,c){
+		var re = '\\d(?=(\\d{' + (x || 3) + '})+' + (n>0 ? '\\D' : '$') + ')', num = this.toFixed(Math.max(0, ~~n));
+		return (c ? num.replace('.', c) : num).replace(new RegExp(re, 'g'), '$&' + (s || ','));
+	}
+	
+	function formatTest(viewObj,sValue){
+		var iValue = Number(sValue);
+		document.write(iValue.formatNumber(0,3, ','));
+	}
+
+	// 분류 코드
+	var g_code = "";
+	var g_selCode = "";
+	
+ 	var openCheck = 0;
+ 	// 상담 분류 페이지 이동
+ 	function go_erms_home() {
+ 		$("#form").prop('action', '/home.do');
+		$("#mode").val('setReq');
+		$("#url").val('pub/setReq');
+		//$("#reqTp").val('0010204');
+		$("#reqTp").val('99999');
+		//$("#reqTpCode").val('0010204');
+		$("#reqTpCode").val('99999');
+		$("#reqTpPath").val('4');
+		$("#form").submit();
+	}
+ 	
+	function go_erms_save(gubun, code, selCode) {
+		var url = '/home.do';
+		form.target = "_self";
+		var token = form.ssoToken.value;
+		var cellula = form.cellula.value;
+		
+		if(gubun=="confirm"){
+			var data = {
+				'url' : 'json_tp', 
+				'mode' : 'ssoLoginChk',
+				'ssoToken' : token
+			};
+			$.ajax({
+				url : url, 
+				type : "POST", 
+				data : data, 
+				success : function (data, status, jqXHR) {
+					// 인증
+					if (data == -1){
+						// 실패
+						CertOpen(code, selCode);
+					}else{
+						// 성공
+						 form.loginId.value=data;
+						 fn_callbackCertPopup_Action("01", "", code, selCode);
+					}
+				}, 
+				error : function(e) {
+					alert("error="+e);
+				}
+			});
+		} 
+		// 현금 영수증 로그인 되어 있을때
+		else { 
+			fn_callbackCertPopup_Action("01", "", code, selCode);
+		}
+	}
+
+	
+	function getSvrType() {
+		
+		document.domain = "hometax.go.kr";
+    	var hostName = location.hostname;
+    	var arr = hostName.match(/([a-z]+-)/);
+    	var svrType = "";
+		
+		return svrType;
+	}
+
+	function CertOpen(code, selCode){
+		g_code = code;
+		g_selCode = selCode;
+		if (openCheck==0){
+			
+			
+			var svrType = getSvrType();
+
+			
+			
+// 			var url = 'https://' + svrType + 'hometax.go.kr/websquare/websquare.html?'
+// 					//+'w2xPath=/ui/comm/a/b/UTECMABA06.xml&systCI=tu&certClCd1=01&certClCd2=02&certClCd3=05' 20150605 공인인증서 삭제후 IPIN 삽입
+// 					//+'w2xPath=/ui/comm/a/b/UTECMABA06.xml&systCI=tu&certClCd1=01&certClCd2=02&certClCd3=04' 20180802 I-pin 메뉴 제거
+// 					//+'w2xPath=/ui/comm/a/b/UTECMABA06.xml&systCI=tu&certClCd1=01&certClCd2=02'
+// 					+'w2xPath=/ui/comm/a/b/UTECMABA06.xml&systCI=tu&certClCd1=01'
+// 					+'&reqTp='+code+'&reqTpCode='+selCode;
+// 					//+'w2xPath=/ui/comm/a/b/UTECMABA06.xml&systCI=tu&certClCd1=01&certClCd2=02&certClCd3=04&certClCd4=05'
+			
+// 			var Cert = window.open(url, 'Cert', 'width=800px, height=323px, statusbar=no, scrollbar=no, resizable=yes;');		
+
+
+			/**
+			 * 2019-07-30 신용카드 변경으로 인한 수정 ksw
+			 * certClCd4=01		//공인인증서
+			 * certClCd3=04		//I-PIN
+			 * certClCd2=02		//신용카드
+			 * certClCd1=05     //휴대전화
+			 */
+
+		 	var url = 'https://' + svrType + 'hometax.go.kr/websquare/websquare.html?' 
+				+'w2xPath=/ui/comm/a/b/UTECMABA14.xml&systCI=tu&certClCd1=05&certClCd2=02&prsCnfrYn=N'
+				+'&reqTp='+code+'&reqTpCode='+selCode; 
+
+			var Cert = window.open(url, 'Cert', 'width=980px, height=840px, statusbar=no, scrollbar=no, resizable=yes;');
+					
+			openCheck=openCheck+1;
+		} else {
+			fn_callbackCertPopup_Action("02", "", code, selCode);
+		}
+	}
+	
+	function fn_callbackCertPopup(cReturn, test, code, selCode){
+		//console.log("aaaa "+cReturn);
+		if (code == undefined || code == "") code = g_code;
+		if (selCode == undefined || selCode == "") selCode = g_selCode;
+		fn_callbackCertPopup_Action(cReturn, test, code, selCode);
+	}
+	
+	function fn_callbackCertPopup_Action(cReturn, test, code, selCode) {
+		//console.log("bbbb "+cReturn);
+		if(cReturn=="01"){
+			//alert("a,"+cReturn+","+Number(cReturn)+","+code+","+selCode);
+			$("#reqTp").val(code);
+			$("#reqTpCode").val(selCode);
+			$("#form").submit();
+		} else {
+			//alert("b,"+cReturn+","+Number(cReturn)+","+code+","+selCode);
+			openCheck=0;
+			/* alert("Error="+cReturn); */
+		}
+	}
+	
+	function resizeParentHeight(){
+		var mf_txppIframeObj = parent.document.getElementById("mf_txppIframe");
+		if(mf_txppIframeObj != null){
+			setTimeout(function(){
+				mf_txppIframeObj.style.height = document.body.scrollHeight + "px";
+			},0);
+		}else{
+			//alert("Parent mf_txppIframe is Null!");
+		}
+	}
+	 
+	function nts_openCertPopup(cd, param) {
+		var url = "" ;
+	    var popupId = "";	// 팝업아이디(필수값 아님)
+	    var popupName = ""; // 팝업이름(필수값 아님)
+	    var popupModal = true;
+	    var popupWidth = "480px";	// 팝업 가로사이즈
+	    var popupHeight = "323px"; // 팝업 세로사이즈
+	    var popupSrcData =  "request";	// 소스대상경로
+	    var popupDestData = "param"; // 결과대상경로
+	    var scrollbars = false;
+	    var popupTargetSystem = "";	// 타시스템에서 호출시 사용
+	    
+		if (param == null) {
+			param = {};
+		}
+		    
+		if(param.popupId != undefined) {
+			WebSquare.ModelUtil.setInstanceValue( "request/popupId" , param.popupId );
+		}
+		
+		if( cd == "mpno") {
+	    	popupTargetSystem = "TXPP";
+	    	
+	    	//휴대폰 인증
+	    	url = "/ui/comm/a/b/UTECMABA01.xml";
+	     	     	
+	    	popupId = "UTECMABA01";
+	    	popupName = "휴대전화인증";
+	    	popupDestData = "request";
+	    	popupWidth = "496";
+	    	popupHeight = "580";
+		}
+		else if( cd == "crdc") {
+			//신용카드 인증
+			url = "/ui/comm/a/b/UTECMABA03.xml";
+	
+			popupId = "UTECMABA03";
+			popupName = "신용카드인증";
+			popupDestData = "request";
+			popupWidth = "496";
+			popupHeight = "596";
+			
+		}
+		else if( cd == "ipin") {
+			//alert("공공I-PIN\n인증미개발기능");
+			//return;
+			window.open("https://hometax.go.kr/gpin/AuthRequest.jsp"
+			        , "gPinLoginWin"
+			        , "directories=no,toolbar=no,left=780,top=480,width=360,height=720");
+			return;			
+		} else if( cd == "pkc") {
+			var was_enccert = 
+				"-----BEGIN CERTIFICATE-----\n" +
+				"MIIEgjCCA+ugAwIBAgICB6AwDQYJKoZIhvcNAQEFBQAwRDELMAkGA1UEBhMCS1Ix\n" +
+				"FjAUBgNVBAoTDURyZWFtU2VjdXJpdHkxDjAMBgNVBAsTBVdpcmVkMQ0wCwYDVQQD\n" +
+				"EwRST09UMB4XDTA0MDUxNzA2MDMwMloXDTA1MDUxNzA2MDMwMlowTjELMAkGA1UE\n" +
+				"BhMCS1IxFjAUBgNVBAoTDURyZWFtU2VjdXJpdHkxDjAMBgNVBAsTBVdpcmVkMRcw\n" +
+				"FQYDVQQDDA5BTllfMDAwMDAwMTM3NDCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkC\n" +
+				"gYEA8oiK9s24U15Zc27yPSXvruwlgsngL9+dGiALMSG0ug3U9yUdJ+NqgBfMTvu2\n" +
+				"LE2EgoVObbwEWfdMCE8xmjlWVJzQRQATtvlGHiKXvAIwSjZq/gBIKLdKYmHQxBJk\n" +
+				"9NNE1nhHE6u0dlvVulNpDqO8hPj0P0OplWxHFZtEBpkSsDECAwEAAaOCAncwggJz\n" +
+				"MGwGA1UdIwRlMGOAFIwdeyOqAicpnNHLlhqKYmCRRZpBoUikRjBEMQswCQYDVQQG\n" +
+				"EwJLUjEWMBQGA1UEChMNRHJlYW1TZWN1cml0eTEOMAwGA1UECxMFV2lyZWQxDTAL\n" +
+				"BgNVBAMTBFJPT1SCAQMwHQYDVR0OBBYEFL+l1vv7eUOivC/pmfP4xbZtjJW3MA4G\n" +
+				"A1UdDwEB/wQEAwIAMDB7BgNVHSAEdDByMHAGCiqDGoyaRAUCPAEwYjBgBggrBgEF\n" +
+				"BQcCAjBUMBQaDURyZWFtU2VjdXJpdHkwAwIBARo8VGhpcyBDZXJ0aWZpY2F0ZSBp\n" +
+				"cyBnZW5lcmF0ZWQgYnkgRHJlYW1zZWN1cml0eSBmb3IgQ0Fvc19YNTA5MCEGA1Ud\n" +
+				"EQQaMBigFgYJKoMajJpECgEBoAkwBwwDQU5ZMAAwgecGA1UdHwSB3zCB3DBRoE+g\n" +
+				"TYZLbGRhcDovL2Nhb3MuZHJlYW1zZWN1cml0eS5jb206Mzg5L2NuPWNybDExZHAy\n" +
+				"LG91PVdpcmVkLG89RHJlYW1TZWN1cml0eSxjPUtSMIGGoIGDoIGAhn5odHRwOi8v\n" +
+				"Y2Fvcy5kcmVhbXNlY3VyaXR5LmNvbS9jcmw/aWg9b0N4RlRlMWFtZGdoV3NrbnlG\n" +
+				"dmt2ZG4yRG9nJTNkJmRwPWNuJTNkY3JsMTFkcDIlMmNvdSUzZFdpcmVkJTJjbyUz\n" +
+				"ZERyZWFtU2VjdXJpdHklMmNjJTNkS1IwSgYIKwYBBQUHAQEEPjA8MDoGCCsGAQUF\n" +
+				"BzABhi5odHRwOi8vY2Fvcy5kcmVhbXNlY3VyaXR5LmNvbToxNDIwMy9PQ1NQU2Vy\n" +
+				"dmVyMA0GCSqGSIb3DQEBBQUAA4GBACYZfFj6/Ixe3VViMpURAyYX7zBnoUDbCput\n" +
+				"CTuETzWMEuAc7/ciMGrnGVXitbRmpFlRINWnvDbrwHGF88xCRM1MTzEbLaBcDIMM\n" +
+				"CvIerUSW2/ocwd/vY6RRN38RAvVuYyNogbphVPaHJv85ivmdT47F7WcvyTz2XCAO\n" +
+				"JY5QJnJ5\n" +
+				"-----END CERTIFICATE-----";
+			
+			var p_skey 			= "";
+			var p_logSgnt 	= "";
+			var p_cert    		= "";
+			var v_rnd           	= "";
+			var p_rnd_enc 	= "";
+			var p_hash			= "";
+					
+			if (!document.MagicLine) {
+				alert('암호화 모듈 로딩중 입니다. \n잠시후 다시 시도해 주세요.');
+				return;
+			}
+			   		
+			MagicLine.Logout();
+			MagicLine.setSessionID("Pilot");			// 임의의 문자열 지정.
+			
+			p_skey = MagicLine.genSessionKey(was_enccert); //세션Key
+			
+			// 암호체계 고도화 기능 enable. SHA256 해쉬, RSA2048 사용
+		    MagicLine.setHashOption(1);        
+			
+			// 인증서 창 열기
+	        var v_logSgnt = MagicLine.ntsStrongAuth();
+	        if ( v_logSgnt == 0 ) { 
+	        	return; 
+	        } else {
+	            if (v_logSgnt.length < 30 ) {
+					window.status = "전자서명값 생성에 실패하였습니다.";
+					alert( "전자서명값 생성에 실패하였습니다.\n\n다시 시도해 주십시요." );
+					location.reload();
+					window.focus();
+					return;
+	            }
+
+				// 인증서 획득
+				var v_cert = MagicLine.tranx2PEM();
+				if ( v_cert == "" ) {
+					window.status = "";
+					window.focus();
+					return;
+				}
+
+				// 생성한 값
+				p_logSgnt	= v_logSgnt;
+				p_cert    	= v_cert;
+				v_rnd         = MagicLine.getRandomfromPrivateKey();
+				p_rnd_enc	= ( v_rnd == "" ) ? "" : MagicLine.encryptWebData(v_rnd);
+				
+				
+				//search@id 생성
+				var tmpDocStr =  "<search id='sCert'></search>";
+				var tmpDoc = WebSquare.xml.parse(tmpDocStr);
+				var findXpath = "screen/search[@id='sCert']";
+				var findTmpDoc = WebSquare.ModelUtil.findInstanceNode(findXpath);	//반복 호출시 동일한 xml이 생성됨을 막기 위함.
+				
+				if(nts_isNull(findTmpDoc)) {
+					WebSquare.ModelUtil.setInstanceNode(tmpDoc, "screen", null, "append");
+				} else {
+					WebSquare.ModelUtil.removeInstanceNode( findXpath );
+					WebSquare.ModelUtil.setInstanceNode(tmpDoc, "screen", null, "append");
+				}
+				
+				//screen/search[@id='bizInSrc']아래에 keyNm, keyCd 세팅
+				var tmpDocStr1 = "<skey>"+p_skey+"</skey>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);			
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<logSgnt>"+p_logSgnt+"</logSgnt>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<cert>"+p_cert+"</cert>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<randomEnc>"+p_rnd_enc+"</randomEnc>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<hashCntn>"+p_hash+"</hashCntn>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<crtfUqno></crtfUqno>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<crtfCntn></crtfCntn>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<crtfOidNo></crtfOidNo>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<crtfVldtTermStrtDt></crtfVldtTermStrtDt>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<crtfVldtTermEndDt></crtfVldtTermEndDt>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+				
+				var tmpDocStr1 = "<txprDscmNo>"+ param.txprDscmNo +"</txprDscmNo>";
+				var tmpDoc1 = WebSquare.xml.parse(tmpDocStr1);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc1, "screen/search[@id='sCert']", null, "append");
+							
+				//Action호출
+				var tmpDocStr = "<action id='ATXPPABA001A12' mode='asynchronous' callBack='fn_callbackPckCert' processMsg=''>";
+			    tmpDocStr += "  <indatalist>";
+				tmpDocStr += "    <indata type='search' src='search[@id=\"sCert\"]'  des='request' act='' />";
+				tmpDocStr += "  </indatalist>";
+				tmpDocStr += "  <outdatalist>";
+				tmpDocStr += "    <outdata type='search' src='reponse' des='search[@id=\"sCert\"]' />";
+				tmpDocStr += "  </outdatalist>";
+				tmpDocStr += "</action>";
+				
+				var tmpDoc = WebSquare.xml.parse(tmpDocStr);
+				WebSquare.ModelUtil.setInstanceNode(tmpDoc, "mapper", null, "append");
+				nts_doService("ATXPPABA001A12");
+	        } 
+		} else {
+	    	alert( "잘못된 팝업호출입니다. 입력값을 확인하여 주십시오.");
+	    	return false;
+	    }
+		
+	  	//공인인증이 아닌 경우 팝업 호출
+	    if( cd != "pkc") {
+	        //팝업호출
+	        var options = { 
+                id : popupId,    
+                popupName : popupName,
+                width: popupWidth,  
+                height: popupHeight, 
+                modal : popupModal, 
+                scrollbars : scrollbars,
+                srcData: popupSrcData,  
+                destData: popupDestData
+	        };
+	        
+            var paramStr = nts_openPopupEx(url, options);
+	    }		
+	}
+	
+	
+	function nts_openPopupEx(action, options){
+		var svrType = getSvrType();
+
+		var idenKey = new Date().getTime();  
+		
+		
+	    action = "https://"+svrType+"hometax.go.kr/websquare/websquare.html?w2xPath="+action;    
+		action += "&datas="+idenKey+"&popupID="+options.id; 
+		
+		if( window.datas == null ){ window.datas = {}; }
+	    if( window.resParam == null ){  window.resParam = {}; }
+	    if( window.ntsPopupName == null ){  window.ntsPopupName = {}; }
+	 
+	    var paramStr = inlineCvtJSONtoXMLString(options.pJSON);		    
+	    
+	    window.datas[idenKey] = paramStr;  
+	    window.resParam[idenKey] = options.destData;  
+	    window.ntsPopupName[idenKey] = options.popupName;  
+	 
+	    if( action.indexOf("/websquare/") < 0 ){
+	        action = "/websquare/popup.html?w2xPath="+action;
+	    }
+	    var windowOptions = "resizable=yes, width="+options.width+", height="+options.height+", top="+options.top+", left="+options.left;
+	    if( options.scrollbars == true ){ windowOptions += ", scrollbars=yes"; }
+	    
+	    window.open(action, options.id, windowOptions);
+	    
+	    function inlineCvtJSONtoXMLString(pObj, pKey){		        
+	        var paramStr = "";
+	        if( pObj != null ){
+				// List 구조
+		        if( typeof pObj == "object" && pObj instanceof Array ){
+		        	if( pKey != null ){ paramStr += "<list id='"+pKey+"'>"; }
+		            for(var i=0;i<pObj.length;i++){				          
+						paramStr += inlineCvtJSONtoXMLString(pObj[i], i);
+					}
+					if( pKey != null ){ paramStr += "</list>"; }
+		        }
+		        // Map 구조
+		        else if( typeof pObj == "object" && pObj instanceof Object ){	
+		            if( pKey != null ){ paramStr += "<map id='"+pKey+"'>"; }
+		            for(var key in pObj){				          
+						paramStr += inlineCvtJSONtoXMLString(pObj[key], key);
+					}
+					if( pKey != null ){ paramStr += "</map>"; }
+		        }				        
+		        // String 구조(최 말단 노드)
+		        else{
+	                if( pKey != null ){ paramStr += "<"+pKey+">"; }
+					paramStr += pObj;
+	                if( pKey != null ){ paramStr += "</"+pKey+">"; }
+		        }
+	        }
+	        return paramStr;		        
+	    }		    
+	}
+	
+	document.oncontextmenu = new Function('return false');			// 우클릭
+	//document.ondragstart = new Function('return false');				// 드래그
+	//document.onselectstart = new Function('return false');				// 선택
+	/************************************************************************/
+</script>
+
+<style type="text/css">
+.hand_over input,.hand_over img,.hand_over a {cursor:pointer;}
+</style>
+
+<!-- common script end -->
+
+
+
+<script type="text/javascript">
+function nts_moveLoginPage(){
+	svrType = getSvrType();
+	
+	var loginPage = "https://" + svrType + "hometax.go.kr";
+	
+	// 브라우저 최상단 영역에서 주소 변환
+	var prTop = window.top;
+	prTop.location.href = loginPage;
+	
+}
+</script>
+
+<script type="text/javascript">
+function subMenuShow(){
+	if(opener == null)
+	{
+		parent.mf_wfHeader_sub_menu.show();			
+	}	
+}
+</script>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko" lang="ko">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<script type="text/javascript">
+	var rndNum = Math.floor((Math.random() * 1000));
+	document.write('<link rel="stylesheet" type="text/css" href="css/comm/work_common.css?num=' + rndNum + ' " />');
+	document.write('<link rel="stylesheet" type="text/css" href="css/comm/work_style.css?num=' + rndNum + ' " />');
+	document.write('<link rel="stylesheet" type="text/css" href="css/comm/work_style02.css?num=' + rndNum + ' " />');
+	document.write('<link rel="stylesheet" type="text/css" href="css/comm/advice.css?num=' + rndNum + ' " />');
+</script>
+
+	
+	<title>국세청 홈택스</title>
+
+<script type="text/javascript">
+	var update_check1 = "";
+	var update_check2 = "";
+	var update_check3 = "";
+	var update_check4 = "";
+	
+	function go_list() {
+		document.form.target = "_self";
+		$("#form").prop('action', '/home.do');
+		var fromWhere = "";
+		if(fromWhere == 'scrap') {
+			$("#mode").val('getScrap');
+			$("#url").val('pub/getDelScrap');
+		}
+		else if(fromWhere == 'list') {
+			$("#mode").val('getListA01');
+			$("#url").val('pub/getListA01');
+		}
+		else if(fromWhere == 'semok') {
+			$("#mode").val('getListB04');
+			$("#url").val('pub/getListB04');
+		}
+		else if(fromWhere == 'faq') {
+			$("#mode").val('getFaq');
+			$("#url").val('pub/getFaq');
+		}
+		else if(fromWhere == 'hot') {
+			$("#mode").val('getHot');
+			$("#url").val('pub/getHot');
+		}
+		else {
+			$("#mode").val('getMy');
+			$("#url").val('pub/getMy');
+		}
+//		$("#mode").val('getListA01');
+//		$("#url").val('pub/getListA01');
+		$("#form").submit();
+	}
+	
+	function go_scrap() {
+		if($("#loginId").val() == '' && $("#loginNm").val() == '' && $("#cellula").val() == '' && $("#email").val() == '' ) {
+			parent.$c.util.nts_alert(parent.$p,'로그인 또는 사용자 정보가 필요합니다.');
+			return false;
+		}
+		$("#form").prop('action', '/home.do');
+		$("#mode").val('setScrap');
+		$("#url").val('pub/getReq_view');
+		$("#form").submit();	
+	}
+	
+	$(document).ready(function() {
+		var flag = "";
+		if(flag != '') {
+			if(flag == '0') {
+				parent.$c.util.nts_alert(parent.$p,'이미 등록된 문의입니다.');
+			}
+			else {
+				parent.$c.util.nts_alert(parent.$p,'등록되었습니다.');
+			}
+		}
+		
+		//20161031 엄정훈 추가
+		var chkScrap = 'null';
+		
+		if(chkScrap == 'Y'){
+			$("#scrapDiv").hide();
+			$("#satisDiv").hide();
+			$("#satisNoneDiv").hide();
+		}	
+		/*
+		$("#btnClick").click(function(){
+			$("#satisNoneDiv").show();
+		});
+		*/
+		/*
+		$("#btnHome").click(function(){
+		 	$("#form").prop('action', '/home.do');
+			$("#mode").val('getReq_tp');
+			$("#url").val('pub/getReq_tp');
+			$("#form").submit();			
+		});
+		*/
+		
+		if($("#answerContentDiv").html() != "" && $("#answerContentDiv").html() != undefined)
+		{
+			// 20220804 이도헌조사관님 상담사례 워터마크 추가
+			$("#answerContentDiv").css({"background":"url('img/comm/bg/bg_watermark.jpg')","background-repeat":"no-repeat","background-position":"center center","background-size":"contain"});
+		}
+		
+	});	
+
+	
+	function goInsert() {
+		if(!$("#satisTp1").is(":checked") && !$("#satisTp2").is(":checked")) {
+			parent.$c.util.nts_alert(parent.$p,'해결 여부를 선택해 주세요.');
+			return false;
+		} else {
+			document.formMove.url.value="pub/getReq_view_h";
+			document.formMove.target = "hid";
+			document.formMove.mode.value="setExamSatis";
+			document.formMove.satisTp.value = $("#satisTp1").is(":checked")?"Y":"N";
+			document.formMove.reqId.value = $("#reqId").val();
+			document.formMove.action = "/home.do";
+			document.formMove.submit();
+		}
+	}
+	
+	function recallSatis() {
+		$("#satisDiv").hide();
+//		$("#satisNoneDiv").show();
+	}
+	
+	//explore 버전 업그레이드 오류로 인한 print변경
+	function print(printArea) {
+		win = window.open('', '', 'width=768', 'resizable=no', 'left=50', 'top=50');
+		self.focus();
+		win.document.open();
+		
+		win.document.write("<html xmlns='http://www.w3.org/1999/xhtml'>");
+		win.document.write("<head>");
+		win.document.write("<meta http-equiv='Content-Type' content='text/html; charset=utf-8' />");
+		win.document.write("<link rel='stylesheet' type='text/css' href='css/comm/work_common.css?2' />");
+		win.document.write("<link rel='stylesheet' type='text/css' href='css/comm/work_style.css?2' />");
+		win.document.write("<link rel='stylesheet' type='text/css' href='css/comm/work_style02.css?2' />");
+		win.document.write("<link rel='stylesheet' type='text/css' href='css/comm/advice.css?2' />");
+		win.document.write("</head>");
+		win.document.write("<body onload='resizeParentHeight();'>");
+		win.document.write("<form method='post' name='form' id='form'  action='home.do'>");
+		win.document.write("<div style='zoom:85%; position:relative; margin:10px 15px;'>");
+		win.document.write(printArea); 
+		win.document.write("</div>"); 
+		win.document.write("</form>");
+		win.document.write("</body>");
+		win.document.write("<script language='javascript' type='text/javascript'>");
+		win.document.write("document.getElementById('satisDiv').style.display = 'none'; ");
+		win.document.write("document.getElementById('scrapDiv').style.display = 'none'; ");
+		win.document.write("document.getElementById('satisNoneDiv').style.display = 'none'; ");
+		win.document.write("document.getElementById('answerContentDiv').style=''; " );
+		win.document.write("var img = document.createElement('img'); ");
+		win.document.write("img.src = 'img/comm/bg/bg_watermark.jpg'; ");
+		win.document.write("img.style.position = 'absolute';" );
+		win.document.write("img.style.zIndex = '-1';" );
+		win.document.write("document.getElementById('bg_an').append(img); ");
+		win.document.write("</sc" + "ript>");
+		win.document.write("</html>");
+		
+		var print = setTimeout(function(){
+			win.document.close();
+			win.print();
+			win.close();
+		}, 1000);
+	}
+	
+
+	function alert_message() {
+		var val = "";
+		var text = "";
+		val = $("#reqId").val();
+		if (val != "")
+			text = encB64(val);
+		$("#reqId").val(text);
+		
+		if (false) {
+			parent.$c.util.nts_alert(parent.$p,'홈택스 홈페이지에서 로그인 후 나의상담내역에서 확인 \n바랍니다. 회원가입 후 로그인하시기 바랍니다.');
+			window.open('https://www.hometax.go.kr','','status=yes,menubar=yes,titlebar=yes,location=yes,scrollbars=yes,resizable=yes');
+		}
+	}
+		
+</script>
+</head>
+
+<body onload="resizeParentHeight();alert_message()">
+	<form method="post" name="formMove" id="formMove" >
+		<input type="hidden" name="url" value="" />
+		<input type="hidden" name="mode" value="" />
+		<input type="hidden" name="reqId" value="" />
+		<input type="hidden" name="satisTp" value="" />
+	</form>
+	<form method="post" name="form" id="form" >
+	<input type="hidden" name="url" id="url" value="" />
+	<input type="hidden" name="mode" id="mode" value="" />
+	<input type="hidden" name="url2" id="url2" value="" /> 
+	<input type="hidden" name="mode2" id="mode2" value="" />
+	<input type="hidden" name="reqTp" id="reqTp" value="" />
+	<input type="hidden" name="reqTpFg" name="reqTpFg" value="C" />
+	<input type="hidden" name="reqId" id="reqId" value="10077339" />
+	<input type="hidden" name="openfg" id="openfg" value="Y" />
+	<input type="hidden" name="ssoToken" value="" />
+	<input type="hidden" id="email" name="email" value="" />
+	<input type="hidden" id="cellula" name="cellula" value="" />
+	<input type="hidden" id="loginNm" name="loginNm" value="" />
+	<input type="hidden" id="loginId" name="loginId" value="" />
+	<input type="hidden" name="currentPage" value="1" />
+	<input type="hidden" name="countPerPage" value="10" />
+	<input type="hidden" id="fromWhere" name="fromWhere" value="" />
+	<input type="hidden" id="searchWd" name="searchWd" value="" />
+	<input type="hidden" id="searchField" name="searchField" value="" />
+	<input type="hidden" id="fr_dt" name="fr_dt" value="" />
+	<input type="hidden" id="to_dt" name="to_dt" value="" />
+	
+	<input type="hidden" id="reqTpCode" name="reqTpCode" value="" />
+	<input type="hidden" id="reqTpPath" name="reqTpPath" value="" />
+	
+	
+	<!-- 첨부파일 데이터 변수 -->
+	<input type="hidden" id="attach_docum_id" name="attach_docum_id" value="" />
+	<input type="hidden" id="attach_seq_no" name="attach_seq_no" value="" />
+	
+	<input type="hidden" id="decFlag" name="decFlag" value="Y" />
+
+	
+	<input type="hidden" id="secreteVal" name="secreteVal" value="0" />
+	
+	<!--본문 container_1280 S-->
+	<div class="w2group container container_1280" id="printArea">
+	
+			<!-- 타이틀 S -->
+			<div class="w2group wrap_title">
+				<div class="w2group tit_h2">
+					<h2>인터넷 상담사례</h2>
+				</div>
+			</div>
+			<!-- //타이틀 E -->
+			
+			<!--버튼 S-->
+			<div class="po_ab_t10">
+				<a class="btnbox btn_sm btn_bo_whgray" href="javascript:;" id="trigger2" onclick="print(document.getElementById('printArea').innerHTML);">인쇄</a>
+			</div>    
+			<!--//버튼 E-->
+			
+			<!-- 콘텐츠 S -->
+			<div class="contents">
+				<!-- 게시판 상세[질문] S-->
+				
+					
+						<div class="board_view">
+							<div class="bv_top">
+								<div class="bv_data">
+									<ul>
+										<li><strong class="txt_blue2">상담유형</strong>세금신고.납부.고지.환급-증명발급/일반세무서류 신청 관련</li>
+									</ul>
+									<div class="bv_data_r">
+										<ul>
+											<li><strong>작성자</strong>관리자</li>
+											<li><strong>조회수</strong>2657</li>
+											<li><strong>등록일</strong>2015-03-05</li>
+										</ul>
+									</div>
+								</div>
+								<div class="bv_tit bg_qu">
+									<span class="i_qu"><em class="screen_hide">Q</em></span>
+									
+										<h3>근로소득원천징수영수증 발급 관련</h3>
+										
+									
+								</div>
+							</div>
+							<div class="bv_content">
+								
+									정말 전화 안됩니다.. 물론 바쁘신거 아는데.. 정말 해도해도 안되서 내용 납깁니다.  <BR>  <BR> 국세청 홈텍스 조회하는 방법 알려주세요 <BR> <BR>개인- 근로소득원천징수영수증 발급 (2009~2013년도)  <BR>원천징수 의무자 - 기부금 명세서 (2009~2013년도)  <BR>  <BR>기부금 이월공제 관련때문에 급하게 확인해서 연말정산해야 합니다.. 꼭 빠른시간에 부탁드립니다.
+									
+								
+							</div>
+							<div class="bv_file">
+								<dl>
+									<dt><span>질문 첨부파일</span></dt>
+									
+								</dl>   
+							</div>
+						</div>
+					
+					
+				
+				<!-- //게시판 상세[질문] E-->
+	
+				<!-- 게시판 상세[답변] S-->
+				
+					
+					<div class="board_view mt30">
+						<div class="bv_top">
+							<div id="bg_an" class="bv_tit bg_an">
+								<span class="i_an"><em class="screen_hide">A</em></span><h3>답변</h3>
+								<div class="bv_data_r">
+									<ul>
+										<li><strong>답변일</strong>2015-03-24</li>
+									</ul>
+								</div>
+							</div>
+						</div>
+						<div id="answerContentDiv" class="bv_content"><P>안녕하세요 [신고납부․증명발급]을 이용해 주셔서 감사합니다.</P> <BR><P>먼저, 빠른 답변 드리지 못해서 정말 죄송합니다. </P> <BR><P>&nbsp;</P> <BR><P>1. 개인이 근로소득 원천징수영수증을 발급 하는 경우</P> <BR><P>홈택스 홈페이지 왼쪽 상단에 [My NTS]-[지급명세서 제출내역]입니다. </P> <BR><P>&nbsp;</P> <BR><P>근로소득, 일용근로소득 등 지급명세서는 회사가 국세청에 제출한 원천징수 영수증을 조회하는 것입니다. 관인없이 제공되는 소득자 확인용 서비스이며, 외부기관(은행, 관공서 등) 제출용으로 사용할 수 없습니다. </P> <BR><P>&nbsp;</P> <BR><P>소득증빙서류가 필요한 경우 2013년도까지 소득금액증명 발급 가능합니다. </P> <BR><P>2014년도 소득금액증명(종합소득세신고자용제외)은 5월 초에 출력 예정입니다.</P> <BR><P><BR>안타깝게도 2013년도 이전 원천징수영수증은 현행 홈택스에서는 확인 불가합니다. </P> <BR><P>홈택스에서는 2013년도 원천징수영수증은 3월말 출력 예정입니다. <BR></P> <BR><P>2. 원천징수의무자가 기부금명세서는 홈택스에서는 확인이 어렵습니다.</P> <BR><P>번거로우시더라도 관할 세무서로&nbsp;문의 부탁드립니다.</P> <BR><P>&nbsp;</P> <BR><P>불편 드려 죄송합니다. 좋은 하루 되시기 바랍니다.</P><br></div>
+						<div class="bv_file">
+							<dl>
+								<dt><span>답변 첨부파일</span></dt>
+								
+							</dl>   
+						</div>
+					</div>
+					
+				
+				<!-- //게시판 상세[답변] E-->
+	
+				<!--버튼 S-->
+				<div id="scrapDiv" class="btn_bbs tar">
+					
+						<a class="btnbox btn_md btn_gray" href="javascript:void(0);" onclick="go_scrap();">스크랩하기</a>
+					
+					<a class="btnbox btn_md btn_navy" href="javascript:void(0);" onclick="go_list();">목록</a>
+				</div>    
+				<!--//버튼 E-->
+	
+				<!-- 설문 조사 START -->
+				<div id="satisDiv">
+					<!--궁금하신 내용 해결 S-->
+	                <div class="satis_box">
+	                    <dl>
+	                        <dt>관심사항에 대해 궁금하신 내용이 해결되셨습니까?</dt>
+	                        <dd>
+	                            <div id="radio1" class="input_radio">
+	                                <div class="radio_item">
+	                                    <input type="radio" class="w2radio_input" name="satisTp" id="satisTp1" value="Y" />
+	                                    <label class="w2radio_label" for="satisTp1" id="radio1_input_0">예</label>
+	                                </div>
+	                                <div class="radio_item">
+	                                    <input type="radio" class="w2radio_input" name="satisTp" id="satisTp2" value="N" />
+	                                    <label class="w2radio_label" for="satisTp2" id="radio1_input_1">아니오</label>
+	                                </div>
+	                            </div>
+	                            <a class="btnbox btn_sm btn_whgray vat" href="javascript:void(0);" onclick="goInsert();">전송</a>
+	                        </dd>
+	                    </dl>
+	                </div>
+	            </div>
+	                <!--//궁금하신 내용 해결 E-->
+					<div id="satisNoneDiv" class="bott_info_box">
+						<div class="fl">
+							<strong><span>궁금하신 내용</span>이 해결되셨나요?</strong>
+							<p>추가적인 상담을 원하시면 전화상담 또는 인터넷상담신청을 등록해주시면 답변해드리겠습니다.</p>
+						</div>
+						<div class="fr">
+							<span class="t_call">전화상담<em>국번없이 126</em><i class="icon"><em class="screen_hide">126</em></i></span>
+							<span class="btn_itn"><a href="javascript:void(0);" onclick="go_erms_home();">인터넷 <em>상담신청</em></a></span>
+						</div>
+					</div>
+				<!-- 설문 조사 END -->
+			</div>
+			<!-- 콘텐츠 E -->
+	</div>
+	<!--본문 container_1280 E-->
+	</form>
+	<iframe src="" name="hid" id="hid" style="display:none" frameborder="10" scrolling="no" title="파일"></iframe>
+	<iframe src="" name="hidfd" id="hidfd" style="display:none" frameborder="10" scrolling="no" title="파일보기"></iframe>
+</body>
+</html>
