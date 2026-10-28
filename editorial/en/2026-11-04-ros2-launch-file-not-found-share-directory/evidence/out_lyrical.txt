@@ -1,0 +1,111 @@
+=== distro=lyrical
+python3-colcon-core 0.21.3+upstream-1
+python3-colcon-ros 0.5.0+upstream-1
+ros-lyrical-launch 3.9.8-1resolute.20260728.172811
+ros-lyrical-ros2launch 0.29.9-1resolute.20260915.085616
+setuptools 78.1.1
+Finished <<< cm_noinstall [1.46s]
+Finished <<< cm_fixed [1.49s]
+Finished <<< py_dup [2.05s]
+Finished <<< py_fixed [2.05s]
+Finished <<< py_globmiss [2.02s]
+Finished <<< py_flat [2.05s]
+Finished <<< py_nodata [1.20s]
+Summary: 7 packages finished [6.90s]
+--- ros2 launch py_nodata demo.launch.py
+file 'demo.launch.py' was not found in the share directory of package 'py_nodata' which is at '/ws/install/py_nodata/share/py_nodata'
+exit=1
+--- ros2 launch py_globmiss demo_launch.py
+file 'demo_launch.py' was not found in the share directory of package 'py_globmiss' which is at '/ws/install/py_globmiss/share/py_globmiss'
+exit=1
+--- ros2 launch py_fixed demo.launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- ros2 launch py_fixed other_launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- ros2 launch py_flat demo.launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- ros2 launch py_dup demo.launch.py
+file 'demo.launch.py' was found more than once in the share directory of package 'py_dup': ['/ws/install/py_dup/share/py_dup/demo.launch.py', '/ws/install/py_dup/share/py_dup/launch/demo.launch.py']
+exit=1
+--- ros2 launch cm_noinstall demo.launch.py
+file 'demo.launch.py' was not found in the share directory of package 'cm_noinstall' which is at '/ws/install/cm_noinstall/share/cm_noinstall'
+exit=1
+--- ros2 launch cm_fixed demo.launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- what got installed
+py_nodata: 
+py_globmiss: 
+py_fixed: ./launch/__pycache__/demo.launch.cpython-314.pyc ./launch/__pycache__/other_launch.cpython-314.pyc ./launch/demo.launch.py ./launch/other_launch.py 
+py_flat: ./__pycache__/demo.launch.cpython-314.pyc ./demo.launch.py 
+py_dup: ./demo.launch.py ./launch/demo.launch.py 
+cm_noinstall: 
+cm_fixed: ./launch/__pycache__/demo.launch.cpython-314.pyc ./launch/demo.launch.py 
+--- stale copy: edit src after a normal build, no rebuild
+--- ros2 launch py_fixed demo.launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- ros2 launch cm_fixed demo.launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- symlink-install build in fresh build/install dirs, then edit again
+Finished <<< cm_fixed [1.85s]
+Finished <<< py_fixed [2.26s]
+Summary: 2 packages finished [2.41s]
+lrwxrwxrwx install/cm_fixed/share/cm_fixed/launch/demo.launch.py -> /ws/src/cm_fixed/launch/demo.launch.py
+lrwxrwxrwx install/py_fixed/share/py_fixed/launch/demo.launch.py -> /ws/build/py_fixed/launch/demo.launch.py
+--- ros2 launch py_fixed demo.launch.py
+[INFO] [launch.user]: VERSION-3
+exit=0
+--- ros2 launch cm_fixed demo.launch.py
+[INFO] [launch.user]: VERSION-3
+exit=0
+--- new launch file added after symlink build, no rebuild
+--- ros2 launch cm_fixed new.launch.py
+file 'new.launch.py' was not found in the share directory of package 'cm_fixed' which is at '/ws/install/cm_fixed/share/cm_fixed'
+exit=1
+--- ros2 launch py_fixed new.launch.py
+file 'new.launch.py' was not found in the share directory of package 'py_fixed' which is at '/ws/install/py_fixed/share/py_fixed'
+exit=1
+--- after colcon build --symlink-install again
+Summary: 2 packages finished [2.13s]
+--- ros2 launch cm_fixed new.launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- ros2 launch py_fixed new.launch.py
+[INFO] [launch.user]: VERSION-1
+exit=0
+--- workspace not sourced (fresh shell, only /opt/ros)
+Package 'py_fixed' not found: "package 'py_fixed' not found, searching: ['/opt/ros/lyrical']"
+--- ros2launch lookup source
+def get_share_file_path_from_package(*, package_name, file_name):
+    """
+    Return the full path to a file in the share directory of a package.
+
+    :raises: PackageNotFoundError if package is not found
+    :raises: FileNotFoundError if the file is not found in the package
+    :raises: MultipleLaunchFilesError if the file is found in multiple places
+    """
+    package_share_directory = get_package_share_directory(package_name)
+    matching_file_paths = []
+    for root, dirs, files in os.walk(package_share_directory):
+        for name in files:
+            if name == file_name:
+                matching_file_paths.append(os.path.join(root, name))
+    if len(matching_file_paths) == 0:
+        raise FileNotFoundError(
+            "file '{}' was not found in the share directory of package '{}' which is at '{}'"
+            .format(file_name, package_name, package_share_directory))
+    if len(matching_file_paths) > 1:
+        raise MultipleLaunchFilesError(
+            "file '{}' was found more than once in the share directory of package '{}': [{}]"
+            .format(
+                file_name,
+                package_name,
+                ', '.join(["'{}'".format(x) for x in matching_file_paths])),
+            matching_file_paths)
+    return matching_file_paths[0]
+

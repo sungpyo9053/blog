@@ -1,0 +1,110 @@
+<pre><code>file 'demo.launch.py' was not found in the share directory of package 'my_pkg' which is at '/ws/install/my_pkg/share/my_pkg'</code></pre>
+
+<p>Short answer: <code>ros2 launch</code> never looks in your <code>src/</code> folder. It only searches the package's installed share directory, the path printed at the end of the error. Your launch file isn't there because the build never copied it. In an <code>ament_python</code> package, add the launch files to <code>data_files</code> in <code>setup.py</code>. In an <code>ament_cmake</code> package, add <code>install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})</code> to <code>CMakeLists.txt</code>. Then run <code>colcon build</code> again and re-source <code>install/setup.bash</code>. Two related cases catch people. After a normal build, the installed copy goes stale when you edit the source file. With <code>--symlink-install</code>, a launch file you add after the build isn't found until you rebuild.</p>
+
+<pre><code class="language-python"># setup.py (ament_python)
+import os
+from glob import glob
+
+data_files=[
+    # ... resource marker and package.xml entries ...
+    (os.path.join('share', package_name, 'launch'),
+     glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
+],</code></pre>
+
+<pre><code class="language-cmake"># CMakeLists.txt (ament_cmake), before ament_package()
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})</code></pre>
+
+<h2>First, look at what was installed</h2>
+
+<p>The error gives you the directory it searched, so check that directory before you change anything:</p>
+
+<pre><code>find /ws/install/my_pkg/share/my_pkg -name '*launch*'</code></pre>
+
+<p>If nothing comes back, the build didn't install the file, and the sections below say why. If the file is there and you still get the error, check the spelling: <code>ros2 launch</code> compares the file name exactly.</p>
+
+<h2>How ros2 launch finds the file</h2>
+
+<p>This is the lookup in <code>ros2launch</code>, read from the installed package in all three images (<a href="https://github.com/ros2/launch_ros/blob/rolling/ros2launch/ros2launch/api/api.py">source on GitHub</a>):</p>
+
+<pre><code class="language-python">package_share_directory = get_package_share_directory(package_name)
+matching_file_paths = []
+for root, dirs, files in os.walk(package_share_directory):
+    for name in files:
+        if name == file_name:
+            matching_file_paths.append(os.path.join(root, name))
+if len(matching_file_paths) == 0:
+    raise FileNotFoundError(
+        "file '{}' was not found in the share directory of package '{}' which is at '{}'" ...</code></pre>
+
+<p>It walks the whole install share directory, including subfolders, and wants exactly one file with that name. Your source tree isn't searched. Neither is any folder name you pass. The function was the same on Humble, Jazzy and Lyrical.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-28 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images. One workspace held seven tiny packages, each with a launch file that only logs <code>VERSION-1</code>. I built them with plain <code>colcon build</code>, ran <code>ros2 launch</code> on each, then edited and added files to test the stale-copy cases. All three distros gave the same result in every row:</p>
+
+<table>
+<thead><tr><th>Package setup</th><th>Result of <code>ros2 launch</code></th></tr></thead>
+<tbody>
+<tr><td>ament_python, launch file not in <code>data_files</code></td><td>was not found in the share directory</td></tr>
+<tr><td>ament_python, <code>glob('launch/*.launch.py')</code>, file named <code>demo_launch.py</code></td><td>was not found (the glob matched nothing)</td></tr>
+<tr><td>ament_python, <code>data_files</code> as above, into <code>share/pkg/launch</code></td><td>runs (<code>demo.launch.py</code> and <code>other_launch.py</code>)</td></tr>
+<tr><td>ament_python, installed to <code>share/pkg</code> with no <code>launch/</code> subfolder</td><td>runs</td></tr>
+<tr><td>Same file installed to both <code>share/pkg</code> and <code>share/pkg/launch</code></td><td><code>file 'demo.launch.py' was found more than once in the share directory</code></td></tr>
+<tr><td>ament_cmake without <code>install(DIRECTORY launch ...)</code>, plus a <code>setup.py</code> with correct <code>data_files</code></td><td>was not found (colcon ignored the setup.py)</td></tr>
+<tr><td>ament_cmake with <code>install(DIRECTORY launch ...)</code></td><td>runs</td></tr>
+<tr><td>Normal build, then source file edited, no rebuild</td><td>runs the <em>old</em> file (logged <code>VERSION-1</code>)</td></tr>
+<tr><td><code>--symlink-install</code> build, then source file edited</td><td>runs the edited file, for both build types</td></tr>
+<tr><td><code>--symlink-install</code> build, then a new launch file added</td><td>was not found, until another <code>colcon build --symlink-install</code></td></tr>
+<tr><td>Workspace built but not sourced</td><td>different error: <code>Package 'py_fixed' not found</code></td></tr>
+</tbody>
+</table>
+
+<h2>ament_python: the glob has to match your file names</h2>
+
+<p>The second row is the one people miss. <code>glob('launch/*.launch.py')</code> matches <code>robot.launch.py</code> but not <code>robot_launch.py</code>. If nothing matches, <code>setup.py</code> doesn't complain. The build reports <code>Finished</code> and you only find out at <code>ros2 launch</code>. The pattern in the fix above, <code>*launch.[pxy][yma]*</code>, matched both <code>demo.launch.py</code> and <code>other_launch.py</code> in my run. It is also written to cover <code>.xml</code> and <code>.yaml</code> launch files, which I didn't test. The current tutorial (<a href="https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Launch/Launch-system.html">Integrating launch files into ROS 2 packages</a>, same text for Humble) uses <code>glob('launch/*')</code>, which installs everything in the folder. I didn't measure that variant.</p>
+
+<p>The subfolder is up to you. Since the lookup walks the whole share directory, <code>share/pkg</code> and <code>share/pkg/launch</code> both worked. Pick one: installing the same file to both gave the "found more than once" error.</p>
+
+<h2>ament_cmake: setup.py is ignored</h2>
+
+<p>The build type comes from <code>&lt;build_type&gt;</code> in <code>package.xml</code>. When it says <code>ament_cmake</code>, colcon runs CMake, and a <code>setup.py</code> in the same folder has no effect. In my test package <code>setup.py</code> listed the launch file correctly, and nothing was installed. The fix is the <code>install(DIRECTORY ...)</code> line, and it has to come before <code>ament_package()</code>, as the tutorial says.</p>
+
+<h2>Stale copies and --symlink-install</h2>
+
+<p>A plain <code>colcon build</code> copies the launch file into <code>install/</code>. Edit the file in <code>src/</code> and the copy stays as it was. No error appears, and your edits seem to do nothing. With <code>--symlink-install</code>, the installed launch file was a symlink. For ament_cmake it pointed straight at <code>src/cm_fixed/launch/demo.launch.py</code>, and for ament_python at <code>build/py_fixed/launch/demo.launch.py</code>. Edits showed up on the next launch without a rebuild. A file created after the build still wasn't found, because no symlink exists for it yet. One more <code>colcon build --symlink-install</code> fixed that for both build types.</p>
+
+<h2>Not tested</h2>
+
+<p>XML and YAML launch files, <code>glob('launch/*')</code> from the current tutorial, <code>ros2 launch</code> called with a file path instead of a package name, and merged or isolated install layouts other than colcon's default.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Does the launch file have to be in a launch/ folder under share?</h3>
+<p>No. <code>ros2 launch</code> walks the package's whole share directory with <code>os.walk</code>. A file installed directly to <code>share/my_pkg</code> was found on Humble, Jazzy and Lyrical. It has to exist only once in that tree, though, or you get "was found more than once".</p>
+
+<h3>I edited my launch file but ros2 launch runs the old version. Why?</h3>
+<p>After a normal <code>colcon build</code>, <code>install/</code> holds a copy of the file. Rebuild after each edit, or build once with <code>--symlink-install</code> so the installed file is a symlink back to your source.</p>
+
+<h3>I use --symlink-install. Why is my new launch file not found?</h3>
+<p>Symlinks are only created at build time. A launch file added afterwards has no link in <code>install/</code> until you run <code>colcon build --symlink-install</code> again.</p>
+
+<h3>My package has both CMakeLists.txt and setup.py. Which one installs the launch files?</h3>
+<p>The one named by <code>build_type</code> in <code>package.xml</code>. With <code>ament_cmake</code>, the <code>data_files</code> in <code>setup.py</code> were ignored in my test, and only <code>install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})</code> in <code>CMakeLists.txt</code> installed the file.</p>
+
+<h3>The error says "Package not found" instead. Is that the same problem?</h3>
+<p>No. <code>Package 'my_pkg' not found</code> means the workspace isn't sourced, or the package didn't build. Run <code>source install/setup.bash</code> in that terminal. The "share directory" error only shows up once the package itself is found.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Does the launch file have to be in a launch/ folder under share?", "acceptedAnswer": {"@type": "Answer", "text": "No. ros2 launch walks the package's whole share directory with os.walk. A file installed directly to share/my_pkg was found on Humble, Jazzy and Lyrical. It has to exist only once in that tree, though, or you get 'was found more than once'."}},
+{"@type": "Question", "name": "I edited my launch file but ros2 launch runs the old version. Why?", "acceptedAnswer": {"@type": "Answer", "text": "After a normal colcon build, install/ holds a copy of the file. Rebuild after each edit, or build once with --symlink-install so the installed file is a symlink back to your source."}},
+{"@type": "Question", "name": "I use --symlink-install. Why is my new launch file not found?", "acceptedAnswer": {"@type": "Answer", "text": "Symlinks are only created at build time. A launch file added afterwards has no link in install/ until you run colcon build --symlink-install again."}},
+{"@type": "Question", "name": "My package has both CMakeLists.txt and setup.py. Which one installs the launch files?", "acceptedAnswer": {"@type": "Answer", "text": "The one named by build_type in package.xml. With ament_cmake, the data_files in setup.py were ignored in my test, and only install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}) in CMakeLists.txt installed the file."}},
+{"@type": "Question", "name": "The error says Package not found instead. Is that the same problem?", "acceptedAnswer": {"@type": "Answer", "text": "No. Package 'my_pkg' not found means the workspace isn't sourced, or the package didn't build. Run source install/setup.bash in that terminal. The share directory error only shows up once the package itself is found."}}
+]}
+</script>
+
+<p>Measured on 2026-10-28 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, ros2launch 0.19.14, launch 1.0.15, Python 3.10, setuptools 59.6.0), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, ros2launch 0.26.13, launch 3.4.12, Python 3.12, setuptools 68.1.2) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, ros2launch 0.29.9, launch 3.9.8, Python 3.14, setuptools 78.1.1), colcon-core 0.21.3, colcon-ros 0.5.0. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-04-ros2-launch-file-not-found-share-directory/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/25013">ros2 launch file was not found in the share directory</a>, <a href="https://robotics.stackexchange.com/questions/109984">_launch.py was not found in the share directory of package</a>, <a href="https://robotics.stackexchange.com/questions/108021">ROS2 Launch file is not found</a>.</p>
