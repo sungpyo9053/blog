@@ -81,3 +81,8 @@
 ## 10/28 사용자 결정
 - other_ad_net(6/7 보유): 카카오 애드핏은 인증코드(제휴 합의 계정만)라 신청 불가, Dable도 트래픽 기준 → **애드센스만 유지, 보류(트래픽 조건 미달)**. 일일 loss 루프에서 제외, 하루 방문 수백 명 도달 시 재검토.
 - 속도(TTFB): Cloudflare HTML 캐시 4시간 규칙으로 HIT 0.06초 → 해소.
+
+## 10/29 재측정 (08:53, bench_velocity·bench_features)
+- 발행 속도: huntlab 전체 78·7일 13·30일 43 (10/27: 74·10·40). 비교 thecheck 7일 33, yellowit 56, foxcg 100, blanclucy 12, aboda 타임아웃. KO 하루 4편 예약이 공개되기 시작해 다음 주 7일 수가 28+EN 7=35 안팎이 될 예정 → thecheck 수준.
+- 기능 loss: 남은 것은 other_ad_net(보류, 사용자 결정)·google_verify(DNS 인증, 효과 없음)뿐 → 기능 loss 루프는 사실상 끝. 앞으로 일일 loss는 ① 7일 발행 수 ② 색인률 ③ 노출 상위 글 CTR(제목·첫 문단)로 본다.
+- post_sec 1.14s(우리) vs 0.255s(중앙값)는 이 Mac이 일본 엣지(NRT·KIX·HKG)로 나가서 생긴 값이다. 서울 러너는 ICN HIT 0.05~0.09s. 스크립트도 NOT_LOSS로 분류한다 → 조치 없음.
