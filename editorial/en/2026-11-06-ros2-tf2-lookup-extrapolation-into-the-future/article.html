@@ -1,0 +1,218 @@
+<pre><code>Lookup would require extrapolation into the future.  Requested time 1793159231.232437 but the latest data is at time 1793159231.218410, when looking up transform from frame [base_link] to frame [odom]</code></pre>
+
+<p>The two related errors come from the same lookup call:</p>
+
+<pre><code>Lookup would require extrapolation into the past.  Requested time 1793159341.155947 but the earliest data is at time 1793159343.127506, when looking up transform from frame [base_link] to frame [odom]
+
+"odom" passed to lookupTransform argument target_frame does not exist.</code></pre>
+
+<p>Short answer: if you pass <code>self.get_clock().now()</code> as the lookup time, the lookup fails every time. In my run it failed 1,800 out of 1,800 times, at 10, 50 and 100 Hz, on Humble, Jazzy and Lyrical. The newest transform in the buffer is always at least about 1 ms older than "now", because it has to travel from the broadcaster to your listener first. Ask for the latest transform with <code>rclpy.time.Time()</code> (time 0), or keep the time you need and add a timeout:</p>
+
+<pre><code class="language-python">from rclpy.time import Time
+from rclpy.duration import Duration
+from tf2_ros import TransformException
+
+# Option 1: newest transform in the buffer, never waits
+t = self.tf_buffer.lookup_transform('odom', 'base_link', Time())
+
+# Option 2: transform at a specific time (a message stamp, or now), wait up to 0.1 s
+try:
+    t = self.tf_buffer.lookup_transform('odom', 'base_link', msg.header.stamp,
+                                        timeout=Duration(seconds=0.1))
+except TransformException as e:
+    self.get_logger().warn(str(e))</code></pre>
+
+<p>Option 1 returned a transform 200 out of 200 times at every rate. Option 2 with <code>now()</code> also succeeded 100 out of 100 times, but each call blocked for 20 to 100 ms. A timeout only helps if something else is spinning the listener while your code waits. In a plain single-threaded node, a lookup with a timeout inside a timer callback failed 12 out of 12 times.</p>
+
+<h2>Find your error text</h2>
+
+<table>
+<thead><tr><th>Error text</th><th>What it meant in my run</th><th>Fix that worked</th></tr></thead>
+<tbody>
+<tr><td><code>extrapolation into the future</code>, gap of a few ms to one publish period</td><td>Lookup at <code>now()</code> with no timeout</td><td><code>Time()</code>, or a timeout</td></tr>
+<tr><td><code>extrapolation into the future</code>, gap of seconds</td><td>The requested stamp is far ahead of the TF data. I requested <code>now()</code> + 5 s</td><td>Check the clocks. See the clock-mismatch section</td></tr>
+<tr><td><code>extrapolation into the past</code> ... <code>earliest data is at</code></td><td>The requested time is older than the buffer keeps (10 s by default), or older than when the listener started</td><td><code>Buffer(cache_time=Duration(seconds=30))</code>, or process the data sooner</td></tr>
+<tr><td><code>"odom" passed to lookupTransform argument target_frame does not exist</code></td><td>Buffer still empty. Every lookup made right after creating the listener failed this way</td><td>Wait with a timeout and keep the listener spinning</td></tr>
+<tr><td><code>"camera_link" passed to lookupTransform argument source_frame does not exist</code></td><td>The other frames are there, but this one is never published</td><td>Fix the frame name or start its broadcaster. A timeout only delays the error</td></tr>
+</tbody>
+</table>
+
+<p>Note the order in the message. I called <code>lookup_transform('odom', 'base_link', ...)</code>, target first, and the message says "from frame [base_link] to frame [odom]", source first.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-28 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images on a 2-vCPU cloud server, with <code>--network none</code> and the default RMW. All three images already had <code>tf2_ros</code> for Python. One Python process was the broadcaster. It sent a static <code>map</code> to <code>odom</code> transform once on <code>/tf_static</code>, and a dynamic <code>odom</code> to <code>base_link</code> transform on <code>/tf</code> from a timer, stamped with <code>now()</code>. A second Python process held a <code>Buffer</code> and a <code>TransformListener</code>, spun by its own executor thread, and ran the lookups. I waited a random 0 to 20 ms between lookups so they didn't line up with the publish timer. I counted <code>/tf</code> messages during each run, and the rate came out at exactly 10.0, 50.0 and 100.0 msg/s.</p>
+
+<p>The results were the same on all three distros. Where numbers differ, the table shows the range across Humble, Jazzy and Lyrical.</p>
+
+<table>
+<thead><tr><th>Lookup</th><th>10 Hz</th><th>50 Hz</th><th>100 Hz</th></tr></thead>
+<tbody>
+<tr><td><code>now()</code>, no timeout</td><td>0/200</td><td>0/200</td><td>0/200</td></tr>
+<tr><td><code>Time()</code> (latest)</td><td>200/200</td><td>200/200</td><td>200/200</td></tr>
+<tr><td><code>now()</code>, <code>timeout=0.1 s</code></td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>stamp 50 ms in the past, no timeout</td><td>92 to 103/200</td><td>200/200</td><td>200/200</td></tr>
+<tr><td>static <code>map</code> to <code>odom</code> at <code>now()</code></td><td>200/200</td><td>200/200</td><td>200/200</td></tr>
+<tr><td><code>map</code> to <code>base_link</code> (static + dynamic) at <code>now()</code></td><td>0/200</td><td>0/200</td><td>0/200</td></tr>
+<tr><td><code>can_transform</code> at <code>now()</code>, no timeout</td><td>False 200/200</td><td>False 200/200</td><td>False 200/200</td></tr>
+<tr><td><code>wait_for_transform_async(now())</code></td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+</tbody>
+</table>
+
+<h2>Why now() fails at every publish rate</h2>
+
+<p>tf2 interpolates between two stored transforms. It doesn't extrapolate past the newest one. When you ask for <code>now()</code>, the newest stored transform was stamped some time before now, so the request is always past the end of the data. The error message gives both times, so I subtracted them for every failure:</p>
+
+<table>
+<thead><tr><th>Publish rate</th><th>Requested minus latest, median</th><th>Max</th><th>Min</th></tr></thead>
+<tbody>
+<tr><td>10 Hz</td><td>48.4 to 49.5 ms</td><td>99.4 to 99.7 ms</td><td>1.2 to 1.5 ms</td></tr>
+<tr><td>50 Hz</td><td>8.9 to 10.6 ms</td><td>20.2 to 21.1 ms</td><td>1.0 to 1.3 ms</td></tr>
+<tr><td>100 Hz</td><td>4.8 to 5.2 ms</td><td>10.3 to 11.2 ms</td><td>1.0 to 1.2 ms</td></tr>
+</tbody>
+</table>
+
+<p>So the error rate does not depend on the publish rate. It was 100% at 10 Hz and 100% at 100 Hz. A faster publisher only makes the gap smaller: about half a period on average, and about one period at most. It never reached zero. Even right after a message arrived, the newest stamp was still at least 1.0 ms behind <code>now()</code>. That's the time from <code>sendTransform</code> to the listener's buffer on the same machine. Publishing faster won't remove the error. Change the lookup.</p>
+
+<p><code>can_transform</code> with <code>now()</code> and no timeout gives the same answer without an exception: it returned False 1,800 times out of 1,800. If your code checks <code>can_transform</code> first and skips the lookup when it's False, the node silently does nothing.</p>
+
+<h2>Time() returns the newest transform, and it is old</h2>
+
+<p><code>rclpy.time.Time()</code> is time zero, which tf2 reads as "the latest you have". It never raised an extrapolation error in my run. It returns the newest stored transform, so it's as old as the last message:</p>
+
+<table>
+<thead><tr><th>Publish rate</th><th>Age of the returned transform, median</th><th>Max</th></tr></thead>
+<tbody>
+<tr><td>10 Hz</td><td>45.5 to 54.5 ms</td><td>100.3 to 101.2 ms</td></tr>
+<tr><td>50 Hz</td><td>9.8 to 10.8 ms</td><td>20.3 to 21.2 ms</td></tr>
+<tr><td>100 Hz</td><td>4.5 to 5.2 ms</td><td>11.2 to 21.1 ms</td></tr>
+</tbody>
+</table>
+
+<p>A 10 ms old pose rarely matters. A 100 ms old pose on a turning robot does, so for sensor data look up the transform at the sensor's stamp. The C++ equivalent of <code>Time()</code> is <code>tf2::TimePointZero</code>.</p>
+
+<h2>What a timeout actually costs</h2>
+
+<p>With <code>timeout=Duration(seconds=0.1)</code>, the lookup at <code>now()</code> worked 100 out of 100 times at every rate. It waits until a transform newer than the requested time arrives, then interpolates. But the wait wasn't as short as I expected:</p>
+
+<table>
+<thead><tr><th>Publish rate</th><th>Call duration, median</th><th>Min</th><th>Max</th></tr></thead>
+<tbody>
+<tr><td>10 Hz</td><td>81.4 to 81.7 ms</td><td>20.5 to 40.9 ms</td><td>101.8 to 104.5 ms</td></tr>
+<tr><td>50 Hz</td><td>20.5 ms</td><td>20.3 to 20.4 ms</td><td>21.2 to 41.4 ms</td></tr>
+<tr><td>100 Hz</td><td>20.4 to 20.5 ms</td><td>20.3 to 20.4 ms</td><td>21.2 to 27.9 ms</td></tr>
+</tbody>
+</table>
+
+<p>At 100 Hz the next transform arrives about 5 ms later, yet the call took 20 ms. The reason is in the installed <code>tf2_ros/buffer.py</code>: <code>can_transform</code>, which <code>lookup_transform</code> calls, checks the buffer in a loop with <code>sleep(0.02)</code> between checks. That line is present on all three distros. So in Python, a timeout that has to wait at all costs at least about 20 ms, however fast your TF is. At 10 Hz the median was 81 ms. That's closer to a full period than to the 50 ms you might expect, because the 20 ms polling steps add delay too.</p>
+
+<p><code>Buffer.wait_for_transform_async()</code> doesn't poll. It returns a future that completes when the data arrives. I created the future for <code>now()</code>, waited for it, then looked up the transform:</p>
+
+<pre><code class="language-python">future = self.tf_buffer.wait_for_transform_async('odom', 'base_link', stamp)
+# in an async callback: await future
+# then:
+t = self.tf_buffer.lookup_transform('odom', 'base_link', stamp)</code></pre>
+
+<p>It completed 100 out of 100 times. The median wait was 88.8 to 91.1 ms at 10 Hz, 10.7 to 12.4 ms at 50 Hz and 6.0 to 7.0 ms at 100 Hz, about half the time to the next message, as expected. One outlier: on Jazzy at 10 Hz, one wait took 171.4 ms. This is the Python counterpart of <code>waitForTransform</code> from ROS 1.</p>
+
+<p>A timeout on a frame that doesn't exist waits the whole time. A lookup for an unpublished <code>camera_link</code> with a 0.5 s timeout raised <code>LookupException</code> after 500.9 to 506.9 ms. Without a timeout it failed in 0.0 to 0.1 ms. With no broadcaster at all, a 2 s timeout blocked for 2004.4 to 2005.5 ms. A request for <code>now()</code> + 5 s with a 0.5 s timeout blocked for 505.4 to 517.2 ms, then raised "extrapolation into the future" with a 4-second gap. If you put a timeout inside a control loop, a missing frame costs you the full timeout on every iteration.</p>
+
+<h2>The timeout needs something spinning the listener</h2>
+
+<p>The listener's subscription only fills the buffer when an executor runs it. If the thread that's waiting is the only one spinning the node, nothing arrives while it waits. I tested three setups, each with a 2 Hz timer whose callback did <code>lookup_transform(..., now(), timeout=0.2 s)</code> against a 50 Hz broadcaster:</p>
+
+<table>
+<thead><tr><th>Setup</th><th>Result</th><th>Call duration</th></tr></thead>
+<tbody>
+<tr><td>One node, <code>rclpy.spin_once</code> (single-threaded), listener on the same node</td><td>0/12, <code>ExtrapolationException</code></td><td>202.6 to 212.7 ms, the full timeout every time</td></tr>
+<tr><td>Same node, <code>MultiThreadedExecutor(num_threads=4)</code></td><td>11/11 ok</td><td>median 20.5 to 20.9 ms</td></tr>
+<tr><td><code>TransformListener(buffer, Node('tf_listener'), spin_thread=True)</code></td><td>12/12 ok</td><td>median 20.4 ms</td></tr>
+</tbody>
+</table>
+
+<p>In the single-threaded case the error looks like a plain timing problem, and a longer timeout only makes each callback block longer. The listener puts its subscriptions in a <code>ReentrantCallbackGroup</code>, so a multi-threaded executor can run them while your callback waits. The second fix is <code>spin_thread=True</code>, which gives the listener its own executor thread. Give it a separate node so the same node isn't spun by two executors. On Jazzy, the multi-threaded executor had two calls that took 243 and 333 ms, longer than the 0.2 s timeout, and still returned a transform. The 4 threads were competing for 2 CPUs.</p>
+
+<p>A buffer whose listener is never spun stays empty. In my no-spin test, with the broadcaster running, <code>lookup_transform(..., Time(), timeout=1 s)</code> blocked for 1012.5 to 1012.9 ms and then said <code>"odom" passed to lookupTransform argument target_frame does not exist</code>. If you see "does not exist" for a frame that <code>ros2 run tf2_ros tf2_echo</code> shows fine, check that your listener's node is actually being spun.</p>
+
+<h2>"target_frame does not exist" right after startup</h2>
+
+<p>A new <code>TransformListener</code> starts empty. Every lookup I made immediately after creating it failed with <code>"odom" passed to lookupTransform argument target_frame does not exist</code>. That happened in 18 out of 18 starts across the three distros, including the 15 starts where the broadcaster had been publishing for seconds. <code>can_transform</code> at that moment returned 0, not an exception. Then I waited with <code>lookup_transform(..., Time(), timeout=2 s)</code> in five fresh listener processes per distro:</p>
+
+<table>
+<thead><tr><th>Distro</th><th>Time until the first lookup succeeded (5 starts)</th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>465.6, 20.4, 20.4, 20.4, 121.5 ms</td></tr>
+<tr><td>Jazzy</td><td>485.9, 142.9, 144.7, 143.0, 143.2 ms</td></tr>
+<tr><td>Lyrical</td><td>182.3, 181.9, 182.4, 182.2, 182.2 ms</td></tr>
+</tbody>
+</table>
+
+<p>Discovery took between 20 ms and half a second, so a startup lookup without a timeout is a race. That fits one asker's report that the error happened "About 50% of the time". The fix is to wait once at startup with a timeout of a few seconds, from a thread that isn't the one spinning the listener, or to skip the first few cycles until <code>can_transform</code> returns true.</p>
+
+<h2>Static transforms and chains</h2>
+
+<p>A transform from <code>/tf_static</code> is valid at any time. A lookup of the static <code>map</code> to <code>odom</code> at <code>now()</code> worked 200 out of 200 times at every rate, with no timeout, even though it was published once at startup. A chain is only as good as its newest dynamic link, though. <code>map</code> to <code>base_link</code>, static plus dynamic, failed 200 out of 200 times at <code>now()</code>, with the same gap as the dynamic link alone. If a transform truly never changes, such as a sensor bolted to the chassis, publish it with <code>StaticTransformBroadcaster</code> or <code>static_transform_publisher</code> and not from a timer on <code>/tf</code>.</p>
+
+<h2>Use the message stamp, and when that fails</h2>
+
+<p>For sensor data, the right time is usually <code>msg.header.stamp</code>, the moment the data was captured. A stamp in the past is fine as long as a newer transform has arrived. With a stamp 50 ms old and no timeout, the lookup worked 200 out of 200 times at 50 and 100 Hz. At 10 Hz it worked only 92 to 103 times out of 200, roughly half, because half the time the next transform hadn't arrived yet. So with a fresh stamp, add a timeout of at least one TF period, or use <code>wait_for_transform_async</code>.</p>
+
+<p>In C++, <code>tf2_ros::MessageFilter</code> does this for you: it holds each message until its transform is available. The Python <code>tf2_ros</code> package had no <code>MessageFilter</code> attribute on any of the three distros. In Python, use <code>wait_for_transform_async</code> or a timeout.</p>
+
+<p>If the gap in the error is seconds rather than milliseconds, and it stays the same while the robot runs, it's not latency. Two clocks disagree: a sensor stamping in its own clock, a second machine without time sync, or <code>use_sim_time</code> set on only some nodes. I measured that case separately in <a href="https://huntlab.app/en/ros2-message-filter-dropping-message-clock-mismatch/">ROS 2 "Message Filter dropping message": find the mismatched clock</a>. The same subtraction on the two times in the extrapolation error tells you which clock is off.</p>
+
+<h2>Extrapolation into the past and cache_time</h2>
+
+<p>The buffer keeps 10 seconds of history by default. I let a listener run for 16 seconds at 50 Hz, then looked up older times:</p>
+
+<table>
+<thead><tr><th>Requested time</th><th>Default <code>Buffer()</code></th><th><code>Buffer(cache_time=Duration(seconds=30))</code></th></tr></thead>
+<tbody>
+<tr><td><code>now()</code> - 5 s</td><td>ok</td><td>ok</td></tr>
+<tr><td><code>now()</code> - 9.5 s</td><td>ok</td><td>ok</td></tr>
+<tr><td><code>now()</code> - 12 s</td><td>extrapolation into the past</td><td>ok</td></tr>
+<tr><td><code>now()</code> - 15 s</td><td>extrapolation into the past</td><td>ok</td></tr>
+<tr><td><code>now()</code> - 25 s</td><td>extrapolation into the past</td><td>extrapolation into the past</td></tr>
+</tbody>
+</table>
+
+<p>With the default buffer, the "earliest data" in the error was 10.02 to 10.04 s before the time I took <code>now()</code>. That's the 10 s cache. With the 30 s buffer, the 25 s request still failed, and its "earliest data" was 16.0 s back: the moment the listener started. A bigger cache can't hold data from before the listener started. Raise <code>cache_time</code> when you process messages late on purpose. If the stamps come from a clock that's behind, or a bag replayed against a fresh listener, fix that instead.</p>
+
+<h2>Version notes</h2>
+
+<p>Humble (tf2_ros 0.25.24), Jazzy (0.36.23) and Lyrical (0.45.10) behaved the same in every test. The error texts were identical, the 20 ms polling loop is present on all three, and none has a Python <code>MessageFilter</code>. Startup discovery times differed: Humble was fastest at 20.4 ms in three of five starts, Jazzy took about 143 ms and Lyrical about 182 ms. Jazzy and Lyrical printed <code>The following exception was never retrieved: cannot use Destroyable because destruction was requested</code> when the <code>spin_thread=True</code> listener shut down. It appeared after the results and had no effect on them.</p>
+
+<h2>Not tested</h2>
+
+<p>rclcpp (<code>lookupTransform</code>, <code>tf2_ros::MessageFilter</code>, <code>waitForTransform</code>), so I can't say whether C++ polls the same way. Also not tested: <code>use_sim_time</code> with a bag or simulator, two machines with clock offset, CycloneDDS or Zenoh instead of the default RMW, publish rates above 100 Hz, <code>lookup_transform_full</code> (time travel), TF published by <code>robot_state_publisher</code>, and loaded systems where the listener falls behind.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does lookup_transform with get_clock().now() always fail?</h3>
+<p>The newest transform in the buffer is always older than now, by at least 1.0 ms in my run and by up to one publish period. tf2 doesn't extrapolate, so the lookup failed 1,800 out of 1,800 times at 10, 50 and 100 Hz. Use <code>rclpy.time.Time()</code> for the latest transform, or add <code>timeout=Duration(seconds=0.1)</code>.</p>
+
+<h3>Will publishing TF faster fix "extrapolation into the future"?</h3>
+<p>No. At 100 Hz it still failed 200 out of 200 times. Only the gap shrank, from a median of about 49 ms at 10 Hz to about 5 ms at 100 Hz.</p>
+
+<h3>How long does a lookup_transform timeout block?</h3>
+<p>In rclpy it checks every 20 ms, so a lookup that has to wait took about 20.5 ms even at 100 Hz, and about 81 ms at 10 Hz. For a frame that doesn't exist, it blocks for the whole timeout: 0.5 s took about 506 ms.</p>
+
+<h3>Why does my timeout not help inside a timer callback?</h3>
+<p>With a single-threaded executor, the listener can't receive TF while your callback waits, so the lookup failed 12 out of 12 times after the full 0.2 s. A <code>MultiThreadedExecutor</code>, or <code>TransformListener</code> with <code>spin_thread=True</code> on its own node, fixed it.</p>
+
+<h3>How do I fix "extrapolation into the past"?</h3>
+<p>The requested time is older than the buffer's history. The default history is 10 s. <code>Buffer(cache_time=Duration(seconds=30))</code> fixed 12 and 15 s old lookups, but no buffer has data from before the listener started.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does lookup_transform with get_clock().now() always fail?", "acceptedAnswer": {"@type": "Answer", "text": "The newest transform in the buffer is always older than now, by at least 1.0 ms in my run and by up to one publish period. tf2 does not extrapolate, so the lookup failed 1,800 out of 1,800 times at 10, 50 and 100 Hz. Use rclpy.time.Time() for the latest transform, or add timeout=Duration(seconds=0.1)."}},
+{"@type": "Question", "name": "Will publishing TF faster fix extrapolation into the future?", "acceptedAnswer": {"@type": "Answer", "text": "No. At 100 Hz it still failed 200 out of 200 times. Only the gap shrank, from a median of about 49 ms at 10 Hz to about 5 ms at 100 Hz."}},
+{"@type": "Question", "name": "How long does a lookup_transform timeout block?", "acceptedAnswer": {"@type": "Answer", "text": "In rclpy it checks every 20 ms, so a lookup that has to wait took about 20.5 ms even at 100 Hz, and about 81 ms at 10 Hz. For a frame that does not exist, it blocks for the whole timeout: 0.5 s took about 506 ms."}},
+{"@type": "Question", "name": "Why does my timeout not help inside a timer callback?", "acceptedAnswer": {"@type": "Answer", "text": "With a single-threaded executor, the listener cannot receive TF while your callback waits, so the lookup failed 12 out of 12 times after the full 0.2 s. A MultiThreadedExecutor, or TransformListener with spin_thread=True on its own node, fixed it."}},
+{"@type": "Question", "name": "How do I fix extrapolation into the past?", "acceptedAnswer": {"@type": "Answer", "text": "The requested time is older than the buffer history. The default history is 10 s. Buffer(cache_time=Duration(seconds=30)) fixed 12 and 15 s old lookups, but no buffer has data from before the listener started."}}
+]}
+</script>
+
+<p>Measured on 2026-10-28 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, tf2 and tf2_ros 0.25.24, rclpy 3.3.22), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, tf2 and tf2_ros 0.36.23, rclpy 7.1.12) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, tf2 and tf2_ros 0.45.10, rclpy 10.0.11), default RMW, Python only. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-06-ros2-tf2-lookup-extrapolation-into-the-future/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/99932">ROS2 lookupTransform() - cannot get transform at time now()</a>, <a href="https://robotics.stackexchange.com/questions/98182">Waiting for TransformListener with ROS2 and Python?</a>, <a href="https://robotics.stackexchange.com/questions/24036">Lookup would require extrapolation into the future on the same machine</a>, <a href="https://robotics.stackexchange.com/questions/110849">transformPoseInTargetFrame: Extrapolation Error looking up target frame</a>, <a href="https://robotics.stackexchange.com/questions/91993">tf2 transform error: Lookup would require extrapolation into the past</a>.</p>
