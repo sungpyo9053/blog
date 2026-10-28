@@ -1,0 +1,194 @@
+<pre><code>A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.2.6 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11&gt;=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy&lt;2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "/tmp/tests.py", line 8, in &lt;module&gt;
+    import cv_bridge; from cv_bridge import CvBridge
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/cv_bridge/__init__.py", line 6, in &lt;module&gt;
+    from cv_bridge.boost.cv_bridge_boost import cvtColorForDisplay, getCvType
+AttributeError: _ARRAY_API not found</code></pre>
+
+<p>A few lines later, usually at <code>CvBridge()</code>, the real failure appears:</p>
+
+<pre><code>  File "/opt/ros/humble/local/lib/python3.10/dist-packages/cv_bridge/core.py", line 71, in __init__
+    import cv2
+ImportError: numpy.core.multiarray failed to import</code></pre>
+
+<p>Short answer: on Humble and Jazzy, the apt-built <code>cv_bridge</code> and <code>python3-opencv</code> were compiled against NumPy 1.x. A pip NumPy 2 earlier on the path breaks them. The fix that worked every time was to remove pip's NumPy so Python falls back to the apt one:</p>
+
+<pre><code>pip uninstall numpy        # add --break-system-packages on Jazzy
+python3 -c "import numpy; print(numpy.__version__, numpy.__file__)"
+# want: /usr/lib/python3/dist-packages/numpy/__init__.py</code></pre>
+
+<p>If another package needs a pip NumPy, use <code>pip install "numpy&lt;2"</code>. If you also need a pip OpenCV, pin it to <code>"opencv-python-headless&lt;4.12"</code>, because every OpenCV wheel from 4.12 on requires NumPy 2. Current OpenCV 5 wheels break <code>cv_bridge</code> with <code>KeyError: 16</code> even when NumPy is 1.x. Lyrical is different. Its apt NumPy is 2.3.5, its <code>cv_bridge</code> works with NumPy 2, and <code>numpy&lt;2</code> has no wheel for its Python 3.14.</p>
+
+<h2>Find your error</h2>
+
+<p>All of these came from the same image round-trip test on a clean <code>ros:*-ros-base</code> container. The "where" column is the line in the traceback that points at ROS or OpenCV code.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>Where</th><th>Cause in my runs</th></tr></thead>
+<tbody>
+<tr><td><code>A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x</code> + <code>AttributeError: _ARRAY_API not found</code></td><td><code>cv_bridge/__init__.py</code>, line 6</td><td>pip NumPy 2 with the apt <code>cv_bridge</code> (Humble, Jazzy). The message is printed, but the import doesn't fail.</td></tr>
+<tr><td><code>ImportError: numpy.core.multiarray failed to import</code></td><td><code>import cv2</code>, or <code>cv_bridge/core.py</code> line 71 inside <code>CvBridge()</code></td><td>pip NumPy 2 with the apt <code>python3-opencv</code> (Humble 4.5.4, Jazzy 4.6.0)</td></tr>
+<tr><td>Exit code 139 (segmentation fault), no exception for the crash itself</td><td><code>imgmsg_to_cv2</code></td><td>pip NumPy 2 + pip <code>opencv-python</code> 4.14.0.94 with the apt <code>cv_bridge</code> (Humble, Jazzy)</td></tr>
+<tr><td><code>KeyError: 16</code></td><td><code>cv_bridge/core.py</code> line 276, <code>cv2_to_imgmsg</code></td><td>pip <code>opencv-python</code> 5.0.0.93, with any NumPy, on all three distros</td></tr>
+<tr><td><code>AttributeError: `np.maximum_sctype` was removed in the NumPy 2.0 release.</code></td><td><code>import tf_transformations</code> → <code>transforms3d/quaternions.py</code></td><td>NumPy 2 with apt <code>transforms3d</code> 0.3.1 (Humble) or 0.4.1 (Jazzy)</td></tr>
+<tr><td><code>AttributeError: module 'numpy' has no attribute 'float'.</code></td><td>same place</td><td>Humble's <code>transforms3d</code> 0.3.1 with NumPy 1.26.4. <code>numpy&lt;2</code> doesn't fix this one.</td></tr>
+<tr><td><code>ERROR: Cannot uninstall numpy 1.26.4, RECORD file not found. Hint: The package was installed by debian.</code></td><td><code>pip install --break-system-packages -U numpy</code> (or <code>opencv-python</code>)</td><td>Jazzy's pip refuses to replace the apt NumPy, and nothing gets installed</td></tr>
+</tbody>
+</table>
+
+<p>Some things never broke. <code>sensor_msgs_py.point_cloud2.read_points_numpy</code>, a <code>sensor_msgs/Imu</code> with its <code>float64[9]</code> covariance, and a <code>sensor_msgs/JointState</code> with <code>float64[]</code> fields all went through <code>serialize_message</code>/<code>deserialize_message</code> fine with NumPy 2.2.6 on Humble and 2.5.4 on Jazzy. If your traceback ends in one of those, look elsewhere. (For the point cloud side, see <a href="https://huntlab.app/en/ros-2-python-pointcloud2-to-xyz-numpy-array-read-points-numpy/">PointCloud2 to an XYZ NumPy array with read_points_numpy</a>.)</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-28 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on an x86_64 server, one distro at a time. In each, I installed <code>ros-$DISTRO-cv-bridge</code>, <code>ros-$DISTRO-sensor-msgs-py</code>, <code>ros-$DISTRO-tf-transformations</code>, <code>python3-pip</code> and <code>python3-venv</code> from apt. Then I ran eight checks in separate processes:</p>
+
+<ul>
+<li>print the NumPy version and file</li>
+<li><code>import cv2</code> (version, file, <code>cv2.CV_8UC3</code>)</li>
+<li><code>import cv_bridge</code></li>
+<li>a <code>CvBridge</code> round-trip: <code>bgr8</code> to message and back, <code>bgr8</code> to <code>mono8</code>, and a <code>16UC1</code> image</li>
+<li><code>read_points_numpy</code> on a two-point cloud</li>
+<li>serialize and deserialize an <code>Imu</code></li>
+<li>serialize and deserialize a <code>JointState</code></li>
+<li><code>tf_transformations.quaternion_from_euler(0, 0, 1.5707963)</code></li>
+</ul>
+
+<p>I repeated the checks after each pip change. pip used wheels only. Results on Humble (apt NumPy 1.21.5):</p>
+
+<table>
+<thead><tr><th>State</th><th>NumPy</th><th>cv2</th><th>CvBridge round-trip</th><th>tf_transformations</th></tr></thead>
+<tbody>
+<tr><td>apt only</td><td>1.21.5</td><td>4.5.4 apt</td><td>ok</td><td>ok</td></tr>
+<tr><td><code>pip install numpy</code></td><td>1.21.5 (pip: "Requirement already satisfied")</td><td>4.5.4 apt</td><td>ok</td><td>ok</td></tr>
+<tr><td><code>pip install -U numpy</code></td><td>2.2.6</td><td><code>numpy.core.multiarray failed to import</code></td><td>same ImportError</td><td><code>np.maximum_sctype</code> removed</td></tr>
+<tr><td><code>pip install "numpy&lt;2"</code></td><td>1.26.4</td><td>4.5.4 apt</td><td>ok</td><td><code>no attribute 'float'</code></td></tr>
+<tr><td><code>pip install "numpy&lt;1.24"</code></td><td>1.23.5</td><td>4.5.4 apt</td><td>ok</td><td>ok</td></tr>
+<tr><td><code>pip install -U numpy transforms3d</code></td><td>2.2.6</td><td>ImportError</td><td>ImportError</td><td>ok (transforms3d 0.4.2)</td></tr>
+<tr><td><code>pip uninstall numpy</code></td><td>1.21.5 apt</td><td>4.5.4 apt</td><td>ok</td><td>ok</td></tr>
+<tr><td><code>pip install opencv-python</code></td><td>2.2.6 (pulled in)</td><td>5.0.0 pip</td><td><code>KeyError: 16</code></td><td><code>np.maximum_sctype</code> removed</td></tr>
+<tr><td>then <code>pip install "numpy&lt;2"</code></td><td>1.26.4</td><td>5.0.0 pip</td><td><code>KeyError: 16</code></td><td><code>no attribute 'float'</code></td></tr>
+<tr><td><code>pip install "opencv-python&lt;5"</code></td><td>2.2.6 (pulled in)</td><td>4.14.0 pip</td><td>exit 139 (segfault)</td><td><code>np.maximum_sctype</code> removed</td></tr>
+<tr><td><code>pip install "opencv-python-headless&lt;4.12" "numpy&lt;2"</code></td><td>1.26.4</td><td>4.11.0 pip</td><td>ok</td><td><code>no attribute 'float'</code></td></tr>
+</tbody>
+</table>
+
+<p>I ran the Humble script twice, and both runs gave the same table, including the segfault.</p>
+
+<h2>Cause 1: the apt cv_bridge and cv2 were built against NumPy 1.x</h2>
+
+<p>The NumPy message is misleading in one way. For <code>cv_bridge</code> it is printed with a traceback, but the import doesn't fail. In every NumPy 2 run, <code>import cv_bridge</code> exited 0, and <code>cv_bridge.getCvType</code> from the boost module was still there. The process dies a few lines later, when <code>CvBridge()</code> runs <code>import cv2</code> and the apt <code>cv2</code> raises <code>ImportError: numpy.core.multiarray failed to import</code>. That's why many tracebacks show both errors. The first comes from <code>cv_bridge_boost</code>, and the one that stops you comes from <code>cv2</code>.</p>
+
+<p>If a pip OpenCV built for NumPy 2 replaces the apt <code>cv2</code>, the ImportError goes away and things get worse. With NumPy 2.2.6 and <code>opencv-python</code> 4.14.0.94, <code>CvBridge()</code> and <code>cv2_to_imgmsg</code> worked. Then <code>imgmsg_to_cv2</code>, which calls into the NumPy 1.x boost module, crashed the interpreter with exit code 139. There was no Python exception. That is the "may crash" in the warning. It happened in both Humble runs and on Jazzy.</p>
+
+<p>The fix is to make the process load the NumPy that <code>cv_bridge</code> was built with:</p>
+
+<ul>
+<li><strong><code>pip uninstall numpy</code></strong> worked on Humble and Jazzy. pip only removes its own copy. On Humble it said <code>Not uninstalling numpy at /usr/lib/python3/dist-packages, outside environment /usr</code> and left the apt NumPy in place, which is what you want.</li>
+<li><strong><code>pip install "numpy&lt;2"</code></strong> gave 1.26.4, and <code>cv_bridge</code> plus the apt <code>cv2</code> worked again. It's the right choice when another pip package needs a newer NumPy than apt's 1.21.5.</li>
+</ul>
+
+<p>After either fix, check which file is loaded. Then check it again with the interpreter your node actually runs.</p>
+
+<h2>Cause 2: OpenCV wheels from 4.12 on require NumPy 2, and 5.0 breaks cv_bridge</h2>
+
+<p>On Humble, plain <code>pip install opencv-python</code> printed <code>Successfully installed numpy-2.2.6 opencv-python-5.0.0.93</code>. NumPy 2 often arrives this way. Nobody asked for it, and it comes in as a dependency. I asked pip's resolver (a dry run with pip 26.2.2) what each OpenCV version needs:</p>
+
+<table>
+<thead><tr><th>Package spec</th><th>Resolved to</th><th>NumPy requirement (Python 3.9+)</th></tr></thead>
+<tbody>
+<tr><td><code>opencv-python</code> / <code>opencv-python-headless</code></td><td>5.0.0.93</td><td><code>numpy&gt;=2</code></td></tr>
+<tr><td><code>opencv-python&lt;5</code></td><td>4.14.0.94</td><td><code>numpy&gt;=2</code></td></tr>
+<tr><td><code>opencv-python==4.12.0.88</code></td><td>4.12.0.88</td><td><code>numpy&lt;2.3.0,&gt;=2</code></td></tr>
+<tr><td><code>opencv-python==4.11.0.86</code>, <code>opencv-python-headless&lt;4.12</code></td><td>4.11.0.86</td><td><code>numpy&gt;=1.21.2</code> (py3.10), <code>&gt;=1.26.0</code> (py3.12)</td></tr>
+<tr><td><code>opencv-python==4.10.0.84</code></td><td>4.10.0.84</td><td>same as 4.11, NumPy 1.x allowed</td></tr>
+<tr><td><code>opencv-python "numpy&lt;2"</code></td><td>4.11.0.86</td><td>the resolver backs off to 4.11 by itself</td></tr>
+</tbody>
+</table>
+
+<p>Pinning NumPy alone doesn't help after OpenCV 5 is already installed. pip printed <code>opencv-python 5.0.0.93 requires numpy&gt;=2; python_version &gt;= "3.9", but you have numpy 1.26.4 which is incompatible.</code> and installed 1.26.4 anyway. The bridge then failed with <code>KeyError: 16</code> in <code>cv2_to_imgmsg</code>. That error has nothing to do with NumPy. <code>cv2.CV_8UC3</code> is <code>16</code> in OpenCV 4.x and <code>64</code> in the 5.0.0 wheel, while the C++ side of <code>cv_bridge</code> still returns OpenCV 4 type codes. It failed the same way on Lyrical, where NumPy wasn't an issue at all.</p>
+
+<p>The combination that worked on Humble and Jazzy was <code>pip install "opencv-python-headless&lt;4.12" "numpy&lt;2"</code>, which gave 4.11.0.86 with 1.26.4. Or don't pip-install OpenCV at all, and use the apt <code>cv2</code>.</p>
+
+<h2>Cause 3: tf_transformations depends on an old transforms3d</h2>
+
+<p><code>tf_transformations</code> imports <code>transforms3d</code>, and the apt versions use NumPy names that are gone. On Humble, apt <code>transforms3d</code> 0.3.1 calls <code>np.maximum_sctype(np.float)</code>. It worked only with NumPy 1.21.5 and 1.23.5. With 1.26.4 it failed on <code>np.float</code>, and with 2.2.6 on <code>np.maximum_sctype</code>. So on Humble <code>numpy&lt;2</code> fixes <code>cv_bridge</code> but not <code>tf_transformations</code>. Two things worked here: <code>pip install transforms3d</code> (0.4.2, ok with NumPy 2.2.6 and with 1.26.4), or <code>numpy&lt;1.24</code>. Jazzy's apt 0.4.1 worked with 1.26.4 and failed with NumPy 2.5.4. Lyrical's apt 0.4.2 worked with NumPy 2.</p>
+
+<h2>Cause 4: pip on Jazzy and Lyrical won't replace the apt NumPy</h2>
+
+<p>On Jazzy and Lyrical, plain <code>pip install</code> stops with PEP 668's <code>externally-managed-environment</code> error. With <code>--break-system-packages</code>, <code>pip install -U numpy</code> and <code>pip install opencv-python</code> both stopped at <code>ERROR: Cannot uninstall numpy 1.26.4, RECORD file not found. Hint: The package was installed by debian.</code> and installed nothing. So on a stock Jazzy the system NumPy is hard to break by accident. NumPy 2 got in two ways in my runs: a venv, or <code>--ignore-installed</code>. Both broke things exactly as on Humble. With <code>--ignore-installed</code> NumPy 2.5.4, <code>import cv2</code> failed with the ImportError. With <code>opencv-python&lt;5</code> the round-trip segfaulted, and with <code>opencv-python</code> 5.0.0.93 it raised <code>KeyError: 16</code>.</p>
+
+<p>Be careful with uninstall on Jazzy. <code>pip uninstall --break-system-packages transforms3d</code> printed <code>Successfully uninstalled transforms3d-0.4.1</code>, and that was the apt copy. Afterwards <code>import transforms3d</code> failed, while <code>dpkg</code> still listed <code>python3-transforms3d</code> as installed. <code>apt-get install --reinstall python3-transforms3d</code> brought it back. Before you uninstall anything, check that <code>numpy.__file__</code> points into <code>/usr/local/lib</code> or your venv.</p>
+
+<h2>venvs: --system-site-packages vs isolated</h2>
+
+<p>A venv doesn't protect you here. <code>source /opt/ros/$DISTRO/setup.bash</code> puts the ROS Python packages on <code>PYTHONPATH</code>, so every venv sees the apt-built <code>cv_bridge</code>. For how ROS picks the interpreter at all, see <a href="https://huntlab.app/en/ros2-run-conda-venv-no-module-named-torch-shebang/">ros2 run, conda and venv: which Python your node really uses</a>.</p>
+
+<ul>
+<li><strong><code>python3 -m venv --system-site-packages</code></strong>, nothing installed: uses the apt NumPy, and the <code>CvBridge</code> round-trip, point cloud and message checks passed on all three distros. After <code>pip install -U numpy</code> inside it (2.2.6 on Humble, 2.5.4 on Jazzy), it broke the same way as the system install. <code>pip install "numpy&lt;2"</code> inside it fixed <code>cv_bridge</code> again.</li>
+<li><strong>Isolated venv</strong> (no system site packages): it sees ROS but not the apt NumPy, <code>cv2</code> or <code>transforms3d</code>. Importing <code>sensor_msgs.msg</code> failed with <code>No module named 'numpy'</code>. With pip NumPy 2.2.6, <code>cv_bridge</code> printed the same <code>_ARRAY_API not found</code> message. On Humble, <code>pip install "numpy&lt;2" "opencv-python-headless&lt;4.12" transforms3d</code> made all eight checks pass. On Jazzy, the message checks also needed PyYAML (<code>No module named 'yaml'</code> from <code>rclpy/parameter.py</code>). On Lyrical, even <code>import cv_bridge</code> needed <code>em</code> (<code>No module named 'em'</code> from <code>rosidl_pycommon</code>). I didn't chase those further.</li>
+</ul>
+
+<p>If you need a venv for something like PyTorch, <code>--system-site-packages</code> plus <code>numpy&lt;2</code> was the shortest setup that worked.</p>
+
+<h2>Which pip packages pull in NumPy 2</h2>
+
+<p>These come from the resolver dry run in a <code>--system-site-packages</code> venv that already had the apt NumPy:</p>
+
+<ul>
+<li><code>opencv-python</code> and <code>opencv-python-headless</code>: 5.0.0.93, which needs <code>numpy&gt;=2</code>. Resolved NumPy: 2.2.6 on Humble, 2.5.4 on Jazzy.</li>
+<li><code>ultralytics</code> 8.4.191: by itself it asks for <code>numpy&gt;=1.23.0</code> on Linux. But it pulls <code>opencv-python</code> 5.0.0.93, so the plan included NumPy 2.2.6 on Humble and 2.5.4 on Jazzy.</li>
+<li><code>torch</code> 2.14.1: no NumPy requirement, and the dry run installed no NumPy.</li>
+</ul>
+
+<p>So in these runs, "I installed ultralytics and cv_bridge broke" was really OpenCV 5 and the NumPy 2 it requires. Installing <code>ultralytics</code> with <code>"opencv-python-headless&lt;4.12" "numpy&lt;2"</code> in the same command is the obvious next step, but I didn't run it.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble</strong> (Ubuntu 22.04, Python 3.10.12, pip 22.0.2): apt NumPy 1.21.5, no PEP 668. <code>pip install -U numpy</code> as root put NumPy 2.2.6 in <code>/usr/local/lib/python3.10/dist-packages</code>, ahead of apt. This is the easiest distro to break.</li>
+<li><strong>Jazzy</strong> (Ubuntu 24.04, Python 3.12.3, pip 24.0): apt NumPy 1.26.4. The breakage is the same once NumPy 2 is loaded. <code>numpy&lt;2</code> was already satisfied by apt. <code>numpy&lt;1.24</code> had no wheel for Python 3.12 (the oldest offered was 1.26.0).</li>
+<li><strong>Lyrical</strong> (Ubuntu 26.04, Python 3.14.4, pip 25.1.1): apt NumPy 2.3.5. Every check passed with apt NumPy, and also with NumPy 2.5.4 in a venv. <code>numpy&lt;2</code> found no wheel (<code>from versions: 2.3.2, 2.3.3, ...</code>). Don't downgrade NumPy on Lyrical. <code>opencv-python</code> 5.0.0.93 still gave <code>KeyError: 16</code>, and <code>opencv-python&lt;5</code> (4.14.0.94) worked.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>arm64 and Jetson, conda environments, <code>pip install --user</code>, building <code>cv_bridge</code> from source against NumPy 2, opencv-python 4.13, actually installing ultralytics or torch (dry run only), Iron and Rolling, and rclpy publish/subscribe over DDS (I only tested serialization).</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I fix "AttributeError: _ARRAY_API not found" when importing cv_bridge?</h3>
+<p>On Humble and Jazzy, a pip NumPy 2 is shadowing the apt NumPy 1.x that <code>cv_bridge</code> was built with. Run <code>pip uninstall numpy</code> so Python falls back to apt, or <code>pip install "numpy&lt;2"</code>. Then confirm with <code>python3 -c "import numpy; print(numpy.__file__)"</code>.</p>
+
+<h3>Why does cv_bridge import fine but my node dies at CvBridge()?</h3>
+<p>The boost module prints the NumPy 1.x message but still loads. <code>CvBridge()</code> then imports <code>cv2</code>, and the apt <code>cv2</code> raises <code>ImportError: numpy.core.multiarray failed to import</code>. With a pip OpenCV 4.14 instead, the process segfaulted in <code>imgmsg_to_cv2</code>.</p>
+
+<h3>I pinned numpy below 2 and still get KeyError: 16 from cv2_to_imgmsg. Why?</h3>
+<p>You have <code>opencv-python</code> 5.x. In it <code>cv2.CV_8UC3</code> is 64 instead of 16, so <code>cv_bridge</code>'s type table doesn't match. Uninstall it and use the apt <code>cv2</code>, or install <code>"opencv-python-headless&lt;4.12"</code> (4.11.0.86). This happened on Humble, Jazzy and Lyrical.</p>
+
+<h3>Which opencv-python versions require NumPy 2?</h3>
+<p>Those I checked: 4.12.0.88 (<code>numpy&gt;=2,&lt;2.3</code>), 4.14.0.94 and 5.0.0.93 (<code>numpy&gt;=2</code>). 4.10.0.84 and 4.11.0.86 accept NumPy 1.x. Asking pip for <code>opencv-python "numpy&lt;2"</code> resolved to 4.11.0.86.</p>
+
+<h3>Does ROS 2 Lyrical have this problem?</h3>
+<p>Not with NumPy. Lyrical's apt NumPy is 2.3.5, and <code>cv_bridge</code>, point clouds, messages and <code>tf_transformations</code> all worked with NumPy 2.3.5 and 2.5.4. <code>numpy&lt;2</code> has no wheel for its Python 3.14. OpenCV 5 wheels still break <code>cv_bridge</code> there.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I fix AttributeError: _ARRAY_API not found when importing cv_bridge?", "acceptedAnswer": {"@type": "Answer", "text": "On Humble and Jazzy, a pip NumPy 2 is shadowing the apt NumPy 1.x that cv_bridge was built with. Run pip uninstall numpy so Python falls back to apt, or pin numpy below 2 (pip installed 1.26.4). Then confirm with python3 -c \"import numpy; print(numpy.__file__)\"."}},
+{"@type": "Question", "name": "Why does cv_bridge import fine but my node dies at CvBridge()?", "acceptedAnswer": {"@type": "Answer", "text": "The boost module prints the NumPy 1.x message but still loads. CvBridge() then imports cv2, and the apt cv2 raises ImportError: numpy.core.multiarray failed to import. With a pip OpenCV 4.14 instead, the process segfaulted in imgmsg_to_cv2."}},
+{"@type": "Question", "name": "I pinned numpy below 2 and still get KeyError: 16 from cv2_to_imgmsg. Why?", "acceptedAnswer": {"@type": "Answer", "text": "You have opencv-python 5.x. In it cv2.CV_8UC3 is 64 instead of 16, so the cv_bridge type table does not match. Uninstall it and use the apt cv2, or install opencv-python-headless 4.11.0.86. This happened on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Which opencv-python versions require NumPy 2?", "acceptedAnswer": {"@type": "Answer", "text": "Those I checked: 4.12.0.88, 4.14.0.94 and 5.0.0.93 require NumPy 2. 4.10.0.84 and 4.11.0.86 accept NumPy 1.x. Asking pip for opencv-python with numpy pinned below 2 resolved to 4.11.0.86."}},
+{"@type": "Question", "name": "Does ROS 2 Lyrical have this problem?", "acceptedAnswer": {"@type": "Answer", "text": "Not with NumPy. Lyrical's apt NumPy is 2.3.5, and cv_bridge, point clouds, messages and tf_transformations all worked with NumPy 2.3.5 and 2.5.4. There is no NumPy 1.x wheel for its Python 3.14. OpenCV 5 wheels still break cv_bridge there."}}
+]}
+</script>
+
+<p>Measured on 2026-10-28 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, ros-humble-cv-bridge 3.2.1, python3-numpy 1.21.5, python3-opencv 4.5.4, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, ros-jazzy-cv-bridge 4.1.0, python3-numpy 1.26.4, python3-opencv 4.6.0, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, ros-lyrical-cv-bridge 4.1.0, python3-numpy 2.3.5, python3-opencv 4.10.0, Python 3.14.4). pip packages: numpy 2.2.6, 2.5.4, 1.26.4 and 1.23.5, opencv-python 5.0.0.93 and 4.14.0.94, opencv-python-headless 4.11.0.86, transforms3d 0.4.2. Full digests and versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-09-ros2-numpy-2-cv-bridge-array-api/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros-perception/vision_opencv/issues/535">vision_opencv #535: Numpy 2.0 support</a>, <a href="https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common/issues/138">isaac_ros_common #138: Python import cv fails because of numpy version</a>, <a href="https://github.com/NCTU-AUV/SAUVC-Autonomy/issues/2">NumPy incompatibility leads to yolov8 error</a>, <a href="https://community.ultralytics.com/t/using-ultralytics-with-ros2-humble/1473">Using ultralytics with ROS2 Humble</a>, <a href="https://get-help.theconstruct.ai/t/error-following-lesson-ros-developers-open-class-n-193-human-pose-estimation-with-ai-in-ros2/37073">Human Pose Estimation with AI in ROS2: _ARRAY_API not found</a>.</p>
