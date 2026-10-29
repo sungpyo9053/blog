@@ -1,0 +1,258 @@
+<pre><code>CMake Error at CMakeLists.txt:4 (find_package):
+  By not providing "Finddiagnostic_updater.cmake" in CMAKE_MODULE_PATH this
+  project has asked CMake to find a package configuration file provided by
+  "diagnostic_updater", but CMake did not find one.
+
+  Could not find a package configuration file provided by
+  "diagnostic_updater" with any of the following names:
+
+    diagnostic_updaterConfig.cmake
+    diagnostic_updater-config.cmake
+
+  Add the installation prefix of "diagnostic_updater" to CMAKE_PREFIX_PATH or
+  set "diagnostic_updater_DIR" to a directory containing one of the above
+  files.  If "diagnostic_updater" provides a separate development package or
+  SDK, be sure it has been installed.
+Failed   &lt;&lt;&lt; fp [0.66s, exited with code 1]</code></pre>
+
+<p>Short answer: CMake looked in every prefix it knows about and found no <code>diagnostic_updaterConfig.cmake</code>. In my runs that had five causes. The package wasn't installed. It was missing from <code>package.xml</code>, so <code>rosdep</code> skipped it. <code>/opt/ros/&lt;distro&gt;/setup.bash</code> wasn't sourced. The name in <code>find_package()</code> had the wrong case. Or it was a workspace package that colcon didn't know to build first. The usual fix is two steps. Declare the dependency in <code>package.xml</code>, then let rosdep install it:</p>
+
+<pre><code>&lt;depend&gt;diagnostic_updater&lt;/depend&gt;</code></pre>
+
+<pre><code>source /opt/ros/$ROS_DISTRO/setup.bash
+sudo apt-get update
+rosdep install --from-paths src --ignore-src -y
+colcon build</code></pre>
+
+<p>The error text was the same on Humble, Jazzy and Lyrical, with CMake 3.22.1, 3.28.3 and 4.2.3.</p>
+
+<h2>Find your cause</h2>
+
+<p>The package name in quotes tells you where to start. If it's <code>ament_cmake</code>, the environment isn't sourced. If it's a ROS package or a system library, it's an install or <code>package.xml</code> problem. If it's a package in your own <code>src/</code>, it's a build-order problem. Every row behaved the same on all three distros.</p>
+
+<table>
+<thead><tr><th>Situation</th><th>What I saw</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>/opt/ros/&lt;distro&gt;/setup.bash</code> not sourced</td><td>The error for <code>"ament_cmake"</code> at the line of <code>find_package(ament_cmake REQUIRED)</code></td><td>Source the setup file in the same shell</td></tr>
+<tr><td>ROS package not installed, not in <code>package.xml</code></td><td>The error for that package. <code>rosdep install</code> printed <code>#All required rosdeps installed successfully</code> and installed nothing</td><td>Add <code>&lt;depend&gt;</code>, run rosdep again</td></tr>
+<tr><td>Declared in <code>package.xml</code> (<code>depend</code>, <code>build_depend</code> or <code>exec_depend</code>)</td><td>rosdep installed 1 package, build passed</td><td>None needed</td></tr>
+<tr><td>Fresh Docker container, no <code>apt-get update</code></td><td><code>E: Unable to locate package ros-humble-diagnostic-updater</code></td><td><code>apt-get update</code> first</td></tr>
+<tr><td>System library not installed (<code>nlohmann_json</code>)</td><td>Same error for <code>"nlohmann_json"</code></td><td><code>&lt;depend&gt;nlohmann-json-dev&lt;/depend&gt;</code> plus rosdep</td></tr>
+<tr><td>Wrong rosdep key (<code>&lt;depend&gt;nlohmann_json&lt;/depend&gt;</code>)</td><td><code>fp: Cannot locate rosdep definition for [nlohmann_json]</code></td><td>Use the rosdep key, not the CMake name</td></tr>
+<tr><td><code>find_package(eigen3)</code> or <code>find_package(EIGEN3)</code></td><td>The error for <code>"eigen3"</code> or <code>"EIGEN3"</code>, with Eigen installed</td><td>Write <code>Eigen3</code></td></tr>
+<tr><td>Workspace package not declared in <code>package.xml</code></td><td>The error for <code>"mylib"</code>, even with <code>mylib</code> in <code>src/</code></td><td>Add <code>&lt;depend&gt;mylib&lt;/depend&gt;</code></td></tr>
+<tr><td>Declared workspace package, <code>--packages-select</code> before it was built</td><td>A different, colcon error: <code>Failed to find the following files: - /ws/install/mylib/share/mylib/package.sh</code></td><td>Build the dependency first, or drop <code>--packages-select</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-29 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another, on an x86_64 Linux host. I started each container with <code>--entrypoint bash</code>, so <code>/opt/ros</code> was not sourced at the start. A script built a one-file ament_cmake package called <code>fp</code>, changed one thing in <code>package.xml</code> or <code>CMakeLists.txt</code>, ran <code>rosdep install</code> and <code>colcon build</code> from a clean <code>build/</code> and <code>install/</code>, and recorded the result.</p>
+
+<p>For the ROS dependency I used <code>diagnostic_updater</code>. It isn't in the ros-base image on any of the three distros, and it's one small apt package. I checked <code>cv_bridge</code>, Eigen and yaml-cpp first. <code>cv_bridge</code> is also missing from ros-base, but it pulls in OpenCV, so I didn't install it. <code>libeigen3-dev</code>, <code>libyaml-cpp-dev</code> and <code>tf2_geometry_msgs</code> were already installed on Humble. So for the system library case I used <code>nlohmann_json</code>, which wasn't installed, and I kept Eigen for the name-case test. For the workspace case I added a second package, <code>mylib</code>, whose CMake step sleeps 5 seconds so that build order shows up.</p>
+
+<p>The CMake package in <code>CMakeLists.txt</code>:</p>
+
+<pre><code>cmake_minimum_required(VERSION 3.8)
+project(fp)
+find_package(ament_cmake REQUIRED)
+find_package(diagnostic_updater REQUIRED)
+ament_package()</code></pre>
+
+<h2>Cause 1: the package isn't installed</h2>
+
+<p>Most of the time the message means what it says: nothing on the system provides <code>diagnostic_updaterConfig.cmake</code>. A ROS package installs that file under <code>/opt/ros/&lt;distro&gt;/share/&lt;name&gt;/cmake/</code>. A system library installs its own config file, for example under <code>/usr/lib/cmake/</code> or <code>/usr/share/</code>. With nothing installed, the build failed in 1.1 to 1.2 seconds on every distro, at the <code>find_package</code> line.</p>
+
+<p>Installing the apt package by hand fixed it right away:</p>
+
+<pre><code>sudo apt-get install ros-humble-diagnostic-updater   # ros-jazzy-..., ros-lyrical-...</code></pre>
+
+<p>The install took 3.5 to 3.9 seconds and set up 1 package. The next <code>colcon build</code> in the same shell passed, and I didn't re-source <code>/opt/ros</code>. That's expected. The package goes into <code>/opt/ros/&lt;distro&gt;</code>, which the shell already points at. A fresh shell that sourced the setup file also passed. If a hand install doesn't help, check the name of the apt package. It's <code>ros-&lt;distro&gt;-</code> plus the package name with underscores turned into dashes.</p>
+
+<h2>Cause 2: rosdep didn't install it</h2>
+
+<p>The common case is a dependency that's listed in <code>CMakeLists.txt</code> but missing from <code>package.xml</code>. rosdep only reads <code>package.xml</code>, so it doesn't fail. It reports success:</p>
+
+<pre><code>$ rosdep install --from-paths src --ignore-src -y
+#All required rosdeps installed successfully</code></pre>
+
+<p>It installed 0 packages, and the next build failed with the same CMake error. This is the trap. A green rosdep run says nothing about <code>CMakeLists.txt</code>. One <a href="https://github.com/ros-controls/ros2_controllers/issues/1941">ros2_controllers fix</a> was exactly this: a <code>find_package(backward_ros)</code> with no matching line in <code>package.xml</code>.</p>
+
+<p>After I added <code>&lt;depend&gt;diagnostic_updater&lt;/depend&gt;</code>, rosdep printed <code>executing command [apt-get install -y ros-humble-diagnostic-updater]</code>, installed 1 package in 7.3 to 8.9 seconds, and the build passed on all three distros. A second rosdep run took 0.5 to 0.6 seconds and installed nothing.</p>
+
+<h3>rosdep errors you may hit first</h3>
+
+<p>The official ros images already have rosdep initialized and a rosdep cache, made when the image was built (2026-10-27 here). They don't have apt package lists. So the first <code>rosdep install</code> in a fresh container resolved the key and then failed in apt:</p>
+
+<pre><code>E: Unable to locate package ros-humble-diagnostic-updater
+ERROR: the following rosdeps failed to install
+  apt: command [apt-get install -y ros-humble-diagnostic-updater] failed</code></pre>
+
+<p>In Docker, run <code>apt-get update</code> before rosdep. It took 5.6 to 7.0 seconds. <code>rosdep update</code> took 6.1 to 9.0 seconds and is still worth running, but it wasn't what broke this.</p>
+
+<p>With the rosdep cache deleted (<code>rosdep update</code> never run), rosdep stopped before resolving anything:</p>
+
+<pre><code>ERROR: your rosdep installation has not been initialized yet.  Please run:
+    rosdep update</code></pre>
+
+<p>With <code>/etc/ros/rosdep/sources.list.d/20-default.list</code> also removed (<code>rosdep init</code> never run), <code>rosdep update</code> said:</p>
+
+<pre><code>ERROR: no data sources in /etc/ros/rosdep/sources.list.d
+
+Please initialize your rosdep with
+
+	sudo rosdep init</code></pre>
+
+<p>and <code>rosdep install</code> said:</p>
+
+<pre><code>ERROR: your rosdep installation has not been initialized yet.  Please run:
+    sudo rosdep init
+    rosdep update</code></pre>
+
+<h3>System libraries use rosdep keys, not CMake names</h3>
+
+<p><code>find_package(nlohmann_json REQUIRED)</code> with nothing installed gave the same error for <code>"nlohmann_json"</code>. The CMake name isn't the rosdep key. <code>&lt;depend&gt;nlohmann_json&lt;/depend&gt;</code> failed:</p>
+
+<pre><code>ERROR: the following packages/stacks could not have their rosdep keys resolved
+to system dependencies:
+fp: Cannot locate rosdep definition for [nlohmann_json]</code></pre>
+
+<p>The key <code>nlohmann-json-dev</code> worked. rosdep installed the apt package <code>nlohmann-json3-dev</code> (3.10.5-2 on Humble, 3.11.3-1 on Jazzy, <code>3.12.0.really.3.12.0.really.3.11.3-3build1</code> on Lyrical), and the build passed. So one library has three names: the CMake package (<code>nlohmann_json</code>), the rosdep key (<code>nlohmann-json-dev</code>) and the apt package (<code>nlohmann-json3-dev</code>). For Eigen it's <code>Eigen3</code>, <code>eigen</code> and <code>libeigen3-dev</code>. Look the rosdep key up in the <a href="https://github.com/ros/rosdistro/blob/master/rosdep/base.yaml">rosdistro rosdep/base.yaml</a> file.</p>
+
+<h2>Cause 3: /opt/ros isn't sourced</h2>
+
+<p>Without sourcing, the first <code>find_package</code> fails, and that's <code>ament_cmake</code>:</p>
+
+<pre><code>CMake Error at CMakeLists.txt:3 (find_package):
+  By not providing "Findament_cmake.cmake" in CMAKE_MODULE_PATH this project
+  has asked CMake to find a package configuration file provided by
+  "ament_cmake", but CMake did not find one.
+
+  Could not find a package configuration file provided by "ament_cmake" with
+  any of the following names:
+
+    ament_cmakeConfig.cmake
+    ament_cmake-config.cmake</code></pre>
+
+<p>This is the error in <a href="https://robotics.stackexchange.com/questions/96454">ROS2 - colcon build fails to find configuration file provided by "ament_cmake"</a>. Here's what the environment looked like before and after <code>source /opt/ros/humble/setup.bash</code>:</p>
+
+<table>
+<thead><tr><th>Variable</th><th>Not sourced</th><th>Sourced</th></tr></thead>
+<tbody>
+<tr><td><code>CMAKE_PREFIX_PATH</code></td><td>empty</td><td>empty</td></tr>
+<tr><td><code>AMENT_PREFIX_PATH</code></td><td>empty</td><td><code>/opt/ros/humble</code></td></tr>
+<tr><td><code>PATH</code></td><td><code>/usr/local/sbin:...:/bin</code></td><td><code>/opt/ros/humble/bin:</code> in front</td></tr>
+</tbody>
+</table>
+
+<p>Jazzy and Lyrical showed the same pattern with their own paths. Sourcing <code>/opt/ros</code> doesn't set <code>CMAKE_PREFIX_PATH</code> at all, so an empty <code>CMAKE_PREFIX_PATH</code> isn't the problem. The error text points you at that variable anyway. I tried setting only one variable by hand without sourcing: <code>CMAKE_PREFIX_PATH=/opt/ros/&lt;distro&gt;</code>, or <code>AMENT_PREFIX_PATH=/opt/ros/&lt;distro&gt;</code>, or <code>/opt/ros/&lt;distro&gt;/bin</code> added to <code>PATH</code>. Each one got CMake past <code>find_package(ament_cmake)</code>, and each one then failed with a different error:</p>
+
+<pre><code>CMake Error at /opt/ros/humble/share/ament_cmake_core/cmake/ament_cmake_package_templates-extras.cmake:41 (message):
+  execute_process(/usr/bin/python3
+  /opt/ros/humble/share/ament_cmake_core/cmake/package_templates/templates_2_cmake.py
+  /ws/build/fp/ament_cmake_package_templates/templates.cmake) returned error
+  code 1</code></pre>
+
+<p>Don't set these variables by hand. Source the setup file in the shell that runs colcon. Your workspace's own <code>install/setup.bash</code> is a different file and does set <code>CMAKE_PREFIX_PATH</code>. After sourcing it I had <code>CMAKE_PREFIX_PATH=/ws/install/fp:/ws/install/mylib</code>. For the difference between the two files, see <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">local_setup.bash vs setup.bash</a>.</p>
+
+<h2>Cause 4: wrong case in find_package</h2>
+
+<p>CMake package names are case sensitive here. With <code>libeigen3-dev</code> installed, <code>find_package(Eigen3 REQUIRED)</code> passed. Both other spellings failed:</p>
+
+<pre><code>  By not providing "Findeigen3.cmake" in CMAKE_MODULE_PATH this project has
+  asked CMake to find a package configuration file provided by "eigen3", but
+  CMake did not find one.
+
+  Could not find a package configuration file provided by "eigen3" with any
+  of the following names:
+
+    eigen3Config.cmake
+    eigen3-config.cmake</code></pre>
+
+<pre><code>  Could not find a package configuration file provided by "EIGEN3" with any
+  of the following names:
+
+    EIGEN3Config.cmake
+    eigen3-config.cmake</code></pre>
+
+<p>The second file name is always in lower case, even when you write <code>EIGEN3</code>. Don't let that lowercase name convince you the casing is fine. The same happened with a ROS package. With <code>ros-humble-diagnostic-updater</code> installed, <code>find_package(Diagnostic_Updater REQUIRED)</code> failed and listed <code>Diagnostic_UpdaterConfig.cmake</code> and <code>diagnostic_updater-config.cmake</code>. ROS packages use the exact package name from <code>package.xml</code>. For system libraries, use the name from the library's docs. The output gives you a clue: if a package is installed and still not found, compare the names it lists against the file on disk:</p>
+
+<pre><code>find /opt/ros/$ROS_DISTRO/share /usr/lib /usr/share -iname '*eigen3*config.cmake'</code></pre>
+
+<h2>Cause 5: the package is in your workspace but colcon didn't build it first</h2>
+
+<p>Here <code>fp</code> called <code>find_package(mylib REQUIRED)</code>, and <code>mylib</code> sat next to it in <code>src/</code>. colcon decides build order only from <code>package.xml</code>. With no <code>&lt;depend&gt;mylib&lt;/depend&gt;</code>, <code>colcon graph</code> showed no edge between the two, and the build went wrong in two ways:</p>
+
+<ul>
+<li>Parallel (the default): <code>fp</code> failed with the error for <code>"mylib"</code> after 0.93 seconds, while <code>mylib</code> was still in its 5-second CMake step. colcon then reported <code>1 package aborted: mylib</code>.</li>
+<li><code>--executor sequential</code>: colcon started with <code>fp</code>, and it failed the same way.</li>
+</ul>
+
+<p>The <a href="https://robotics.stackexchange.com/questions/117785">g2o question</a> on Robotics Stack Exchange has this shape. A library is checked out in the workspace, and colcon doesn't treat it as a dependency.</p>
+
+<p>With <code>&lt;depend&gt;mylib&lt;/depend&gt;</code>, a plain <code>colcon build</code> built <code>mylib</code> and then <code>fp</code>, and both passed in 7.0 to 7.4 seconds. Once <code>mylib</code> was built, <code>colcon build --packages-select fp</code> passed too, without sourcing <code>install/setup.bash</code>. colcon sets up the environment of declared dependencies by itself.</p>
+
+<p><code>--packages-select fp</code> before <code>mylib</code> was ever built did not produce the CMake error. colcon stopped first, in 0.02 seconds, before CMake ran:</p>
+
+<pre><code>ERROR:colcon.colcon_cmake.task.cmake.build:Failed to find the following files:
+- /ws/install/mylib/share/mylib/package.sh
+Check that the following packages have been built:
+- mylib</code></pre>
+
+<p>So if you see the CMake error for one of your own packages, the dependency is missing from <code>package.xml</code>. A declared dependency that hasn't been built gives the colcon message above.</p>
+
+<h2>package.xml depend tags and what rosdep does with each</h2>
+
+<p>I ran <code>rosdep install --from-paths src --ignore-src -y</code> with one tag at a time, from a state where <code>ros-&lt;distro&gt;-diagnostic-updater</code> wasn't installed. Results were the same on all three distros.</p>
+
+<table>
+<thead><tr><th>In package.xml</th><th>rosdep installed</th><th>colcon build</th></tr></thead>
+<tbody>
+<tr><td>nothing</td><td>nothing, printed <code>#All required rosdeps installed successfully</code></td><td>failed, the error above</td></tr>
+<tr><td><code>&lt;build_depend&gt;</code></td><td>1 package, <code>ros-&lt;distro&gt;-diagnostic-updater</code></td><td>passed</td></tr>
+<tr><td><code>&lt;exec_depend&gt;</code></td><td>1 package, the same one</td><td>passed</td></tr>
+<tr><td><code>&lt;exec_depend&gt;</code> with <code>--dependency-types build</code></td><td>nothing</td><td>Not tested (the package was missing)</td></tr>
+<tr><td><code>&lt;depend&gt;</code></td><td>1 package</td><td>passed</td></tr>
+</tbody>
+</table>
+
+<p>By default rosdep installs every dependency type, so an <code>exec_depend</code>-only package still built here. That isn't a reason to stop at <code>exec_depend</code>. Anything that filters by type, like <code>--dependency-types build</code>, skips it. For a C++ library you <code>find_package()</code> and link against, use <code>&lt;depend&gt;</code>. It covers build, export and exec. Use <code>&lt;build_depend&gt;</code> only for something needed at build time alone.</p>
+
+<h2>Version notes</h2>
+
+<p>The CMake error text was identical on Humble (CMake 3.22.1, ament_cmake 1.3.14), Jazzy (CMake 3.28.3, ament_cmake 2.5.6) and Lyrical (CMake 4.2.3, ament_cmake 2.8.8), word for word and with the same line breaks. The rosdep messages were also identical, because all three images had rosdep 0.27.0 and colcon-core 0.21.3. The only extra line on Lyrical was apt's <code>Solving dependencies...</code>. On Lyrical, colcon printed a timestamp of <code>[-1793238601041840896.000s]</code> in front of the <code>Failed to find the following files</code> message. It looks cosmetic. The build still failed in 0.02 seconds as on the other distros. CMake 4 on Lyrical breaks other things, but not this message. See <a href="https://huntlab.app/en/ros-2-lyrical-unknown-cmake-command-ament-target-dependencies/">Unknown CMake command ament_target_dependencies on Lyrical</a>.</p>
+
+<h2>Not tested</h2>
+
+<p><code>cv_bridge</code>, <code>pcl_conversions</code> and OpenCV themselves (I only checked that <code>cv_bridge</code> is missing from ros-base). Windows, macOS, conda and pip-installed CMake. Packages built from source into <code>/usr/local</code> or another custom prefix. <code>CMAKE_PREFIX_PATH</code> set together with a sourced environment. <code>--symlink-install</code>, <code>--merge-install</code>, overlays on top of a second workspace, <code>rosdep --skip-keys</code>, <code>ament_python</code> packages, Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Could not find a package configuration file provided by" mean in colcon build?</h3>
+<p>CMake ran <code>find_package(name)</code> and found no <code>nameConfig.cmake</code> or <code>name-config.cmake</code> in any prefix it searched. In my runs the causes were: the package wasn't installed, it was missing from package.xml so rosdep skipped it, <code>/opt/ros</code> wasn't sourced, the name had the wrong case, or a workspace package wasn't declared as a dependency.</p>
+
+<h3>rosdep says all required rosdeps installed successfully, but the build still fails. Why?</h3>
+<p>rosdep reads only package.xml. If the dependency is in CMakeLists.txt but not in package.xml, rosdep installs nothing and still prints success. Add <code>&lt;depend&gt;name&lt;/depend&gt;</code> and run rosdep again. In my run it then installed 1 package and the build passed.</p>
+
+<h3>Do I need to re-source /opt/ros after installing a ROS package with apt?</h3>
+<p>No. After <code>apt-get install ros-&lt;distro&gt;-diagnostic-updater</code>, the next colcon build in the same, already sourced shell passed on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why does rosdep fail with Unable to locate package in Docker?</h3>
+<p>The official ros images ship with rosdep initialized and a rosdep cache, but with no apt package lists. Run <code>apt-get update</code> before <code>rosdep install</code>.</p>
+
+<h3>Should I write find_package(eigen3) or find_package(Eigen3)?</h3>
+<p><code>Eigen3</code>. With libeigen3-dev installed, <code>eigen3</code> and <code>EIGEN3</code> both failed with this error, and <code>Eigen3</code> passed. The rosdep key is <code>eigen</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Could not find a package configuration file provided by mean in colcon build?", "acceptedAnswer": {"@type": "Answer", "text": "CMake ran find_package(name) and found no nameConfig.cmake or name-config.cmake in any prefix it searched. In my runs the causes were: the package wasn't installed, it was missing from package.xml so rosdep skipped it, /opt/ros wasn't sourced, the name had the wrong case, or a workspace package wasn't declared as a dependency."}},
+{"@type": "Question", "name": "rosdep says all required rosdeps installed successfully, but the build still fails. Why?", "acceptedAnswer": {"@type": "Answer", "text": "rosdep reads only package.xml. If the dependency is in CMakeLists.txt but not in package.xml, rosdep installs nothing and still prints success. Add a depend tag for the package and run rosdep again. In my run it then installed 1 package and the build passed."}},
+{"@type": "Question", "name": "Do I need to re-source /opt/ros after installing a ROS package with apt?", "acceptedAnswer": {"@type": "Answer", "text": "No. After apt-get install ros-distro-diagnostic-updater, the next colcon build in the same, already sourced shell passed on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why does rosdep fail with Unable to locate package in Docker?", "acceptedAnswer": {"@type": "Answer", "text": "The official ros images ship with rosdep initialized and a rosdep cache, but with no apt package lists. Run apt-get update before rosdep install."}},
+{"@type": "Question", "name": "Should I write find_package(eigen3) or find_package(Eigen3)?", "acceptedAnswer": {"@type": "Answer", "text": "Eigen3. With libeigen3-dev installed, eigen3 and EIGEN3 both failed with this error, and Eigen3 passed. The rosdep key is eigen."}}
+]}
+</script>
+
+<p>Measured on 2026-10-29 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, CMake 3.22.1, ament_cmake 1.3.14, diagnostic_updater 4.0.7), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, CMake 3.28.3, ament_cmake 2.5.6, diagnostic_updater 4.2.7) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, CMake 4.2.3, ament_cmake 2.8.8, diagnostic_updater 4.4.7), all with rosdep 0.27.0 and colcon-core 0.21.3. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-12-ros2-could-not-find-package-configuration-file/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103550">Could not find a package configuration file provided by "nav2_map_server"</a>, <a href="https://robotics.stackexchange.com/questions/114285">ROS2 Jazzy beginner tutorial fails to build on Ubuntu 24.04 and docker</a>, <a href="https://robotics.stackexchange.com/questions/96454">ROS2 - colcon build fails to find configuration file provided by "ament_cmake"</a>, <a href="https://robotics.stackexchange.com/questions/117785">Colcon (and rosdep) not recognizing the dependency relation between my package and the source checkout of non-ROS library</a>, <a href="https://github.com/ros-controls/ros2_controllers/issues/1941">mecanum_drive_controller: Declare missing backward_ros dependency</a>.</p>
