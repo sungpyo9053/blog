@@ -1,0 +1,185 @@
+<pre><code>Starting &gt;&gt;&gt; stl_pkg
+--- stderr: stl_pkg
+/usr/lib/python3/dist-packages/setuptools/command/install.py:34: SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools.
+  warnings.warn(
+---
+Finished &lt;&lt;&lt; stl_pkg [0.96s]</code></pre>
+
+<p>With <code>--symlink-install</code> the same block also has <code>easy_install.py:158: EasyInstallDeprecationWarning: easy_install command is deprecated. Use build and pip and other standards-based tools.</code> On Jazzy the text is split over several lines. The first line ends at <code>setup.py install is deprecated.</code> and a box of asterisks follows: "Please avoid running ``setup.py`` directly."</p>
+
+<p>Short answer: the warning is harmless. Every build that printed it finished, and <code>ros2 run</code> started the node every time, on Humble and Jazzy. You only see it if your colcon is old. colcon-core 0.16.0 and later start <code>setup.py</code> with <code>-W ignore:setup.py install is deprecated</code>, and 0.18.4 added <code>-W ignore:easy_install command is deprecated</code>. The current ROS images ship colcon-core 0.21.3, and none of their builds printed either warning. So the fix is to update colcon (<code>sudo apt update &amp;&amp; sudo apt install python3-colcon-core</code>) rather than downgrade setuptools. If you can't update, this filter hid both warnings on Humble and Jazzy:</p>
+
+<pre><code>export PYTHONWARNINGS="ignore:setup.py install is deprecated,ignore:easy_install command is deprecated"</code></pre>
+
+<p>Don't run <code>pip install setuptools==58.2.0</code> on Jazzy or Lyrical. On Python 3.12 and 3.14 that version can't even be imported, and the build fails. With the colcon that ships in the images, every build failure in this test came from a setuptools installed with pip. After <code>pip uninstall setuptools</code>, all three distros built again.</p>
+
+<h2>Find your error</h2>
+
+<p>The first two rows are only warnings. Every other row stopped the build with <code>Failed &lt;&lt;&lt; stl_pkg</code> and a non-zero exit code.</p>
+
+<table>
+<thead><tr><th>What you see (last line of the stderr block)</th><th>Where it came from in my run</th></tr></thead>
+<tbody>
+<tr><td><code>SetuptoolsDeprecationWarning: setup.py install is deprecated</code>, <code>EasyInstallDeprecationWarning: easy_install command is deprecated</code></td><td>colcon-core older than 0.16.0. Harmless</td></tr>
+<tr><td><code>Usage of dash-separated 'install-scripts' will not be supported</code> (Humble), <code>Invalid dash-separated options</code> (Jazzy), <code>Invalid dash-separated key 'install-scripts' in 'install' (setup.cfg)</code> (Lyrical)</td><td><code>script-dir</code> / <code>install-scripts</code> in setup.cfg. Harmless, but shown even with current colcon</td></tr>
+<tr><td><code>AttributeError: module 'pkgutil' has no attribute 'ImpImporter'. Did you mean: 'zipimporter'?</code></td><td>setuptools 58.2.0, 59.6.0 or 65.5.0 from pip on Jazzy or Lyrical</td></tr>
+<tr><td><code>SyntaxError: invalid syntax</code> after a long dict starting <code>{'package_data': ...</code>, then <code>invalid syntax (&lt;unknown&gt;, line 1)</code></td><td>setuptools 68.2.0 from pip, all three distros</td></tr>
+<tr><td><code>TypeError: canonicalize_version() got an unexpected keyword argument 'strip_trailing_zero'</code></td><td>setuptools 71.1.0 or newer from pip on Humble, with the apt <code>packaging</code> 21.3</td></tr>
+<tr><td><code>error: option --uninstall not recognized</code></td><td>A workspace built with <code>--symlink-install</code> under apt setuptools, rebuilt after <code>pip install</code> of setuptools 84.2.1</td></tr>
+<tr><td><code>error: option --editable not recognized</code></td><td>colcon-core 0.15.2 with setuptools 84.2.1 and <code>--symlink-install</code> (Jazzy)</td></tr>
+</tbody>
+</table>
+
+<p>One failure prints nothing at all. With setuptools 80.0.0 or newer, <code>--symlink-install</code> finished without an error but installed copies instead of links. More on that below.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-29 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another. The script makes a package with <code>ros2 pkg create --build-type ament_python --node-name stl_node stl_pkg</code>. The generated setup.cfg already uses <code>script_dir</code> and <code>install_scripts</code> with underscores. Each case does three builds:</p>
+
+<ol>
+<li>a plain <code>colcon build</code> in a clean workspace</li>
+<li><code>colcon build --symlink-install</code> in a clean workspace</li>
+<li>a plain build on top of that symlink build, which makes colcon undo the old develop install</li>
+</ol>
+
+<p>After each build I ran <code>ros2 run stl_pkg stl_node</code>, which prints <code>Hi from stl_pkg.</code>. I counted the warnings and checked for an <code>.egg-link</code> file to see if the symlink install was real. I changed one thing per case:</p>
+
+<ul>
+<li>the apt setuptools, untouched</li>
+<li>eight <code>PYTHONWARNINGS</code> values</li>
+<li>a setup.cfg with dash keys</li>
+<li>no setup.cfg</li>
+<li>17 pinned setuptools versions from pip plus the latest (84.2.1), each installed in front of the apt one, and then removed again</li>
+<li>colcon-core 0.15.2 from pip, which predates the filter, so I could see the warning at all</li>
+<li>a newer <code>packaging</code> from pip on Humble</li>
+<li>a workspace carried over from the apt setuptools to pip setuptools 84.2.1</li>
+</ul>
+
+<p>The images came with these versions:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Ubuntu</td><td>22.04.5</td><td>24.04.5</td><td>26.04.1</td></tr>
+<tr><td>Python</td><td>3.10.12</td><td>3.12.3</td><td>3.14.4</td></tr>
+<tr><td>python3-setuptools (apt)</td><td>59.6.0</td><td>68.1.2</td><td>78.1.1</td></tr>
+<tr><td>python3-packaging (apt)</td><td>21.3</td><td>24.0</td><td>26.0</td></tr>
+<tr><td>colcon-core</td><td>0.21.3</td><td>0.21.3</td><td>0.21.3</td></tr>
+<tr><td>colcon-python-setup-py</td><td>0.2.9</td><td>0.2.9</td><td>0.2.9</td></tr>
+</tbody>
+</table>
+
+<h2>Why a current colcon shows nothing</h2>
+
+<p>With the apt setuptools and colcon-core 0.21.3, all three distros built without any deprecation warning, plain or with <code>--symlink-install</code>. The same held for every pip setuptools that could build. The reason shows up in one of the failing runs, where colcon printed the command it had started: <code>['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', '--help-commands']</code>. colcon filters the two messages itself. In the colcon-core history, the first filter came in 0.16.0 ("Suppress setup.py deprecation warnings during build", #626). The easy_install one came in 0.18.4 (#676).</p>
+
+<p>To see the warning I installed colcon-core 0.15.2 from pip. On Humble and Jazzy it showed up as shown at the top of this post. Every build still finished, and the node ran after each one. With setuptools 58.2.0 on Humble, the old colcon printed neither warning. 59.6.0, 65.5.0 and 69.5.1 all printed both. That fits the common advice that 58.2.0 is the last quiet version, but it only matters with an old colcon.</p>
+
+<p>On Lyrical, colcon-core 0.15.2 didn't work at all. The extensions that build Python packages failed to load with <code>cannot import name 'OVERRIDE_OPT' from 'em'</code>, and colcon said <code>No task extension to 'build' a 'ros.ament_python' package</code>. So I couldn't reproduce the warning on Lyrical.</p>
+
+<p>If you see the warning, check your version with <code>python3 -c "import colcon_core; print(colcon_core.__version__, colcon_core.__file__)"</code>. A path under <code>/usr/local</code> or <code>~/.local</code> means a pip install is shadowing the apt one.</p>
+
+<h2>Hiding it with PYTHONWARNINGS</h2>
+
+<p>I ran each value with colcon-core 0.15.2 and the apt setuptools. "Hidden" means the build printed neither warning, plain or with <code>--symlink-install</code>.</p>
+
+<table>
+<thead><tr><th><code>PYTHONWARNINGS=</code></th><th>Humble (setuptools 59.6.0)</th><th>Jazzy (setuptools 68.1.2)</th></tr></thead>
+<tbody>
+<tr><td><code>ignore:setup.py install is deprecated,ignore:easy_install command is deprecated</code></td><td>hidden</td><td>hidden</td></tr>
+<tr><td><code>ignore:::setuptools.command.install</code></td><td>plain build hidden. <code>EasyInstallDeprecationWarning</code> still shown with <code>--symlink-install</code></td><td>nothing hidden</td></tr>
+<tr><td><code>ignore:::setuptools.command.install,ignore:::setuptools.command.easy_install,ignore:::pkg_resources</code></td><td>hidden</td><td>nothing hidden</td></tr>
+<tr><td><code>ignore:::setuptools.command.install,ignore:::setuptools.command.develop,ignore:::setuptools.command.easy_install</code></td><td>hidden</td><td>easy_install hidden, setup.py install still shown</td></tr>
+<tr><td><code>ignore:::setuptools.command.develop</code></td><td>nothing hidden</td><td>easy_install hidden, setup.py install still shown</td></tr>
+<tr><td><code>ignore:::setuptools._distutils.cmd,ignore:::setuptools.command.develop</code></td><td>nothing hidden</td><td>easy_install hidden, setup.py install still shown</td></tr>
+<tr><td><code>ignore::UserWarning</code></td><td>nothing hidden</td><td>hidden</td></tr>
+<tr><td><code>ignore</code></td><td>hidden</td><td>hidden, along with every other warning</td></tr>
+</tbody>
+</table>
+
+<p>The module-based filters that most answers suggest depend on the setuptools version. On Humble the warning is raised from <code>setuptools/command/install.py</code>. On Jazzy the same message is reported from <code>setuptools/_distutils/cmd.py:66</code>, so <code>ignore:::setuptools.command.install</code> doesn't match it. The message-based filter in the first row is the same one colcon uses, and it worked on both. Put it in <code>~/.bashrc</code> if you are stuck on an old colcon.</p>
+
+<h2>Which setuptools version you have and why</h2>
+
+<p>You get the version apt installed (59.6.0, 68.1.2 or 78.1.1 above) unless something put a newer one in front of it with pip. That something is often <code>pip install -U setuptools</code>, or a <code>requirements.txt</code> that pulls it in. To check, run <code>python3 -c "import setuptools; print(setuptools.__version__, setuptools.__file__)"</code>. A path in <code>/usr/local/lib</code> or <code>~/.local/lib</code> is a pip copy. This is what each pip version did with colcon-core 0.21.3:</p>
+
+<table>
+<thead><tr><th>pip setuptools</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>58.2.0, 59.6.0, 65.5.0</td><td>builds</td><td>fails: <code>pkgutil</code> has no <code>ImpImporter</code></td><td>fails: <code>pkgutil</code> has no <code>ImpImporter</code></td></tr>
+<tr><td>68.1.2</td><td>builds</td><td>builds</td><td>builds</td></tr>
+<tr><td>68.2.0</td><td>fails: <code>SyntaxError</code></td><td>fails: <code>SyntaxError</code></td><td>fails: <code>SyntaxError</code></td></tr>
+<tr><td>69.5.1, 70.1.1, 70.3.0</td><td>builds</td><td>builds</td><td>builds</td></tr>
+<tr><td>71.1.0, 72.1.0, 72.2.0, 74.1.3, 75.8.0, 78.1.0, 79.0.1</td><td>fails: <code>canonicalize_version()</code> <code>TypeError</code></td><td>builds</td><td>builds</td></tr>
+<tr><td>80.0.0, 80.9.0, 84.2.1</td><td>fails: <code>canonicalize_version()</code> <code>TypeError</code></td><td>builds, but <code>--symlink-install</code> copies</td><td>builds, but <code>--symlink-install</code> copies</td></tr>
+</tbody>
+</table>
+
+<p>None of the builds that worked printed a deprecation warning, and the node ran after each one. A failure stopped all three builds in the case: plain, symlink and the switch back. In each case the node wasn't installed (<code>Package 'stl_pkg' not found</code>).</p>
+
+<p>The failures have different causes.</p>
+
+<ul>
+<li><strong>58.2.0 to 65.5.0 on Jazzy and Lyrical.</strong> These versions call <code>pkgutil.ImpImporter</code>, which Python 3.12 removed. The error comes from <code>pkg_resources</code> as soon as <code>setup.py</code> imports setuptools. The popular <code>pip install setuptools==58.2.0</code> fix only works on Humble.</li>
+<li><strong>68.2.0 everywhere.</strong> colcon-python-setup-py 0.2.9 reads the package metadata by evaluating what <code>setup.py</code> prints. With 68.2.0 that output isn't a valid Python literal, and <code>ast.literal_eval</code> raises <code>SyntaxError</code>. 68.1.2 and 69.5.1 were fine. This is the failure from <a href="https://github.com/colcon/colcon-python-setup-py/issues/56">colcon-python-setup-py issue 56</a>.</li>
+<li><strong>71.1.0 and newer on Humble.</strong> These setuptools versions use the <code>packaging</code> already installed, and Humble's apt <code>packaging</code> is 21.3. Its <code>canonicalize_version()</code> doesn't accept <code>strip_trailing_zero</code>. After <code>pip install packaging</code> (26.3), all of 71.1.0, 75.8.0, 79.0.1, 80.0.0, 80.9.0 and 84.2.1 built on Humble, and the node ran.</li>
+<li><strong>80.0.0 and newer with <code>--symlink-install</code>.</strong> The build said nothing, but no <code>stl-pkg.egg-link</code> was written. colcon-core 0.21.3 found no <code>--editable</code> option in <code>setup.py develop</code> and did a normal install. In the 84.2.1 run, the only trace was in <code>log/latest_build/logger_all.log</code>: <code>INFO:colcon.colcon_core.task.python.build:No '--editable' capability in setuptools, falling back to full install</code>. Edits to your Python files then need a rebuild. colcon-core 0.15.2 has no such check. On Jazzy, with 84.2.1, it failed with <code>error: option --editable not recognized</code>.</li>
+</ul>
+
+<p>One more trap shows up when you upgrade setuptools under an existing workspace. On all three distros, I built with <code>--symlink-install</code> under the apt setuptools, then installed 84.2.1 with pip (plus <code>packaging</code> 26.3 on Humble). After that, both <code>colcon build --symlink-install</code> and a plain <code>colcon build</code> failed with <code>error: option --uninstall not recognized</code>. colcon tries to undo the old develop install first, and the new setuptools no longer has that option. The old install was still there, so <code>ros2 run</code> kept working. After <code>rm -rf build install log</code> the build passed.</p>
+
+<p>To go back to the apt setuptools, run <code>python3 -m pip uninstall setuptools</code>. On Jazzy and Lyrical my script set <code>PIP_BREAK_SYSTEM_PACKAGES=1</code> for every pip command. On all three distros, the apt version was active again after that, and the plain, symlink and switch builds all passed with the node running. The apt package files were untouched. <code>dpkg -V python3-setuptools</code> listed only documentation files that the image itself doesn't ship.</p>
+
+<h2>Dash-separated keys in setup.cfg</h2>
+
+<p>The other stderr block you can still get with a current colcon comes from setup.cfg. With <code>script-dir</code> and <code>install-scripts</code> instead of <code>script_dir</code> and <code>install_scripts</code>, every build printed a <code>--- stderr: stl_pkg</code> block. On Humble the warning was a <code>UserWarning: Usage of dash-separated 'install-scripts' will not be supported in future versions. Please use the underscore name 'install_scripts' instead</code>. Jazzy printed <code>SetuptoolsDeprecationWarning: Invalid dash-separated options</code>. Lyrical, and pip setuptools 80.9.0 and 84.2.1 on Jazzy, named the key: <code>Invalid dash-separated key 'script-dir' in 'develop' (setup.cfg), please use the underscore name 'script_dir' instead.</code> Each build still finished and the node ran. Changing the dashes to underscores removes the block.</p>
+
+<p>Don't delete setup.cfg to get rid of it. Without the file the build was clean, but <code>ros2 run</code> said <code>No executable found</code>. I covered that case, and how entry points and <code>script_dir</code> decide where the script lands, in <a href="https://huntlab.app/en/ros2-run-no-executable-found-ament-python-setup-cfg-entry-points/">ros2 run "No executable found" for ament_python</a>.</p>
+
+<h2>Version notes</h2>
+
+<p>The three distros differed in four ways.</p>
+
+<ul>
+<li><strong>Warning text.</strong> On Humble, with setuptools 59.6.0, the warning is one line ending in "Use build and pip and other standards-based tools." Jazzy's 68.1.2 prints the boxed version.</li>
+<li><strong>Old pins.</strong> Old setuptools pins break on Jazzy and Lyrical because of their Python version.</li>
+<li><strong>New pip setuptools on Humble.</strong> Only Humble breaks on a new pip setuptools, because of its old <code>packaging</code>.</li>
+<li><strong>Old colcon on Lyrical.</strong> The old colcon I used to show the warning doesn't run on Lyrical at all.</li>
+</ul>
+
+<p><a href="https://github.com/colcon/colcon-python-setup-py/issues/58">colcon-python-setup-py issue 58</a> reports <code>No module named 'setuptools.extern.packaging'</code> with setuptools 72.2.0. I didn't get that error. 72.2.0 built on Jazzy and Lyrical with colcon-python-setup-py 0.2.9, and on Humble it failed earlier with the <code>canonicalize_version()</code> error.</p>
+
+<h2>Not tested</h2>
+
+<p>Foxy, Iron, Kilted and Rolling. colcon or setuptools inside a venv or conda env. pip installs to <code>~/.local</code> (<code>--user</code>). colcon-core versions between 0.15.2 and 0.21.3. setuptools 66.x, 67.x, 73.x, 76.x, 77.x and the 81 to 84 releases other than 84.2.1. Packages with a pyproject.toml, <code>ament_cmake_python</code>, and colcon's experimental standards-based Python build. Windows and macOS. Large workspaces, where the stderr block may sit between many other packages.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Is "SetuptoolsDeprecationWarning: setup.py install is deprecated" an error?</h3>
+<p>No. In every build that printed it, colcon reported the package as finished and <code>ros2 run</code> started the node. It is printed in colcon's <code>--- stderr</code> block, which looks alarming but doesn't fail the build.</p>
+
+<h3>Why do I see this warning when others don't?</h3>
+<p>Your colcon-core is probably older than 0.16.0. Newer versions start <code>setup.py</code> with <code>-W</code> filters for both messages, and colcon-core 0.21.3 on Humble, Jazzy and Lyrical printed nothing with any setuptools that could build. Update colcon, and check that no pip copy in <code>/usr/local</code> or <code>~/.local</code> shadows the apt one.</p>
+
+<h3>Should I run pip install setuptools==58.2.0?</h3>
+<p>Not on Jazzy or Lyrical. There, 58.2.0 failed every build with <code>module 'pkgutil' has no attribute 'ImpImporter'</code>. On Humble it built, and with an old colcon it was the only version I tested that printed no warning. With a current colcon you don't need it on any distro.</p>
+
+<h3>Which PYTHONWARNINGS value hides it?</h3>
+<p><code>ignore:setup.py install is deprecated,ignore:easy_install command is deprecated</code> hid both warnings on Humble and Jazzy. Module-based values such as <code>ignore:::setuptools.command.install</code> worked on Humble but not on Jazzy, where the warning is reported from <code>setuptools._distutils.cmd</code>.</p>
+
+<h3>Why does colcon build fail with error: option --uninstall not recognized?</h3>
+<p>The workspace was built with <code>--symlink-install</code> under an older setuptools, and you upgraded setuptools with pip. colcon tries to undo the old develop install, and setuptools 84.2.1 no longer accepts <code>--uninstall</code>. Delete <code>build</code>, <code>install</code> and <code>log</code> and build again, or remove the pip setuptools.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Is SetuptoolsDeprecationWarning: setup.py install is deprecated an error?", "acceptedAnswer": {"@type": "Answer", "text": "No. In every build that printed it, colcon reported the package as finished and ros2 run started the node. It is printed in colcon's stderr block, which looks alarming but doesn't fail the build."}},
+{"@type": "Question", "name": "Why do I see this warning when others don't?", "acceptedAnswer": {"@type": "Answer", "text": "Your colcon-core is probably older than 0.16.0. Newer versions start setup.py with -W filters for both messages, and colcon-core 0.21.3 on Humble, Jazzy and Lyrical printed nothing with any setuptools that could build. Update colcon, and check that no pip copy in /usr/local or ~/.local shadows the apt one."}},
+{"@type": "Question", "name": "Should I run pip install setuptools==58.2.0?", "acceptedAnswer": {"@type": "Answer", "text": "Not on Jazzy or Lyrical. There, 58.2.0 failed every build with module 'pkgutil' has no attribute 'ImpImporter'. On Humble it built, and with an old colcon it was the only version I tested that printed no warning. With a current colcon you don't need it on any distro."}},
+{"@type": "Question", "name": "Which PYTHONWARNINGS value hides it?", "acceptedAnswer": {"@type": "Answer", "text": "ignore:setup.py install is deprecated,ignore:easy_install command is deprecated hid both warnings on Humble and Jazzy. Module-based values such as ignore:::setuptools.command.install worked on Humble but not on Jazzy, where the warning is reported from setuptools._distutils.cmd."}},
+{"@type": "Question", "name": "Why does colcon build fail with error: option --uninstall not recognized?", "acceptedAnswer": {"@type": "Answer", "text": "The workspace was built with --symlink-install under an older setuptools, and you upgraded setuptools with pip. colcon tries to undo the old develop install, and setuptools 84.2.1 no longer accepts --uninstall. Delete build, install and log and build again, or remove the pip setuptools."}}
+]}
+</script>
+
+<p>Measured on 2026-10-29 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Python 3.10.12, python3-setuptools 59.6.0), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Python 3.12.3, python3-setuptools 68.1.2) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Python 3.14.4, python3-setuptools 78.1.1), all with colcon-core 0.21.3, colcon-python-setup-py 0.2.9 and colcon-ros 0.5.0. pip setuptools 58.2.0 to 84.2.1, colcon-core 0.15.2 and packaging 26.3 came from PyPI. Full digests and versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-16-ros2-colcon-setuptools-deprecation-warning/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/101255">SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools</a>, <a href="https://github.com/ament/ament_cmake/issues/382">ament_cmake issue 382: SetuptoolsDeprecationWarning: setup.py install is deprecated</a>, <a href="https://github.com/ros2/ros2/issues/1362">ros2 issue 1362: SetuptoolsDeprecationWarning on Humble</a>, <a href="https://github.com/ros2/ros2/issues/1577">ros2 issue 1577: easy_install problem when using colcon build python package on Jazzy</a>, <a href="https://github.com/colcon/colcon-python-setup-py/issues/56">setuptools==68.2.0 breaks colcon-python-setup-py</a>, <a href="https://github.com/colcon/colcon-python-setup-py/issues/58">setuptools 72.2.0 breaks colcon-python-setup-py</a>.</p>
