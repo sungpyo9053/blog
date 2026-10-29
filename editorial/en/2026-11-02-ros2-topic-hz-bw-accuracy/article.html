@@ -43,6 +43,19 @@
 
 <p>With <code>ros2 topic hz -w 2000</code> (a larger averaging window), Jazzy printed 394.1 Hz at 400 Hz and 963.9 Hz at 1,000 Hz. The default window gave 400.0 and 1,000.0 in the same runs. Humble didn't show this. I didn't track down why.</p>
 
+<h2 id="faq">FAQ</h2>
+<h3>Is ros2 topic hz accurate?</h3>
+<p>At 400 Hz and 1,000 Hz it matched a C++ subscriber counting every message to within 0.2% on Humble and Jazzy. It only fell behind at very high rates.</p>
+<h3>What is the highest rate ros2 topic hz can measure?</h3>
+<p>On a 2-vCPU machine it topped out around 4,600–5,000 Hz. A 10 kHz topic was reported at about half its real rate.</p>
+<h3>Why don't ros2 topic hz and ros2 topic bw line up?</h3>
+<p><code>bw</code> averages only the latest 100 messages and read about 3% higher than the serialized size my counter summed. So rate times message size from <code>hz</code> won't match <code>bw</code> exactly, even when both work.</p>
+<h3>ros2 topic hz shows 750 Hz for a 1 kHz topic. Is the tool wrong?</h3>
+<p>In my test <code>hz</code> measured a real 1 kHz topic correctly, on x86 cores, and I didn't test a Raspberry Pi 4. Count the messages that actually arrive with a small subscriber. If it also shows about 750 Hz, the publisher isn't keeping up.</p>
+<h3>Can I run ros2 topic hz and bw at the same time?</h3>
+<p>Run them one at a time, and not on a machine that is already at full load. Each one is a Python process that receives every message.</p>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is ros2 topic hz accurate?", "acceptedAnswer": {"@type": "Answer", "text": "At 400 Hz and 1,000 Hz it matched a C++ subscriber counting every message to within 0.2% on Humble and Jazzy. It only fell behind at very high rates."}}, {"@type": "Question", "name": "What is the highest rate ros2 topic hz can measure?", "acceptedAnswer": {"@type": "Answer", "text": "On a 2-vCPU machine it topped out around 4,600–5,000 Hz. A 10 kHz topic was reported at about half its real rate."}}, {"@type": "Question", "name": "Why don't ros2 topic hz and ros2 topic bw line up?", "acceptedAnswer": {"@type": "Answer", "text": "bw averages only the latest 100 messages and read about 3% higher than the serialized size my counter summed. So rate times message size from hz won't match bw exactly, even when both work."}}, {"@type": "Question", "name": "ros2 topic hz shows 750 Hz for a 1 kHz topic. Is the tool wrong?", "acceptedAnswer": {"@type": "Answer", "text": "In my test hz measured a real 1 kHz topic correctly, on x86 cores, and I didn't test a Raspberry Pi 4. Count the messages that actually arrive with a small subscriber. If it also shows about 750 Hz, the publisher isn't keeping up."}}, {"@type": "Question", "name": "Can I run ros2 topic hz and bw at the same time?", "acceptedAnswer": {"@type": "Answer", "text": "Run them one at a time, and not on a machine that is already at full load. Each one is a Python process that receives every message."}}]}</script>
+
 <h2>Not tested</h2>
 
 <p>Raspberry Pi or other ARM boards, Lyrical, Cyclone DDS (all runs used the default Fast DDS), larger messages such as images, and running <code>hz</code> on a different machine from the publisher.</p>

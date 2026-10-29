@@ -77,6 +77,19 @@ pip3 uninstall setuptools-scm</code></pre>
 
 <p>If you renamed the package, rename the file in <code>resource/</code> too. A leftover file with the old name gives you the <code>can't copy</code> error above.</p>
 
+<h2 id="faq">FAQ</h2>
+<h3>Is "listing git files failed - pretending there aren't any" an error?</h3>
+<p>No. It comes from setuptools_scm, and in my tests the build finished and the node ran every time this line appeared. If <code>colcon build</code> failed, the cause is another line in the output.</p>
+<h3>When does the listing git files failed message appear?</h3>
+<p>With setuptools_scm 7.1.0 or 8.1.0, when the workspace isn't a git repository or is one owned by a different user. Without setuptools_scm it never appeared, and 10.3.4 didn't print it.</p>
+<h3>How do I get rid of the message?</h3>
+<p>If you don't use setuptools_scm, <code>pip3 uninstall setuptools-scm</code> removes it. In a repo owned by another user, <code>git config --global --add safe.directory /path/to/ws</code> also silenced it.</p>
+<h3>Does downgrading setuptools to 58.2.0 help?</h3>
+<p>I didn't test 58.2.0. The message appeared with setuptools 59.6.0 and with 84.2.1, so the setuptools version doesn't seem to be what triggers it.</p>
+<h3>Why does colcon build fail with "git introspection failed: fatal: detected dubious ownership"?</h3>
+<p>With setuptools_scm 10.3.4, a workspace inside a git repository owned by another user stopped the build on Humble and Jazzy. Adding the path to <code>safe.directory</code>, uninstalling setuptools-scm, or building as the user who owns the files avoids it.</p>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is \"listing git files failed - pretending there aren't any\" an error?", "acceptedAnswer": {"@type": "Answer", "text": "No. It comes from setuptools_scm, and in my tests the build finished and the node ran every time this line appeared. If colcon build failed, the cause is another line in the output."}}, {"@type": "Question", "name": "When does the listing git files failed message appear?", "acceptedAnswer": {"@type": "Answer", "text": "With setuptools_scm 7.1.0 or 8.1.0, when the workspace isn't a git repository or is one owned by a different user. Without setuptools_scm it never appeared, and 10.3.4 didn't print it."}}, {"@type": "Question", "name": "How do I get rid of the message?", "acceptedAnswer": {"@type": "Answer", "text": "If you don't use setuptools_scm, pip3 uninstall setuptools-scm removes it. In a repo owned by another user, git config --global --add safe.directory /path/to/ws also silenced it."}}, {"@type": "Question", "name": "Does downgrading setuptools to 58.2.0 help?", "acceptedAnswer": {"@type": "Answer", "text": "I didn't test 58.2.0. The message appeared with setuptools 59.6.0 and with 84.2.1, so the setuptools version doesn't seem to be what triggers it."}}, {"@type": "Question", "name": "Why does colcon build fail with \"git introspection failed: fatal: detected dubious ownership\"?", "acceptedAnswer": {"@type": "Answer", "text": "With setuptools_scm 10.3.4, a workspace inside a git repository owned by another user stopped the build on Humble and Jazzy. Adding the path to safe.directory, uninstalling setuptools-scm, or building as the user who owns the files avoids it."}}]}</script>
+
 <h2>Not tested</h2>
 
 <p>setuptools_scm versions other than 7.1.0, 8.1.0 and 10.3.4. I didn't run setuptools_scm on Lyrical, because pip refused to install it there just as on Jazzy. I also didn't test virtual environments, packages that use <code>setup.cfg</code>/<code>pyproject.toml</code> only, or builds without git installed while setuptools_scm 10.x is present. I tried that last one only with a repository owned by another user, and it built.</p>

@@ -99,6 +99,19 @@ asyncio.run(main())</code></pre>
 <li><strong>Short one-off async call from a sync callback:</strong> <code>asyncio.run()</code> works, but it blocks every other callback on that executor until it returns.</li>
 </ul>
 
+<h2 id="faq">FAQ</h2>
+<h3>Why does await asyncio.sleep() in an rclpy callback raise "no running event loop"?</h3>
+<p>rclpy drives an <code>async def</code> callback with its own executor, not asyncio. No asyncio loop is running in that thread, so anything that needs one fails.</p>
+<h3>Why does await client.call_async() hang in an async callback?</h3>
+<p>On a <code>SingleThreadedExecutor</code> it hung in every setup I tried except one. With the timer callback in a <code>ReentrantCallbackGroup</code>, the response came at once.</p>
+<h3>How do I wait inside an async rclpy callback without blocking?</h3>
+<p>Await an rclpy <code>Future</code> that a one-shot timer completes, and call <code>destroy_timer</code> when it fires. 50 waits of 0.02 s took 1.02–1.03 s in total on Humble, Jazzy and Lyrical, and a 20 Hz timer on the same node kept firing.</p>
+<h3>Can I call spin_until_future_complete inside a callback?</h3>
+<p>No. On Humble it waited the full <code>timeout_sec=2.0</code> and returned with the future not done. On Jazzy it raised <code>RuntimeError: Executor is already spinning</code>.</p>
+<h3>How do I use asyncio libraries like websockets or aiohttp with rclpy?</h3>
+<p>Give asyncio the main thread and run <code>rclpy.spin</code> in a daemon thread. Hand messages across with <code>loop.call_soon_threadsafe</code>, and start coroutines from ROS callbacks with <code>asyncio.run_coroutine_threadsafe</code>.</p>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Why does await asyncio.sleep() in an rclpy callback raise \"no running event loop\"?", "acceptedAnswer": {"@type": "Answer", "text": "rclpy drives an async def callback with its own executor, not asyncio. No asyncio loop is running in that thread, so anything that needs one fails."}}, {"@type": "Question", "name": "Why does await client.call_async() hang in an async callback?", "acceptedAnswer": {"@type": "Answer", "text": "On a SingleThreadedExecutor it hung in every setup I tried except one. With the timer callback in a ReentrantCallbackGroup, the response came at once."}}, {"@type": "Question", "name": "How do I wait inside an async rclpy callback without blocking?", "acceptedAnswer": {"@type": "Answer", "text": "Await an rclpy Future that a one-shot timer completes, and call destroy_timer when it fires. 50 waits of 0.02 s took 1.02–1.03 s in total on Humble, Jazzy and Lyrical, and a 20 Hz timer on the same node kept firing."}}, {"@type": "Question", "name": "Can I call spin_until_future_complete inside a callback?", "acceptedAnswer": {"@type": "Answer", "text": "No. On Humble it waited the full timeout_sec=2.0 and returned with the future not done. On Jazzy it raised RuntimeError: Executor is already spinning."}}, {"@type": "Question", "name": "How do I use asyncio libraries like websockets or aiohttp with rclpy?", "acceptedAnswer": {"@type": "Answer", "text": "Give asyncio the main thread and run rclpy.spin in a daemon thread. Hand messages across with loop.call_soon_threadsafe, and start coroutines from ROS callbacks with asyncio.run_coroutine_threadsafe."}}]}</script>
+
 <h2>Not tested</h2>
 
 <p><code>MultiThreadedExecutor</code>, action clients, Iron and Rolling, the rest of Lyrical's <code>AsyncNode</code> API (I only measured its sleep), and third-party asyncio executors for rclpy. I only used a timer as the calling callback. Subscription callbacks may behave the same, but I didn't measure them.</p>

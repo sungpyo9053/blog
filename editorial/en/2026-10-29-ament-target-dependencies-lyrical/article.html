@@ -95,6 +95,19 @@ target_link_libraries(my_node PUBLIC ${std_msgs_TARGETS})</code></pre>
 
 <p>Lyrical ships CMake 4.2.3. With <code>cmake_minimum_required(VERSION 3.8)</code>, a common value in older package templates, Lyrical printed <code>Compatibility with CMake &lt; 3.10 will be removed from a future version of CMake</code>. It's only a warning, but raising the line to <code>VERSION 3.10</code> silenced it and still built on Humble's CMake 3.22.</p>
 
+<h2 id="faq">FAQ</h2>
+<h3>Why do I get Unknown CMake command "ament_target_dependencies"?</h3>
+<p>ROS 2 Lyrical removed <code>ament_target_dependencies()</code>. Any CMakeLists.txt that still calls it stops with this error.</p>
+<h3>What do I replace ament_target_dependencies with?</h3>
+<p>Use <code>target_link_libraries(my_node PUBLIC rclcpp::rclcpp ${std_msgs_TARGETS})</code>, listing every dependency the old call had. That line built and ran on Humble, Jazzy, Kilted and Lyrical in my test.</p>
+<h3>Why do I get "std_msgs/msg/string.hpp: No such file or directory" after the fix?</h3>
+<p>You only replaced <code>rclcpp</code>. Every package that was in the old <code>ament_target_dependencies</code> call has to appear in <code>target_link_libraries</code>.</p>
+<h3>What does "must be either all-keyword or all-plain" mean?</h3>
+<p>You mixed plain and <code>PUBLIC</code> <code>target_link_libraries</code> calls for one target. Use <code>PUBLIC</code> (or <code>PRIVATE</code>) on every call for that target, or on none of them.</p>
+<h3>Can I bring ament_target_dependencies back on Lyrical?</h3>
+<p>Not in my test. Adding <code>find_package(ament_cmake_target_dependencies REQUIRED)</code> before the old call did not restore it, so convert the call instead.</p>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Why do I get Unknown CMake command \"ament_target_dependencies\"?", "acceptedAnswer": {"@type": "Answer", "text": "ROS 2 Lyrical removed ament_target_dependencies(). Any CMakeLists.txt that still calls it stops with this error."}}, {"@type": "Question", "name": "What do I replace ament_target_dependencies with?", "acceptedAnswer": {"@type": "Answer", "text": "Use target_link_libraries(my_node PUBLIC rclcpp::rclcpp ${std_msgs_TARGETS}), listing every dependency the old call had. That line built and ran on Humble, Jazzy, Kilted and Lyrical in my test."}}, {"@type": "Question", "name": "Why do I get \"std_msgs/msg/string.hpp: No such file or directory\" after the fix?", "acceptedAnswer": {"@type": "Answer", "text": "You only replaced rclcpp. Every package that was in the old ament_target_dependencies call has to appear in target_link_libraries."}}, {"@type": "Question", "name": "What does \"must be either all-keyword or all-plain\" mean?", "acceptedAnswer": {"@type": "Answer", "text": "You mixed plain and PUBLIC target_link_libraries calls for one target. Use PUBLIC (or PRIVATE) on every call for that target, or on none of them."}}, {"@type": "Question", "name": "Can I bring ament_target_dependencies back on Lyrical?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my test. Adding find_package(ament_cmake_target_dependencies REQUIRED) before the old call did not restore it, so convert the call instead."}}]}</script>
+
 <h2>Not tested</h2>
 
 <p>Library packages that export targets to other packages (<code>ament_export_targets</code>, <code>ament_export_dependencies</code>), Python packages, and distros older than Humble. If you're converting a library, its downstream packages need the exported targets too. Check that a dependent package still builds after the change.</p>
