@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head meta_screenName="자주쓰는메뉴">
+        <title>법원경매정보 - 나의설정(자주쓰는메뉴)</title>
+    	<w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+        	<xf:instance>
+        		<data xmlns="" />
+        	</xf:instance>
+        	<w2:dataCollection baseNode="map">
+        		<w2:dataList baseNode="list" repeatNode="map" id="dlt_bmrkMenuAllLst" saveRemovedData="true">
+        			<w2:columnInfo>
+        				<w2:column id="cortAuctnComCd" name="법원경매공통코드" dataType="text"></w2:column>
+        				<w2:column id="uprCortAuctnComCd" name="상위법원경매공통코드" dataType="text"></w2:column>
+        				<w2:column id="cortAuctnComCdNm" name="법원경매공통코드명" dataType="text"></w2:column>
+        				<w2:column id="cortAuctnComCdLvl" name="법원경매공통코드레벨" dataType="text"></w2:column>
+        			</w2:columnInfo>
+        		</w2:dataList>
+        		<w2:dataList baseNode="list" repeatNode="map" id="dlt_bmrkMenuUserLst" saveRemovedData="true">
+        			<w2:columnInfo>
+        				<w2:column id="cortAuctnMbrsId" name="법원경매회원ID" dataType="text"></w2:column>
+        				<w2:column id="menuPgmId" name="메뉴프로그램ID" dataType="text"></w2:column>
+        				<w2:column id="indctTurn" name="표시순서" dataType="text"></w2:column>
+        				<w2:column id="menuPgmName" name="메뉴프로그램명" dataType="text"></w2:column>
+        			</w2:columnInfo>
+        			<w2:data use="true"></w2:data>
+        		</w2:dataList>
+        		<w2:dataList baseNode="list" repeatNode="map" id="dlt_userSelectMenu" saveRemovedData="true">
+        			<w2:columnInfo>
+        				<w2:column id="menuPgmId" name="메뉴프로그램ID" dataType="text"></w2:column>
+        				<w2:column id="indctTurn" name="표시순서" dataType="text"></w2:column>
+        				<w2:column id="menuPgmName" name="메뉴프로그램명" dataType="text"></w2:column>
+        			</w2:columnInfo>
+        			<w2:data use="false"></w2:data>
+        		</w2:dataList>
+        		<w2:dataList baseNode="list" repeatNode="map" id="dlt_bmrkMenuUserData" saveRemovedData="true">
+        			<w2:columnInfo>
+        				<w2:column id="menuPgmId" name="메뉴ID" dataType="text"></w2:column>
+        			</w2:columnInfo>
+        			<w2:data use="false"></w2:data>
+        		</w2:dataList>
+        	</w2:dataCollection>
+        	<w2:workflowCollection></w2:workflowCollection>
+        	<xf:submission id="sbm_selectBmrkMenuLst" ref=""
+        		target='data:json,[{"id":"dlt_bmrkMenuAllLst","key":"data.dlt_bmrkMenuAllLst"},{"id":"dlt_bmrkMenuUserLst","key":"data.dlt_bmrkMenuUserLst"}]'
+        		action="/pgj/pgj195/selectBmrkMenuMng.on" method="post" mediatype="application/json" encoding="UTF-8" instance="" replace=""
+        		errorHandler="" customHandler="" mode="asynchronous" processMsg="" ev:submit=""
+        		ev:submitdone="scwin.sbm_selectBmrkMenuLst_submitdone" ev:submiterror="" abortTrigger="">
+        	</xf:submission>
+        	<xf:submission id="sbm_insertBmrkMenuUser" ref='data:json,dlt_bmrkMenuUserData' target="" action="/pgj/pgj195/saveBmrkMenuMng.on" method="post"
+        		mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler="" mode="asynchronous"
+        		processMsg="" ev:submit="" ev:submitdone="scwin.sbm_insertBmrkMenuUser_submitdone" ev:submiterror="" abortTrigger="">
+        	</xf:submission>
+        </xf:model>
+        <script type="text/javascript" lazy="false"><![CDATA[/* 프로그램ID */
+scwin.pgmId = 'PGJ195M03';
+
+/* 최상단(opener, parent 포함) 기준 함수 */
+scwin.isMain = function() {
+	return true;
+};
+
+/**
+ * onPageLoad시 자주쓰는 메뉴 전체 리스트,회원id의 등록된 메뉴 리스트 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.onpageload = function() {
+	scscrno.setScPgmId(scwin.pgmId);
+
+	/* 메뉴 */	
+	if(!scutilo.isEmpty(scwin.pgmId)){ 
+	   $p.main().wfm_side.scope.scwin.menuFocus(scwin.pgmId);
+	}
+
+	com.executeSubmission(sbm_selectBmrkMenuLst);
+};
+
+scwin.onpageunload = function() {
+
+};
+
+/**
+ * 자주쓰느메뉴중 대분류 메뉴 폰트색, [] 체크
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbm_selectBmrkMenuLst_submitdone = function(e) {
+	for (var i=0; i<dlt_bmrkMenuAllLst.getTotalRow(); i++) {
+		if (dlt_bmrkMenuAllLst.getCellData(i,"cortAuctnComCdLvl") == "2") {
+			var temp = dlt_bmrkMenuAllLst.getCellData(i, "cortAuctnComCdNm");
+			temp = `<font color='blue'> [ ${temp} ]<font>`;
+			dlt_bmrkMenuAllLst.setCellData(i, "cortAuctnComCdNm", temp);
+		}
+	}
+};
+
+/**
+ * 오른쪽 환살표 버튼 클릭시 유효성 검사후 데이터 바인딩
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_bmrkMenuAdd_onclick = function(e) {
+	var cnt=0;
+	if (dlt_userSelectMenu.getTotalRow()==0) {
+		scutilo.showMsg(scglblo.MSG.WARN,"선택된 항목이 없습니다.");
+		return;
+	} else {
+		if (dlt_bmrkMenuUserLst.getTotalRow()>=10) {/* 등록 메뉴 10개인지 */
+			scutilo.showMsg(scglblo.MSG.WARN,"자주쓰는메뉴는 10까지만 등록 가능합니다.");
+			return;
+		}
+		for(var i=0; i<dlt_userSelectMenu.getTotalRow(); i++) {
+			var pgmId = dlt_userSelectMenu.getCellData(i, "menuPgmId");
+			/* 중복체크 */
+			for(var j=0; j<dlt_bmrkMenuUserLst.getTotalRow(); j++) {
+				var realPgmId = dlt_bmrkMenuUserLst.getCellData(j, "menuPgmId");
+				if (pgmId==realPgmId) {
+					cnt++;
+				}
+			}
+			/* 대분류 메뉴 선택됐는지 체크 */
+			if (pgmId.length == 7) {
+				scutilo.showMsg(scglblo.MSG.WARN,"대메뉴명은 이동할 수 없습니다.")
+				return;
+			}
+			if (cnt>0) {
+				scutilo.showMsg(scglblo.MSG.WARN,"이미등록된 메뉴가 포함되어 있습니다.");
+				return;
+			}
+		}
+		dlt_bmrkMenuUserLst.setJSON(dlt_userSelectMenu.getAllJSON(), true);
+	}
+};
+
+/**
+ * 전체 자주쓰는 메뉴에서 선택한 메뉴들 dlt_userSelectMenu의 저장
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.msb_bmrkMenuAllLst_onviewchange = function(info) {
+	dlt_userSelectMenu.removeAll();
+	var selLst = info.newSelectedIndex.split(" ");
+	for (var i =0; i<selLst.length; i++) {
+		dlt_userSelectMenu.insertRow(i);
+		dlt_userSelectMenu.setCellData(i, "menuPgmName", dlt_bmrkMenuAllLst.getCellData(selLst[i], "cortAuctnComCdNm"));
+		dlt_userSelectMenu.setCellData(i, "menuPgmId", dlt_bmrkMenuAllLst.getCellData(selLst[i], "cortAuctnComCd"));
+		dlt_userSelectMenu.setCellData(i, "indctTurn", i+1);
+	}
+};
+
+
+
+/**
+ * 왼쪽 화살표 버튼 클릭시 선택한 자주쓰는메뉴삭제
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_bmrkMenuDel_onclick = function(e) {
+	/* 회원id등록된 자주쓰는 메뉴중 지우려고 선택한 index */
+	var delIndex = msb_bmrkMenuUserLst.getSelectedIndex(",").split(",");
+	var a = [];
+	if (delIndex[0] == '') {
+		scutilo.showMsg(scglblo.MSG.WARN,"선택된 항목이 없습니다.");
+		return;
+	} else {
+		for(let i=0; i<delIndex.length; i++) {
+			a[i] = dlt_bmrkMenuUserLst.getCellData(delIndex[i], "menuPgmId");
+		}
+		for(var j = 0; j<dlt_bmrkMenuUserLst.getTotalRow(); j++) {
+			for(let idx = 0; idx<a.length; idx++) {
+				if (dlt_bmrkMenuUserLst.getCellData(j,"menuPgmId") == a[idx]) {
+					dlt_bmrkMenuUserLst.removeRow(j);
+				}
+			}
+		}
+	}
+};
+
+/**
+ * 위에 화살표 버튼 클릭시 순서 변경
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_bmrkMenuUp_onclick = function(e) {
+	let tempIndex = msb_bmrkMenuUserLst.getSelectedIndex(",").split(",");
+	let index = tempIndex[0];
+	dlt_bmrkMenuUserLst.rowMoveUp(index);
+};
+
+/**
+ * 아래 화살표 버튼 클릭시 순서 변경
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_bmrkMenuDown_onclick = function(e) {
+	let tempIndex =msb_bmrkMenuUserLst.getSelectedIndex(",").split(",");
+	let index = tempIndex[0];
+	dlt_bmrkMenuUserLst.rowMoveDown(index);
+};
+
+/**
+ * 저장 버튼 클릭시 해당 회원ID 자주쓰는목록에 선택한 메뉴 저장
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_saveBmrkMenu_onclick = function(e) {
+	dlt_bmrkMenuUserData.removeAll();
+	for(let i =0; i<dlt_bmrkMenuUserLst.getTotalRow(); i++) {
+		dlt_bmrkMenuUserData.insertRow(i);
+		dlt_bmrkMenuUserData.setCellData(i, "menuPgmId", dlt_bmrkMenuUserLst.getCellData(i, "menuPgmId"));
+	}
+	scutilo.showMsg(scglblo.MSG.WARN,scutilo.getMsg(pgjmsg.PGJ.S_0002), ()=>{
+		com.executeSubmission(sbm_insertBmrkMenuUser);
+	})
+};
+
+/**
+ * 메뉴 저장후 초기화
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbm_insertBmrkMenuUser_submitdone = function(e) {
+
+	scwin.onpageload();
+};
+]]></script>
+    </head>
+    <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+    	<xf:group class="wrap user" id="" style="">
+    		<w2:wframe class="header" id="wfm_header" src="../common/header.xml" style=""></w2:wframe>
+    		<xf:group class="sub_cotainer" id="wfm_mainFrame" style="">
+    			<xf:group class="inr" id="" style="">
+    				<w2:wframe class="sidebox" id="wfm_side" src="../common/sideMenu/side006.xml" style=""></w2:wframe>
+    				<xf:group class="sub_contents" id="" style="">
+    					<xf:group class="pgtbox" id="" style="">
+    						<w2:textbox class="pgt_tit" id="" label="자주쓰는메뉴" style="" tagname="h2"></w2:textbox>
+    						<xf:group class="clearfix" id="" style="">
+    							<xf:group class="pgt_location" id="" style="" tagname="ul">
+    								<xf:group id="" style="" tagname="li">
+    									<w2:span id="" label="나의경매" style=""></w2:span>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:span id="" label="나의설정" style=""></w2:span>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:span id="" label="자주쓰는메뉴" style=""></w2:span>
+    								</xf:group>
+    							</xf:group>
+    						</xf:group>
+    					</xf:group>
+    					<xf:group style="" id="" class="rowmenu">
+    						<xf:group style="" id="" class="rowbox"><xf:group class="stbox" id="" style="">
+    						<w2:textbox class="frm_title" id="" label="메뉴선택" style="" tagname="h3"></w2:textbox>
+
+    					</xf:group><xf:group style="" id="" class="multi_wrap">
+    						<xf:select appearance="minimal" style="width:100%;" id="msb_bmrkMenuAllLst" ref="" class="sel multi2" escape="false" ev:onviewchange="scwin.msb_bmrkMenuAllLst_onviewchange">
+    							<xf:choices>
+    								<xf:itemset nodeset="data:dlt_bmrkMenuAllLst">
+    									<xf:label ref="cortAuctnComCdNm"></xf:label>
+    									<xf:value ref="cortAuctnComCd"></xf:value>
+    								</xf:itemset>
+    							</xf:choices>
+    						</xf:select>
+</xf:group></xf:group>
+    						<xf:group style="" id="" class="rowbtn_group">
+    							<xf:group style="" id="" class="btns"><xf:trigger type="button" style="" id="btn_bmrkMenuAdd" class="btn" title="추가" ev:onclick="scwin.btn_bmrkMenuAdd_onclick">
+    								<xf:label><![CDATA[추가]]></xf:label>
+    							</xf:trigger><xf:trigger class="btn del" id="btn_bmrkMenuDel" style="" type="button" title="삭제" ev:onclick="scwin.btn_bmrkMenuDel_onclick">
+    								<xf:label><![CDATA[삭제]]></xf:label>
+    							</xf:trigger></xf:group>
+
+
+    						</xf:group>
+    						<xf:group class="rowbox" id="" style=""><xf:group class="stbox" id="" style="">
+    						<w2:textbox class="frm_title" id="" label="자주쓰는 메뉴" style="" tagname="h3"></w2:textbox>
+    					</xf:group><xf:group id="" style="" class="multi_wrap">
+    						<xf:select appearance="minimal" id="msb_bmrkMenuUserLst" ref="" style="width:100%;" class="sel multi2">
+    							<xf:choices>
+    								<xf:itemset nodeset="data:dlt_bmrkMenuUserLst">
+    									<xf:label ref="menuPgmName"></xf:label>
+    									<xf:value ref="menuPgmId"></xf:value>
+    								</xf:itemset>
+    							</xf:choices>
+    						</xf:select>
+
+
+    						<xf:group style="" id="" class="btns">
+    							<xf:trigger type="button" style="" id="btn_bmrkMenuUp" class="btn up" title="위로 이동" ev:onclick="scwin.btn_bmrkMenuUp_onclick">
+    								<xf:label><![CDATA[위로 이동]]></xf:label>
+    							</xf:trigger>
+    							<xf:trigger class="btn down" id="btn_bmrkMenuDown" style="" type="button" title="아래로 이동" ev:onclick="scwin.btn_bmrkMenuDown_onclick">
+    								<xf:label><![CDATA[아래로 이동]]></xf:label>
+    							</xf:trigger>
+    						</xf:group>
+    					</xf:group></xf:group>
+
+    					</xf:group>
+
+
+
+
+
+
+    					<xf:group class="btn_group" id="" style="">
+    						<xf:trigger class="btn_cm lg bg3" disabled="" id="btn_saveBmrkMenu" style="" title="저장하기" type="button" ev:onclick="scwin.btn_saveBmrkMenu_onclick">
+    							<xf:label><![CDATA[저장]]></xf:label>
+    						</xf:trigger>
+    					</xf:group><xf:group class="infobox" id="" style="">
+    						<w2:textbox class="tit" id="" label="사용설명" style=""></w2:textbox>
+    						<xf:group class="info_list" id="" style="" tagname="ul">
+    							<xf:group id="" style="" tagname="li">
+    								<w2:textbox id="" label="자주쓰는 메뉴는 최대 10개까지 설정 가능합니다." style=""></w2:textbox>
+    							</xf:group>
+    							<xf:group id="" style="" tagname="li">
+    								<w2:span label="우측 하단의" style="" id=""></w2:span>
+    								<xf:image src="/pgj/cm/images/contents/ic_arr_st2.png" style="margin:0 3px;" id="" alt="위로이동"></xf:image>
+    								<xf:image alt="아래로이동" id="" src="/pgj/cm/images/contents/ic_arr_st2.png"
+    									style="margin:0 3px;transform:rotate(180deg);">
+    								</xf:image>
+    								<w2:span id="" label="버튼을 이용하여 메뉴의 순위 조정이 가능합니다." style=""></w2:span>
+    							</xf:group>
+    							<xf:group id="" style="" tagname="li">
+    								<w2:textbox id="" label="자주쓰는 메뉴를 추가 / 삭제 / 순위조정을 한 후 저장버튼을 클릭하시면 저장 됩니다." style=""></w2:textbox>
+    							</xf:group>
+    						</xf:group>
+    					</xf:group>
+
+    				</xf:group>
+    			</xf:group>
+    		</xf:group>
+    		<w2:wframe class="footer" id="" src="../common/footer.xml" style=""></w2:wframe>
+    		<w2:wframe class="quickmenu" id="" src="../common/quick.xml" style=""></w2:wframe>
+    	</xf:group>
+    </body>
+</html>

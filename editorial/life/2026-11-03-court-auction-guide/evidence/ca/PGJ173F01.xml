@@ -1,0 +1,763 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head meta_screenName="경매서식" meta_vertical_guides="" meta_horizontal_guides="48">
+        <title>법원경매정보 - 경매서식</title>
+        <w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+        	<xf:instance>
+        		<data xmlns="" />
+        	</xf:instance>
+        	<w2:dataCollection baseNode="map">
+        		<w2:dataMap baseNode="map" id="dma_pageInfo">
+        			<w2:keyInfo>
+        				<w2:key id="pageNo" name="페이지번호" dataType="number"></w2:key>
+        				<w2:key id="pageSize" name="페이지크기" dataType="number"></w2:key>
+        				<w2:key id="bfPageNo" name="이전 페이지 번호" dataType="number"></w2:key>
+        				<w2:key id="startRowNo" name="시작 행번호" dataType="number"></w2:key>
+        				<w2:key id="totalCnt" name="총건수" dataType="number"></w2:key>
+        				<w2:key id="totalYn" name="총건수조회여부" dataType="text"></w2:key>
+        			</w2:keyInfo>
+        			<w2:data use="true"></w2:data>
+        		</w2:dataMap>
+        		<w2:dataMap baseNode="map" id="dma_auctnFrmlSrch">
+        			<w2:keyInfo>
+        				<w2:key id="cortAuctnNtcEtcDtlDvsCd" name="법원경매공지기타상세구분코드" dataType="text"></w2:key>
+        				<w2:key id="titlSrchwd" name="검색어" dataType="text"></w2:key>
+        				<w2:key id="tapFlag" name="탭구분버호" dataType="text"></w2:key>
+        			</w2:keyInfo>
+        			<w2:data use="true"></w2:data>
+        		</w2:dataMap>
+        		<w2:dataList baseNode="list" repeatNode="map" id="dlt_auctnFrmlLst" saveRemovedData="true">
+        			<w2:columnInfo>
+        				<w2:column id="seq" name="글순서번호" dataType="text"></w2:column>
+        				<w2:column id="ntatcTitlNm" name="게시물제목명" dataType="text"></w2:column>
+        				<w2:column id="hwpFileNm" name="한글파일명" dataType="text"></w2:column>
+        				<w2:column id="docFileNm" name="엑셀파일명" dataType="text"></w2:column>
+        				<w2:column id="hwpCortAuctnAtflSeq" name="한글파일사항순번" dataType="text"></w2:column>
+        				<w2:column id="cortAuctnNtcEtcDtlDvsCd" name="법원경매공지기타구분코드" dataType="text"></w2:column>
+        				<w2:column id="cortAuctnNtcEtcDvsCd" name="법원경매공지기타구분코드" dataType="text"></w2:column><w2:column id="cortAuctnNtcMtrSeq" name="법원경매공지사항순번" dataType="text"></w2:column>
+
+
+
+        				<w2:column id="docCortAuctnAtflSeq" name="엑셀파일사항순번" dataType="text"></w2:column>
+
+
+
+        			</w2:columnInfo>
+        			<w2:data use="true"></w2:data>
+        		</w2:dataList>
+        	</w2:dataCollection>
+        	<w2:workflowCollection></w2:workflowCollection>
+        	<xf:submission id="sbm_selectAuctnFrmlLst" ref='data:json,["dma_pageInfo","dma_auctnFrmlSrch"]'
+        		target='data:json,[{"id":"dma_pageInfo","key":"data.dma_pageInfo"},{"id":"dlt_auctnFrmlLst","key":"data.dlt_auctnFrmlLst"}]' action="/pgj/pgj173/selectAuctnFrmlLst.on"
+        		method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+        		mode="asynchronous" processMsg="" ev:submit="" ev:submitdone="scwin.sbm_selectAuctnFrmlLst_submitdone" ev:submiterror="" abortTrigger="">
+        	</xf:submission>
+        </xf:model>
+        <script type="text/javascript" lazy="false"><![CDATA[/* 프로그램ID */
+scwin.pgmId = 'PGJ173F01';
+
+/* 최상단의 선언 */
+scwin.isMain = function() {
+	return true;
+}
+
+/* 페이지 건수 */
+var pageCnt = 0;
+
+/* 탭위치 동산 부동산 구분코드 */
+scwin.rletMvprpDvsCd = 'R'
+
+scwin.onpageload = function() {
+
+	/* 메뉴 */
+	if(!scutilo.isEmpty(scwin.pgmId)){
+	   $p.main().wfm_side.scope.scwin.menuFocus(scwin.pgmId.slice(0,6));
+	}
+
+	let flag = com.getParameter("tap");
+	if (!scutilo.isEmpty(flag) && flag == "M") {
+		tac_auctnFrml.setSelectedTabIndex(1);
+		dma_auctnFrmlSrch.set("cortAuctnNtcEtcDtlDvsCd","0005502");
+		dma_auctnFrmlSrch.set("tapFlag",1);
+		dma_auctnFrmlSrch.set("titlSrchwd","");
+	}
+	ibx_frmlNm1.focus();
+	if (pgjUtil.getCookie("pageCnt")==null) {
+		pageCnt =20;
+		sbx_pageCnt1.setValue('20');
+	} else {
+		pageCnt = Number(pgjUtil.getCookie("pageCnt"));
+		sbx_pageCnt1.setValue(pgjUtil.getCookie("pageCnt"));
+	}
+	scwin.auctnFrmlListMain(true,pageCnt);
+};
+
+scwin.onpageunload = function() {
+
+};
+
+//웹접근성으로 인한 title제공 수정
+scwin.titleFormatter = function(e) {
+    return "";
+}
+
+/**
+ * 페이징 처리 Main
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.05.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.auctnFrmlListMain = function(isFirst,pageCnt){
+
+	/* 최초 조회 여부 */
+	if (isFirst) {
+        dma_pageInfo.set("pageNo" , 1);
+        dma_pageInfo.set("totalYn", "Y");
+	} else {
+        dma_pageInfo.set("totalYn", "N");
+    }
+	dma_pageInfo.set("pageSize", pageCnt);
+	com.executeSubmission(sbm_selectAuctnFrmlLst);
+}
+
+/**
+ * 페이징 처리
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.05.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbm_selectAuctnFrmlLst_submitdone = function(e) {
+	var tapFlag = dma_auctnFrmlSrch.get("tapFlag");
+
+	if (tapFlag==0 || tapFlag==null || tapFlag=="") {
+		/* 페이지 dma, 해당 페이지 리스트 ID, 해당 gridView ID */
+		scutilo.setPagingInfo(dma_pageInfo, pgl_auctnFrmlList, grd_auctnFrmlList1);
+	} else {
+		scutilo.setPagingInfo(dma_pageInfo, pgl_auctnFrmlList2, grd_auctnFrmlList2);
+	}
+
+};
+
+/**
+ * 부동산 탭 페이지 이동시 해당 페이지 번호
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.05.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.pgl_auctnFrmlList_onviewchange = function(info) {
+	dma_pageInfo.set("pageNo" , info.newSelectedIndex );
+    dma_pageInfo.set("bfPageNo",info.oldSelectedIndex );
+	scwin.auctnFrmlListMain(false,pageCnt);//조회처리
+};
+
+/**
+ * 동산 탭 페이지 이동시 해당 페이지 번호
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.05.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.pgl_auctnFrmlList2_onviewchange = function(info) {
+	dma_pageInfo.set("pageNo" , info.newSelectedIndex );
+    dma_pageInfo.set("bfPageNo",info.oldSelectedIndex );
+	scwin.auctnFrmlListMain(false,pageCnt);//조회처리
+};
+
+/**
+ * 탭 이동시 해당 탭에 맞는 경매서식 목록 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.05.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.tac_auctnFrml_ontabclick = function(tabID,idx) {
+
+	/* 탭 인덱스 */
+	var a = idx;
+
+	if (a == "0") {/* 부동산 일 경우 */
+		ibx_frmlNm1.focus();
+		dma_auctnFrmlSrch.set("cortAuctnNtcEtcDtlDvsCd","0005501");
+		dma_auctnFrmlSrch.set("tapFlag",a);
+		/* 초기화 */
+		dma_auctnFrmlSrch.set("titlSrchwd","");
+		ibx_frmlNm1.setValue("");
+		sbx_pageCnt1.setValue(WebSquare.cookie.getCookie('pageCnt'));
+		scwin.auctnFrmlListMain(true,pageCnt);
+	} else { /* 동산 일 경우 */
+		ibx_frmlNm2.focus();
+		dma_auctnFrmlSrch.set("cortAuctnNtcEtcDtlDvsCd","0005502");
+		dma_auctnFrmlSrch.set("tapFlag",a);
+		/* 초기화 */
+		dma_auctnFrmlSrch.set("titlSrchwd","");
+		ibx_frmlNm2.setValue("");
+		sbx_pageCnt2.setValue(WebSquare.cookie.getCookie('pageCnt'));
+		scwin.auctnFrmlListMain(true,pageCnt);
+	}
+
+};
+
+/**
+ * 부동산 서식명 검색
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.08.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_auctnFrmlSrch1_onclick = function(e) {
+	const srchNm = scutilo.skipSpaces(ibx_frmlNm1.getValue());
+	//유효성 체크
+	if (srchNm.length === 1) {
+		scutilo.showMsg(scglblo.MSG.WARN,scutilo.getMsg(pgjmsg.PGJ.W_0009,"검색어"))
+		return
+	}
+	if (pgjUtil.spcCharChk2(srchNm)) {
+		scutilo.showMsg(scglblo.MSG.WARN,scutilo.getMsg(pgjmsg.PGJ.W_0004));
+		return
+	}
+	dma_auctnFrmlSrch.set("titlSrchwd",ibx_frmlNm1.getValue());
+	scwin.auctnFrmlListMain(true,pageCnt);
+};
+
+/**
+ * 동산 서식명 검색
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.08.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_auctnFrmlSrch2_onclick = function(e) {
+	//유효성 체크
+	const srchNm = scutilo.skipSpaces(ibx_frmlNm2.getValue());
+	if (srchNm.length === 1) {
+		scutilo.showMsg(scglblo.MSG.WARN,scutilo.getMsg(pgjmsg.PGJ.W_0009,"검색어"))
+		return
+	}
+	if (pgjUtil.spcCharChk2(srchNm)) {
+		scutilo.showMsg(scglblo.MSG.WARN,scutilo.getMsg(pgjmsg.PGJ.W_0004));
+		return
+	}
+	dma_auctnFrmlSrch.set("titlSrchwd",ibx_frmlNm2.getValue());
+	scwin.auctnFrmlListMain(true,pageCnt);
+};
+
+/**
+ * 부동산 일때 페이지 수
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.08.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbx_pageCnt1_onchange = function(info) {
+
+	WebSquare.cookie.setCookieAsync("test", "부동산", "None");
+	var cookieFlag = info.newValue;
+	if (cookieFlag == 10) {
+		pgjUtil.setCookie("pageCnt","10")
+	} else if (cookieFlag == 20) {
+		pgjUtil.setCookie("pageCnt","20")
+	} else if (cookieFlag == 30) {
+		pgjUtil.setCookie("pageCnt","30")
+	} else if (cookieFlag == 40) {
+		pgjUtil.setCookie("pageCnt","40")
+	}
+	pageCnt = pgjUtil.getCookie("pageCnt");
+	scwin.auctnFrmlListMain(true,cookieFlag);
+};
+
+/**
+ * 동산 일때 페이지 수
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.08.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbx_pageCnt2_onchange = function(info) {
+	WebSquare.cookie.setCookieAsync("test", "동산", "None");
+	var cookieFlag = info.newValue;
+	if (cookieFlag == 10) {
+		pgjUtil.setCookie('pageCnt','10')
+	} else if (cookieFlag == 20) {
+		pgjUtil.setCookie('pageCnt','20')
+	} else if (cookieFlag == 30) {
+		pgjUtil.setCookie('pageCnt','30')
+	} else if (cookieFlag == 40) {
+		pgjUtil.setCookie('pageCnt','40')
+	}
+	pageCnt = pgjUtil.getCookie('pageCnt');
+	scwin.auctnFrmlListMain(true,cookieFlag);
+};
+
+
+/**
+ * 부동산 일때 서식클릭시 상세페이지 이동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.08.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.grd_auctnFrmlList1_oncellclick = function(row,col,colId) {
+
+	let dvsCd = dlt_auctnFrmlLst.getCellData(row, "cortAuctnNtcEtcDvsCd")
+	let frmlSer = dlt_auctnFrmlLst.getCellData(row, "cortAuctnNtcMtrSeq")
+	let fileSer= ""
+
+	if (col == 2) {
+		//한글파일 다운로
+		fileSer = dlt_auctnFrmlLst.getCellData(row, "hwpCortAuctnAtflSeq")
+		if (scutilo.isEmpty(dvsCd) || scutilo.isEmpty(dvsCd) || scutilo.isEmpty(fileSer)) {
+			scutilo.showMsg(scglblo.MSG.WARN,"서식파일이 존재하지 않습니다.\n관리자에게 문의하십시오.")
+			return;
+		}
+	} else if (col == 3) {
+		//엑셀파일 다운로드
+		fileSer = dlt_auctnFrmlLst.getCellData(row, "docCortAuctnAtflSeq")
+		if (scutilo.isEmpty(dvsCd) || scutilo.isEmpty(dvsCd) || scutilo.isEmpty(fileSer) ) {
+			scutilo.showMsg(scglblo.MSG.WARN,"서식파일이 존재하지 않습니다.\n관리자에게 문의하십시오.")
+			return;
+		}
+	}
+
+	if (col === 2 || col === 3) {
+		const params = { "dma_downInfo": {
+			cortAuctnNtcEtcDvsCd : dvsCd,
+			cortAuctnNtcMtrSeq : frmlSer,
+			cortAuctnAtflSeq : fileSer,
+		} }
+
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', "/pgj/pgjComm/000Blob.on", true);
+		xhr.setRequestHeader('Content-Type', 'application/json');
+		com.setHeader(xhr); // SCHeader setting
+		xhr.responseType = 'blob';
+		xhr.onreadystatechange = function() {
+			if (this.readyState === XMLHttpRequest.DONE) {
+				if (this.status === 200) {
+					let filename = "";
+					let contentDisposition = this.getResponseHeader('Content-Disposition');
+					if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
+						const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+						let matches = filenameRegex.exec(contentDisposition);
+						if (matches != null && matches[1]) {
+							filename = matches[1].replace(/['"]/g, '');
+						}
+					}
+					const blob = new Blob([this.response], { type: 'application/octet-stream' });
+					const downloadLink = document.createElement('a');
+					downloadLink.href = URL.createObjectURL(blob);
+					downloadLink.download = decodeURIComponent(filename) || 'unknown'; // 한글명 대응
+					downloadLink.click();
+				} else {
+					scutilo.showMsg(scglblo.MSG.ERROR, '파일 다운로드에'); //<%s> 실패하였습니다.
+				}
+			}
+		};
+		xhr.send(JSON.stringify(params));
+	}
+};
+
+/**
+ * 동산 일때 서식클릭시 상세페이지 이동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.08.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.grd_auctnFrmlList2_oncellclick = function(row,col,colId) {
+	if (col == 2) {
+		//한글파일 다운로드
+		dvsCd  = dlt_auctnFrmlLst.getCellData(row, "cortAuctnNtcEtcDvsCd")
+		frmlSer = dlt_auctnFrmlLst.getCellData(row, "cortAuctnNtcMtrSeq")
+		fileSer = dlt_auctnFrmlLst.getCellData(row, "hwpCortAuctnAtflSeq")
+	} else if (col == 3) {
+		//엑셀파일 다운로드
+		dvsCd  = dlt_auctnFrmlLst.getCellData(row, "cortAuctnNtcEtcDvsCd")
+		frmlSer = dlt_auctnFrmlLst.getCellData(row, "cortAuctnNtcMtrSeq")
+		fileSer = dlt_auctnFrmlLst.getCellData(row, "docCortAuctnAtflSeq")
+	}
+
+	if (col === 2 || col === 3) {
+		const params = { "dma_downInfo": {
+			cortAuctnNtcEtcDvsCd : dvsCd,
+			cortAuctnNtcMtrSeq : frmlSer,
+			cortAuctnAtflSeq : fileSer,
+		} }
+
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', "/pgj/pgjComm/000Blob.on", true);
+		xhr.setRequestHeader('Content-Type', 'application/json');
+		com.setHeader(xhr); // SCHeader setting
+		xhr.responseType = 'blob';
+		xhr.onreadystatechange = function() {
+			if (this.readyState === XMLHttpRequest.DONE) {
+				if (this.status === 200) {
+					let filename = "";
+					let contentDisposition = this.getResponseHeader('Content-Disposition');
+					if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
+						const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+						let matches = filenameRegex.exec(contentDisposition);
+						if (matches != null && matches[1]) {
+							filename = matches[1].replace(/['"]/g, '');
+						}
+					}
+					const blob = new Blob([this.response], { type: 'application/octet-stream' });
+					const downloadLink = document.createElement('a');
+					downloadLink.href = URL.createObjectURL(blob);
+					downloadLink.download = decodeURIComponent(filename) || 'unknown'; // 한글명 대응
+					downloadLink.click();
+				} else {
+					scutilo.showMsg(scglblo.MSG.ERROR, '파일 다운로드에'); //<%s> 실패하였습니다.
+				}
+			}
+		};
+		xhr.send(JSON.stringify(params));
+	}
+};
+
+/**
+ * 부동산 일때 엔터키를 누를시 검색 이벤트 발동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.11.30.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ibx_frmlNm1_onkeydown = function(e) {
+	if (e.code == "Enter") {
+		scwin.btn_auctnFrmlSrch1_onclick();
+	}
+};
+
+/**
+ * 동산 일때 엔터키를 누를시 검색 이벤트 발동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.11.30.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ibx_frmlNm2_onkeydown = function(e) {
+		if (e.code == "Enter") {
+		scwin.btn_auctnFrmlSrch2_onclick();
+	}
+};
+
+/**
+ * 부동산 검색어 입력시 특수문자를 막아주는 이벤트
+ * (결함수정)
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.02.28.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ibx_frmlNm1_onkeypress = function(e) {
+	pgjUtil.noneInputSpcChar2(e)
+};
+
+/**
+ * 동산 검색어 입력시 특수문자를 막아주는 이벤트
+ * (결함수정)
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.02.28.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ibx_frmlNm2_onkeypress = function(e) {
+	pgjUtil.noneInputSpcChar2(e)
+};
+]]></script>
+    </head>
+    <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+        <xf:group class="wrap user" id="" style="">
+            <w2:wframe class="header" id="" src="../common/header.xml" style=""></w2:wframe>
+            <xf:group class="sub_cotainer" id="wfm_mainFrame" style="">
+                <xf:group class="inr" id="" style="">
+                    <w2:wframe class="sidebox" id="wfm_side" src="../common/sideMenu/side004.xml" style=""></w2:wframe>
+                    <xf:group class="sub_contents" id="" style="">
+                        <xf:group class="pgtbox" id="" style="">
+                            <w2:textbox class="pgt_tit" id="" label="경매서식" style="" tagname="h2"></w2:textbox>
+                            <xf:group class="clearfix" id="" style="">
+                                <xf:group class="pgt_location" id="" style="" tagname="ul">
+                                	<xf:group id="" style="" tagname="li">
+                                		<w2:span id="" label="HOME" style=""></w2:span>
+                                	</xf:group>
+                                	<xf:group id="" style="" tagname="li">
+                                		<w2:span id="" label="경매지식" style=""></w2:span>
+                                	</xf:group>
+                                	<xf:group id="" style="" tagname="li">
+                                		<w2:span id="" label="경매서식" style=""></w2:span>
+                                	</xf:group>
+                                </xf:group>
+                            </xf:group>
+                        </xf:group><w2:tabControl useTabKeyOnly="false" id="tac_auctnFrml" useMoveNextTabFocus="false" useConfirmMessage="false" confirmTrueAction="exist" confirmFalseAction="new" alwaysDraw="false" style="" class="inner_tab_type1" ev:ontabclick="scwin.tac_auctnFrml_ontabclick">
+                            <w2:tabs disabled="false" style="" id="tas_rlet" label="부동산" title="선택됨"></w2:tabs>
+                            <w2:tabs disabled="false" style="" id="tas_mvprp" label="동산" class="" title="선택됨"></w2:tabs>
+                            <w2:content alwaysDraw="true" style="" id="content1"><xf:group class="shbox" id="" style="">
+                            <xf:group class="shbox_inner" id="" style="">
+                                <xf:group class="w2tb" id="" style="width:100%;" tagname="table">
+                                    <w2:attributes>
+                                        <w2:summary></w2:summary>
+                                    </w2:attributes>
+                                    <xf:group tagname="caption"></xf:group>
+                                    <xf:group tagname="colgroup">
+                                        <xf:group style="width:100px;" tagname="col"></xf:group>
+                                        <xf:group style="" tagname="col"></xf:group>
+                                    </xf:group>
+                                    <xf:group style="" tagname="tr">
+                                        <xf:group class="w2tb_th" style="" tagname="th">
+                                            <w2:attributes>
+                                                <w2:scope>row</w2:scope>
+                                            </w2:attributes>
+                                            <w2:textbox id="" label="서식명" style=""></w2:textbox>
+                                        </xf:group>
+                                        <xf:group class="w2tb_td" style="" tagname="td">
+                                            <w2:textbox tagname="label" for="ibx_frmlNm1" id="" label="서식명 입력" class="webblind"></w2:textbox>
+                                            <xf:input adjustMaxLength="false" class="inp" dataType="" id="ibx_frmlNm1" style="width:100%;max-width:300px;" title="내용을 입력해주세요." ev:onkeydown="scwin.ibx_frmlNm1_onkeydown" ev:onkeypress="scwin.ibx_frmlNm1_onkeypress" maxlength="100">
+                                            </xf:input>
+                                        </xf:group>
+                                    </xf:group>
+                                </xf:group>
+                            </xf:group>
+                            <xf:group class="shbox_btns" id="" style="">
+                                <xf:trigger class="btn_cm bt_sch" id="btn_auctnFrmlSrch1" style="" title="검색" type="button" ev:onclick="scwin.btn_auctnFrmlSrch1_onclick">
+                                    <xf:label><![CDATA[검색]]></xf:label>
+                                </xf:trigger>
+                            </xf:group>
+                        </xf:group>
+                                <w2:gridView autoFit="allColumn" class="grid" dataList="data:dlt_auctnFrmlLst" defaultCellHeight="20"
+                                	id="grd_auctnFrmlList1" readOnly="false" scrollByColumn="false" scrollByColumnAdaptive="false"
+                                	style="min-height:100px;" summary="기일내역" tengeMask="" visibleRowNum="all" rowNumVisible="false"
+                                	rowNumHeaderValue="번호" rowNumWidth="50" initFixedHeightByRowNum="1"
+                                	ev:oncellclick="scwin.grd_auctnFrmlList1_oncellclick" filterFocusMode="outfocus"
+                                	rowNumBackgroundColor="#FFFFFF" focusMode="none" tooltipDisplay="false" noResultMessage="검색결과 없습니다." noResultMessageVisibleAlways="true" titleFormatter="scwin.titleFormatter">
+                                	<w2:caption style="" id="caption1" value="this is a grid caption."></w2:caption>
+                                	<w2:header style="" id="header1">
+                                		<w2:row style="" id="row1">
+                                			<w2:column width="70" inputType="text" style="height:20px" id="column4" value="번호"
+                                				displayMode="label">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="300" inputType="text" style="height:20px;"
+                                				id="column3" value="제목" blockSelect="false" displayMode="label">
+                                			</w2:column>
+                                			<w2:column colSpan="2" removeBorderStyle="false" width="80" inputType="text"
+                                				style="height:20px;" id="column2" value="다운로드" blockSelect="false" displayMode="label">
+                                			</w2:column>
+                                		</w2:row>
+                                	</w2:header>
+                                	<w2:gBody style="" id="gBody1">
+                                		<w2:row style="" id="row2">
+                                			<w2:column width="70" inputType="text" style="height:20px" id="seq" value=""
+                                				displayMode="label">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="300" inputType="text" style="height:20px"
+                                				id="ntatcTitlNm" class="al" blockSelect="false" displayMode="label" readOnly="true" escape="false">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="40" inputType="button" style="height:20px"
+                                				id="hwpFileNm" blockSelect="false" displayMode="label" class="bt_hwp" readOnly="true">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="40" inputType="button" style="height:20px"
+                                				id="docFileNm" blockSelect="false" class="bt_doc" displayMode="label" readOnly="true">
+                                			</w2:column>
+                                		</w2:row>
+                                	</w2:gBody>
+                                </w2:gridView>
+                                <xf:group class="count_page" id="" style="">
+                            <xf:group class="gvw_count_group" id="" style="">
+                                <w2:span id="" label="총" style=""></w2:span>
+                                <w2:span class="count_selected " id="spn_totalCnt1" label="" style="" ref="data:dma_pageInfo.totalCnt"></w2:span>
+                                <w2:span id="" label="건" style=""></w2:span>
+                            </xf:group>
+                            <w2:pageList class="wq_pglist" displayButtonType="display" displayFormat="#" id="pgl_auctnFrmlList" pageSize="10" style="" buttonShowType="3" ev:onviewchange="scwin.pgl_auctnFrmlList_onviewchange" pagingType="1" renderType="table" ev:onchange="scwin.pgl_auctnFrmlList_onchange">
+                            </w2:pageList>
+                            <xf:group class="count_view" id="" style="">
+                                <w2:span class="txt" dataType="" id="" label="페이지당" style=""></w2:span>
+                                <w2:textbox tagname="label" for="sbx_pageCnt1" id="" label="페이지 목록수 선택" class="webblind"></w2:textbox>
+                                <xf:select1 allOption="" appearance="minimal" chooseOption="" class="sel" direction="auto" disabled="false"
+                                	disabledClass="w2selectbox_disabled" id="sbx_pageCnt1" ref="" renderType="select" style="max-width:80px;"
+                                	submenuSize="auto" title="페이지 목록수 선택" ev:onchange="scwin.sbx_pageCnt1_onchange">
+                                	<xf:choices>
+                                		<xf:item>
+                                			<xf:label><![CDATA[10]]></xf:label>
+                                			<xf:value><![CDATA[10]]></xf:value>
+                                		</xf:item>
+                                		<xf:item>
+                                			<xf:label><![CDATA[20]]></xf:label>
+                                			<xf:value><![CDATA[20]]></xf:value>
+                                		</xf:item>
+                                		<xf:item>
+                                			<xf:label><![CDATA[30]]></xf:label>
+                                			<xf:value><![CDATA[30]]></xf:value>
+                                		</xf:item>
+                                		<xf:item>
+                                			<xf:label><![CDATA[40]]></xf:label>
+                                			<xf:value><![CDATA[40]]></xf:value>
+                                		</xf:item>
+                                	</xf:choices>
+                                </xf:select1>
+                            </xf:group>
+                        </xf:group></w2:content>
+                            <w2:content alwaysDraw="true" style="" id="content2">
+                                <xf:group class="shbox" id="" style="">
+                                    <xf:group class="shbox_inner" id="" style="">
+                                        <xf:group class="w2tb" id="" style="width:100%;" tagname="table">
+                                            <w2:attributes>
+                                                <w2:summary></w2:summary>
+                                            </w2:attributes>
+                                            <xf:group tagname="caption"></xf:group>
+                                            <xf:group tagname="colgroup">
+                                                <xf:group style="width:100px;" tagname="col"></xf:group>
+                                                <xf:group style="" tagname="col"></xf:group>
+                                            </xf:group>
+                                            <xf:group style="" tagname="tr">
+                                                <xf:group class="w2tb_th" style="" tagname="th">
+                                                    <w2:attributes>
+                                                        <w2:scope>row</w2:scope>
+                                                    </w2:attributes>
+                                                    <w2:textbox id="" label="서식명" style=""></w2:textbox>
+                                                </xf:group>
+                                                <xf:group class="w2tb_td" style="" tagname="td">
+                                                    <w2:textbox tagname="label" for="ibx_frmlNm2" id="" label="검색어 입력" class="webblind"></w2:textbox>
+                                                    <xf:input adjustMaxLength="false" class="inp" dataType="" id="ibx_frmlNm2"
+                                                        style="width:100%;max-width:300px;" title="내용을 입력해주세요." ev:onkeydown="scwin.ibx_frmlNm2_onkeydown" ev:onkeypress="scwin.ibx_frmlNm2_onkeypress" maxlength="100">
+                                                    </xf:input>
+                                                </xf:group>
+                                            </xf:group>
+                                        </xf:group>
+                                    </xf:group>
+                                    <xf:group class="shbox_btns" id="" style="">
+                                        <xf:trigger class="btn_cm bt_sch" id="btn_auctnFrmlSrch2" style="" title="검색" type="button" ev:onclick="scwin.btn_auctnFrmlSrch2_onclick">
+                                            <xf:label><![CDATA[검색]]></xf:label>
+                                        </xf:trigger>
+                                    </xf:group>
+                                </xf:group>
+                                <w2:gridView autoFit="allColumn" class="grid" dataList="data:dlt_auctnFrmlLst" defaultCellHeight="20"
+                                	id="grd_auctnFrmlList2" readOnly="false" rowNumHeaderValue="번호" rowNumVisible="false" rowNumWidth="50"
+                                	scrollByColumn="false" scrollByColumnAdaptive="false" style="min-height:100px;" summary="기일내역" tengeMask=""
+                                	tooltipDisplay="true" visibleRowNum="all" ev:oncellclick="scwin.grd_auctnFrmlList2_oncellclick"
+                                	focusMode="none" rowNumBackgroundColor="#FFFFFF" noResultMessage="검색결과가 없습니다." noResultMessageVisibleAlways="true">
+                                	<w2:caption id="caption1" style="" value="this is a grid caption."></w2:caption>
+                                	<w2:header id="header1" style="">
+                                		<w2:row id="row1" style="">
+                                			<w2:column width="70" inputType="text" style="height:20px" id="column4" value="번호"
+                                				displayMode="label">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="300" inputType="text" style="height:20px;"
+                                				id="column3" value="제목" blockSelect="false" displayMode="label">
+                                			</w2:column>
+                                			<w2:column rowSpan="" colSpan="2" removeBorderStyle="false" width="80" inputType="text"
+                                				style="height:20px;" id="column2" value="다운로드" blockSelect="false" displayMode="label">
+                                			</w2:column>
+                                		</w2:row>
+                                	</w2:header>
+                                	<w2:gBody id="gBody1" style="">
+                                		<w2:row id="row2" style="">
+                                			<w2:column width="70" inputType="text" style="height:20px" id="seq" value=""
+                                				displayMode="label">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="300" inputType="text" style="height:20px"
+                                				id="ntatcTitlNm" class="al" value="" blockSelect="false" displayMode="label">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="40" inputType="button" style="height:20px"
+                                				id="hwpFileNm" value="" blockSelect="false" displayMode="label" class="bt_hwp">
+                                			</w2:column>
+                                			<w2:column removeBorderStyle="false" width="40" inputType="button" style="height:20px"
+                                				id="docFileNm" value="" blockSelect="false" displayMode="label" class="bt_doc">
+                                			</w2:column>
+                                		</w2:row>
+                                	</w2:gBody>
+                                </w2:gridView>
+                                <xf:group class="count_page" id="" style="">
+                                    <xf:group class="gvw_count_group" id="" style="">
+                                        <w2:span id="" label="총" style=""></w2:span>
+                                        <w2:span class="count_selected " id="spn_totalCnt2" label="" style="" ref="data:dma_pageInfo.totalCnt"></w2:span>
+                                        <w2:span id="" label="건" style=""></w2:span>
+                                    </xf:group>
+                                    <w2:pageList class="wq_pglist" displayButtonType="display" displayFormat="#" id="pgl_auctnFrmlList2"
+                                        pageSize="10" style="" ev:onviewchange="scwin.pgl_auctnFrmlList2_onviewchange" buttonShowType="3">
+                                    </w2:pageList>
+                                    <xf:group class="count_view" id="" style="">
+                                        <w2:span class="txt" dataType="" id="" label="페이지당" style=""></w2:span>
+                                         <w2:textbox tagname="label" for="sbx_pageCnt2" id="" label="페이지 목록수 선택" class="webblind"></w2:textbox>
+                                        <xf:select1 allOption="" appearance="minimal" chooseOption="" class="sel" direction="auto"
+                                        	disabled="false" disabledClass="w2selectbox_disabled" id="sbx_pageCnt2" ref="" renderType="select"
+                                        	style="max-width:80px;" submenuSize="auto" title="페이지 목록수 선택"
+                                        	ev:onchange="scwin.sbx_pageCnt2_onchange">
+                                        	<xf:choices>
+                                        		<xf:item>
+                                        			<xf:label><![CDATA[10]]></xf:label>
+                                        			<xf:value><![CDATA[10]]></xf:value>
+                                        		</xf:item>
+                                        		<xf:item>
+                                        			<xf:label><![CDATA[20]]></xf:label>
+                                        			<xf:value><![CDATA[20]]></xf:value>
+                                        		</xf:item>
+                                        		<xf:item>
+                                        			<xf:label><![CDATA[30]]></xf:label>
+                                        			<xf:value><![CDATA[30]]></xf:value>
+                                        		</xf:item>
+                                        		<xf:item>
+                                        			<xf:label><![CDATA[40]]></xf:label>
+                                        			<xf:value><![CDATA[40]]></xf:value>
+                                        		</xf:item>
+                                        	</xf:choices>
+                                        </xf:select1>
+                                    </xf:group>
+                                </xf:group>
+                            </w2:content>
+</w2:tabControl>
+
+
+
+
+
+                        <xf:group class="infobox ty_2" id="" style="">
+                            <w2:textbox class="tit" id="" label="유의사항" style=""></w2:textbox>
+                            <xf:group class="info_list" id="" style="" tagname="ul">
+                                <xf:group id="" style="" tagname="li">
+                                    <w2:textbox id="" label="이곳에는 경매에 대표적으로 쓰는 서식만 보실 수 있으며 이외의 서식은 해당 민원실로 문의하여 주시기 바랍니다." style="">
+                                    </w2:textbox>
+                                </xf:group>
+                            </xf:group>
+                        </xf:group>
+
+                    </xf:group>
+                </xf:group>
+            </xf:group>
+            <w2:wframe class="footer" id="" src="../common/footer.xml" style=""></w2:wframe>
+            <w2:wframe class="quickmenu" id="" src="../common/quick.xml" style=""></w2:wframe>
+        </xf:group>
+    </body>
+</html>

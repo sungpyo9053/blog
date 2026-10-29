@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head meta_screenName="경매용어" meta_vertical_guides="" meta_horizontal_guides="1104">
+        <title>법원경매정보 - 경매용어</title>
+    	<w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+        	<xf:instance>
+        		<data xmlns="" />
+        	</xf:instance>
+        	<w2:dataCollection baseNode="map">
+        		<w2:dataList baseNode="list" repeatNode="map" id="dlt_allAuctnTrmList" saveRemovedData="true">
+        			<w2:columnInfo>
+        				<w2:column id="cortAuctnNtcMtrSeq" name="법원경매공지사항순번" dataType="text"></w2:column>
+        				<w2:column id="cortAuctnNtcEtcDtlDvsCd" name="법원경매공지기타상세구분코드" dataType="text"></w2:column>
+        				<w2:column id="ntatcTitlNm" name="게시물제목명" dataType="text"></w2:column>
+        				<w2:column id="ntatcCtxtCtt" name="게시물본문내용" dataType="text"></w2:column>
+        			</w2:columnInfo>
+        			<w2:data use="true"></w2:data>
+        		</w2:dataList>
+        		<w2:dataMap baseNode="map" id="dma_srchAuctnTrm">
+        			<w2:keyInfo>
+        				<w2:key id="srch" name="검색어" dataType="text"></w2:key>
+        				<w2:key id="cortAuctnRletDvsCd" name="경매용어구분사항코드" dataType="text"></w2:key>
+        				<w2:key id="srchDvsCd" name="검색구분코드" dataType="text"></w2:key>
+        			</w2:keyInfo>
+        			<w2:data use="true"></w2:data>
+        		</w2:dataMap>
+        	</w2:dataCollection>
+        	<w2:workflowCollection></w2:workflowCollection>
+        	<xf:submission id="sbm_auctnTrmSrch" ref="data:json,dma_srchAuctnTrm" target='data:json,{"id":"dlt_allAuctnTrmList","key":"data.dlt_allAuctnTrmList"}' action="/pgj/pgj172/searchAuctnTrm.on" method="post"
+        		mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler="" mode="asynchronous"
+        		processMsg="" ev:submit="" ev:submitdone="scwin.sbm_auctnTrmSrch_submitdone" ev:submiterror="" abortTrigger="">
+        	</xf:submission>
+        </xf:model>
+        <script type="text/javascript" lazy="false"><![CDATA[
+/* 프로그램ID */
+scwin.pgmId = 'PGJ172M01';
+
+/* 최상단의 선언 */
+scwin.isMain = function() {
+	return true;
+}
+
+/**
+ * onpageLoad시 경매용어 전체 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.onpageload = function() {
+
+	scwin.lgnMbr = WebSquare.cookie.getCookie('cortAuctnLgnMbr')
+	scglblo.setScUserId(scwin.lgnMbr);
+	scscrno.setScPgmId(scwin.pgmId);
+
+	/* 메뉴 */
+	if(!scutilo.isEmpty(scwin.pgmId)){
+	   $p.main().wfm_side.scope.scwin.menuFocus(scwin.pgmId.slice(0,6));
+	}
+
+	dma_srchAuctnTrm.set("srchDvsCd","00");
+
+	const comParam = com.storage.get('PGJ172M01','param') || '';
+	if (!scutilo.isEmpty(comParam)) {
+		dma_srchAuctnTrm.set("srchDvsCd","01");
+		dma_srchAuctnTrm.set("srch",comParam);
+		com.storage.removeSection("PGJ172M01");
+	}
+		com.executeSubmission(sbm_auctnTrmSrch);
+};
+
+
+scwin.onpageunload = function() {
+
+};
+
+/**
+ * 경매용어 전체 데이터 받아온뒤 동적으로 컴포넌트 생성 후 값 입력
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+
+/* 동적으로 생성한 컴포넌트 ID 중복 제거 */
+
+
+scwin.sbm_auctnTrmSrch_submitdone = function(e) {
+	ibx_auctnTrmSrch.focus();
+	ibx_auctnTrmSrch.setValue(dma_srchAuctnTrm.get('srch'))
+	if($p.getComponentById("grp_auctnTrmBox")!=null){
+		grp_auctnTrmBox.remove();
+	}
+	$p.dynamicCreate("grp_auctnTrmBox", "group", {
+		className : "term_list",
+		tagname : "ul"
+	}, grp_termBox)
+	if (dlt_allAuctnTrmList.getTotalRow()>0) {
+
+	/* 동적으로 컴포넌트 생성 */
+		for(var i=0; i<dlt_allAuctnTrmList.getTotalRow(); i++){
+			$p.dynamicCreate("grp_auctnTrm"+i, "group", {
+				tagname : "li"
+			}, grp_auctnTrmBox)
+
+			var tempComponent = $p.getComponentById("grp_auctnTrm"+i);
+
+			$p.dynamicCreate("tbx_auctnTrmTit"+i, "textbox", {
+				className : "tit",
+				label : dlt_allAuctnTrmList.getCellData(i, "ntatcTitlNm")
+			}, tempComponent)
+
+			$p.dynamicCreate("grp_auctnTrmCtt"+i, "group",{
+				className : "cont"
+			},tempComponent)
+
+			var tempComponent2 = $p.getComponentById("grp_auctnTrmCtt"+i);
+
+			$p.dynamicCreate("tbx_auctnTrmCtt"+i, "textbox", {
+				label : dlt_allAuctnTrmList.getCellData(i, "ntatcCtxtCtt")
+			}, tempComponent2)
+
+		}
+	} else {
+		/* 현재 TO-BE 이미지가 없어서 AS-IS 이미지로 대체 나중에 교체 해야됨  TO-DO */
+		$p.dynamicCreate("img_noneSrch", "image", {
+			src:"/pgj/cm/images/dummy/ic_res_none.gif",
+			style:"position:absolute; right:30%; width:35%;"
+		}, grp_auctnTrmBox)
+	}
+
+};
+
+/**
+ * 검색어로 경매용어 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_auctnTrmSrch_onclick = function(e) {
+	/* 검색어 앞뒤 공백제거 */
+	let srchNm = scutilo.skipSpaces(ibx_auctnTrmSrch.getValue());
+	if (srchNm.length == 1) {
+		scutilo.showMsg(scglblo.MSG.WARN,scutilo.getMsg(pgjmsg.PGJ. W_0009,"검색어"));
+		return
+	} else if(srchNm.length >= 2 && pgjUtil.spcCharChk2(srchNm)){
+		scutilo.showMsg(scglblo.MSG.WARN,scutilo.getMsg(pgjmsg.PGJ.W_0020));
+		return
+	} else {
+		dma_srchAuctnTrm.set("srch", srchNm)
+		dma_srchAuctnTrm.set("srchDvsCd","01");
+		com.executeSubmission(sbm_auctnTrmSrch)
+
+	}
+};
+
+/**
+ * 엔터 눌렀을 시 검색어로 경매용어 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.12.14.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ibx_auctnTrmSrch_onkeydown = function(e) {
+	if(e.code == "Enter") {
+		scwin.btn_auctnTrmSrch_onclick()
+	}
+};
+
+/**
+ * 전체 버튼 클릭시 경매용어 전체조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.anc_allInq_onclick = function() {
+	scwin.onpageload();
+};
+
+
+
+/**
+ * " ㄱ, ㄴ, ㄷ " 등 버튼 클릭시 경매용어 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.anc_srchwd_onclick = function() {
+	/* 자음 클릭시 검색어 초기화 */
+	ibx_auctnTrmSrch.setValue("");
+
+	var data = this.getUserData("userData1");
+	dma_srchAuctnTrm.set("srchDvsCd","02");
+	dma_srchAuctnTrm.set("cortAuctnRletDvsCd",data);
+	com.executeSubmission(sbm_auctnTrmSrch);
+};
+
+/**
+ * 인기검색어 버튼 클릭시 경매용어 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.08.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.anc_popltSrchwd_onclick = function(){
+	var popltData = this.getUserData("userData1");
+	ibx_auctnTrmSrch.setValue(popltData);
+	scwin.btn_auctnTrmSrch_onclick();
+}
+
+/**
+ * 특수문자 입력을 막아준다.
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.12.14.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ibx_auctnTrmSrch_onkeypress = function(e) {
+	pgjUtil.noneInputSpcChar(e)
+};
+]]></script>
+    <script type="text/javascript" src="/pgj/ui/message/pgjmsg.js" scopeExternal="true" scopeVariable="pgjmsg"></script>
+    </head>
+    <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+    	<xf:group class="wrap user" id="" style="">
+    		<w2:wframe class="header" id="" src="../common/header.xml" style=""></w2:wframe>
+    		<xf:group class="sub_cotainer" id="wfm_mainFrame" style="" tabIndex="0">
+    			<xf:group class="inr" id="" style="">
+    				<w2:wframe class="sidebox" id="wfm_side" src="../common/sideMenu/side004.xml" style=""></w2:wframe>
+    				<xf:group class="sub_contents" id="" style="">
+    					<xf:group class="pgtbox" id="" style="">
+    						<w2:textbox class="pgt_tit" id="" label="경매용어" style="" tagname="h2"></w2:textbox>
+    						<xf:group class="clearfix" id="" style="">
+    							<xf:group class="pgt_location" id="" style="" tagname="ul">
+    								<xf:group id="" style="" tagname="li">
+    									<w2:span id="" label="HOME" style=""></w2:span>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:span id="" label="경매지식" style=""></w2:span>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:span id="" label="경매용어" style=""></w2:span>
+    								</xf:group>
+    							</xf:group>
+    						</xf:group>
+    					</xf:group>
+    					<xf:group style="" id="" class="term_shbox">
+
+    						<xf:group style="" id="" class="inp_wrap">
+
+
+    							<xf:group style="" id="">
+    							    <w2:textbox tagname="label" for="ibx_auctnTrmSrch" id="" label="경매용어 검색어입력" class="webblind"></w2:textbox>
+    								<xf:input class="inp" id="ibx_auctnTrmSrch" placeholder="" style="" title="경매용어 검색어입력"
+    									ev:onfocus="scwin.inpSch_onfocus" ev:onkeydown="scwin.ibx_auctnTrmSrch_onkeydown"
+    									ev:onkeypress="scwin.ibx_auctnTrmSrch_onkeypress" maxlength="50" autocomplete="off">
+    								</xf:input>
+    								<xf:trigger type="button" style="" id="btn_auctnTrmSrch" class="btn_cm bt_term"
+    									ev:onclick="scwin.btn_auctnTrmSrch_onclick" title="경매용어 검색버튼">
+    									<xf:label><![CDATA[검색]]></xf:label>
+    								</xf:trigger>
+
+    							</xf:group>
+    						</xf:group>
+
+    						<xf:group style="" id="" class="word_wrap">
+    							<w2:anchor outerDiv="false" style="" id="anc_allInq" class="" ev:onclick="scwin.anc_allInq_onclick" title="전체 검색">
+    								<xf:label><![CDATA[전체]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd01" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005701" title='"ㄱ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㄱ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd02" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005702" title='"ㄴ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㄴ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd03" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005703" title='"ㄷ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㄷ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd04" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005704" title='"ㄹ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㄹ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd05" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005705" title='"ㅁ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅁ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd06" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005706" title='"ㅂ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅂ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd07" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005707" title='"ㅅ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅅ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd08" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005708" title='"ㅇ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅇ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd09" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005709" title='"ㅈ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅈ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd10" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005710" title='"ㅊ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅊ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd11" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005711" title='"ㅋ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅋ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd12" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005712" title='"ㅌ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅌ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd13" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005713" title='"ㅍ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅍ]]></xf:label>
+    							</w2:anchor>
+    							<w2:anchor id="anc_srchwd14" outerDiv="false" style="" ev:onclick="scwin.anc_srchwd_onclick"
+    								userData1="0005714" title='"ㅎ"으로 시작하는 경매용어 검색'>
+    								<xf:label><![CDATA[ㅎ]]></xf:label>
+    							</w2:anchor>
+    						</xf:group>
+    						<xf:group style="" id="" class="tag_wrap">
+    							<w2:textbox label="예시" style="" id="" class="tit"></w2:textbox>
+    							<xf:group style="" id="" class="tag_list">
+    								<xf:group style="" id="" tagname="li">
+    									<w2:anchor outerDiv="false" style="" id="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="매각기일" title='"매각기일" 경매용어 검색'>
+    										<xf:label><![CDATA[매각기일]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="공탁" title='"공탁" 경매용어 검색'>
+    										<xf:label><![CDATA[공탁]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="대항력" title='"대항력" 경매용어 검색'>
+    										<xf:label><![CDATA[대항력]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="매수신고인" title='"매수신고인" 경매용어 검색'>
+    										<xf:label><![CDATA[매수신고인]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="부동산 인도명령" title='"부동산 인도명령" 경매용어 검색'>
+    										<xf:label><![CDATA[부동산 인도명령]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="분할채권" title='"분할채권" 경매용어 검색'>
+    										<xf:label><![CDATA[분할채권]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="상계" title='"상계" 경매용어 검색'>
+    										<xf:label><![CDATA[상계]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="우선매수권" title='"우선매수권" 경매용어 검색'>
+    										<xf:label><![CDATA[우선매수권]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="지상권" title='"지상권" 경매용어 검색'>
+    										<xf:label><![CDATA[지상권]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    								<xf:group id="" style="" tagname="li">
+    									<w2:anchor id="" outerDiv="false" style="" ev:onclick="scwin.anc_popltSrchwd_onclick"
+    										userData1="필지" title='"필지" 경매용어 검색'>
+    										<xf:label><![CDATA[필지]]></xf:label>
+    									</w2:anchor>
+    								</xf:group>
+    							</xf:group>
+    						</xf:group>
+
+    					</xf:group>
+    					<xf:group style="" id="grp_termBox" class="term_box"></xf:group>
+    				</xf:group>
+    			</xf:group>
+    		</xf:group>
+    		<w2:wframe class="footer" id="" src="../common/footer.xml" style=""></w2:wframe>
+    		<w2:wframe class="quickmenu" id="" src="../common/quick.xml" style=""></w2:wframe>
+    	</xf:group>
+    </body>
+</html>

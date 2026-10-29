@@ -1,0 +1,516 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+PGJ141M01(법원경매정보 - 공지사항 상세조회) 화면 XML
+
+============= ============ ==========================
+ Date          Author       Description
+============= ============ ==========================
+ 2022.07.22.   나해준       [NELS]최초 생성
+ 2026.08.28.   김기석       [26A-PGJ-0040] 공지사항 내용중 특수문자 변환 오류 개선
+============= ============ ==========================
+-->
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head meta_screenName="공지사항 상세조회">
+        <w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+            <xf:instance>
+                <data xmlns="" />
+            </xf:instance>
+            <w2:dataCollection baseNode="map">
+                <w2:dataList baseNode="list" repeatNode="map" id="dlt_rcntRegNtcMtr" saveRemovedData="true">
+                    <w2:columnInfo>
+                        <w2:column id="cortAuctnNtcEtcDtlDvsCd" name="법원경매공지기타상세구분코드" dataType="text"></w2:column>
+                        <w2:column id="ntatcTitlNm" name="게시물제목명" dataType="text"></w2:column>
+                        <w2:column id="srvcInqCnt" name="서비스조회수" dataType="text"></w2:column>
+                        <w2:column id="ntatcCtxtCtt" name="게시물본문내용" dataType="text"></w2:column>
+                        <w2:column id="cortAuctnNtcMtrSeq" name="법원경매공지사항순번" dataType="text"></w2:column>
+                        <w2:column id="cortAuctnRletDvsCd" name="법원경매공지사항형식구분코드" dataType="text"></w2:column>
+                        <w2:column id="cortAuctnAtflSeq" name="법원경매첨부파일순번" dataType="text"></w2:column>
+                        <w2:column id="ntatcAtfl" name="게시물첨부파일" dataType="text"></w2:column>
+                        <w2:column id="ntatcAtflNm" name="게시물첨부파일명" dataType="text"></w2:column>
+                        <w2:column id="cortAuctnNtcEtcDvsCd" name="법원경매공지기타구분코드" dataType="text"></w2:column>
+                        <w2:column id="lnkNm" name="링크명" dataType="text"></w2:column>
+                        <w2:column id="ntcMtrLnkUrl" name="공지사항링크URL" dataType="text"></w2:column>
+                        <w2:column id="bfDbJobCd" name="공지사항이전글번호" dataType="text"></w2:column>
+                        <w2:column id="bfGul" name="공지사항이전글" dataType="text"></w2:column>
+                        <w2:column id="nxtDbJobCd" name="공지사항다음글번호" dataType="text"></w2:column>
+                        <w2:column id="nxtGul" name="공지사항다음글" dataType="text"></w2:column>
+                        <w2:column id="ntatcAtflEyn" name="게시물첨부파일유무" dataType="text"></w2:column>
+                        <w2:column id="cortAuctnComCdNm" name="법원경매공통코드명" dataType="text"></w2:column>
+                    </w2:columnInfo>
+                    <w2:data use="true"></w2:data>
+                </w2:dataList>
+                <w2:dataMap baseNode="map" id="dma_ntcMtrSeq">
+                    <w2:keyInfo>
+                        <w2:key id="cortAuctnNtcMtrSeq" name="법원경매공지사항순번" dataType="text"></w2:key>
+                        <w2:key id="ntcMtrDtlInqCnt" name="상세조회수flag" dataType="text"></w2:key>
+                    </w2:keyInfo>
+                </w2:dataMap>
+            </w2:dataCollection>
+            <w2:workflowCollection></w2:workflowCollection>
+            <xf:submission id="sbm_selectNtcMtrDtlInf" ref="data:json,dma_ntcMtrSeq"
+                target='data:json,{"id":"dlt_rcntRegNtcMtr","key":"data.dlt_rcntRegNtcMtr"}' action="/pgj/pgj111/selectNtcMtrGnrlPopupCtt.on"
+                method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+                mode="asynchronous" processMsg="" ev:submit="" ev:submitdone="scwin.sbm_selectNtcMtrDtlInf_submitdone" ev:submiterror=""
+                abortTrigger="">
+            </xf:submission>
+        </xf:model>
+        <script type="text/javascript" lazy="false"><![CDATA[/* 최상단의 선언 */
+scwin.isMain = function () {
+    return true;
+}
+/* 프로그램 ID */
+scwin.pgmId = 'PGJ141M02'
+
+/* 회원ID */
+scwin.lgnMbr = '';
+
+/**
+ * 메인페이지 onload
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.07.22.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.onpageload = function () {
+    // TO-DO 세션처리
+    scwin.lgnMbr = WebSquare.cookie.getCookie('cortAuctnLgnMbr')
+    scglblo.setScUserId(scwin.lgnMbr);
+    scscrno.setScPgmId(scwin.pgmId);
+
+    /* 메뉴 */
+    if(!scutilo.isEmpty(scwin.pgmId)){ 
+	   $p.main().wfm_side.scope.scwin.menuFocus(scwin.pgmId.slice(0,6));
+    }
+     /**
+     * 메인페이지 팝업공지 상세 버튼 눌렀을 경우 callback함수로 부터 받아온 paramether (법원경매공지사항순번)
+     */
+    let param = com.storage.get("PGJ141M02", "ntcSeq") || '';
+    if (!scutilo.isEmpty(param)) {
+        com.storage.removeSection("PGJ141M02");
+        dma_ntcMtrSeq.set("cortAuctnNtcMtrSeq",param);
+    } else {
+        dma_ntcMtrSeq.set("cortAuctnNtcMtrSeq", com.getParameter("cortAuctnNtcMtrSeq"));
+    }
+    /* 공지사항 상세정보 조회 */
+    com.executeSubmission(sbm_selectNtcMtrDtlInf);
+};
+
+scwin.onpageunload = function () {
+    
+};
+
+/**
+ * 공지시항 상세 데이터 해당 컴포넌트의 배치
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.07.22.   나해준       [NELS]최초 생성
+ *  2026.08.28.   김기석       [26A-PGJ-0040] 공지사항 내용중 특수문자 변환 오류 개선
+ * ============= ============ ==========================
+ */
+scwin.sbm_selectNtcMtrDtlInf_submitdone = function () {
+
+    /* 파일첨부 초기화 */
+    if ($p.getComponentById("grp_atfl") != null) {
+        grp_atfl.remove();
+    }
+
+    $p.dynamicCreate("grp_atfl", "group", {
+        className: "w2tb_td",
+        tagname: "td",
+        colspan: "3",
+        rowspan: "1"
+    }, grp_topFile);  
+
+    var atflTd = document.getElementById("mf_grp_atfl");
+    atflTd.setAttribute("colspan", "3");
+
+
+    /* 기본적으로 다음글,이전글 Span컴포넌트 hide */
+    spn_befNtcMtr.hide();
+    spn_nxtNtcMtr.hide();
+
+    //개행처리
+    let ntcMtrCtt = dlt_rcntRegNtcMtr.getCellData(0, "ntatcCtxtCtt");
+    if(!scutilo.isEmpty(ntcMtrCtt)){ 
+        //ntcMtrCtt = ntcMtrCtt.replaceAll(' ', '&nbsp;').replaceAll('\n', '<br />');    
+        ntcMtrCtt = ntcMtrCtt.replaceAll('\n', '<br />');    // [26A-PGJ-0040] replaceAll 조건 수정
+    }
+    
+    /**
+     * 법원경매공지사항순번을 parameter로 
+     * 조회 한 상세 데이터를 해당 컴포넘트에 맞게 데이터 삽입 
+     */
+    spn_dvsCd.setValue(dlt_rcntRegNtcMtr.getCellData(0, "cortAuctnComCdNm"));
+    spn_inqCnt.setValue(dlt_rcntRegNtcMtr.getCellData(0, "srvcInqCnt"));
+    spn_titl.setValue(dlt_rcntRegNtcMtr.getCellData(0, "ntatcTitlNm"));
+    anc_link.setValue(dlt_rcntRegNtcMtr.getCellData(0, "lnkNm"));
+    tbx_ntcMtrCtt.setValue(ntcMtrCtt);
+    anc_nxtNtcMtr.setValue(dlt_rcntRegNtcMtr.getCellData(0, "nxtGul"));
+    anc_befNtcMtr.setValue(dlt_rcntRegNtcMtr.getCellData(0, "bfGul"));
+
+    if(scutilo.isEmpty(anc_link.getValue())){
+        anc_link.hide();
+    }
+
+    /* 파일 확장자를 체크해서 이미지 경로를 반환 */
+    var cnt = 1;
+    var dltSize = dlt_rcntRegNtcMtr.getTotalRow();
+    var imgPath = "";
+    var htmlTag = "";
+    var altT = "";
+    if (dlt_rcntRegNtcMtr.getCellData(0, "ntatcAtflNm") != "") {
+        for (var i = 0; i < dltSize; i++) {
+            var useYn = dlt_rcntRegNtcMtr.getCellData(i, "ntatcAtflEyn");
+            if (useYn == 'Y') {
+                var fileNm = dlt_rcntRegNtcMtr.getCellData(i, "ntatcAtflNm");
+                var NtcMtrSeq = dlt_rcntRegNtcMtr.getCellData(i, "cortAuctnNtcMtrSeq");
+                var fileSeq = dlt_rcntRegNtcMtr.getCellData(i, "cortAuctnAtflSeq");
+
+                if (fileNm.endsWith(".xlsx")) {
+                    imgPath = "/pgj/cm/images/common/ic_doc_excel.png";
+                    altT = "엑셀파일 첨부";
+                } else if (fileNm.endsWith(".hwp")) {
+                    imgPath = "/pgj/cm/images/common/ic_doc_hwp.png";
+                    altT = "한글파일 첨부";
+                } else if (fileNm.endsWith(".pdf")) {
+                    imgPath = "/pgj/cm/images/common/ic_doc_pdf.png";
+                    altT = "PDF파일 첨부";
+                } else if (fileNm.endsWith(".txt")) {
+                    imgPath = "/pgj/cm/images/common/ic_doc_txt.png";
+                    altT = "텍스트파일 첨부";
+                } else if (fileNm.endsWith(".doc") || imgPath.endsWith(".docx")) {
+                    imgPath = "/pgj/cm/images/common/ic_doc_word.png";
+                    altT = "DOC파일 첨부";
+                } else if (fileNm.endsWith(".pptx")) {
+                    imgPath = "/pgj/cm/images/common/ic_doc_ppt.png";
+                    altT = "PPT파일 첨부";
+                } else {
+                    imgPath = "/pgj/cm/images/common/ic_doc_etc.png";
+                    altT = "ETC파일 첨부";
+                }
+                /* 컴포넌트 사이 공백 */
+                $p.dynamicCreate("spn_empty" + cnt, "span", {}, grp_atfl);
+
+                /* 이미지 */
+                $p.dynamicCreate("img_ntcMtrDtl" + cnt, "image", {
+                    src: imgPath,
+                    alt : altT,
+                    style: "vertical-align : bottom;"
+                }, grp_atfl);
+
+                /* 파일명 */
+                $p.dynamicCreate("anc_ntcMtrDtl" + cnt, "anchor", {}, grp_atfl);
+
+                /* 파일명 클릭시 다운로드(이벤트 동적 생성) */
+                var ancValue = $p.getComponentById("anc_ntcMtrDtl" + cnt);
+                ancValue.setValue(fileNm);
+                ancValue.setUserData("cortAuctnAtflSeq", fileSeq);
+                ancValue.setUserData("cortAuctnNtcMtrSeq", NtcMtrSeq);
+                ancValue.bind("onclick", "scwin.testClickEvent");
+                cnt += 1;
+            }
+        }
+    }
+
+    /* 파일 이미지 첨부 */
+    //anc_ntatcAtfl.setValue(htmlTag);
+
+    /* 다음글, 이전글이 없을경우 Span을 보여주고 Anchor를 숨기기 (다음글,이전글로 넘어갈시 초기화) */
+    if (anc_nxtNtcMtr.getValue() == "") {
+        anc_nxtNtcMtr.hide();
+        spn_nxtNtcMtr.show("");
+    } else {
+        anc_nxtNtcMtr.show("");
+        spn_nxtNtcMtr.hide();
+    }
+
+    if (anc_befNtcMtr.getValue() == "") {
+        anc_befNtcMtr.hide();
+        spn_befNtcMtr.show("");
+    } else {
+        anc_befNtcMtr.show("");
+        spn_befNtcMtr.hide();
+    }
+};
+
+/* Get방식 파일 다운로드 함수 */
+scwin.testClickEvent = function () {
+    const filID = $p.getComponentById(this.getID());
+    const fileFlagSeq = filID.getUserData("cortAuctnAtflSeq")
+    const fileNum = filID.getUserData("cortAuctnNtcMtrSeq")
+    const filecode = "0005401";
+        const params = { "dma_downInfo": {
+		cortAuctnNtcMtrSeq : fileNum,
+		cortAuctnNtcEtcDvsCd : filecode,
+		cortAuctnAtflSeq : fileFlagSeq,
+	} }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', "/pgj/pgjComm/000Blob.on", true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    com.setHeader(xhr); // SCHeader setting
+    xhr.responseType = 'blob';
+	xhr.onreadystatechange = function() {
+        if (this.readyState === XMLHttpRequest.DONE) { 
+            if (this.status === 200) {
+                let filename = "";
+                let contentDisposition = this.getResponseHeader('Content-Disposition');
+                if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    let matches = filenameRegex.exec(contentDisposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                const blob = new Blob([this.response], { type: 'application/octet-stream' });
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(blob);
+                downloadLink.download = decodeURIComponent(filename) || 'unknown'; // 한글명 대응
+                downloadLink.click();
+            } else {
+                scutilo.showMsg(scglblo.MSG.ERROR, '파일 다운로드에'); //<%s> 실패하였습니다.
+            }
+        }
+	};
+	xhr.send(JSON.stringify(params));
+}
+
+/**
+ * 다을글 클릭시 이전글 공지사항 상세페이지로 이동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.07.29.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.anc_nxtNtcMtr_onclick = function () {
+    dma_ntcMtrSeq.set("cortAuctnNtcMtrSeq", dlt_rcntRegNtcMtr.getCellData(0, "nxtDbJobCd"));
+    com.executeSubmission(sbm_selectNtcMtrDtlInf);
+};
+
+/**
+ * 이전글 클릭시 이전글 공지사항 상세페이지로 이동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.07.29.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.anc_befNtcMtr_onclick = function () {
+    dma_ntcMtrSeq.set("cortAuctnNtcMtrSeq", dlt_rcntRegNtcMtr.getCellData(0, "bfDbJobCd"));
+    com.executeSubmission(sbm_selectNtcMtrDtlInf);
+};
+
+/**
+ * 목록 버튼 클릭시 공지사항 목록 페이지로 이동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.07.29.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_ntcMtrLst_onclick = function () {
+    $p.url("/pgj/ui/pgj100/PGJ141M00.xml");
+};
+
+/**
+ * 링크 이동
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2024.08.29.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.anc_link_onclick = function() {
+    var url = dlt_rcntRegNtcMtr.getCellData(0, "ntcMtrLnkUrl");
+    if(!url.includes('http://')){
+        url = 'http://' + url;
+    }
+    pgjAdminUtil.openUrl({url: url});
+};
+
+
+]]></script>
+    </head>
+    <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+        <xf:group class="wrap user" id="" style="">
+            <w2:wframe class="header" id="" src="../common/header.xml" style="" nextTabID=""></w2:wframe>
+            <xf:group class="sub_cotainer" id="" style="">
+                <xf:group class="inr" id="" style="">
+                    <w2:wframe class="sidebox" id="wfm_side" src="../common/sideMenu/side001.xml" style=""></w2:wframe>
+                    <xf:group class="sub_contents" id="" style="">
+                        <xf:group class="pgtbox" id="" style="">
+                            <w2:textbox class="pgt_tit" id="" label="공지사항" style="" tagname="h2"></w2:textbox>
+                            <xf:group class="clearfix" id="" style="">
+                                <xf:group class="pgt_location" id="" style="" tagname="ul">
+                                	<xf:group id="" style="" tagname="li">
+                                		<w2:span id="" label="HOME" style=""></w2:span>
+                                	</xf:group><xf:group id="" style="" tagname="li">
+                                		<w2:span id="" label="경매공고" style=""></w2:span>
+                                	</xf:group>
+                                	<xf:group id="" style="" tagname="li">
+                                		<w2:span id="" label="공지사항" style=""></w2:span>
+                                	</xf:group>
+                                	
+                                </xf:group>
+                            </xf:group>
+                        </xf:group>
+                        <xf:group tagname="table" style="width:100%;" id="" class="w2tb tb_ty1" adaptive="layout">
+                        	<w2:attributes>
+                        		<w2:summary>공지사항 구분, 조회수, 제목, 첨부파일, 내용</w2:summary>
+                        	</w2:attributes>
+                        	<xf:group tagname="caption"></xf:group>
+                        	<xf:group tagname="colgroup">
+                        		<xf:group tagname="col" style="width:150px;"></xf:group>
+                        		<xf:group tagname="col" style=""></xf:group>
+                        		<xf:group tagname="col" style="width:150px;"></xf:group>
+                        		<xf:group tagname="col" style=""></xf:group>
+                        	</xf:group>
+                        	<xf:group tagname="tr">
+                        		<xf:group tagname="th" style="" class="w2tb_th">
+                        			<w2:attributes>
+                        				<w2:scope>row</w2:scope>
+                        			</w2:attributes>
+                        			<w2:textbox label="구분" style="" id=""></w2:textbox>
+                        		</xf:group>
+                        		<xf:group tagname="td" style="" class="w2tb_td">
+                        			<w2:span label="부동산" style="" id="spn_dvsCd" class="txt" ref=''></w2:span>
+                        		</xf:group>
+                        		<xf:group tagname="th" style="" class="w2tb_th">
+                        			<w2:attributes>
+                        				<w2:scope>row</w2:scope>
+                        			</w2:attributes>
+                        			<w2:textbox id="" label="조회수" style=""></w2:textbox>
+                        		</xf:group>
+                        		<xf:group tagname="td" style="" class="w2tb_td">
+                        			<w2:span label="6,819" style="" id="spn_inqCnt" class="txt" ref=""></w2:span>
+                        		</xf:group>
+                        	</xf:group>
+                        	<xf:group tagname="tr">
+                        		<xf:group tagname="th" style="" class="w2tb_th">
+                        			<w2:attributes>
+                        				<w2:scope>row</w2:scope>
+                        			</w2:attributes>
+                        			<w2:textbox id="" label="제목" style=""></w2:textbox>
+                        		</xf:group>
+                        		<xf:group tagname="td" style="" class="w2tb_td">
+                        			<w2:attributes>
+                        				<w2:colspan>3</w2:colspan>
+                        				<w2:rowspan>1</w2:rowspan>
+                        			</w2:attributes>
+                        			<w2:span label="공인중개사의 매수신청대리 실무교육기관 지정승인신청 접수안내(2021, 2022년)" style="" id="spn_titl" dataType=""
+                        				class="txt" ref="" escape="false">
+                        			</w2:span>
+                        		</xf:group>
+                        	</xf:group>
+                        	<xf:group tagname="tr" style="">
+                        		<xf:group class="w2tb_th" style="" tagname="th">
+                        			<w2:attributes>
+                        				<w2:scope>row</w2:scope>
+                        			</w2:attributes>
+                        			<w2:textbox id="" label="링크" style=""></w2:textbox>
+                        		</xf:group>
+                        		<xf:group class="w2tb_td" style="" tagname="td">
+                        			<w2:attributes>
+                        				<w2:colspan>3</w2:colspan>
+                        				<w2:rowspan>1</w2:rowspan>
+                        			</w2:attributes>
+                        			<w2:anchor outerDiv="false" id="anc_link" ev:onclick="scwin.anc_link_onclick" title="관련 링크" disabled="true" escape="false">
+                        			</w2:anchor>
+                        		</xf:group>
+                        	</xf:group>
+                        	<xf:group tagname="tr" id="grp_topFile">
+                        		<xf:group tagname="th" style="" class="w2tb_th">
+                        			<w2:attributes>
+                        				<w2:scope>row</w2:scope>
+                        			</w2:attributes>
+                        			<w2:textbox id="" label="첨부파일" style=""></w2:textbox>
+                        		</xf:group>
+                        		<xf:group tagname="td" style="" class="w2tb_td" id="grp_atfl">
+                        			<w2:attributes>
+                        				<w2:colspan>3</w2:colspan>
+                        				<w2:rowspan>1</w2:rowspan>
+                        			</w2:attributes>
+                        			<w2:anchor outerDiv="false" style="" id="anc_ntatcAtfl" class="" title="첨부파일 다운로드" ref=""
+                        				escape="false">
+                        			</w2:anchor>
+                        		</xf:group>
+                        	</xf:group>
+                        	<xf:group tagname="tr">
+                        		<xf:group tagname="td" style="padding:10px;" class="w2tb_td">
+                        		    <w2:attributes>
+                        		        <w2:scope>row</w2:scope>
+                        		        <w2:colspan>4</w2:colspan>
+                        		        <w2:rowspan>1</w2:rowspan>
+                        		    </w2:attributes>
+                        		    <w2:textbox class="txt mt10" id="tbx_ntcMtrCtt" label="공지사항 내용" style="" ref="" escape="false">
+                        		    </w2:textbox>
+                        		</xf:group>
+                        	</xf:group>
+                        </xf:group>
+
+                        <xf:group tagname="table" style="width:100%;" id="" class="w2tb tb_ty1 mt30">
+                            <w2:attributes>
+                                <w2:summary>이전 글, 다음 글 보기</w2:summary>
+                            </w2:attributes>
+                            <xf:group tagname="caption"></xf:group>
+                            <xf:group tagname="colgroup">
+                                <xf:group tagname="col" style="width:150px;"></xf:group>
+                                <xf:group tagname="col" style=""></xf:group>
+                            </xf:group>
+                            <xf:group tagname="tr">
+                                <xf:group tagname="th" style="" class="w2tb_th">
+                                    <w2:attributes>
+                                        <w2:scope>row</w2:scope>
+                                    </w2:attributes>
+                                    <w2:textbox id="" label="이전글" style="" class="prev" tagname="span"></w2:textbox>
+                                </xf:group>
+                                <xf:group tagname="td" style="" class="w2tb_td">
+                                    <w2:span class="txt" id="spn_befNtcMtr" label="이전글이 없습니다." style="" ref="" escape="false"></w2:span><w2:anchor outerDiv="false" style="" id="anc_befNtcMtr" class="" disabled="false"
+                                        enableReadOnly="false" ev:onclick="scwin.anc_befNtcMtr_onclick" title="이전글" escape="false">
+                                        <xf:label><![CDATA[]]></xf:label>
+                                    </w2:anchor>
+                                    
+                                </xf:group>
+                            </xf:group>
+                            <xf:group tagname="tr">
+                                <xf:group tagname="th" style="" class="w2tb_th">
+                                    <w2:attributes>
+                                        <w2:scope>row</w2:scope>
+                                    </w2:attributes>
+                                    <w2:textbox id="" label="다음글" style="" class="next" tagname="span"></w2:textbox>
+                                </xf:group>
+                                <xf:group tagname="td" style="" class="w2tb_td">
+                                    <w2:span label="다음글이 없습니다." style="" id="spn_nxtNtcMtr" class="txt" ref="" escape="false"></w2:span>
+                                    <w2:anchor class="" disabled="false" enableReadOnly="false" id="anc_nxtNtcMtr" outerDiv="false" style="" ev:onclick="scwin.anc_nxtNtcMtr_onclick" escape="false" title="다음글">
+                                        <xf:label><![CDATA[]]></xf:label>
+                                    </w2:anchor>
+                                </xf:group>
+                            </xf:group>
+                        </xf:group>
+                        <xf:group class="btn_group " id="" style="">
+                            <xf:trigger class="btn_cm lg" id="btn_ntcMtrLst" style="" type="button" ev:onclick="scwin.btn_ntcMtrLst_onclick">
+                                <xf:label><![CDATA[목록]]></xf:label>
+                            </xf:trigger>
+                        </xf:group>
+                    </xf:group>
+
+                </xf:group>
+            </xf:group>
+            <w2:wframe class="footer" id="" src="../common/footer.xml" style=""></w2:wframe>
+            <w2:wframe class="quickmenu" id="" src="../common/quick.xml" style=""></w2:wframe>
+        </xf:group>
+    </body>
+</html>

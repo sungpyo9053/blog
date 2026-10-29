@@ -1,0 +1,811 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head meta_screenName="나의동산집행정보">
+        <title>법원경매정보 - 나의동산집행정보</title>
+        <w2:type>DEFAULT</w2:type>
+        <w2:buildDate />
+        <xf:model>
+            <xf:instance>
+                <data xmlns="" />
+            </xf:instance>
+            <w2:dataCollection baseNode="map">
+            	<w2:dataList baseNode="list" repeatNode="map" id="dlt_myMvprpCsLst" saveRemovedData="true">
+            		<w2:columnInfo>
+            			<w2:column id="checkBox" name="체크박스" dataType="text"></w2:column>
+            			<w2:column id="userMvCsNo" name="사건번호" dataType="text"></w2:column>
+            			<w2:column id="csTypNm" name="사건유형" dataType="text"></w2:column>
+            			<w2:column id="jhPlaceNm" name="집행장소" dataType="text"></w2:column>
+            			<w2:column id="crdtrNm" name="채권자" dataType="text"></w2:column>
+            			<w2:column id="debtrNm" name="채무자" dataType="text" encYN="true"></w2:column>
+            			<w2:column id="clmAmt" name="청구금액" dataType="text"></w2:column>
+            			<w2:column id="deptNm" name="부서명" dataType="text"></w2:column>
+            			<w2:column id="csProgStatNm" name="진행상태" dataType="text"></w2:column>
+            			<w2:column id="csRcptYmd" name="사건접수일자" dataType="text"></w2:column>
+            			<w2:column id="chargRcptYmd" name="담담계사건접수일자" dataType="text"></w2:column>
+            			<w2:column id="telNum" name="전화번호" dataType="text" encYN="true"></w2:column>
+            			<w2:column id="cortOfcCd" name="법원사무소코드" dataType="text"></w2:column>
+            			<w2:column id="auctnIntrpsDvsCd" name="경매이해관계인구분코드" dataType="text"></w2:column>
+            			<w2:column id="csNo" name="사건번호" dataType="text"></w2:column>
+            			<w2:column id="mvprpCsNo" name="동산사건번호" dataType="text"></w2:column>
+            			<w2:column id="formatDeptNm" name="사용자용 담당부서" dataType="text"></w2:column>
+            		</w2:columnInfo>
+            	</w2:dataList>
+            	<w2:dataMap baseNode="map" id="dma_pageInfo">
+            		<w2:keyInfo>
+            			<w2:key id="pageNo" name="페이지번호" dataType="number"></w2:key>
+            			<w2:key id="pageSize" name="페이지크기" dataType="number"></w2:key>
+            			<w2:key id="bfPageNo" name="이전 페이지 번호" dataType="number"></w2:key>
+            			<w2:key id="startRowNo" name="시작 행번호" dataType="number"></w2:key>
+            			<w2:key id="totalCnt" name="총건수" dataType="number"></w2:key>
+            			<w2:key id="totalYn" name="총건수조회여부" dataType="text"></w2:key>
+            		</w2:keyInfo>
+            	</w2:dataMap>
+            	<w2:dataList baseNode="list" repeatNode="map" id="dlt_myMvprpExecInfDel" saveRemovedData="true">
+            		<w2:columnInfo>
+            			<w2:column id="cortOfcCd" name="법원사무소코드" dataType="text"></w2:column>
+            			<w2:column id="csNo" name="사건번호" dataType="text"></w2:column>
+            		</w2:columnInfo>
+            	</w2:dataList>
+            </w2:dataCollection>
+            <w2:workflowCollection></w2:workflowCollection>
+            <xf:submission id="sbm_selectMyMvprpCsLst" ref='data:json,dma_pageInfo'
+                target='data:json,[{"id":"dma_pageInfo","key":"data.dma_pageInfo"},{"id":"dlt_myMvprpCsLst","key":"data.dlt_myMvprpCsLst"}]'
+                action="/pgj/pgj196/selectMyMvprpExecInfLst.on" method="post" mediatype="application/json" encoding="UTF-8" instance="" replace=""
+                errorHandler="" customHandler="" mode="asynchronous" processMsg="" ev:submit=""
+                ev:submitdone="scwin.sbm_selectMyMvprpCsLst_submitdone" ev:submiterror="" abortTrigger="">
+            </xf:submission>
+            <xf:submission id="sbm_deleteMvprpExecInf" ref="data:json,dlt_myMvprpExecInfDel" target=""
+                action="/pgj/pgj196/deleteMyMvprpExecInf.on" method="post" mediatype="application/json" encoding="UTF-8" instance="" replace=""
+                errorHandler="" customHandler="" mode="asynchronous" processMsg="" ev:submit=""
+                ev:submitdone="scwin.sbm_deleteMvprpExecInf_submitdone" ev:submiterror="" abortTrigger="">
+            </xf:submission>
+        </xf:model>
+        <script type="text/javascript" lazy="false"><![CDATA[/* 프로그램ID */
+scwin.pgmId = 'PGJ196M01';
+
+/* 최상단(opener, parent 포함) 기준 함수 */
+scwin.isMain = function() {
+    return true;
+};
+
+/* 페이지당 건수 */
+scwin.pagaSize = '';
+scwin.pageNum = 1;
+
+/**
+ * 나의동산집행정보 목록 페이지당 건수 처리
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.onpageload = function() {
+
+    scscrno.setScPgmId(scwin.pgmId);
+
+    /* 메뉴 */
+    if(!scutilo.isEmpty(scwin.pgmId)){
+        $p.main().wfm_side.scope.scwin.menuFocus(scwin.pgmId.slice(0,6));
+    }
+
+    let pageCnt = 10;
+    if (scwin.getCookie('pageCnt')==null) {
+        sbx_myMvprpLst.setValue('10');
+    } else {
+        pageCnt = Number(scwin.getCookie('pageCnt'));
+        sbx_myMvprpLst.setValue(scwin.getCookie('pageCnt'));
+    }
+
+    scwin.pagaSize = pageCnt;
+    scwin.myMvprpExecInfMain(true);
+};
+
+//웹접근성으로 인한 title제공 수정
+scwin.titleFormatter = function(){
+  return "";
+}
+
+function showTooltip(){
+    const tooltipContent = document.querySelector('.w2grid_tooltip')
+    tooltipContent.classList.add('on')
+}
+
+function hideTooltip(){
+    const tooltipContent = document.querySelector('.w2grid_tooltip')
+    tooltipContent.classList.remove('on')
+}
+
+scwin.onpageunload = function() {
+
+};
+
+/**
+ * 나의동산집행정보 페이징처리 메인
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.myMvprpExecInfMain = function(isFirst){
+
+    /* 최초 조회 여부 */
+    if (isFirst) {
+        dma_pageInfo.set("totalYn", "Y");
+    } else {
+        dma_pageInfo.set("totalYn", "N");
+    }
+    /* 페이지 사이즈 셋팅 */
+    dma_pageInfo.set("pageSize", scwin.pagaSize);
+    dma_pageInfo.set("pageNo", scwin.pageNum);
+    com.executeSubmission(sbm_selectMyMvprpCsLst);
+}
+/**
+ * 나의동산집행정보 목록 조회후 세팅
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbm_selectMyMvprpCsLst_submitdone = function(e) {
+
+    /*   dlt_myMvprpCsLst.setJSON([{
+        "checkBox": "",
+        "userMvCsNo": "서울중앙지방법원<br>2024본879",
+        "csTypNm": "동산경매",
+        "jhPlaceNm": "서울특별시 중구 난계로21길 13 702호 (황학동)",
+        "crdtrNm": "김가윤",
+        "debtrNm": "정금란",
+        "clmAmt": "28127020",
+        "deptNm": "7부",
+        "csProgStatNm": "진행",
+        "csRcptYmd": "2024.4.12.",
+        "chargRcptYmd": "02-533-6850~7,7부,2024.4.12.",
+        "telNum": "02-533-6850~7",
+        "cortOfcCd": "O000210",
+        "auctnIntrpsDvsCd": "00015C10",
+        "csNo": "20240000001444",
+        "mvprpCsNo": "2024본879",
+        "formatDeptNm": "",
+        "rowStatus": "U"
+    },
+    {
+        "checkBox": "",
+        "userMvCsNo": "서울중앙지방법원<br>2024본879",
+        "csTypNm": "동산경매",
+        "jhPlaceNm": "서울특별시 중구 난계로21길 13 702호 (황학동)",
+        "crdtrNm": "김가윤",
+        "debtrNm": "정금란",
+        "clmAmt": "28127020",
+        "deptNm": "7부",
+        "csProgStatNm": "진행",
+        "csRcptYmd": "2024.4.12.",
+        "chargRcptYmd": "02-533-6850~7,7부,2024.4.12.",
+        "telNum": "02-533-6850~7",
+        "cortOfcCd": "O000210",
+        "auctnIntrpsDvsCd": "00015C10",
+        "csNo": "20240000001444",
+        "mvprpCsNo": "2024본879",
+        "formatDeptNm": "",
+        "rowStatus": "U"
+    }]); */
+
+    let flag = dlt_myMvprpCsLst.getTotalRow();
+    if (flag >0) {
+        for (let i=0; i<flag; i++) {
+            let temp = dlt_myMvprpCsLst.getCellData(i,"chargRcptYmd")
+            let realData = temp.split(",");
+            dlt_myMvprpCsLst.setCellData(i, "telNum", realData[0]);
+            dlt_myMvprpCsLst.setCellData(i, "deptNm", realData[1]);
+            dlt_myMvprpCsLst.setCellData(i, "csRcptYmd", scdateo.getFmtDate(dlt_myMvprpCsLst.getCellData(i,"csRcptYmd"), "."));
+        }
+    }
+
+    if(String(dma_pageInfo.get("totalCnt")) !== '0') {
+        grp_rletPageInfo.show("");
+        spn_totalCnt.setValue(dma_pageInfo.get("totalCnt"));
+        //페이징 처리
+        scutilo.setPagingInfo(dma_pageInfo, pgl_myMvprpCsLst, grd_myMvprpCsLst);
+        pgl_myMvprpCsLst.setValue(scwin.pageNum);
+    } else {
+        grp_rletPageInfo.hide();
+    }
+
+};
+
+/**
+ *
+ * 그리드 담당계 이미지 생성하기위한 customFormatter
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2024.09.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ *
+ */
+scwin.chargDept = function(data, formattedData, rowIndex, colIndex){
+    return `${data}</br>연락처 : ${dlt_myMvprpCsLst.getCellData(rowIndex, "telNum")}`
+}
+
+
+/**
+ *
+ * 그리드 담당계 툴팁 생성하기위한 tooltipFormatter
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2024.09.04.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ *
+ */
+scwin.tooltipFormatter = function(rowIndex, colIndex, label, isOverflow){
+  var txt = "";
+  var _colId = dlt_myMvprpCsLst.getColumnID(colIndex);
+  if(_colId == "deptNm"){
+    const telNum = dlt_myMvprpCsLst.getCellData(rowIndex, "telNum");
+    txt =`<div class="toolTipText">
+        <span>·<text class="mr5" style="color:#6798FD; width:16px;">전화번호</text>${telNum}</span></div>`;
+  }
+
+  return txt;
+}
+
+/**
+ * 페이지 번호 이동시 데이터 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.pgl_myMvprpCsLst_onviewchange = function(info) {
+    dma_pageInfo.set( "pageNo" , info.newSelectedIndex );
+    dma_pageInfo.set( "bfPageNo",info.oldSelectedIndex );
+    scwin.pageNum = info.newSelectedIndex;
+    scwin.myMvprpExecInfMain(false);//조회처리
+};
+
+
+/**
+ * 공지사항 목록 페이지 건수 쿠키 처리 set함수
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.setCookie = function(cookie_name, value, days) {
+  var exdate = new Date();
+  /* days의 1이 들어가면 10초 설정 */
+  exdate.setTime(exdate.getTime() + days * 10 * 1000); //10초설정
+  // 설정 일수만큼 현재시간에 만료값으로 지정 시간이 없을경우 계속
+  var cookie_value = encodeURIComponent(value) + ((days == null) ? '' : '; expires=' + exdate.toUTCString());
+  document.cookie = encodeURIComponent(cookie_name) + '=' + cookie_value;
+}
+
+
+/**
+ * 공지사항 목록 페이지 건수 쿠키 처리 get함수
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.getCookie = function(cookie_name) {
+  var x, y;
+  var val = document.cookie.split(';');
+  for (var i = 0; i < val.length; i++) {
+    x = val[i].substr(0, val[i].indexOf('='));
+    y = val[i].substr(val[i].indexOf('=') + 1);
+    x = x.replace(/^\s+|\s+$/g, ''); // 앞과 뒤의 공백 제거하기
+    if (x == cookie_name) {
+      return unescape(y); // unescape로 디코딩 후 값 리턴
+    }
+  }
+}
+
+/**
+ * 페이지당 선택시 회당 페이지크기 만큼 리스트 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbx_myMvprpLst_onviewchange = function(info) {
+    var cookieFlag = info.newValue;
+    if (cookieFlag == 10) {
+        scwin.setCookie('pageCnt','10');
+    } else if (cookieFlag == 20) {
+        scwin.setCookie('pageCnt','20');
+    } else if (cookieFlag == 30) {
+        scwin.setCookie('pageCnt','30');
+    } else if (cookieFlag == 40) {
+        scwin.setCookie('pageCnt','40');
+    }
+    scwin.pagaSize = scwin.getCookie('pageCnt');
+    scwin.myMvprpExecInfMain(true);
+};
+
+/**
+ * 추가 버튼 클릭시 추가 팝업창 open
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.click_myMvprpExecAdd = function(){
+    let popId = "myMvprpExecAddPopUp";
+    if(scwin.popupDpcnChk(popId)) {
+        scwin.myMvprpExecAddPopUp();
+    } else{
+        return;
+    }
+}
+
+/**
+ * 삭제할 동산집행정보를 선택후 삭제 버튼 클릭시 유효성 검사 및 삭제
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.click_mvprpExecInfDel = function(){
+    var cheLst = dlt_myMvprpCsLst.getMatchedIndex("checkBox", "1");
+    if (cheLst.length<=0) {
+        scutilo.showMsg(scglblo.MSG.WARN,"하나 이상의 물건을 선택하세요");
+        return;
+    } else {
+        scutilo.showConfirm(scglblo.MSG.WARN,"삭제하시겠습니까?",scwin.realMyMvprpExecInfDel);
+    }
+}
+
+/**
+ * 삭제 유효성 확인에서 true일경우 삭제
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.realMyMvprpExecInfDel =function(e){
+    let flag = e.clickValue;
+    if (flag) {
+        let cheLst = dlt_myMvprpCsLst.getMatchedIndex("checkBox", "1");
+        dlt_myMvprpExecInfDel.removeAll();
+        for (let i=0; i<cheLst.length; i++) {
+            dlt_myMvprpExecInfDel.insertRow(i);
+            dlt_myMvprpExecInfDel.setCellData(i, "cortOfcCd", dlt_myMvprpCsLst.getCellData(cheLst[i], "cortOfcCd"))
+            dlt_myMvprpExecInfDel.setCellData(i, "csNo", dlt_myMvprpCsLst.getCellData(cheLst[i], "csNo"));
+        }
+        com.executeSubmission(sbm_deleteMvprpExecInf);
+    }
+}
+
+/**
+ * 나의동산집행정보 추가 popUp창
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.myMvprpExecAddPopUp = function(){
+
+    /********* Popup Settings *********/
+    var winW = window.innerWidth;
+    var winH = window.innerHeight;
+
+    /* small popup size */
+    var popupW = 700;
+    var popupH = 450;
+
+    // /* default popup size */
+    // var popupW = 900;
+    // var popupH = 700;
+
+    var popupX = (winW/2) - (popupW/2);
+    var popupY = (winH/2) - (popupH/2);
+
+    /**
+     * 공지사항 openPopUp option설정
+     */
+    let options = {
+        id: "myMvprpExecAddPopUp",
+        type: "wframePopup",
+        popupName: "나의동산 집행정보 추가",
+        top:popupY,
+        left:popupX,
+        width:popupW,
+        height:popupH,
+        modal: false
+    };
+
+    com.win.openPopup("/pgj/ui/pgj100/PGJ196P02.xml",options);
+}
+
+
+/**
+ * 팝업창 중복 생성 체크
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.popupDpcnChk = function(id){
+    var popupList = WebSquare.uiplugin.popup.popupList;
+    if (popupList.length!=0) {
+        for (var idx = 0; idx < popupList.length; idx++) {
+            if (WebSquare.uiplugin.popup.popupList[idx].id.indexOf(id) != -1) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/**
+ *  삭제후 나의 동산집행정보 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbm_deleteMvprpExecInf_submitdone = function(e) {
+    scwin.myMvprpExecInfMain(true);
+};
+
+/**
+ *  사건번호 클릭시 상세화면 팝업창 오픈
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.grd_myMvprpCsLst_oncellclick = function(row,col,colId) {
+    if (col == 1) {
+        let srch ={};
+        srch.csNo = dlt_myMvprpCsLst.getCellData(dlt_myMvprpCsLst.getRowPosition(), "csNo");
+        srch.cortOfcCd =  dlt_myMvprpCsLst.getCellData(dlt_myMvprpCsLst.getRowPosition(),"cortOfcCd");
+        srch.auctnIntrpsDvsCd = dlt_myMvprpCsLst.getCellData(dlt_myMvprpCsLst.getRowPosition(), "auctnIntrpsDvsCd");
+        srch.mvprpCsNo = dlt_myMvprpCsLst.getCellData(dlt_myMvprpCsLst.getRowPosition(), "mvprpCsNo");
+        const popId = "mvprpExecInfDtlPopUp";
+        if(scwin.popupDpcnChk(popId)) {
+            scwin.mvprpExecInfDtlPopUp(srch);
+        } else{
+            return;
+        }
+     }
+};
+
+/**
+ *  나의동산집행정보 상세 popUp
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.10.11.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.mvprpExecInfDtlPopUp = function(srch){
+
+    /********* Popup Settings *********/
+    var winW = window.innerWidth;
+    var winH = window.innerHeight;
+
+    /* small popup size */
+    //var popupW = 700;
+    //var popupH = 450;
+
+    // /* default popup size */
+    var popupW = 958;
+    var popupH = 695;
+
+    var popupX = (winW/2) - (popupW/2);
+    var popupY = (winH/2) - (popupH/2);
+
+    /**
+     * 공지사항 openPopUp option설정
+     */
+    var options = {
+        id: "mvprpExecInfDtlPopUp",
+        type: "wframePopup",
+        popupName: "대한민국법원 법원경매정보_나의동산집행정보",
+        top:popupY,
+        left:popupX,
+        width:popupW,
+        height:popupH,
+        modal: true
+    };
+
+    // /* 공지사항 팝업창이 오픈될때 같이 가져갈 paramether 변수 선언 */
+    //obj = {};
+    // /* 공지사항 팝업창에서 closePopUp시 실행시킬 callback 함수 */
+    // obj.callbackFn = "scwin.callbackFn";
+
+    // /* 공지사항 팝업창이 오픈될때 같이 가져갈 paramether */
+    paramObj = {};
+    paramObj.csNo = srch.csNo;
+    paramObj.cortOfcCd = srch.cortOfcCd;
+    paramObj.mvprpCsNo = srch.mvprpCsNo;
+    paramObj.auctnIntrpsDvsCd = srch.auctnIntrpsDvsCd;
+    com.win.openPopup("/pgj/ui/pgj100/PGJ196F01.xml",options,paramObj);
+}
+
+/**
+ *  페이지 인쇄 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.0 5.22.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.printEvent = function(e) {
+    let paramJSON = {};
+    paramJSON.html = document.getElementById($p.getComponentById('grp_contests').id).innerHTML;
+
+	const dataObject = {
+		type : "json",
+		data : paramJSON,
+		name : "paramObj"
+	};
+
+    /* default popup size */
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+    const popupW = 1200;
+    const popupH = 700;
+
+    const popupX = (winW / 2) - (popupW / 2);
+    const popupY = (winH / 2) - (popupH / 2);
+
+	// 팝업의 옵션
+	var options = {
+			id: 'print',					// 팝업ID
+			type: "browserPopup",			// 팝업 타입(wframePopup,browserPopup)
+			width: popupW,				// 팝업 가로사이즈
+			height: popupH,			// 팝업 세로사이즈
+			top: popupY,					// 팝업 top위치
+			left: popupX,				// 팝업 left위치
+			popupName: "인쇄",				// 팝업 Name
+			modal: false,					// 부모창이 안움직임(true)/부모창이 움직임(false)
+			useIFrame: true,
+			dataObject : dataObject
+	};
+
+	$p.openPopup("/pgj/ui/pgj100/PGJPrintContainer.xml", options);
+};
+
+/**
+ *  집행사건 등록후 콜백함수
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.10.31.   나해준       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.execCsAdd = function(){
+    scwin.onpageload();
+}
+]]></script>
+    </head>
+    <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+        <xf:group class="wrap user" id="" style="">
+            <w2:wframe class="header" id="wfm_header" src="../common/header.xml" style=""></w2:wframe>
+            <xf:group class="sub_cotainer" id="wfm_mainFrame" style="">
+                <xf:group class="inr" id="" style="">
+                    <w2:wframe class="sidebox" id="wfm_side" src="../common/sideMenu/side006.xml" style=""></w2:wframe>
+                    <xf:group class="sub_contents" id="grp_contests" style="">
+                        <xf:group class="pgtbox" id="" style="margin-bottom: 0px;">
+                            <w2:textbox class="pgt_tit" id="" label="나의동산집행정보" style="" tagname="h2"></w2:textbox>
+                            <xf:group class="clearfix" id="" style="">
+                                <xf:group class="pgt_location" id="" style="" tagname="ul">
+                                    <xf:group id="" style="" tagname="li">
+                                        <w2:span id="" label="HOME" style=""></w2:span>
+                                    </xf:group>
+                                    <xf:group id="" style="" tagname="li">
+                                        <w2:span id="" label="나의경매" style=""></w2:span>
+                                    </xf:group>
+                                    <xf:group id="" style="" tagname="li">
+                                        <w2:span id="" label="나의동산집행정보" style=""></w2:span>
+                                    </xf:group>
+                                </xf:group>
+                            </xf:group>
+                        </xf:group>
+                        <xf:group class="btn_group_w ty1" id="grp_buttonInfo" style="margin-top: 0px;">
+                            <xf:group class="btn_group r_line dsInb " id="" style="">
+                                <xf:trigger class="btn_cm lg bt_print" id="btn_prntng1" style="" type="button" ev:onclick="scwin.printEvent">
+                                    <xf:label><![CDATA[인쇄하기]]></xf:label>
+                                </xf:trigger>
+                            </xf:group>
+                            <xf:group class="btn_group dsInb " id="" style="">
+                                <xf:trigger class="btn_cm lg bg3" id="btn_myMvprpExecAdd1" style="" type="button" ev:onclick="scwin.click_myMvprpExecAdd">
+                                    <xf:label><![CDATA[추가]]></xf:label>
+                                </xf:trigger>
+                                <xf:trigger class="btn_cm lg" id="btn_mvprpExecInfDel1" style="" type="button" ev:onclick="scwin.click_mvprpExecInfDel">
+                                    <xf:label><![CDATA[삭제]]></xf:label>
+                                </xf:trigger>
+                            </xf:group>
+                        </xf:group>
+                        <xf:group id="" class="over_x3">
+                        	<w2:gridView summary="동산집행정보 목록" tooltipShowAlways="true" ev:oncellclick="scwin.grd_myMvprpCsLst_oncellclick"
+                        		scrollByColumnAdaptive="false" tooltipHeaderShowAlways="false" noResultMessageVisibleAlways="true"
+                        		readOnly="false" scrollByColumn="false" defaultCellHeight="20"
+                        		noResultMessage="검색된 결과가 없습니다." setCellInputTypeCustom="true" fixedColumn="1" dataList="data:dlt_myMvprpCsLst"
+                        		showImageTooltip="false" style="" tengeMask="" autoFit="allColumn" id="grd_myMvprpCsLst"
+                        		visibleRowNum="all" class="grdtype10 grdcolor" escape="false" titleFormatter="scwin.titleFormatter" noResultMessageStyle="display: block; position: relative; color: rgb(56, 61, 65);font-size: 12px;text-align: center;">
+                        		<w2:caption style="" id="caption1" value="this is a grid caption."></w2:caption>
+                        		<w2:header style="" id="header1">
+                        			<w2:row style="" id="row1">
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="40" inputType="checkbox"
+                        					style="height:40px;" id="column9" value="선택" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="110" inputType="text" style="height:40px;"
+                        					id="column8" sortable="false" value="사건번호" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="80" inputType="text" style="height:40px;"
+                        					id="column7" sortable="false" value="사건유형" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="200" inputType="text" style="height:40px;"
+                        					id="column6" value="집행장소" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="70" inputType="text" style="height:40px;"
+                        					id="column5" value="채권자" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="70" inputType="text" style="height:40px;"
+                        					id="column4" value="채무자" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="110" inputType="text" style="height:40px;"
+                        					id="column3" value="청구금액(원)" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column removeBorderStyle="false" width="80" inputType="text" style="height:20px" id="column2"
+                        					value="담당부" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" width="80" inputType="text" style="height:40px;"
+                        					id="column1" sortable="false" value="진행상태" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        			</w2:row>
+                        			<w2:row style="" id="row4">
+                        				<w2:column removeBorderStyle="false" width="80" inputType="text" style="height:20px" id="column34"
+                        					value="접수일자" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        			</w2:row>
+                        		</w2:header>
+                        		<w2:gBody style="" id="gBody1">
+                        			<w2:row style="" id="row2">
+                        				<w2:column rowSpan="2" removeBorderStyle="false" inputType="checkbox"
+                        					style="height:20px;" id="checkBox" blockSelect="false" displayMode="label" checkboxLabelColumn="userMvCsNo"
+                        					checkboxLabel="선택">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" inputType="link" style="height:20px;"
+                        					readOnly="true" id="userMvCsNo" escape="false" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" inputType="text" style="height:40px;"
+                        					readOnly="true" id="csTypNm" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" inputType="text" style="height:20px;"
+                        					readOnly="true" id="jhPlaceNm" class="al" escape="false" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" inputType="text" style="height:40px;"
+                        					readOnly="true" id="crdtrNm" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" inputType="text" style="height:40px;"
+                        					readOnly="true" id="debtrNm" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" displayFormat="##,###,###,###,###원"
+                        					inputType="text" style="height:40px;" readOnly="true" id="clmAmt" class="ar" blockSelect="false"
+                        					displayMode="label">
+                        				</w2:column>
+                        				<w2:column removeBorderStyle="false" inputType="text"
+                        					style="height:20px" readOnly="true" id="deptNm" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        				<w2:column rowSpan="2" removeBorderStyle="false" inputType="text" style="height:40px;"
+                        					readOnly="true" id="csProgStatNm" blockSelect="false" displayMode="label">
+                        				</w2:column>
+                        			</w2:row>
+                        			<w2:row style="" id="row3">
+                        				<w2:column removeBorderStyle="false" inputType="text" style="height:20px;"
+                        					id="csRcptYmd" blockSelect="false" displayMode="label" readOnly="true">
+                        				</w2:column>
+                        			</w2:row>
+                        		</w2:gBody>
+                        	</w2:gridView></xf:group><xf:group class="count_page" id="grp_rletPageInfo" style="">
+                            <xf:group class="gvw_count_group" id="" style="">
+                                <w2:span id="" label="총" style=""></w2:span>
+                                <w2:span class="count_selected " id="spn_totalCnt" label="1" style=""></w2:span>
+                                <w2:span id="" label="건" style=""></w2:span>
+                            </xf:group>
+                            <w2:pageList class="wq_pglist" displayButtonType="display" displayFormat="#" id="pgl_myMvprpCsLst" pageSize="10"
+                                style="min-height: 35px;" buttonShowType="3" ev:onviewchange="scwin.pgl_myMvprpCsLst_onviewchange">
+                            </w2:pageList>
+                            <xf:group class="count_view" id="" style="">
+                                <w2:span class="txt" dataType="" id="" label="페이지당" style=""></w2:span>
+                                <w2:textbox tagname="label" for="sbx_myMvprpLst" id="" label="페이지 목록수선택" class="webblind"></w2:textbox>
+                                <xf:select1 allOption="" appearance="minimal" chooseOption="" class="sel" direction="auto" disabled="false"
+                                    disabledClass="w2selectbox_disabled" id="sbx_myMvprpLst" ref="" renderType="select" style="max-width:80px;" submenuSize="auto"
+                                    title="페이지 목록수 선택" ev:onviewchange="scwin.sbx_myMvprpLst_onviewchange">
+                                    <xf:choices>
+                                        <xf:item>
+                                            <xf:label><![CDATA[10]]></xf:label>
+                                            <xf:value><![CDATA[10]]></xf:value>
+                                        </xf:item>
+                                        <xf:item>
+                                            <xf:label><![CDATA[20]]></xf:label>
+                                            <xf:value><![CDATA[20]]></xf:value>
+                                        </xf:item>
+                                        <xf:item>
+                                            <xf:label><![CDATA[30]]></xf:label>
+                                            <xf:value><![CDATA[30]]></xf:value>
+                                        </xf:item>
+                                        <xf:item>
+                                            <xf:label><![CDATA[40]]></xf:label>
+                                            <xf:value><![CDATA[40]]></xf:value>
+                                        </xf:item>
+                                    </xf:choices>
+                                </xf:select1>
+                            </xf:group>
+                        </xf:group>
+                        <xf:group class="btn_group_w ty1" id="grp_buttonInfo2" style="">
+                            <xf:group class="btn_group r_line dsInb " id="" style="">
+                                <xf:trigger class="btn_cm lg bt_print" id="btn_prntng2" style="" type="button" ev:onclick="scwin.printEvent">
+                                    <xf:label><![CDATA[인쇄하기]]></xf:label>
+                                </xf:trigger>
+                            </xf:group>
+                            <xf:group class="btn_group dsInb " id="" style="">
+                                <xf:trigger class="btn_cm lg bg3" id="btn_myMvprpExecAdd2" style="" type="button" ev:onclick="scwin.click_myMvprpExecAdd">
+                                    <xf:label><![CDATA[추가]]></xf:label>
+                                </xf:trigger>
+                                <xf:trigger class="btn_cm lg" id="btn_mvprpExecInfDel2" style="" type="button" ev:onclick="scwin.click_mvprpExecInfDel">
+                                    <xf:label><![CDATA[삭제]]></xf:label>
+                                </xf:trigger>
+                            </xf:group>
+                        </xf:group>
+                        <xf:group class="infobox" id="grp_noticeInfo" style="height: 145px;">
+                            <w2:textbox class="tit" id="" label="사용설명" style=""></w2:textbox>
+                            <xf:group class="info_list" id="" style="" tagname="ul">
+                                <xf:group id="" style="" tagname="li">
+                                    <w2:textbox id="" label="나의동산집행정보는 해당 동산 집행사건의 비밀번호를 부여받은 채권자/채무자인 경우에만 추가해서 볼 수 있습니다." style=""></w2:textbox>
+                                </xf:group>
+                                <xf:group id="" style="" tagname="li">
+                                    <w2:textbox id="" label="나의동산집행정보로 등록한 사건이 종국된 후 30일이 지난 경우 채무자의 개인정보보호를 위해 나의동산집행정보 리스트에서 자동으로 삭제됩니다."
+                                        style="">
+                                    </w2:textbox>
+                                </xf:group>
+                            </xf:group>
+                        </xf:group>
+                    </xf:group>
+                </xf:group>
+            </xf:group>
+            <w2:wframe class="footer" id="" src="../common/footer.xml" style=""></w2:wframe>
+            <w2:wframe class="quickmenu" id="" src="../common/quick.xml" style=""></w2:wframe>
+        </xf:group>
+    </body>
+</html>
