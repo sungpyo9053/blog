@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-gazebo-high-resolution-camera-image-topic-bandwidth-qos-depth",
+  "title": "Gazebo 고해상도 카메라 센서를 넣었더니 시뮬레이션이 느려질 때: 해상도·fps·QoS depth로 이미지 토픽이 초당 몇 MB를 내보내는지 먼저 계산하기",
+  "slug": "gazebo-high-resolution-camera-image-topic-bandwidth-qos-depth",
+  "reader_question": "Robotics Stack Exchange 질문 'Gazebo Performance Problems with high resolution camera sensor'(https://robotics.stackexchange.com/questions/114780/gazebo-performance-problems-with-high-resolution-camera-sensor, 조회 860회, 답변 없음)에서 출발한다. 시뮬레이션 로봇에 고해상도 카메라를 달았더니 전체가 느려졌다. 해상도를 얼마나 낮춰야 하는지 정하기 전에, 이미지 토픽 하나가 초당 몇 MB를 내보내고 QoS 큐 하나가 최대 몇 MB를 붙잡을 수 있는지를 먼저 숫자로 확인할 수 있을까?",
+  "target_reader": "Gazebo나 실제 카메라 드라이버에서 sensor_msgs 이미지 토픽을 처음 다뤄 보는 ROS 2 입문자. 토픽 발행·구독은 알지만, 해상도·fps·QoS depth가 데이터량에 어떻게 곱해지는지는 계산해 본 적이 없다. 곱셈과 바이트→MB 환산만 할 수 있으면 따라올 수 있다.",
+  "learning_outcome": "독자는 이미지 토픽의 초당 데이터량을 출력 width×출력 height×(픽셀당 바이트)×fps로 계산할 수 있다. 출력 해상도는 CameraInfo 주석의 규칙대로 (width/binning_x)×(height/binning_y)이고, 여기서 width/height는 카메라를 보정할 때의 이미지 크기다. 또 QoS keep last depth N은 공식 정의상 '최대 N개 표본 저장'이므로, 이 정의로 큐 하나가 붙잡을 수 있는 이미지 바이트의 상한을 구할 수 있다. 그 결과 1920×1080을 640×480으로 낮추면 데이터가 6.75배 줄고, 2×2 binning이면 4배 준다는 것을 실행 전에 예측할 수 있다. 독자가 할 일은 세 가지다. 먼저 자기 카메라 설정값으로 MB/s와 depth 상한을 계산한다. 다음으로 Gazebo 없이 같은 해상도의 합성 Image를 발행하고 ros2 topic bw/hz로 잰 값을 계산과 비교한다. 마지막으로 받은 Image의 width/height가 함께 발행된 CameraInfo의 width/binning_x, height/binning_y와 맞는지, K[0]이 0(미보정)은 아닌지 확인한다. 이 결과를 보고 해상도를 줄일지, depth를 줄일지, 아니면 문제를 렌더링 쪽에서 찾을지 정한다.",
+  "unique_takeaway": "이미지 토픽의 부담은 픽셀 수에 fps와 QoS depth를 곱한 값이고, 픽셀 수는 해상도가 오를 때 가로와 세로 양쪽으로 함께 늘어난다. 1920×1080 rgb8(가정) 30 fps는 초당 약 186.6 MB이고, 기본 QoS keep last 10의 상한은 큐 하나에서만 약 62.2 MB다. 4K로 올리면 초당 약 746.5 MB가 된다. 다만 이 계산은 메시지 데이터량만 알려 준다. Gazebo가 느려진 원인이 렌더링인지 메시지인지는, 같은 해상도의 합성 토픽을 시뮬레이터 없이 발행해 보는 대조 실험으로 가려야 한다. 그리고 CameraInfo 정의에 따르면 width/height와 K는 보정할 때의 값이라 재보정 전까지 그대로이고, binning은 재보정 없이 출력 해상도만 줄인다. 그래서 해상도나 binning을 바꾼 뒤에는 '받은 이미지 크기 = CameraInfo width/binning_x × height/binning_y'가 성립하는지 직접 확인해야 한다. 이 관계가 깨졌다면 K를 그 이미지에 그대로 쓰면 안 된다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/common_interfaces/jazzy/sensor_msgs/msg/CameraInfo.msg",
+      "publisher": "ROS 2 common_interfaces (Jazzy sensor_msgs)",
+      "claim_scope": "CameraInfo message definition: intrinsic matrix K (fx, fy, cx, cy), distortion, rectification and projection matrices and the pinhole projection they describe; message semantics only, not a calibration procedure",
+      "checked_at": "2026-10-29T14:09:27.893039+09:00"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/ros2/ros2_documentation/rolling/source/ROS-Framework/interfaces/topics/About-Quality-of-Service-Settings.rst",
+      "publisher": "ROS 2 Documentation",
+      "claim_scope": "QoS policies and compatibility; rolling document, no measured delivery guarantees",
+      "checked_at": "2026-10-29T14:09:27.893039+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261029T050923Z-41692418ab-gazebo-high-resolution-camera-image-topic-bandwidth-qos-depth/example.py",
+    "sha256": "51601639b7da4e120e048cf9168acdf44394d29eeab0cba0b134f8b9d786d3c4",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/5d42763d994ccd21b0d3aa9a8d21ee335cf65dac/editorial/generated-foundations/20261029T050923Z-41692418ab-gazebo-high-resolution-camera-image-topic-bandwidth-qos-depth/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261029T050923Z-41692418ab-gazebo-high-resolution-camera-image-topic-bandwidth-qos-depth/verification.json",
+    "sha256": "e387ac3fe0ea271c3eddf73e0e89ba0aa6acce5bfab87d4b29ba25eb9d78a5d8",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/5d42763d994ccd21b0d3aa9a8d21ee335cf65dac/editorial/generated-foundations/20261029T050923Z-41692418ab-gazebo-high-resolution-camera-image-topic-bandwidth-qos-depth/verification.json"
+  },
+  "author_id": "discovery-writer-b87c287b98ec4e719a70fd2f2005b424"
+}
