@@ -6,6 +6,7 @@ The card only restates the post's own title (no new numbers), split at ':' into 
 
 usage (runner): .venv/bin/python scripts/make_info_cards.py cards.json OUTDIR [--apply]
 cards.json: [{"post_id": 1066, "title": "...", "label": "보험·고용"}]
+  optional "type" (REST base, default "posts"; "hunt_en" for EN) and "footer".
 --apply uploads each PNG and sets it as featured_media (only if the post still has none).
 """
 import json
@@ -44,7 +45,7 @@ def wrap(draw, text, f, width):
     return lines + ([cur] if cur else [])
 
 
-def render(title, label, out):
+def render(title, label, out, footer="huntlab.app · 공식 출처 기준"):
     head, _, sub = title.partition(":")
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
@@ -52,16 +53,20 @@ def render(title, label, out):
     x, maxw = 150, W - 300  # keep text inside the central ~80% safe area
     d.text((x, 150), label, font=font("Bold", 40), fill=ACCENT)
     y = 230
-    hf = font("Bold", 96)
-    for line in wrap(d, head.strip(), hf, maxw)[:3]:
+    for size in range(96, 47, -8):  # shrink until a long single word fits and the headline stays within 3 lines
+        hf = font("Bold", size)
+        lines = wrap(d, head.strip(), hf, maxw)
+        if len(lines) <= 3 and all(d.textlength(line, font=hf) <= maxw for line in lines):
+            break
+    for line in lines[:3]:
         d.text((x, y), line, font=hf, fill=INK)
-        y += 124
+        y += int(size * 1.3)
     y += 30
     sf = font("Regular", 46)
     for line in wrap(d, sub.strip(), sf, maxw)[:3]:
         d.text((x, y), line, font=sf, fill=SUB)
         y += 66
-    d.text((x, H - 120), "huntlab.app · 공식 출처 기준", font=font("Regular", 34), fill=SUB)
+    d.text((x, H - 120), footer, font=font("Regular", 34), fill=SUB)
     img.save(out)
 
 
@@ -75,16 +80,16 @@ def main():
         client = WordPressClient(WordPressConfig.from_environment(ROOT / ".env"))
     for c in cards:
         out = outdir / f"card-{c['post_id']}.png"
-        render(c["title"], c["label"], out)
+        render(c["title"], c["label"], out, c.get("footer", "huntlab.app · 공식 출처 기준"))
         if not client:
             print("rendered", out)
             continue
-        post = client.request("GET", f"posts/{c['post_id']}?context=edit", expected=(200,))
+        post = client.request("GET", f"{c.get('type', 'posts')}/{c['post_id']}?context=edit", expected=(200,))
         if post.get("featured_media"):
             print("skip has-image", c["post_id"])
             continue
         media = client.upload_media(out, alt_text=c["title"].partition(":")[0].strip())
-        client.request("POST", f"posts/{c['post_id']}", payload={"featured_media": media["id"]}, expected=(200,))
+        client.request("POST", f"{c.get('type', 'posts')}/{c['post_id']}", payload={"featured_media": media["id"]}, expected=(200,))
         print("set", c["post_id"], media["id"], media.get("source_url"))
 
 
