@@ -1,0 +1,747 @@
+
+
+
+
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="keywords" content="모두의카드">
+    <meta name="description" content="모두의카드 홈페이지">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5" />
+    <meta name="robots" content="noindex, follow" />
+    
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://korea-pass.kr/">
+    <meta property="og:title" content="모두의카드">
+    <meta property="og:image" content="https://korea-pass.kr/assets/images/logo_header.svg">
+    <meta property="og:description" content="모두의카드 홈페이지">
+    <meta property="og:site_name" content="Site Name">
+    <meta property="og:locale" content="KR">
+    <title>모두의카드</title>
+    <link rel="stylesheet" type="text/css" href="/assets/css/swiper.8.4.3.min.css">
+    <link rel="stylesheet" type="text/css" href="/assets/css/common.min.css">
+	<link rel="stylesheet" type="text/css" href="/assets/css/sub.min.css">
+	<link rel="apple-touch-icon" href="/assets/images/logo.svg">
+	<link rel="apple-touch-icon-precomposed" href="/assets/images/logo.svg">
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/common2.min.css"> -->
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/main2.min.css"> -->
+					
+	
+	<!-- <script>document.domain='korea-pass.kr'</script> -->
+		    
+    <script src="/assets/js/vendors/jquery.min.js"></script>
+    <script src="/assets/js/vendors/swiper-bundle.8.4.7.min.js"></script>
+    <script src="/assets/js/utils.js"></script>
+    <script defer src="/assets/js/Modernizr.js"></script>
+    <script defer src="/assets/js/pub.min.js"></script>
+    <script src="/assets/js/common.js"></script>
+    				
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-1E6PH8MGZW"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+	
+	  gtag('config', 'G-1E6PH8MGZW');
+	</script>
+
+    <script>
+    	$(document).ready(function() {
+        	//로컬테스트 할 때만 주석처리 해야함
+        	
+        	var reloc = window.location.href;
+        	if(reloc.indexOf("https://") == -1){
+            	location.href = reloc.replace("http://", "https://");
+        	}
+        	
+        	if (reloc.indexOf("www.") > 0){
+        		location.href = reloc.replace("www.", "");
+        	}
+             
+            //로그아웃처리
+            $("#logout, #mlogout").click(function(){
+            	fn_callAjax("/logout.do", '', {
+                    successCallback: function (data) {
+                    	localStorage.removeItem("alarmBtn"); // 전체메뉴 header : 개인 알림 게시판 갯수
+                    	location.href = '/'
+                    },
+                  });
+            });
+            
+        	//홈페이지 마우스 우클릭 금지 조치
+            $(document).bind("contextmenu", function(event) {
+            	event.preventDefault();
+            	alertWarning('오른쪽 마우스는 사용할 수 없습니다.');
+            });
+        	
+            initSubInfo();
+               
+            // 모바일전체메뉴 아코디언 기능 추가
+            var windowsize = $(window).width();
+            if (windowsize < 1025) {
+                mgnb ();
+            } else{
+                webgnb ();
+            }
+
+
+            $(window).resize(function() {
+                if(Modernizr.mq('screen and (min-width:1025px)')) {
+                    webgnb ();
+                                    
+                }else{
+                    mgnb ();
+                }
+            });
+
+            function webgnb (){
+                console.log('pc');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('mobile');
+                $('#gnb').addClass('web');
+            }
+
+            function mgnb (){
+                console.log('mobile');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('web');
+                $('#gnb').addClass('mobile');
+
+                $('.mobile > ul > li > a').click( function(e){
+                    e.preventDefault();
+                    function slideDown(target) {
+                        slideUp();
+                        $(target).addClass('on').next('.depth2').stop().slideDown('fast');
+                    }
+                    function slideUp() {
+                        $('.mobile ul li  > a').removeClass('on').next('.depth2').slideUp('fast');
+                    }
+                    $(this).hasClass('on') ? slideUp() : slideDown(this);
+                });
+            }
+		});
+
+        function initSubInfo() {
+            var pMap = {};
+      		var alUserSn = '';
+      		var alUserId = '';
+      		var alUserNm = '';
+  
+            if (
+              !fn_isNull(alUserSn) &&
+              !fn_isNull(alUserId)
+            ) {
+              document.getElementById('header').classList.add('loggedin');   
+              document.getElementById("userNm").innerHTML = alUserNm + " 님";
+
+              // 전체메뉴 header : 개인 알림 게시판 갯수
+              $("#alarmBtn").attr("data-num", localStorage.getItem("alarmBtn"));
+			} else {
+				document.getElementById('header').classList.remove('loggedin');
+			}
+        }
+        
+      //전체메뉴 header : 개인 알림 리스트 드롭다운
+        function moveToNotificationList(){
+        	fn_callAjax("/notifs/list.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data) {
+        			$(".alarm-list").empty();
+        			var list = data.list;
+        			var unReadList = []; //안읽은 게시물 리스트
+        			var readList = []; //읽은 게시물 리스트
+        			var unReadCnt = 0; //안읽은 게시물 개수
+					var totalRecordCount = data.notifsVo.paginationInfo.totalRecordCount; //등록된 게시물 개수
+        			
+        			if(totalRecordCount == 0){//등록된 게시물 없는 경우 
+        				$(".no-alarm").addClass("active");
+        			} else {
+        				$(".no-alarm").removeClass("active");
+        			}
+        			$.each(list, function (i, val) { //1. 전체 게시물 중 안읽은 게시물 수 및 게시물 읽음 여부에 따라 새로운 리스트에 요소 추가
+        				if(val.isRead == false){
+        					unReadCnt += 1;
+        					unReadList.push(val);
+        				} else {
+        					unReadCnt
+        					readList.push(val);
+        				}
+        			});
+        			
+        			if(unReadCnt < 9){ //2. 게시물 읽음여부 상관없이 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", unReadCnt);
+        				if(unReadCnt < 5){ //노출되는 게시글 : 읽음 + 안읽음
+        					$.each(unReadList.slice(0,unReadCnt), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        					$.each(readList.slice(0,(5-unReadCnt)), function (i, val) { //읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk read" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				} else { //노출되는 게시글 : 안읽음
+        					$.each(unReadList.slice(0,5), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				}
+        			} else { //2. 안읽은 게시물 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", "9+"); //안읽음 알림 개수 max 9+
+        				$.each(unReadList.slice(0,5), function (i, val) { 
+        					var html = '<li>'+
+        									'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        										'<span class="date">'+val.frstRgstDt+'</span>'+
+        										'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        										'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        									'</a>'+
+        								'</li>';
+        					$(html).appendTo(".alarm-list");
+        				});
+        			}
+        		},
+        	});
+        }
+        //전체메뉴 header : 개인 알림 게시판 상세페이지 이동
+        function moveToNotificationDetail(notifsSn){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"notifsSn" : notifsSn, "alUserSn" : '', "readChk" : "readOne", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			var newForm = $("<form></form>");
+					newForm.attr("name", "form");
+					newForm.attr("method", "post");
+					newForm.attr("action", "/notifs/notifsDetail.do");
+					
+					newForm.append($("<input type='hidden' id='notifsSn' name='notifsSn' value='"+data.notifsVo.notifsSn+"'>"));
+					newForm.append($("<input type='hidden' id='alUserSn' name='alUserSn' value='"+data.notifsVo.alUserSn+"'>"));
+					newForm.append($("<input type='hidden' id='sidoCd' name='sidoCd' value='"+data.notifsVo.sidoCd+"'>"));
+					newForm.append($("<input type='hidden' id='insttSn' name='insttSn' value='"+data.notifsVo.insttSn+"'>"));
+					
+					newForm.appendTo("body");
+					newForm.submit();
+        		},
+        	});
+        }
+        // 전체메뉴 header : 개인 알림 게시판 전체읽음처리
+        function notificationReadchk(){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			$("#alarmBtn").trigger("click");
+        		},
+        	});
+        }
+	</script>
+</head>
+
+<body>
+<a class="content-shortcut" href="#content">본문 바로가기</a>
+   	<header id="header" class="header" aria-expanded="false">
+	    <div class="header-wrapper">
+	        <h1 class="header-logo">
+	            <a href="/" title="모두의카드 바로가기">
+	                <img src="/assets/images/logo.svg" width="84" height="52" alt="모두의카드 로고">
+	            </a>
+	        </h1>
+	        <div class="gnb-wrap">
+				<nav id="gnb" class="gnb">
+				    <ul class="depth1">
+				        <li>
+				            <a href="#" tabindex="0"><span>사업소개</span></a>
+				            <ul class="depth2" data-title="사업소개">
+				                <li>
+				                    <a href="/info/intro.do" tabindex="0"><span>모두의카드소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>지역별혜택소개</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/intro_gg.do" tabindex="0"><span>경기</span></a></li>
+				                        <li><a href="/info/intro_ic.do" tabindex="0"><span>인천</span></a></li>
+				                        <li><a href="/info/intro_bs.do" tabindex="0"><span>동백</span></a></li>
+				                        <li><a href="/info/intro_sj.do" tabindex="0"><span>세종</span></a></li>
+				                        <li><a href="/info/intro_cn.do" tabindex="0"><span>충남</span></a></li>
+				                        
+										<li><a href="/info/intro_gn.do" tabindex="0"><span>경남</span></a></li>
+										<li><a href="/info/intro_gj.do" tabindex="0"><span>전남광주</span></a></li>
+										<li><a href="/info/intro_us.do" tabindex="0"><span>울산</span></a></li>
+										<li><a href="/info/intro_seoul.do" tabindex="0"><span>서울</span></a></li>
+				                    </ul>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>이용안내</span></a>
+				            <ul class="depth2" data-title="이용안내">
+				                <li>
+				                    <a href="/info/use_join.do" tabindex="0"><span>가입조건</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_accm.do" tabindex="0"><span>적립안내</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_pay.do" tabindex="0"><span>환급안내</span></a>
+				                </li>
+				               <!--  <li>
+				                    <a href="/info/intro_refund_calculator.do" tabindex="0"><span>예상환급금계산기</span></a>
+				                </li>  -->
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>모두의카드</span></a>
+				            <ul class="depth2" data-title="모두의카드소개">
+				            	<li>
+				                    <a href="/info/card_guide.do" tabindex="0"><span>카드 소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>사용안내</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/kpass_pay.do" tabindex="0"><span>카드사별 지급방식</span></a></li>
+				                        <li><a href="/info/kpass_mob.do" tabindex="0"><span>모바일페이 이용안내</span></a></li>
+				                        <li><a href="/info/kpass_chg.do" tabindex="0"><span>카드변경방법</span></a></li>
+				                        <li><a href="/info/kpass_inq.do" tabindex="0"><span>카드사문의안내</span></a></li>
+				                    </ul>
+				                </li>
+				                <li>
+				                    <a href="/event/eventListView.do" tabindex="0"><span>카드 이벤트</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>공지사항</span></a>
+				            <ul class="depth2" data-title="공지사항">
+				                <li>
+				                    <a href="/notice/noticeList.do" tabindex="0"><span>공지사항</span></a>
+				                </li>
+				                
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>문의하기</span></a>
+				            <ul class="depth2" data-title="문의하기">
+				                <li>
+				                    <a href="/serviceInfo/qnaIntro.do" tabindex="0"><span>문의하기</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaWrite.do" tabindex="0"><span>1:1문의</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaListView.do" tabindex="0"><span>문의내역</span></a>
+				                </li>
+				                <li>
+				                    <a href="/notice/faqList.do" tabindex="0"><span>자주묻는질문</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        
+				        <li class="from-md">
+				            <a href="#" tabindex="0"><span>이용약관</span></a>
+				            <ul class="depth2" data-title="settings">
+				                <li><a href="/term/term03.do" tabindex="0"><span>개인정보처리방침</span></a></li>
+				                <li><a href="/term/term01.do" tabindex="0"><span>서비스이용약관</span></a></li>
+				            </ul>
+				        </li>
+				    </ul>
+				</nav>
+	        </div>
+	        <div class="alarm-wrap">
+	        	<!-- <button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="moveToNotificationList()"> -->
+	        	<button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="location.href='/notifs/notifsList.do'">
+	           		<!-- <i class="arrow"></i> -->
+	           	</button>
+	           	<!-- <div class="alarm-list-wrap">
+	           		<div class="list-title">
+	           			<h3>알림</h3>
+	           			<button type="button" class="btn-read" id="alarmReadBtn" onclick="notificationReadchk()">전체읽음</button>
+	           		</div>
+	           		<div class="list-inner">
+	           			<div class="no-alarm"> active class로 제어
+	           				<i class="ico-no-alarm"></i>새로운 알림이 없습니다.
+	           			</div>
+	            		<ul class="alarm-list">
+	            			<li>
+	            				<a class="lnk" href="../notification/notificationList.html">
+	            					<span class="date">24.03.07</span>
+	            					<span class="alarm-title">24년 12월 환급금 일부 지자체 감액 안내</span>
+	            					<span class="alarm-content">24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내</span>
+	            				</a>
+	            			</li>
+	            		</ul>
+	           		</div>
+	           		<button type="button" class="btn-more" onclick="location.href='../notifs/notifsList.do'">전체보기</button>
+	           	</div> -->
+	        </div>
+	        <button type="button" class="js-header-sitemap" aria-haspopup="true">
+	            <i></i>
+	            <i></i>
+	            <i></i>
+	            <span>사이트맵 보기</span>
+	        </button>
+			<div class="header-utils">
+	            <p class="header-utils-01" id="hello"><!-- 반갑습니다<br> -->로그인 또는 회원가입을 해주세요!</p>
+				
+					
+						<a href="/join/login.do" class="header-utils-02" id="login">로그인</a>
+						<a href="/join/join.do" class="header-utils-03" id="join">회원가입</a>
+					
+					
+				
+	        </div>
+	        <!-- <a href="#" class="header-notice" aria-live="assertive"><i></i><span>새소식</span></a> -->
+        	<a id="backBtn" class="header-back" title="뒤로가기"><i></i></a>
+        	</div>
+        	
+        <!-- 적립내역 띠배너 -->
+		<!-- <div class="header-banner-sub">
+	       <div class="header-banner-container">
+	           <div class="header-banner-swiper">
+	               <div class="swiper-wrapper">
+	                   <div class="swiper-slide">
+	                       <p>K-패스에서 카드 사용 내역 확인까지<br class="from-sm"> <strong>최대 14일</strong>이 소요됩니다.</p>
+	                   </div>
+	               </div>
+	           </div>
+	           <button type="button" id="header-banner-close-sub" class="header-banner-close">닫기</button>
+	       </div>
+	     </div> -->
+	</header>
+    <sub-header></sub-header>
+    
+
+
+
+
+
+
+<link rel="stylesheet" type="text/css" href="/assets/css/sub2.min.css">
+
+
+<script>
+$(document).ready(function () {
+	fn_addLnb('공지사항', '공지사항');
+	
+	$("#boardList").empty();
+	
+	$("#faqCtgry").empty();
+	fn_callAjax("/serviceInfo/noticeCtgry.do", null, {
+	  successCallback: function (data) {
+	    $('<option value="">전체</option>').appendTo("#faqCtgry");
+	    $('<button type="button" role="tab" id="tab01" class="tab" aria-selected="true" data-id=""><span>전체</span></button>').appendTo("#faqCategory");
+	    
+		// 기타 항목 제거처리
+		var newArr = data.list.filter(val => val.code != "ETC");
+
+	    $.each(newArr, function (i, itm) {
+	  	  var number = i + 2;
+	      $(
+	        '<button type="button" role="tab" id="tab0'+number+'" class="tab" aria-selected="false" data-id="' + itm.code + '"><span>' + itm.codeNm + '</span></button>'
+	      ).appendTo("#faqCategory");
+	      $(
+	          '<option value="' + itm.code + '">' + itm.codeNm + "</option>"
+	        ).appendTo("#faqCtgry");
+	      //<button type="button" role="tab" id="tab02" aria-selected="false" data-id="' + itm.code + "><span>' + itm.codeNm + '</span></button>
+	    });
+	    var searchCtgry = "";
+	    if(searchCtgry != ""){
+	    	/* if(searchCtgry == 'CHECK'){
+	    		searchCtgry = 'SYSTEM';
+	    	} */
+	    	$("#faqCtgry").val(searchCtgry).prop("selected", true);
+			$("#faqCategory").find(".tab").attr('aria-selected', 'false');
+			$("#faqCategory").find('[data-id="'+searchCtgry+'"]').attr('aria-selected', 'true');
+	    } else {
+		    $("#faqCtgry").first().prop("selected", true);
+	    }
+	
+	    $("#pageIndex").val("1");
+	    fn_search();
+	  },
+	});
+	
+	$("#mlgSrchMoreBtn").on("click", function () {
+	    $("#pageIndex").val($("#pageIndex").val() * 1 + 1);
+	    fn_search();
+	});
+	$("#btnSearch").on("click", function () {
+		if($("#searchKeyword").val() == ""){
+			alert("검색어를 입력해주세요.");
+			return false;
+		}
+		$("#boardList").empty();
+	    $("#pageIndex").val("1");
+	    fn_search();
+	});
+	$(document).on("click", ".tab", function (e) {
+		  var id = e.currentTarget.dataset.id;
+		  var id2 = e.currentTarget.id;
+		  
+		  $(".tab").attr('aria-selected', 'false');
+		  $("#"+id2).attr('aria-selected', 'true');
+		  
+		  $("#faqCtgry").val(id);
+		  //$("#pageIndex").val('1');
+		  
+		  $("#boardList").empty();
+		  //$("#mlgSrchMoreBtn").show();
+		  
+		  fn_search(1);
+		  
+	  });
+});
+function fn_search(pageIndex){
+	if( pageIndex !== undefined ){
+		$("#pageIndex").val(pageIndex);		
+	}
+	
+	if($("#pageIndex").val() < 1){
+    	$("#pageIndex").val("1");
+      }
+
+	if(isMobile.Android()||isMobile.iOS()){
+	} else {
+		//$("#boardList").empty();
+	}
+	fn_callAjax("/notice/list.do", $("#searchForm").serialize(), {
+        successCallback: function (data) {
+            var totalRecordCount = data.noticeVo.paginationInfo.totalRecordCount;
+            $("#total").html(totalRecordCount);
+            $("#mlgSrchMoreBtn").attr('data-page-current', $("#pageIndex").val());
+            $("#mlgSrchMoreBtn").attr('data-page-total', Math.ceil(totalRecordCount/10));
+
+            if(parseInt($("#pageIndex").val()) 
+            	  >= parseInt($("#mlgSrchMoreBtn").attr('data-page-total'))){
+                $(".mileage-01-03-01").hide();	//더보기 버튼 숨김           
+            } else {
+                $(".mileage-01-03-01").show();           	  
+            }
+              
+            var list = data.list;
+            if (list.length < 1) {
+          	  $("#mlgSrchMoreBtn").hide();
+          	  if($("#pageIndex").val() !== "1") {
+          		  alertWarning("더 이상 불러올 내용이 없습니다.", {
+                      closeBtn: false,
+                   });
+          	  }     
+              return;
+            }
+        	
+            if (list.length < 10) {
+            	$("#mlgSrchMoreBtn").hide();
+            }
+            
+           // $("#pageIndex").val(data.noticeVo.pageIndex);
+           // $("#lastIndex").val(data.noticeVo.paginationInfo.lastPageNo);
+                  
+			// var pageSize = 5;
+			// var lastPageNo = data.noticeVo.paginationInfo.lastPageNo;
+			// var currentPageNo = data.noticeVo.paginationInfo.currentPageNo;
+			
+            // var currentPage = parseInt((currentPageNo-1)/pageSize);
+            // var startPage = currentPage*pageSize+1;
+            // var endPage = (currentPage+1)*pageSize < lastPageNo ? (currentPage+1)*pageSize : lastPageNo;
+            
+            // //이전 pagination-prev
+            // if(startPage -1 > 0){
+            // 	$(".pagination-prev").prop('href','javaScript:fn_search('+parseInt(startPage-1)+')');
+            // } else {
+            // 	$(".pagination-prev").prop('href','#');            	
+            // }
+            
+			// $(".pagination > ol").empty();
+            // for(var i=startPage; i<=endPage; i++){
+            // 	if( i == currentPageNo ){
+            // 		$('<li><strong aria-current="page"><span class="sr-only">현재</span>'+i+'<span class="sr-only">페이지</span></strong></li>')
+            // 		.appendTo(".pagination > ol")
+            // 	} else {
+            //     	$('<li><a href="javaScript:fn_search('+i+')">'+i+'<span class="sr-only">페이지로</span></a></li>')
+            //     	.appendTo(".pagination > ol")            		
+            // 	}
+            // }
+            
+            // //다음 pagination-next
+            // if(endPage < lastPageNo){
+            // 	$(".pagination-next").prop('href','javaScript:fn_search('+parseInt(endPage+1)+')');
+            // } else {
+            // 	$(".pagination-next").prop('href','#');            	
+            // }
+
+            $.each(list, function (i, val) {
+          	  var sn = '<dd class="notice">공지</dd>';
+          	  if(val.faqCtgry == 'EVENT'){
+          		  sn = '<dd class="event">이벤트</dd>';
+          	  } else if(val.faqCtgry == 'ETC'){
+          		  sn = '<dd class="etc">기타</dd>';
+          	  } else if(val.faqCtgry == 'CHECK'){
+          		  sn = '<dd class="system">시스템점검</dd>';
+          	  } else{
+          		  sn = '<dd class="notice">공지</dd>';
+          	  }
+          	  
+              if (val.topListYn == "Y") {
+                $(
+              		  '<li class="pinned">'+
+      	                  '<a href="javascript:fn_showDetail(\''+val.nttSn+'\');">'+
+    	                  	'<h4 class="dot-line">'+val.nttSj+'</h4>'+
+      	                          '<dl class="cate top">'+
+      	                              '<dt>분류</dt>'+
+      	                              sn+
+      	                          '</dl>'+
+      	                          '<dl class="date top">'+
+      	                              '<dt>작성일</dt>'+
+      	                              '<dd><time>'+val.frstRgstDt+'</time></dd>'+
+      	                          '</dl>'+
+      	                  '</a>'+
+      	              '</li>').appendTo("#boardList");
+              } else {
+                if (val.newYn == "Y") {
+              	  $(
+                  		  '<li>'+
+          	                  '<a href="javascript:fn_showDetail(\''+val.nttSn+'\');">'+
+          	                	'<h4 class="dot-line">'+val.nttSj+'</h4>'+
+          	                          '<dl class="cate top">'+
+          	                              '<dt>분류</dt>'+
+          	                              sn+
+          	                          '</dl>'+
+          	                          '<dl class="date top">'+
+          	                              '<dt>작성일</dt>'+
+          	                              '<dd><time>'+val.frstRgstDt+'</time></dd>'+
+          	                          '</dl>'+
+          	                  '</a>'+
+              	  '</li>').appendTo("#boardList");
+                } else {
+              	  
+              	  $(
+                  		  '<li>'+
+          	                  '<a href="javascript:fn_showDetail(\''+val.nttSn+'\');">'+
+          	                	'<h4 class="dot-line">'+val.nttSj+'</h4>'+
+          	                          '<dl class="cate top">'+
+          	                              '<dt>분류</dt>'+
+          	                              sn+
+          	                          '</dl>'+
+          	                          '<dl class="date top">'+
+          	                              '<dt>작성일</dt>'+
+          	                              '<dd><time>'+val.frstRgstDt+'</time></dd>'+
+          	                          '</dl>'+
+          	                  '</a>'+
+              	  '</li>').appendTo("#boardList");
+                }
+              }
+            });
+      }
+	});
+}
+function fn_showDetail(nttSn) {
+	$("#nttSn").val(nttSn);
+	//fn_postSubmit("searchForm", "/notice/noticeDetail.do");
+	var newForm = $("<form></form>");
+	newForm.attr("name", "form");
+	newForm.attr("method", "post");
+	newForm.attr("action", "/notice/noticeDetail.do");
+
+    var form = $(document).find("#searchForm");
+    var inputList = form.find("input");
+    var selectList = form.find("select");
+    
+    $.each(inputList, function (idx, itm) {
+		newForm.append($("<input/>", {type: "hidden", name: itm.name, value: $(itm).val()}));
+    });
+
+    $.each(selectList, function (idx, itm) {
+		newForm.append($("<input/>", {type: "hidden", name: itm.name, value: $(itm).val()}));
+    });
+	newForm.appendTo("body");
+	newForm.submit();
+}
+</script>
+
+<main id="content" class="content">
+	<section class="sub inquiry-01">
+		<div class="inquiry-01-04" role="search">
+			<form id="searchForm" onSubmit="return false;">
+	    		<input type="hidden" id="pageIndex" name="pageIndex" value="1">
+	           	<input type="hidden" id="lastIndex">
+	           	<input type="hidden" id="nttSn" name="nttSn">
+	           	<input type="hidden" id="faqCtgry" name="faqCtgry">
+	           	<input type="hidden" id="searchCondition" name="searchCondition" value="1">
+	           	<!-- <select style="display:none;" id="faqCtgry" name="faqCtgry"></select> -->
+	            <fieldset>
+	                <label for="searchKeyword">검색어 입력</label>
+	                <input type="text" id="searchKeyword" name="searchKeyword" placeholder="검색어 입력" maxlength="99">
+	                <button id="btnSearch">검색</button>
+	            </fieldset>
+	   		</form>
+	   		</div>
+   		<div class="inquiry-01-04-tablist" role="tablist" id="faqCategory"></div>
+   		<section class="inquiry-01-01">
+   			<header>
+            	<div class="sr-only">목록</div>
+                <span>전체 <strong id="total"></strong>건</span>
+          	</header>          	         
+            <ol id="boardList">
+            	<!-- 리스트 추가 영역 -->        
+            </ol>
+   		</section>
+   		<!-- <nav class="pagination">
+	         <a href="#" class="pagination-first">처음<span class="sr-only">페이지로</span></a> 
+	        <a href="#" class="pagination-prev">이전<span class="sr-only">페이지로</span></a>
+	        <ol>
+	            <li><strong aria-current="page"><span class="sr-only">현재</span>1<span class="sr-only">페이지</span></strong></li>
+	             <li><a href="#">2<span class="sr-only">페이지로</span></a></li>
+	            <li><a href="#">3<span class="sr-only">페이지로</span></a></li>
+	            <li><a href="#">4<span class="sr-only">페이지로</span></a></li>
+	            <li><a href="#">5<span class="sr-only">페이지로</span></a></li> 
+	        </ol>
+	        <a href="#" class="pagination-next">다음<span class="sr-only">페이지로</span></a>
+	         <a href="#" class="pagination-end">맨끝<span class="sr-only">페이지로</span></a> 
+      	</nav> -->
+      	<div class="group-btn--center app-button-box">
+        	<button class="mileage-01-03-01" type="button" id="mlgSrchMoreBtn" data-page-current="1" data-page-total="4">더보기</button>
+       	</div>
+<!--        	<form id="form">
+			<input type='hidden' id='pageIndex' name='pageIndex' value='1'>
+		</form> -->
+	</section>
+</main>
+            
+
+     		
+     		
+
+      
+     
+
+ 
+
+	<common-footer></common-footer>
+</body>
+
+</html>

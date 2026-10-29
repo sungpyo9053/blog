@@ -1,0 +1,1008 @@
+
+
+
+
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="keywords" content="모두의카드">
+    <meta name="description" content="모두의카드 홈페이지">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5" />
+    <meta name="robots" content="noindex, follow" />
+    
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://korea-pass.kr/">
+    <meta property="og:title" content="모두의카드">
+    <meta property="og:image" content="https://korea-pass.kr/assets/images/logo_header.svg">
+    <meta property="og:description" content="모두의카드 홈페이지">
+    <meta property="og:site_name" content="Site Name">
+    <meta property="og:locale" content="KR">
+    <title>모두의카드</title>
+    <link rel="stylesheet" type="text/css" href="/assets/css/swiper.8.4.3.min.css">
+    <link rel="stylesheet" type="text/css" href="/assets/css/common.min.css">
+	<link rel="stylesheet" type="text/css" href="/assets/css/sub.min.css">
+	<link rel="apple-touch-icon" href="/assets/images/logo.svg">
+	<link rel="apple-touch-icon-precomposed" href="/assets/images/logo.svg">
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/common2.min.css"> -->
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/main2.min.css"> -->
+					
+	
+	<!-- <script>document.domain='korea-pass.kr'</script> -->
+		    
+    <script src="/assets/js/vendors/jquery.min.js"></script>
+    <script src="/assets/js/vendors/swiper-bundle.8.4.7.min.js"></script>
+    <script src="/assets/js/utils.js"></script>
+    <script defer src="/assets/js/Modernizr.js"></script>
+    <script defer src="/assets/js/pub.min.js"></script>
+    <script src="/assets/js/common.js"></script>
+    				
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-1E6PH8MGZW"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+	
+	  gtag('config', 'G-1E6PH8MGZW');
+	</script>
+
+    <script>
+    	$(document).ready(function() {
+        	//로컬테스트 할 때만 주석처리 해야함
+        	
+        	var reloc = window.location.href;
+        	if(reloc.indexOf("https://") == -1){
+            	location.href = reloc.replace("http://", "https://");
+        	}
+        	
+        	if (reloc.indexOf("www.") > 0){
+        		location.href = reloc.replace("www.", "");
+        	}
+             
+            //로그아웃처리
+            $("#logout, #mlogout").click(function(){
+            	fn_callAjax("/logout.do", '', {
+                    successCallback: function (data) {
+                    	localStorage.removeItem("alarmBtn"); // 전체메뉴 header : 개인 알림 게시판 갯수
+                    	location.href = '/'
+                    },
+                  });
+            });
+            
+        	//홈페이지 마우스 우클릭 금지 조치
+            $(document).bind("contextmenu", function(event) {
+            	event.preventDefault();
+            	alertWarning('오른쪽 마우스는 사용할 수 없습니다.');
+            });
+        	
+            initSubInfo();
+               
+            // 모바일전체메뉴 아코디언 기능 추가
+            var windowsize = $(window).width();
+            if (windowsize < 1025) {
+                mgnb ();
+            } else{
+                webgnb ();
+            }
+
+
+            $(window).resize(function() {
+                if(Modernizr.mq('screen and (min-width:1025px)')) {
+                    webgnb ();
+                                    
+                }else{
+                    mgnb ();
+                }
+            });
+
+            function webgnb (){
+                console.log('pc');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('mobile');
+                $('#gnb').addClass('web');
+            }
+
+            function mgnb (){
+                console.log('mobile');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('web');
+                $('#gnb').addClass('mobile');
+
+                $('.mobile > ul > li > a').click( function(e){
+                    e.preventDefault();
+                    function slideDown(target) {
+                        slideUp();
+                        $(target).addClass('on').next('.depth2').stop().slideDown('fast');
+                    }
+                    function slideUp() {
+                        $('.mobile ul li  > a').removeClass('on').next('.depth2').slideUp('fast');
+                    }
+                    $(this).hasClass('on') ? slideUp() : slideDown(this);
+                });
+            }
+		});
+
+        function initSubInfo() {
+            var pMap = {};
+      		var alUserSn = '';
+      		var alUserId = '';
+      		var alUserNm = '';
+  
+            if (
+              !fn_isNull(alUserSn) &&
+              !fn_isNull(alUserId)
+            ) {
+              document.getElementById('header').classList.add('loggedin');   
+              document.getElementById("userNm").innerHTML = alUserNm + " 님";
+
+              // 전체메뉴 header : 개인 알림 게시판 갯수
+              $("#alarmBtn").attr("data-num", localStorage.getItem("alarmBtn"));
+			} else {
+				document.getElementById('header').classList.remove('loggedin');
+			}
+        }
+        
+      //전체메뉴 header : 개인 알림 리스트 드롭다운
+        function moveToNotificationList(){
+        	fn_callAjax("/notifs/list.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data) {
+        			$(".alarm-list").empty();
+        			var list = data.list;
+        			var unReadList = []; //안읽은 게시물 리스트
+        			var readList = []; //읽은 게시물 리스트
+        			var unReadCnt = 0; //안읽은 게시물 개수
+					var totalRecordCount = data.notifsVo.paginationInfo.totalRecordCount; //등록된 게시물 개수
+        			
+        			if(totalRecordCount == 0){//등록된 게시물 없는 경우 
+        				$(".no-alarm").addClass("active");
+        			} else {
+        				$(".no-alarm").removeClass("active");
+        			}
+        			$.each(list, function (i, val) { //1. 전체 게시물 중 안읽은 게시물 수 및 게시물 읽음 여부에 따라 새로운 리스트에 요소 추가
+        				if(val.isRead == false){
+        					unReadCnt += 1;
+        					unReadList.push(val);
+        				} else {
+        					unReadCnt
+        					readList.push(val);
+        				}
+        			});
+        			
+        			if(unReadCnt < 9){ //2. 게시물 읽음여부 상관없이 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", unReadCnt);
+        				if(unReadCnt < 5){ //노출되는 게시글 : 읽음 + 안읽음
+        					$.each(unReadList.slice(0,unReadCnt), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        					$.each(readList.slice(0,(5-unReadCnt)), function (i, val) { //읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk read" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				} else { //노출되는 게시글 : 안읽음
+        					$.each(unReadList.slice(0,5), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				}
+        			} else { //2. 안읽은 게시물 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", "9+"); //안읽음 알림 개수 max 9+
+        				$.each(unReadList.slice(0,5), function (i, val) { 
+        					var html = '<li>'+
+        									'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        										'<span class="date">'+val.frstRgstDt+'</span>'+
+        										'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        										'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        									'</a>'+
+        								'</li>';
+        					$(html).appendTo(".alarm-list");
+        				});
+        			}
+        		},
+        	});
+        }
+        //전체메뉴 header : 개인 알림 게시판 상세페이지 이동
+        function moveToNotificationDetail(notifsSn){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"notifsSn" : notifsSn, "alUserSn" : '', "readChk" : "readOne", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			var newForm = $("<form></form>");
+					newForm.attr("name", "form");
+					newForm.attr("method", "post");
+					newForm.attr("action", "/notifs/notifsDetail.do");
+					
+					newForm.append($("<input type='hidden' id='notifsSn' name='notifsSn' value='"+data.notifsVo.notifsSn+"'>"));
+					newForm.append($("<input type='hidden' id='alUserSn' name='alUserSn' value='"+data.notifsVo.alUserSn+"'>"));
+					newForm.append($("<input type='hidden' id='sidoCd' name='sidoCd' value='"+data.notifsVo.sidoCd+"'>"));
+					newForm.append($("<input type='hidden' id='insttSn' name='insttSn' value='"+data.notifsVo.insttSn+"'>"));
+					
+					newForm.appendTo("body");
+					newForm.submit();
+        		},
+        	});
+        }
+        // 전체메뉴 header : 개인 알림 게시판 전체읽음처리
+        function notificationReadchk(){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			$("#alarmBtn").trigger("click");
+        		},
+        	});
+        }
+	</script>
+</head>
+
+<body>
+<a class="content-shortcut" href="#content">본문 바로가기</a>
+   	<header id="header" class="header" aria-expanded="false">
+	    <div class="header-wrapper">
+	        <h1 class="header-logo">
+	            <a href="/" title="모두의카드 바로가기">
+	                <img src="/assets/images/logo.svg" width="84" height="52" alt="모두의카드 로고">
+	            </a>
+	        </h1>
+	        <div class="gnb-wrap">
+				<nav id="gnb" class="gnb">
+				    <ul class="depth1">
+				        <li>
+				            <a href="#" tabindex="0"><span>사업소개</span></a>
+				            <ul class="depth2" data-title="사업소개">
+				                <li>
+				                    <a href="/info/intro.do" tabindex="0"><span>모두의카드소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>지역별혜택소개</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/intro_gg.do" tabindex="0"><span>경기</span></a></li>
+				                        <li><a href="/info/intro_ic.do" tabindex="0"><span>인천</span></a></li>
+				                        <li><a href="/info/intro_bs.do" tabindex="0"><span>동백</span></a></li>
+				                        <li><a href="/info/intro_sj.do" tabindex="0"><span>세종</span></a></li>
+				                        <li><a href="/info/intro_cn.do" tabindex="0"><span>충남</span></a></li>
+				                        
+										<li><a href="/info/intro_gn.do" tabindex="0"><span>경남</span></a></li>
+										<li><a href="/info/intro_gj.do" tabindex="0"><span>전남광주</span></a></li>
+										<li><a href="/info/intro_us.do" tabindex="0"><span>울산</span></a></li>
+										<li><a href="/info/intro_seoul.do" tabindex="0"><span>서울</span></a></li>
+				                    </ul>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>이용안내</span></a>
+				            <ul class="depth2" data-title="이용안내">
+				                <li>
+				                    <a href="/info/use_join.do" tabindex="0"><span>가입조건</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_accm.do" tabindex="0"><span>적립안내</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_pay.do" tabindex="0"><span>환급안내</span></a>
+				                </li>
+				               <!--  <li>
+				                    <a href="/info/intro_refund_calculator.do" tabindex="0"><span>예상환급금계산기</span></a>
+				                </li>  -->
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>모두의카드</span></a>
+				            <ul class="depth2" data-title="모두의카드소개">
+				            	<li>
+				                    <a href="/info/card_guide.do" tabindex="0"><span>카드 소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>사용안내</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/kpass_pay.do" tabindex="0"><span>카드사별 지급방식</span></a></li>
+				                        <li><a href="/info/kpass_mob.do" tabindex="0"><span>모바일페이 이용안내</span></a></li>
+				                        <li><a href="/info/kpass_chg.do" tabindex="0"><span>카드변경방법</span></a></li>
+				                        <li><a href="/info/kpass_inq.do" tabindex="0"><span>카드사문의안내</span></a></li>
+				                    </ul>
+				                </li>
+				                <li>
+				                    <a href="/event/eventListView.do" tabindex="0"><span>카드 이벤트</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>공지사항</span></a>
+				            <ul class="depth2" data-title="공지사항">
+				                <li>
+				                    <a href="/notice/noticeList.do" tabindex="0"><span>공지사항</span></a>
+				                </li>
+				                
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>문의하기</span></a>
+				            <ul class="depth2" data-title="문의하기">
+				                <li>
+				                    <a href="/serviceInfo/qnaIntro.do" tabindex="0"><span>문의하기</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaWrite.do" tabindex="0"><span>1:1문의</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaListView.do" tabindex="0"><span>문의내역</span></a>
+				                </li>
+				                <li>
+				                    <a href="/notice/faqList.do" tabindex="0"><span>자주묻는질문</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        
+				        <li class="from-md">
+				            <a href="#" tabindex="0"><span>이용약관</span></a>
+				            <ul class="depth2" data-title="settings">
+				                <li><a href="/term/term03.do" tabindex="0"><span>개인정보처리방침</span></a></li>
+				                <li><a href="/term/term01.do" tabindex="0"><span>서비스이용약관</span></a></li>
+				            </ul>
+				        </li>
+				    </ul>
+				</nav>
+	        </div>
+	        <div class="alarm-wrap">
+	        	<!-- <button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="moveToNotificationList()"> -->
+	        	<button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="location.href='/notifs/notifsList.do'">
+	           		<!-- <i class="arrow"></i> -->
+	           	</button>
+	           	<!-- <div class="alarm-list-wrap">
+	           		<div class="list-title">
+	           			<h3>알림</h3>
+	           			<button type="button" class="btn-read" id="alarmReadBtn" onclick="notificationReadchk()">전체읽음</button>
+	           		</div>
+	           		<div class="list-inner">
+	           			<div class="no-alarm"> active class로 제어
+	           				<i class="ico-no-alarm"></i>새로운 알림이 없습니다.
+	           			</div>
+	            		<ul class="alarm-list">
+	            			<li>
+	            				<a class="lnk" href="../notification/notificationList.html">
+	            					<span class="date">24.03.07</span>
+	            					<span class="alarm-title">24년 12월 환급금 일부 지자체 감액 안내</span>
+	            					<span class="alarm-content">24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내</span>
+	            				</a>
+	            			</li>
+	            		</ul>
+	           		</div>
+	           		<button type="button" class="btn-more" onclick="location.href='../notifs/notifsList.do'">전체보기</button>
+	           	</div> -->
+	        </div>
+	        <button type="button" class="js-header-sitemap" aria-haspopup="true">
+	            <i></i>
+	            <i></i>
+	            <i></i>
+	            <span>사이트맵 보기</span>
+	        </button>
+			<div class="header-utils">
+	            <p class="header-utils-01" id="hello"><!-- 반갑습니다<br> -->로그인 또는 회원가입을 해주세요!</p>
+				
+					
+						<a href="/join/login.do" class="header-utils-02" id="login">로그인</a>
+						<a href="/join/join.do" class="header-utils-03" id="join">회원가입</a>
+					
+					
+				
+	        </div>
+	        <!-- <a href="#" class="header-notice" aria-live="assertive"><i></i><span>새소식</span></a> -->
+        	<a id="backBtn" class="header-back" title="뒤로가기"><i></i></a>
+        	</div>
+        	
+        <!-- 적립내역 띠배너 -->
+		<!-- <div class="header-banner-sub">
+	       <div class="header-banner-container">
+	           <div class="header-banner-swiper">
+	               <div class="swiper-wrapper">
+	                   <div class="swiper-slide">
+	                       <p>K-패스에서 카드 사용 내역 확인까지<br class="from-sm"> <strong>최대 14일</strong>이 소요됩니다.</p>
+	                   </div>
+	               </div>
+	           </div>
+	           <button type="button" id="header-banner-close-sub" class="header-banner-close">닫기</button>
+	       </div>
+	     </div> -->
+	</header>
+    <sub-header></sub-header>
+    
+
+
+
+
+
+
+<link rel="stylesheet" type="text/css" href="/assets/css/intro.css">
+<main id="content" class="content">
+<section class="sub">
+	<div class="contents-inner earn-info-contents">
+		<div class="intro-contents">
+			<div class="inner">
+				<div class="title-wrap">
+					<div class="title cont-top">
+						계산은 모두의카드가, 혜택은 당신이. <br>이동할수록 커지는 환급, 일정 금액으로 더 자유로운 이동까지
+					</div>
+					<div class="desc type1">
+						<strong><span class="col-orange">매월 1일에서 말일</span> 모두의카드 교통카드로 대중교통 탑승 시 <br class="web-br">3가지 환급 방식 중 환급금이 <span class="col-orange">가장 큰 환급 정책</span>으로 자동 계산되어 환급됩니다.</strong>
+					</div>
+				</div>
+				<div class="earn-info-slide">
+					<div class="swiper-wrapper">
+						<div class="swiper-slide">
+							<div class="earn-info-box type1">
+								<div class="title">기본형</div>
+								<div class="desc">
+									대중교통 이용 금액에<br>나의 환급률 적용
+									<p class="benefit-info">시차출퇴근 시간 환급률 상향</p>
+								</div>
+							</div>
+						</div>
+						<div class="swiper-slide">
+							<div class="earn-info-box type2">
+								<div class="title">
+									모두의카드<br>일반형
+								</div>
+								<div class="desc">3,000원 미만 대중교통 이용 금액 3만원~6만 2천원으로 무제한 이용</div>
+							</div>
+						</div>
+						<div class="swiper-slide">
+							<div class="earn-info-box type3">
+								<div class="title">
+									모두의카드<br>플러스형
+								</div>
+								<div class="desc">3,000원 이상 대중교통 포함 이용 금액 6만 5천원~10만원으로 무제한 이용</div>
+							</div>
+						</div>
+						<div class="swiper-slide">
+							<div class="earn-info-box type4">
+								<div class="title">미적립 수단</div>
+								<div class="desc">시외(고속,공항)버스, KTX, SRT 등 별도 발권 받아 탑승하는 교통수단은 미포함</div>
+							</div>
+						</div>
+					</div>
+					<div class="swiper-pagination"></div>
+				</div>
+			</div>
+		</div>
+		<div class="intro-contents">
+			<div class="inner">
+				<div class="title type2">계산 방법</div>
+				<ul class="calc-detail-info">
+					<li>
+						<div class="label">
+							<i class="ico-logo-kpass kpass"></i>
+						</div>
+						<div class="text-box">
+							<strong>기본형</strong>
+							<p>전체 이용금액 x 환급률</p>
+						</div>
+					</li>
+					<li>
+						<div class="label">
+							<i class="ico-logo-kpass normal"></i>
+						</div>
+						<div class="text-box">
+							<strong>모두의카드 일반형</strong>
+							<p>(전체 이용금액 - 3,000원 이상 이용금액) - 지역/그룹별 일반형 기준 금액</p>
+						</div>
+					</li>
+					<li>
+						<div class="label">
+							<i class="ico-logo-kpass kplus"></i>
+						</div>
+						<div class="text-box">
+							<strong>모두의카드 플러스형</strong>
+							<p>모두의카드 플러스형 환급금 = 전체이용금액 - 지역/그룹별 플러스형 기준 금액</p>
+						</div>
+					</li>
+				</ul>
+				<ul class="contents-info">
+					<li>적립은 통행을 기준으로 적립되며, 이용횟수 1회로 취급합니다.</li>
+					<li>이용횟수 1회는 대중교통 환승할인제도를 기준으로 하며, 최초 승차 후 환승 이용을 포함하여 다음 초승 전까지를 1통행으로 처리합니다.</li>
+					<li>초승은 기본요금이 부과된 건을 기준으로 하며, 기본 요금은 이용하시는 교통수단에 따라 상이할 수 있습니다.</li>
+					<li>대중교통 환승할인제도는 지역별로 상이하며, 해당 지역의 환승 체계를 바탕으로 교통내역을 처리합니다. (예 : 수도권 기준 최대 4회 환승, 총 5회 탑승까지 1통행으로 인정될 수 있습니다.)</li>
+					<li>버스(광역버스 포함), 도시·광역철도(신분당선, GTX 포함), 공항철도 등의 이용 내역만 적립됩니다.</li>
+					<li>지역/그룹별 기준 금액은 사업소개 &gt; 환급기준을 참고해 주세요.</li>
+				</ul>
+				<div class="btn-wrap">
+					<a class="btn-lnk" href="/info/intro.do">모두의카드 소개</a>
+					<!-- <a class="btn-lnk" href="/info/intro_refund_calculator.do">예상환급금계산기</a> -->
+				</div>
+			</div>
+		</div>
+		<div class="intro-contents way-slide-section">
+			<div class="inner">
+				<div class="title-wrap">
+					<div class="title type1">
+						모두의카드 적립금은 모두의카드를 발급받아 <br class="mob-br">홈페이지 또는 앱에서 회원가입 하고,<br>모두의카드로 교통카드 이용 시 <br class="mob-br">MY &gt; 적립금액 메뉴에서 적립금액을 <br class="mob-br">확인하실 수 있습니다.
+					</div>
+					<div class="desc">
+						모두의카드 적립금은 실시간으로 반영되지 않고, 카드 이용 후 최대 14일까지 소요될 수 있습니다.<br> 회원가입 하지 않고 이용한 카드는 환급금이 발생하지 않습니다.
+					</div>
+				</div>
+				<div class="way-guide-slide">
+					<div class="swiper-wrapper">
+						<div class="swiper-slide">
+							<div class="way-guide-box step1">
+								<div class="title">
+									모두의카드 <br>발급 받아서 <br>회원가입 완료하고
+								</div>
+							</div>
+						</div>
+						<div class="swiper-slide">
+							<div class="way-guide-box step2">
+								<div class="title">
+									모두의카드로 <br>대중교통 이용 시
+								</div>
+							</div>
+						</div>
+						<div class="swiper-slide">
+							<div class="way-guide-box step3">
+								<div class="title">
+									카드사는 이용내역을<br>모두의카드 시스템으로<br>전송!
+								</div>
+								<div class="desc">평균 2~3일, 최대 14일 이상 소요</div>
+							</div>
+						</div>
+						<div class="swiper-slide">
+							<div class="way-guide-box step4">
+								<div class="title">
+									모두의카드로 들어온 <br>이용내역은 <br>환급금 정책에 맞춰서 <br>자동으로 계산되고
+								</div>
+							</div>
+						</div>
+						<div class="swiper-slide">
+							<div class="way-guide-box step5">
+								<div class="title">
+									홈페이지나 앱에서 <br>로그인 해서 <br>환급금 확인!
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="swiper-pagination"></div>
+				</div>
+			</div>
+		</div>
+		<div class="intro-contents">
+			<div class="inner count">
+				<div class="title type2">적립 횟수</div>
+				<div class="desc type1">월 1일부터 말일까지 15회 이상 이용 시 지급됩니다.</div>
+			</div>
+		</div>
+		<div class="intro-contents">
+			<div class="inner type1">
+				<div class="flex-box">
+					<div class="title type2">모두의카드 기본형 지역 별 추가 환급률</div>
+					<select class="int" id="localSelect">
+						<option value="gg">경기도</option>
+						<!-- <option value="as">경기 안성시</option>
+   								<option value="sw">경기 수원시</option> -->
+						<option value="ic">인천광역시</option>
+						<option value="gj">전남광주통합특별시 자치구</option>
+						<option value="gn">경상남도</option>
+						<option value="ws">울산광역시</option>
+					</select>
+					<div class="local-toggle">
+						전체 지역 펼쳐보기 <label class="toggle-ipt"> <input type="checkbox" /> <span class="ico-slide"></span>
+						</label>
+					</div>
+					<div class="title-detail-info">
+						<p>
+							<strong>시차출퇴근 시간</strong> : 5시30분-6시30분, 9시-10시, 16시-17시, 19시-20시 (승차시간 기준)
+						</p>
+					</div>
+				</div>
+				<div class="table-wrap">
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+</main>
+
+<script>
+$(document).ready(function () {
+	fn_addLnb('적립안내', '이용안내', '적립안내');
+	
+	let isSyncing = false;
+  	let isExpanded = false;
+  	
+  	var frstTb = `<table>
+			<colgroup>
+			<col style="width: 62px;">
+			<col style="width: 55px;">
+			<col style="width: 104px;">
+		</colgroup>
+		<thead>
+			<tr>
+				<th class="tit" colspan="2">구분</th>
+				<th class="tit box top">기본형</th>
+				<!-- pc -->
+				<th class="tit web-br" colspan="2">
+					<select class="int" id="pcLocalSelect">
+   					<option value="gg">경기도</option>
+						<!-- <option value="as">경기 안성시</option>
+						<option value="sw">경기 수원시</option> -->
+						<option value="ic">인천광역시</option>
+						<option value="gj">전남광주통합특별시 자치구</option>
+						<option value="gn">경상남도</option>
+						<option value="ws">울산광역시</option>
+   				</select>
+				</th>
+				<th class="tit th web-hide" data-local="gg">경기도</th>
+				<!-- <th class="tit th hide" data-local="as">경기 안성시</th>
+				<th class="tit th hide" data-local="sw">경기 수원시</th> -->
+				<th class="tit th hide" data-local="ic" colspan="2">인천광역시</th>
+				<th class="tit th hide" data-local="gj">전남광주통합특별시 자치구</th>
+				<th class="tit th hide" data-local="gn" colspan="2">경상남도</th>
+				<th class="tit th hide" data-local="ws">울산광역시</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<th class="tit" rowspan="2">기본 환급률</th>
+				<th class="tit type1">그 외 시간</th>
+				<td class="box">20%</td>
+				<td class="td" data-local="gg">20%</td>
+				<!-- <td class="td hide" data-local="as">20%</td>
+				<td class="td hide" data-local="sw">20%</td> -->
+				<td class="td hide" data-local="ic" colspan="2">20%</td>
+				<td class="td hide" data-local="gj">20%</td>
+				<td class="td hide" data-local="gn" colspan="2">20%</td>
+				<td class="td hide" data-local="ws">20%</td>
+			</tr>
+			<tr>
+					<th class="tit type1">시차 출퇴근</th>
+					<td class="box">50%</td>
+					<td class="td" data-local="gg">50%</td>
+					<!-- <td class="td hide" data-local="as">20%</td> -->
+					<!-- <td class="td hide" data-local="sw">20%</td> -->
+					<td class="td hide" data-local="ic" colspan="2">50%</td>
+					<td class="td hide" data-local="gj">50%</td>
+					<td class="td hide" data-local="gn" colspan="2">50%</td>
+					<td class="td hide" data-local="ws">50%</td>
+				</tr>
+			<tr>
+				<th class="tit" colspan="2">최소 이용 횟수</th>
+				<td class="box">15회</td>
+				<td class="td" data-local="gg">15회</td>
+				<!-- <td class="td hide" data-local="as">저소득 1회 이상, <br class="web-br">일반 15회 이상</td>
+				<td class="td hide" data-local="sw">청년 1회 이상</td> -->
+				<td class="td hide" data-local="ic" colspan="2">15회</td>
+				<td class="td hide" data-local="gj">15회</td>
+				<td class="td hide" data-local="gn" colspan="2">15회 <br>단, 75세 이상 15회 미만도 100% 지급</td>
+				<td class="td hide" data-local="ws">15회</td>
+			</tr>
+			<tr>
+				<th class="tit" rowspan="2">저소득 환급률</th>
+				<th class="tit type1">그 외 시간</th>
+				<td class="box">53.3%</td>
+				<td class="td" data-local="gg">53.3%</td>
+				<!-- <td class="td hide" data-local="as">100%</td>
+				<td class="td hide" data-local="sw">53.3%</td> -->
+				<td class="td hide" data-local="ic" colspan="2">53.3%</td>
+				<td class="td hide" data-local="gj">64%</td>
+				<td class="td hide" data-local="gn" colspan="2">100%</td>
+				<td class="td hide" data-local="ws">100%</td>
+			</tr>
+			<tr>
+					<th class="tit type1">시차 출퇴근</th>
+					<td class="box">83.3%</td>
+					<td class="td" data-local="gg">83.3%</td>
+					<!-- <td class="td hide" data-local="as">100%</td> -->
+					<!-- <td class="td hide" data-local="sw">53.3%</td> -->
+					<td class="td hide" data-local="ic" colspan="2">83.3%</td>
+					<td class="td hide" data-local="gj">83.3%</td>
+					<td class="td hide" data-local="gn" colspan="2">-</td>
+					<td class="td hide" data-local="ws">-</td>
+				</tr>
+			<tr>
+				<th class="tit" rowspan="3">청년 <br class="mob-br">환급률</th>
+				<th class="tit type1">대상</th>
+				<td class="box">만 19 ~ 34세</td>
+				<td class="td" data-local="gg">만 19 ~ 39세</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">만 19 ~ 23세</td> -->
+				<td class="td hide" data-local="ic" colspan="2">만 19 ~ 39세</td>
+				<td class="td hide" data-local="gj">만 19 ~ 39세</td>
+				<td class="td hide" data-local="gn">만 19 ~ 34세</td>
+				<td class="td hide" data-local="gn">만 35 ~ 39세</td>
+				<td class="td hide" data-local="ws">만 19 ~ 39세</td>
+			</tr>
+			<tr>
+				<th class="tit type1">그 외 시간</th>
+				<td class="box">30%</td>
+				<td class="td" data-local="gg">30%</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">100%</td> -->
+				<td class="td hide" data-local="ic" colspan="2">30%</td>
+				<td class="td hide" data-local="gj">30%</td>
+				<td class="td hide" data-local="gn" colspan="2">30%</td>
+				<td class="td hide" data-local="ws">30%</td>
+			</tr>
+			<tr>
+				<th class="tit type1">시차 출퇴근</th>
+				<td class="box">60%</td>
+				<td class="td" data-local="gg">60%</td>
+				<!-- <td class="td hide" data-local="as">60%</td>
+				<td class="td hide" data-local="sw">60%</td> -->
+				<td class="td hide" data-local="ic" colspan="2">60%</td>
+				<td class="td hide" data-local="gj">60%</td>
+				<td class="td hide" data-local="gn">60%</td>
+				<td class="td hide" data-local="gn">50%</td>
+				<td class="td hide" data-local="ws">60%</td>
+			</tr>
+			<tr>
+				<th class="tit" rowspan="3">어르신 <br class="mob-br">환급률</th>
+				<th class="tit type1">대상</th>
+				<td class="box">만 65세 이상</td>
+				<td class="td" data-local="gg">-</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">-</td> -->
+				<td class="td hide" data-local="ic" colspan="2">-</td>
+				<td class="td hide" data-local="gj">만 65세 이상</td>
+				<td class="td hide" data-local="gn" colspan="2">만 75세 이상</td>
+				<td class="td hide" data-local="ws">-</td>
+			</tr>
+			<tr>
+				<th class="tit type1">그 외 시간</th>
+				<td class="box">30%</td>
+				<td class="td" data-local="gg">-</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">-</td> -->
+				<td class="td hide" data-local="ic" colspan="2">-</td>
+				<td class="td hide" data-local="gj">50%</td>
+				<td class="td hide" data-local="gn" colspan="2">100%</td>
+				<td class="td hide" data-local="ws">-</td>
+			</tr>
+			<tr>
+				<th class="tit type1">시차 출퇴근</th>
+				<td class="box">60%</td>
+				<td class="td" data-local="gg">-</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">-</td>  -->
+				<td class="td hide" data-local="ic" colspan="2">-</td>
+				<td class="td hide" data-local="gj">60%</td>
+				<td class="td hide" data-local="gn" colspan="2">-</td>
+				<td class="td hide" data-local="ws">-</td>
+			</tr>
+			<tr>
+				<th class="tit" rowspan="2">다자녀 <br> 2인<br class="mob-br">환급률</th>
+				<th class="tit type1">그 외 시간</th>
+				<td class="box">30%</td>
+				<td class="td" data-local="gg">-</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">-</td> -->
+				<td class="td hide" data-local="ic">-</td>
+				<td class="td hide" data-local="ic">i+차비드림<br>'25년 이후 출산<br>첫째 50%<br>둘째 이상 70%</td>
+				<td class="td hide" data-local="gj">-</td>
+				<td class="td hide" data-local="gn" colspan="2">-</td>
+				<td class="td hide" data-local="ws">-</td>
+			</tr>
+			<tr>
+				<th class="tit type1">시차 출퇴근</th>
+				<td class="box">60%</td>
+				<td class="td" data-local="gg">-</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">-</td> -->
+				<td class="td hide" data-local="ic">-</td>
+				<td class="td hide" data-local="ic">i+차비드림<br>'25년 이후 출산<br>둘째 이상 70%</td>
+				<td class="td hide" data-local="gj">-</td>
+				<td class="td hide" data-local="gn" colspan="2">-</td>
+				<td class="td hide" data-local="ws">-</td>
+			</tr>
+			<tr>
+				<th class="tit" rowspan="2">다자녀<br> 3인 <br class="mob-br"> 환급률</th>
+				<th class="tit type1">그 외 시간</th>
+				<td class="box">50%</td>
+				<td class="td" data-local="gg">-</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">-</td> -->
+				<td class="td hide" data-local="ic" colspan="2">-</td>
+				<td class="td hide" data-local="gj">-</td>
+				<td class="td hide" data-local="gn" colspan="2">-</td>
+				<td class="td hide" data-local="ws">-</td>
+			</tr>
+			<tr>
+				<th class="tit type1">시차 출퇴근</th>
+				<td class="box bottom">80%</td>
+				<td class="td" data-local="gg">-</td>
+				<!-- <td class="td hide" data-local="as">-</td>
+				<td class="td hide" data-local="sw">-</td> -->
+				<td class="td hide" data-local="ic" colspan="2">-</td>
+				<td class="td hide" data-local="gj">-</td>
+				<td class="td hide" data-local="gn" colspan="2">-</td>
+				<td class="td hide" data-local="ws">-</td>
+			</tr>
+		</tbody>
+	</table>`;
+	
+	$('.table-wrap').html(frstTb);
+
+  function renderTable(val) {
+    if (isExpanded) {
+      $('.th, .td').removeClass('hide');
+      return;
+    }
+    const isPC = window.innerWidth > 1023;
+    $('.th, .td').addClass('hide');
+    if (!val) return;
+    if (isPC) {
+      $('.td[data-local="' + val + '"]').removeClass('hide');
+    } else {
+      $('.th[data-local="' + val + '"], .td[data-local="' + val + '"]').removeClass('hide');
+    }
+  }
+
+  function syncSelect(value, source) {
+    if (isSyncing) return;
+    isSyncing = true;
+    if (source !== 'pc') {
+      $('#pcLocalSelect').val(value);
+    }
+    if (source !== 'mobile') {
+      $('#localSelect').val(value);
+    }
+    isSyncing = false;
+  }
+
+  $('#pcLocalSelect').on('change', function () {
+    const val = $(this).val();
+    syncSelect(val, 'pc');
+    renderTable(val);
+  });
+
+  $('#localSelect').on('change', function () {
+    const val = $(this).val();
+    syncSelect(val, 'mobile');
+    renderTable(val);
+  });
+  
+  $('.toggle-ipt input').on('change', function () {
+    isExpanded = $(this).is(':checked');
+    if (isExpanded) {
+      $('.table-wrap').addClass('min-type');
+      $('.th, .td').removeClass('hide');
+      $('.web-hide').addClass('show');
+      $('#pcLocalSelect').hide();
+      $('#pcLocalSelect').parent('th').addClass('hide');
+    } else {
+      $('.table-wrap').removeClass('min-type');
+      $('.web-hide').removeClass('show');
+      $('#pcLocalSelect').show();
+      $('#pcLocalSelect').parent('th').removeClass('hide');
+      const isPC = window.innerWidth > 1023;
+      const val = isPC
+        ? $('#pcLocalSelect').val()
+        : $('#localSelect').val();
+      renderTable(val);
+    }
+  });
+  
+  $(window).on('resize', function () {
+    if (isExpanded) return;
+    const isPC = window.innerWidth > 1023;
+    const val = isPC
+      ? $('#pcLocalSelect').val()
+      : $('#localSelect').val();
+    renderTable(val);
+  });
+  
+  const initVal = $('#pcLocalSelect').val() || $('#localSelect').val();
+  syncSelect(initVal, 'pc');
+  renderTable(initVal);
+});
+
+const swiperInstances = {
+		  way: null,
+		  earnInfo: null,
+		};
+		function updateSwiper(swiper) {
+		  if (!swiper) return;
+		  requestAnimationFrame(() => {
+		    swiper.update();
+		  });
+		}
+		function initSwipers() {
+		  const isMobile = window.innerWidth <= 1024;
+		  /* 이용방법 */
+		  const wayEl = document.querySelector('.way-guide-slide');
+		  if (wayEl) {
+		    if (!swiperInstances.way) {
+		      swiperInstances.way = new Swiper(wayEl, {
+		        slidesPerView: 'auto',
+		        spaceBetween: 16,
+		        observer: true,
+		        observeParents: true,
+		        watchOverflow: true,
+		        pagination: {
+		          el: wayEl.querySelector('.swiper-pagination'),
+		          type: 'bullets',
+		          clickable: true
+		        },
+		        on: {
+		          init(swiper) {
+		            updateSwiper(swiper);
+		          },
+		        	slideChangeTransitionStart: function () {
+		        		const $wrapper = $(this.wrapperEl); 
+		        		$wrapper.addClass('is-moving');  
+		        		if (this.realIndex === 0) { 
+		        			$wrapper.removeClass('is-moving'); 
+	        			}                           
+	        	  },
+		        }
+		      });
+		    } else {
+		      updateSwiper(swiperInstances.way);
+		    }
+		  }
+		  /* 적립수단 */
+		  const earnInfoEl = document.querySelector('.earn-info-slide');
+		  if (earnInfoEl) {
+		    if (isMobile && !swiperInstances.earnInfo) {
+		      swiperInstances.earnInfo = new Swiper(earnInfoEl, {
+		        slidesPerView: 'auto',
+		        spaceBetween: 16,
+		        watchOverflow: true,
+		        pagination: {
+		          el: earnInfoEl.querySelector('.swiper-pagination'),
+		          type: 'bullets',
+		          clickable: true
+		        },
+		        on: {
+		          init(swiper) {
+		            updateSwiper(swiper);
+		          }
+		        }
+		      });
+		    } else if (!isMobile && swiperInstances.earnInfo) {
+		      swiperInstances.earnInfo.destroy(true, true);
+		      swiperInstances.earnInfo = null;
+		    } else if (isMobile && swiperInstances.earnInfo) {
+		      updateSwiper(swiperInstances.earnInfo);
+		    }
+		  }
+		}
+		/* 최초 실행 */
+		initSwipers();
+		/* 리사이즈 대응 */
+		let resizeTimer;
+		window.addEventListener('resize', () => {
+		  clearTimeout(resizeTimer);
+		  resizeTimer = setTimeout(initSwipers, 150);
+		});
+</script>
+	<common-footer></common-footer>
+</body>
+
+</html>

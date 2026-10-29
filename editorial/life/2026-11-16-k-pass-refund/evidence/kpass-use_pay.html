@@ -1,0 +1,705 @@
+
+
+
+
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="keywords" content="모두의카드">
+    <meta name="description" content="모두의카드 홈페이지">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5" />
+    <meta name="robots" content="noindex, follow" />
+    
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://korea-pass.kr/">
+    <meta property="og:title" content="모두의카드">
+    <meta property="og:image" content="https://korea-pass.kr/assets/images/logo_header.svg">
+    <meta property="og:description" content="모두의카드 홈페이지">
+    <meta property="og:site_name" content="Site Name">
+    <meta property="og:locale" content="KR">
+    <title>모두의카드</title>
+    <link rel="stylesheet" type="text/css" href="/assets/css/swiper.8.4.3.min.css">
+    <link rel="stylesheet" type="text/css" href="/assets/css/common.min.css">
+	<link rel="stylesheet" type="text/css" href="/assets/css/sub.min.css">
+	<link rel="apple-touch-icon" href="/assets/images/logo.svg">
+	<link rel="apple-touch-icon-precomposed" href="/assets/images/logo.svg">
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/common2.min.css"> -->
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/main2.min.css"> -->
+					
+	
+	<!-- <script>document.domain='korea-pass.kr'</script> -->
+		    
+    <script src="/assets/js/vendors/jquery.min.js"></script>
+    <script src="/assets/js/vendors/swiper-bundle.8.4.7.min.js"></script>
+    <script src="/assets/js/utils.js"></script>
+    <script defer src="/assets/js/Modernizr.js"></script>
+    <script defer src="/assets/js/pub.min.js"></script>
+    <script src="/assets/js/common.js"></script>
+    				
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-1E6PH8MGZW"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+	
+	  gtag('config', 'G-1E6PH8MGZW');
+	</script>
+
+    <script>
+    	$(document).ready(function() {
+        	//로컬테스트 할 때만 주석처리 해야함
+        	
+        	var reloc = window.location.href;
+        	if(reloc.indexOf("https://") == -1){
+            	location.href = reloc.replace("http://", "https://");
+        	}
+        	
+        	if (reloc.indexOf("www.") > 0){
+        		location.href = reloc.replace("www.", "");
+        	}
+             
+            //로그아웃처리
+            $("#logout, #mlogout").click(function(){
+            	fn_callAjax("/logout.do", '', {
+                    successCallback: function (data) {
+                    	localStorage.removeItem("alarmBtn"); // 전체메뉴 header : 개인 알림 게시판 갯수
+                    	location.href = '/'
+                    },
+                  });
+            });
+            
+        	//홈페이지 마우스 우클릭 금지 조치
+            $(document).bind("contextmenu", function(event) {
+            	event.preventDefault();
+            	alertWarning('오른쪽 마우스는 사용할 수 없습니다.');
+            });
+        	
+            initSubInfo();
+               
+            // 모바일전체메뉴 아코디언 기능 추가
+            var windowsize = $(window).width();
+            if (windowsize < 1025) {
+                mgnb ();
+            } else{
+                webgnb ();
+            }
+
+
+            $(window).resize(function() {
+                if(Modernizr.mq('screen and (min-width:1025px)')) {
+                    webgnb ();
+                                    
+                }else{
+                    mgnb ();
+                }
+            });
+
+            function webgnb (){
+                console.log('pc');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('mobile');
+                $('#gnb').addClass('web');
+            }
+
+            function mgnb (){
+                console.log('mobile');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('web');
+                $('#gnb').addClass('mobile');
+
+                $('.mobile > ul > li > a').click( function(e){
+                    e.preventDefault();
+                    function slideDown(target) {
+                        slideUp();
+                        $(target).addClass('on').next('.depth2').stop().slideDown('fast');
+                    }
+                    function slideUp() {
+                        $('.mobile ul li  > a').removeClass('on').next('.depth2').slideUp('fast');
+                    }
+                    $(this).hasClass('on') ? slideUp() : slideDown(this);
+                });
+            }
+		});
+
+        function initSubInfo() {
+            var pMap = {};
+      		var alUserSn = '';
+      		var alUserId = '';
+      		var alUserNm = '';
+  
+            if (
+              !fn_isNull(alUserSn) &&
+              !fn_isNull(alUserId)
+            ) {
+              document.getElementById('header').classList.add('loggedin');   
+              document.getElementById("userNm").innerHTML = alUserNm + " 님";
+
+              // 전체메뉴 header : 개인 알림 게시판 갯수
+              $("#alarmBtn").attr("data-num", localStorage.getItem("alarmBtn"));
+			} else {
+				document.getElementById('header').classList.remove('loggedin');
+			}
+        }
+        
+      //전체메뉴 header : 개인 알림 리스트 드롭다운
+        function moveToNotificationList(){
+        	fn_callAjax("/notifs/list.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data) {
+        			$(".alarm-list").empty();
+        			var list = data.list;
+        			var unReadList = []; //안읽은 게시물 리스트
+        			var readList = []; //읽은 게시물 리스트
+        			var unReadCnt = 0; //안읽은 게시물 개수
+					var totalRecordCount = data.notifsVo.paginationInfo.totalRecordCount; //등록된 게시물 개수
+        			
+        			if(totalRecordCount == 0){//등록된 게시물 없는 경우 
+        				$(".no-alarm").addClass("active");
+        			} else {
+        				$(".no-alarm").removeClass("active");
+        			}
+        			$.each(list, function (i, val) { //1. 전체 게시물 중 안읽은 게시물 수 및 게시물 읽음 여부에 따라 새로운 리스트에 요소 추가
+        				if(val.isRead == false){
+        					unReadCnt += 1;
+        					unReadList.push(val);
+        				} else {
+        					unReadCnt
+        					readList.push(val);
+        				}
+        			});
+        			
+        			if(unReadCnt < 9){ //2. 게시물 읽음여부 상관없이 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", unReadCnt);
+        				if(unReadCnt < 5){ //노출되는 게시글 : 읽음 + 안읽음
+        					$.each(unReadList.slice(0,unReadCnt), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        					$.each(readList.slice(0,(5-unReadCnt)), function (i, val) { //읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk read" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				} else { //노출되는 게시글 : 안읽음
+        					$.each(unReadList.slice(0,5), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				}
+        			} else { //2. 안읽은 게시물 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", "9+"); //안읽음 알림 개수 max 9+
+        				$.each(unReadList.slice(0,5), function (i, val) { 
+        					var html = '<li>'+
+        									'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        										'<span class="date">'+val.frstRgstDt+'</span>'+
+        										'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        										'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        									'</a>'+
+        								'</li>';
+        					$(html).appendTo(".alarm-list");
+        				});
+        			}
+        		},
+        	});
+        }
+        //전체메뉴 header : 개인 알림 게시판 상세페이지 이동
+        function moveToNotificationDetail(notifsSn){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"notifsSn" : notifsSn, "alUserSn" : '', "readChk" : "readOne", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			var newForm = $("<form></form>");
+					newForm.attr("name", "form");
+					newForm.attr("method", "post");
+					newForm.attr("action", "/notifs/notifsDetail.do");
+					
+					newForm.append($("<input type='hidden' id='notifsSn' name='notifsSn' value='"+data.notifsVo.notifsSn+"'>"));
+					newForm.append($("<input type='hidden' id='alUserSn' name='alUserSn' value='"+data.notifsVo.alUserSn+"'>"));
+					newForm.append($("<input type='hidden' id='sidoCd' name='sidoCd' value='"+data.notifsVo.sidoCd+"'>"));
+					newForm.append($("<input type='hidden' id='insttSn' name='insttSn' value='"+data.notifsVo.insttSn+"'>"));
+					
+					newForm.appendTo("body");
+					newForm.submit();
+        		},
+        	});
+        }
+        // 전체메뉴 header : 개인 알림 게시판 전체읽음처리
+        function notificationReadchk(){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			$("#alarmBtn").trigger("click");
+        		},
+        	});
+        }
+	</script>
+</head>
+
+<body>
+<a class="content-shortcut" href="#content">본문 바로가기</a>
+   	<header id="header" class="header" aria-expanded="false">
+	    <div class="header-wrapper">
+	        <h1 class="header-logo">
+	            <a href="/" title="모두의카드 바로가기">
+	                <img src="/assets/images/logo.svg" width="84" height="52" alt="모두의카드 로고">
+	            </a>
+	        </h1>
+	        <div class="gnb-wrap">
+				<nav id="gnb" class="gnb">
+				    <ul class="depth1">
+				        <li>
+				            <a href="#" tabindex="0"><span>사업소개</span></a>
+				            <ul class="depth2" data-title="사업소개">
+				                <li>
+				                    <a href="/info/intro.do" tabindex="0"><span>모두의카드소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>지역별혜택소개</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/intro_gg.do" tabindex="0"><span>경기</span></a></li>
+				                        <li><a href="/info/intro_ic.do" tabindex="0"><span>인천</span></a></li>
+				                        <li><a href="/info/intro_bs.do" tabindex="0"><span>동백</span></a></li>
+				                        <li><a href="/info/intro_sj.do" tabindex="0"><span>세종</span></a></li>
+				                        <li><a href="/info/intro_cn.do" tabindex="0"><span>충남</span></a></li>
+				                        
+										<li><a href="/info/intro_gn.do" tabindex="0"><span>경남</span></a></li>
+										<li><a href="/info/intro_gj.do" tabindex="0"><span>전남광주</span></a></li>
+										<li><a href="/info/intro_us.do" tabindex="0"><span>울산</span></a></li>
+										<li><a href="/info/intro_seoul.do" tabindex="0"><span>서울</span></a></li>
+				                    </ul>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>이용안내</span></a>
+				            <ul class="depth2" data-title="이용안내">
+				                <li>
+				                    <a href="/info/use_join.do" tabindex="0"><span>가입조건</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_accm.do" tabindex="0"><span>적립안내</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_pay.do" tabindex="0"><span>환급안내</span></a>
+				                </li>
+				               <!--  <li>
+				                    <a href="/info/intro_refund_calculator.do" tabindex="0"><span>예상환급금계산기</span></a>
+				                </li>  -->
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>모두의카드</span></a>
+				            <ul class="depth2" data-title="모두의카드소개">
+				            	<li>
+				                    <a href="/info/card_guide.do" tabindex="0"><span>카드 소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>사용안내</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/kpass_pay.do" tabindex="0"><span>카드사별 지급방식</span></a></li>
+				                        <li><a href="/info/kpass_mob.do" tabindex="0"><span>모바일페이 이용안내</span></a></li>
+				                        <li><a href="/info/kpass_chg.do" tabindex="0"><span>카드변경방법</span></a></li>
+				                        <li><a href="/info/kpass_inq.do" tabindex="0"><span>카드사문의안내</span></a></li>
+				                    </ul>
+				                </li>
+				                <li>
+				                    <a href="/event/eventListView.do" tabindex="0"><span>카드 이벤트</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>공지사항</span></a>
+				            <ul class="depth2" data-title="공지사항">
+				                <li>
+				                    <a href="/notice/noticeList.do" tabindex="0"><span>공지사항</span></a>
+				                </li>
+				                
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>문의하기</span></a>
+				            <ul class="depth2" data-title="문의하기">
+				                <li>
+				                    <a href="/serviceInfo/qnaIntro.do" tabindex="0"><span>문의하기</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaWrite.do" tabindex="0"><span>1:1문의</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaListView.do" tabindex="0"><span>문의내역</span></a>
+				                </li>
+				                <li>
+				                    <a href="/notice/faqList.do" tabindex="0"><span>자주묻는질문</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        
+				        <li class="from-md">
+				            <a href="#" tabindex="0"><span>이용약관</span></a>
+				            <ul class="depth2" data-title="settings">
+				                <li><a href="/term/term03.do" tabindex="0"><span>개인정보처리방침</span></a></li>
+				                <li><a href="/term/term01.do" tabindex="0"><span>서비스이용약관</span></a></li>
+				            </ul>
+				        </li>
+				    </ul>
+				</nav>
+	        </div>
+	        <div class="alarm-wrap">
+	        	<!-- <button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="moveToNotificationList()"> -->
+	        	<button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="location.href='/notifs/notifsList.do'">
+	           		<!-- <i class="arrow"></i> -->
+	           	</button>
+	           	<!-- <div class="alarm-list-wrap">
+	           		<div class="list-title">
+	           			<h3>알림</h3>
+	           			<button type="button" class="btn-read" id="alarmReadBtn" onclick="notificationReadchk()">전체읽음</button>
+	           		</div>
+	           		<div class="list-inner">
+	           			<div class="no-alarm"> active class로 제어
+	           				<i class="ico-no-alarm"></i>새로운 알림이 없습니다.
+	           			</div>
+	            		<ul class="alarm-list">
+	            			<li>
+	            				<a class="lnk" href="../notification/notificationList.html">
+	            					<span class="date">24.03.07</span>
+	            					<span class="alarm-title">24년 12월 환급금 일부 지자체 감액 안내</span>
+	            					<span class="alarm-content">24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내</span>
+	            				</a>
+	            			</li>
+	            		</ul>
+	           		</div>
+	           		<button type="button" class="btn-more" onclick="location.href='../notifs/notifsList.do'">전체보기</button>
+	           	</div> -->
+	        </div>
+	        <button type="button" class="js-header-sitemap" aria-haspopup="true">
+	            <i></i>
+	            <i></i>
+	            <i></i>
+	            <span>사이트맵 보기</span>
+	        </button>
+			<div class="header-utils">
+	            <p class="header-utils-01" id="hello"><!-- 반갑습니다<br> -->로그인 또는 회원가입을 해주세요!</p>
+				
+					
+						<a href="/join/login.do" class="header-utils-02" id="login">로그인</a>
+						<a href="/join/join.do" class="header-utils-03" id="join">회원가입</a>
+					
+					
+				
+	        </div>
+	        <!-- <a href="#" class="header-notice" aria-live="assertive"><i></i><span>새소식</span></a> -->
+        	<a id="backBtn" class="header-back" title="뒤로가기"><i></i></a>
+        	</div>
+        	
+        <!-- 적립내역 띠배너 -->
+		<!-- <div class="header-banner-sub">
+	       <div class="header-banner-container">
+	           <div class="header-banner-swiper">
+	               <div class="swiper-wrapper">
+	                   <div class="swiper-slide">
+	                       <p>K-패스에서 카드 사용 내역 확인까지<br class="from-sm"> <strong>최대 14일</strong>이 소요됩니다.</p>
+	                   </div>
+	               </div>
+	           </div>
+	           <button type="button" id="header-banner-close-sub" class="header-banner-close">닫기</button>
+	       </div>
+	     </div> -->
+	</header>
+    <sub-header></sub-header>
+    
+
+
+
+
+
+
+<link rel="stylesheet" type="text/css" href="/assets/css/intro.css">
+
+<main id="content" class="content">
+    <section class="sub">
+        <div class="contents-inner pay-info-contents">
+        	<div class="intro-contents">
+        		<div class="inner">
+        			<div class="title">모두의카드 환급 안내</div>
+        			<div class="way-guide-slide">
+              	<div class="swiper-wrapper">
+              		<div class="swiper-slide">
+              			<div class="way-guide-box step1">
+						<div class="title" data-label="step 1">모두의카드는 <br>월 초 정산된 지급금액을<br>카드사에 전송!</div>
+              			</div>
+              		</div>
+              		<div class="swiper-slide">
+              			<div class="way-guide-box step2">
+              				<div class="title" data-label="step 2">각 카드사는 <br>각 사의 정책에 따라 <br>사용자에게 지급!</div>
+              			</div>
+              		</div>
+              		<div class="swiper-slide">
+              			<div class="way-guide-box step3">
+							<div class="title" data-label="step 3">월 초 홈페이지나 앱에서 지급 결과와 지급금액, 지급된 카드사를 확인!</div>
+              				<div class="desc">계좌 변경이나 카드 분실, <br>실제 지급일 확인은 카드사로 문의!</div>
+              			</div>
+              		</div>
+              	</div>
+              	<div class="swiper-pagination"></div>
+             	</div>
+        		</div>
+        	</div>
+        	<div class="intro-contents">
+        		<div class="inner">
+        			<div class="title-wrap">
+        				<div class="title">지급일</div>
+						<div class="desc">적립월의 익월에 최종 환급금을 카드사에 전달합니다. <br>모두의카드 회원은 이용중인 카드사의 실제 지급일과 지급 방식을 확인해 주세요.</div>
+        			</div>
+        		</div>
+			</div>
+			<div class="intro-contents pay-info">
+			 <div class="inner">
+				 <div class="title">환급기준</div>
+				 <ul class="pay-info-guide">
+					 <li>
+						 <div class="title">월 이용 횟수</div>
+						 <div class="desc">15회 이상 이용 시 환급금이 지급됩니다.<br>가입 첫 달은 15회 미만 이용 시에도 지급됩니다.</div>
+					 </li>
+					 <li>
+						 <div class="title">환승 기준</div>
+						 <div class="desc">최초 승차부터 환승 이용까지 포함하여 <br>다음 최초 승차 전까지 1회 이용으로 처리됩니다.</div>
+					 </li>
+				 </ul>
+				</div>
+			</div>
+       		<div class="intro-contents">
+        		<div class="inner">
+       				<div class="title">환급 내역 확인 방법</div>
+						<div class="pay-info-slide">
+						<div class="swiper-wrapper">
+							<div class="swiper-slide">
+								<div class="pay-guide-box">
+									<div class="title">로그인 후 메인 화면에서 환급금액을 확인할 수 있습니다. <br>환급된 카드사를 꼭 확인해주세요.</div>
+								</div>
+							</div>
+							<div class="swiper-slide">
+								<div class="pay-guide-box step2">
+									<div class="title">지급내역에서는 더 상세한 내역을 확인할 수 있습니다.</div>
+									<div class="desc">월 15회 미만 이용했다면 카드사로 <br class="mob-br">환급되지 않으니 <br class="web-br">가장 상단의 <br class="mob-br">환급 결과를 꼭 확인해주세요.</div>
+								</div>
+							</div>
+							<div class="swiper-slide">
+								<div class="pay-guide-box step3">
+									<div class="title">정산된 금액이 이용중인 카드사로 <br class="mob-br">전달되었습니다. <br>카드사의 실제 지급 일자와 지급 방식을 안내드립니다.</div>
+								</div>
+							</div>
+						</div>
+						<div class="swiper-pagination"></div>
+        			</div>
+        		</div>
+       		</div>
+       		<div class="intro-contents">
+        		<div class="inner">
+        			<div class="title-wrap">
+        				<div class="title">지역 별 추가 혜택</div>
+        				<div class="desc">지자체 혜택은 별도의 가입 없이, 모두의카드 회원 중 해당 지자체 주민에게 자동으로 적용됩니다. <br>월 초 환급금 정산 시 나의 지자체 혜택으로 적용됩니다.</div>
+        			</div>
+        		</div>
+       		</div>
+       		<div class="intro-contents">
+        		<div class="inner">
+        			<div class="title-wrap">
+        				<div class="title">지급 내역 문의 하기</div>
+        				<div class="desc">모두의카드 환급금은 카드사를 통해 환급하고 있습니다. <br>환급 과정 별 문의의 빠른 답변을 위해 처리 과정 별 민원처를 안내드립니다.</div>
+        			</div>
+        			<div class="pay-info-slide qna">
+              	<div class="swiper-wrapper">
+              		<div class="swiper-slide">
+              			<div class="pay-guide-box">
+							<div class="title">월 초에는 모두의카드 환급금을 계산하고 있어요.</div>
+              				<div class="desc">적립금 문의는 <strong>모두의카드</strong>로 문의해주세요.</div>
+              			</div>
+              		</div>
+              		<div class="swiper-slide">
+              			<div class="pay-guide-box step2">
+							<div class="title">MY &gt; 지급내역에서 “지급 완료“가 <br class="web-br">보인다면, 환급금 정산이 완료된 것!</div>
+              				<div class="desc">실제 지급일, 지급 방법, 계좌 변경, 계좌 분실, 카드 분실 등 <br class="web-br">환급금 수령에 대한 문의는  <strong>이용중인 카드사</strong>에서 답변받으실 수 있습니다.</div>
+              			</div>
+              		</div>
+              		<div class="swiper-slide">
+              			<div class="pay-guide-box step3">
+							<div class="title">MY &gt; 지급내역에서 “미지급＂이라면 <br class="web-br">미지급 사유를 확인해 주세요!</div>
+              				<div class="desc">미지급 상태 문의는  <strong>모두의카드</strong>로 문의해주세요.</div>
+              			</div>
+              		</div>
+              	</div>
+              	<div class="swiper-pagination"></div>
+             	</div>
+        		</div>
+       		</div>
+       		<div class="intro-contents">
+        		<div class="inner">
+					<div class="title">충남광역환승 환급 안내</div>
+        			<div class="msg-box-wrap">
+        				<div class="msg-box user">
+        					<div class="text">충남광역환승 혜택은 다음 달이 아닌 <strong>2달 뒤 환급</strong>된다구요?</div>
+        					<i class="ico"></i>
+        				</div>
+        				<div class="msg-box cn">
+        					<i class="ico"></i>
+							<div class="text">네! 1월 환승 내역이 <br class="mob-br">있다면 2월이 아닌<br>3월에 정산되어 2월 환급금과 같이 환급됩니다!</div>
+       					</div>
+        				<div class="msg-box user">
+        					<div class="text">왜 2달 뒤 환급되나요?</div>
+        					<i class="ico"></i>
+        				</div>
+        				<div class="msg-box cn">
+        					<i class="ico"></i>
+        					<div class="text">
+        						2중 혜택 방지를 위해 기본형 환급금을 먼저 계산하여 <br class="web-br">충남광역환승 환급금에서 기본형 환급금을 뺀 나머지가 환급되기 때문입니다!
+        						<span class="info">’26년부터 도입되는 모두의카드(일반형/플러스형)로 환급받은 달에는 <br class="web-br">충남광역환승 환급금이 환급되지 않습니다!</span>
+        					</div>
+        				</div>
+        			</div>
+        		</div>
+       		</div>
+       		<div class="intro-contents">
+        		<div class="inner">
+        			<div class="title-wrap">
+        				<div class="title">충남광역환승 지급</div>
+        				<div class="desc">충남광역환승은 이용월의 2달 뒤 정산되어 환급됩니다. <br>충남광역환승 중 버스 환승요금 혜택은 정산 시점에 충남도민으로 확인되어야 환급금이 환급됩니다. <br><strong class="col-text">모두의카드(일반형/플러스형)로 환급받은 달은 충남광역환승 환급금이 환급되지 않습니다.</strong></div>
+        			</div>
+        		</div>
+       		</div>
+       		<div class="intro-contents">
+        		<div class="inner">
+       				<div class="title">충남광역환승 확인하기</div>
+        			<div class="pay-info-slide cn-trans">
+              	<div class="swiper-wrapper">
+              		<div class="swiper-slide">
+              			<div class="pay-guide-box">
+							<div class="title">MY&gt;충남광역환승 메뉴에서 <br class="mob-br">월별 환급금을 확인하실 수 있습니다. <br>환급금은 매월 초 확인할 수 있습니다.</div>
+              			</div>
+              		</div>
+              		<div class="swiper-slide">
+              			<div class="pay-guide-box step2">
+              				<div class="title">충남광역환승 이용 내역을 확인할 수 있습니다.</div>
+              			</div>
+              		</div>
+              	</div>
+              	<div class="swiper-pagination"></div>
+             	</div>
+        		</div>
+       		</div>
+        </div>
+    </section>
+</main>
+
+<script>
+$(document).ready(function () {
+	fn_addLnb('환급안내', '이용안내', '환급안내');
+});	
+const swiperInstances = {
+		  way: null,
+		  earnWay: null,
+		  earnInfo: null,
+		  local: []
+		};
+
+function updateSwiper(swiper) {
+  if (!swiper) return;
+  requestAnimationFrame(() => {
+    swiper.update();
+  });
+}
+function initSwipers() {
+  const isMobile = window.innerWidth <= 1024;
+  /* 이용방법 */
+  const wayEl = document.querySelector('.way-guide-slide');
+  if (wayEl) {
+    if (isMobile && !swiperInstances.way) {
+      swiperInstances.way = new Swiper(wayEl, {
+        slidesPerView: 'auto',
+        spaceBetween: 16,
+        watchOverflow: true,
+        pagination: {
+          el: wayEl.querySelector('.swiper-pagination'),
+          type: 'bullets',
+          clickable: true
+        },
+        on: {
+	          init(swiper) {
+	            updateSwiper(swiper);
+	          }
+	        }
+      });
+    } else if (!isMobile && swiperInstances.way) {
+      swiperInstances.way.destroy(true, true);
+      swiperInstances.way = null;
+    }
+  }
+  /* 환급내역 (다중) */
+  const localEls = document.querySelectorAll('.pay-info-slide');
+  if (isMobile) {
+    localEls.forEach((el, i) => {
+      if (!swiperInstances.local[i]) {
+        swiperInstances.local[i] = new Swiper(el, {
+          slidesPerView: 'auto',
+          spaceBetween: 12,
+          watchOverflow: true,
+          pagination: {
+            el: el.querySelector('.swiper-pagination'),
+            type: 'bullets',
+            clickable: true
+          },
+	        on: {
+		          init(swiper) {
+		            updateSwiper(swiper);
+		          }
+		        }
+        });
+      }
+    });
+  } else {
+    swiperInstances.local.forEach(swiper => {
+      if (swiper) swiper.destroy(true, true);
+    });
+    swiperInstances.local = [];
+  }
+}
+// 최초 실행
+initSwipers();
+// 리사이즈 대응 (디바운스)
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(initSwipers, 150);
+});
+</script>
+	<common-footer></common-footer>
+</body>
+
+</html>

@@ -1,0 +1,1143 @@
+
+
+
+
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="keywords" content="모두의카드">
+    <meta name="description" content="모두의카드 홈페이지">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5" />
+    <meta name="robots" content="noindex, follow" />
+    
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://korea-pass.kr/">
+    <meta property="og:title" content="모두의카드">
+    <meta property="og:image" content="https://korea-pass.kr/assets/images/logo_header.svg">
+    <meta property="og:description" content="모두의카드 홈페이지">
+    <meta property="og:site_name" content="Site Name">
+    <meta property="og:locale" content="KR">
+    <title>모두의카드</title>
+    <link rel="stylesheet" type="text/css" href="/assets/css/swiper.8.4.3.min.css">
+    <link rel="stylesheet" type="text/css" href="/assets/css/common.min.css">
+	<link rel="stylesheet" type="text/css" href="/assets/css/sub.min.css">
+	<link rel="apple-touch-icon" href="/assets/images/logo.svg">
+	<link rel="apple-touch-icon-precomposed" href="/assets/images/logo.svg">
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/common2.min.css"> -->
+	<!-- <link rel="stylesheet" type="text/css" href="/assets/css/main2.min.css"> -->
+					
+	
+	<!-- <script>document.domain='korea-pass.kr'</script> -->
+		    
+    <script src="/assets/js/vendors/jquery.min.js"></script>
+    <script src="/assets/js/vendors/swiper-bundle.8.4.7.min.js"></script>
+    <script src="/assets/js/utils.js"></script>
+    <script defer src="/assets/js/Modernizr.js"></script>
+    <script defer src="/assets/js/pub.min.js"></script>
+    <script src="/assets/js/common.js"></script>
+    				
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-1E6PH8MGZW"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+	
+	  gtag('config', 'G-1E6PH8MGZW');
+	</script>
+
+    <script>
+    	$(document).ready(function() {
+        	//로컬테스트 할 때만 주석처리 해야함
+        	
+        	var reloc = window.location.href;
+        	if(reloc.indexOf("https://") == -1){
+            	location.href = reloc.replace("http://", "https://");
+        	}
+        	
+        	if (reloc.indexOf("www.") > 0){
+        		location.href = reloc.replace("www.", "");
+        	}
+             
+            //로그아웃처리
+            $("#logout, #mlogout").click(function(){
+            	fn_callAjax("/logout.do", '', {
+                    successCallback: function (data) {
+                    	localStorage.removeItem("alarmBtn"); // 전체메뉴 header : 개인 알림 게시판 갯수
+                    	location.href = '/'
+                    },
+                  });
+            });
+            
+        	//홈페이지 마우스 우클릭 금지 조치
+            $(document).bind("contextmenu", function(event) {
+            	event.preventDefault();
+            	alertWarning('오른쪽 마우스는 사용할 수 없습니다.');
+            });
+        	
+            initSubInfo();
+               
+            // 모바일전체메뉴 아코디언 기능 추가
+            var windowsize = $(window).width();
+            if (windowsize < 1025) {
+                mgnb ();
+            } else{
+                webgnb ();
+            }
+
+
+            $(window).resize(function() {
+                if(Modernizr.mq('screen and (min-width:1025px)')) {
+                    webgnb ();
+                                    
+                }else{
+                    mgnb ();
+                }
+            });
+
+            function webgnb (){
+                console.log('pc');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('mobile');
+                $('#gnb').addClass('web');
+            }
+
+            function mgnb (){
+                console.log('mobile');
+                $('.mobile > ul > li > a').off();
+                $('#gnb').removeClass('web');
+                $('#gnb').addClass('mobile');
+
+                $('.mobile > ul > li > a').click( function(e){
+                    e.preventDefault();
+                    function slideDown(target) {
+                        slideUp();
+                        $(target).addClass('on').next('.depth2').stop().slideDown('fast');
+                    }
+                    function slideUp() {
+                        $('.mobile ul li  > a').removeClass('on').next('.depth2').slideUp('fast');
+                    }
+                    $(this).hasClass('on') ? slideUp() : slideDown(this);
+                });
+            }
+		});
+
+        function initSubInfo() {
+            var pMap = {};
+      		var alUserSn = '';
+      		var alUserId = '';
+      		var alUserNm = '';
+  
+            if (
+              !fn_isNull(alUserSn) &&
+              !fn_isNull(alUserId)
+            ) {
+              document.getElementById('header').classList.add('loggedin');   
+              document.getElementById("userNm").innerHTML = alUserNm + " 님";
+
+              // 전체메뉴 header : 개인 알림 게시판 갯수
+              $("#alarmBtn").attr("data-num", localStorage.getItem("alarmBtn"));
+			} else {
+				document.getElementById('header').classList.remove('loggedin');
+			}
+        }
+        
+      //전체메뉴 header : 개인 알림 리스트 드롭다운
+        function moveToNotificationList(){
+        	fn_callAjax("/notifs/list.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data) {
+        			$(".alarm-list").empty();
+        			var list = data.list;
+        			var unReadList = []; //안읽은 게시물 리스트
+        			var readList = []; //읽은 게시물 리스트
+        			var unReadCnt = 0; //안읽은 게시물 개수
+					var totalRecordCount = data.notifsVo.paginationInfo.totalRecordCount; //등록된 게시물 개수
+        			
+        			if(totalRecordCount == 0){//등록된 게시물 없는 경우 
+        				$(".no-alarm").addClass("active");
+        			} else {
+        				$(".no-alarm").removeClass("active");
+        			}
+        			$.each(list, function (i, val) { //1. 전체 게시물 중 안읽은 게시물 수 및 게시물 읽음 여부에 따라 새로운 리스트에 요소 추가
+        				if(val.isRead == false){
+        					unReadCnt += 1;
+        					unReadList.push(val);
+        				} else {
+        					unReadCnt
+        					readList.push(val);
+        				}
+        			});
+        			
+        			if(unReadCnt < 9){ //2. 게시물 읽음여부 상관없이 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", unReadCnt);
+        				if(unReadCnt < 5){ //노출되는 게시글 : 읽음 + 안읽음
+        					$.each(unReadList.slice(0,unReadCnt), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        					$.each(readList.slice(0,(5-unReadCnt)), function (i, val) { //읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk read" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				} else { //노출되는 게시글 : 안읽음
+        					$.each(unReadList.slice(0,5), function (i, val) { //안읽은 게시물 노출
+        						var html = '<li>'+
+        										'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        											'<span class="date">'+val.frstRgstDt+'</span>'+
+        											'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        											'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        										'</a>'+
+        									'</li>';
+        						$(html).appendTo(".alarm-list");
+        					});
+        				}
+        			} else { //2. 안읽은 게시물 최대 상위 5개만 노출 
+        				$("#alarmBtn").attr("data-num", "9+"); //안읽음 알림 개수 max 9+
+        				$.each(unReadList.slice(0,5), function (i, val) { 
+        					var html = '<li>'+
+        									'<a class="lnk" href="#" onclick="moveToNotificationDetail(\''+val.notifsSn+'\')">'+
+        										'<span class="date">'+val.frstRgstDt+'</span>'+
+        										'<span class="alarm-title">'+val.notifsSj+'</span>'+
+        										'<span class="alarm-content">'+ConvertToHtml(val.notifsCn.replace(/(?:\r\n|\r|\n)/g, "<br>"))+'</span>'+
+        									'</a>'+
+        								'</li>';
+        					$(html).appendTo(".alarm-list");
+        				});
+        			}
+        		},
+        	});
+        }
+        //전체메뉴 header : 개인 알림 게시판 상세페이지 이동
+        function moveToNotificationDetail(notifsSn){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"notifsSn" : notifsSn, "alUserSn" : '', "readChk" : "readOne", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			var newForm = $("<form></form>");
+					newForm.attr("name", "form");
+					newForm.attr("method", "post");
+					newForm.attr("action", "/notifs/notifsDetail.do");
+					
+					newForm.append($("<input type='hidden' id='notifsSn' name='notifsSn' value='"+data.notifsVo.notifsSn+"'>"));
+					newForm.append($("<input type='hidden' id='alUserSn' name='alUserSn' value='"+data.notifsVo.alUserSn+"'>"));
+					newForm.append($("<input type='hidden' id='sidoCd' name='sidoCd' value='"+data.notifsVo.sidoCd+"'>"));
+					newForm.append($("<input type='hidden' id='insttSn' name='insttSn' value='"+data.notifsVo.insttSn+"'>"));
+					
+					newForm.appendTo("body");
+					newForm.submit();
+        		},
+        	});
+        }
+        // 전체메뉴 header : 개인 알림 게시판 전체읽음처리
+        function notificationReadchk(){
+        	fn_callAjax("/notifs/readChk.do", {
+        		"alUserSn" : '', "showLoc" : "header", "sidoCd" : '', "insttSn" : ''},{
+        		successCallback: function (data){
+        			if(data.result > 0){ //안읽은 게시물 개수 체크
+        				localStorage.setItem("alarmBtn", localStorage.getItem("alarmBtn") - data.result);
+        			}
+        			
+        			$("#alarmBtn").trigger("click");
+        		},
+        	});
+        }
+	</script>
+</head>
+
+<body>
+<a class="content-shortcut" href="#content">본문 바로가기</a>
+   	<header id="header" class="header" aria-expanded="false">
+	    <div class="header-wrapper">
+	        <h1 class="header-logo">
+	            <a href="/" title="모두의카드 바로가기">
+	                <img src="/assets/images/logo.svg" width="84" height="52" alt="모두의카드 로고">
+	            </a>
+	        </h1>
+	        <div class="gnb-wrap">
+				<nav id="gnb" class="gnb">
+				    <ul class="depth1">
+				        <li>
+				            <a href="#" tabindex="0"><span>사업소개</span></a>
+				            <ul class="depth2" data-title="사업소개">
+				                <li>
+				                    <a href="/info/intro.do" tabindex="0"><span>모두의카드소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>지역별혜택소개</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/intro_gg.do" tabindex="0"><span>경기</span></a></li>
+				                        <li><a href="/info/intro_ic.do" tabindex="0"><span>인천</span></a></li>
+				                        <li><a href="/info/intro_bs.do" tabindex="0"><span>동백</span></a></li>
+				                        <li><a href="/info/intro_sj.do" tabindex="0"><span>세종</span></a></li>
+				                        <li><a href="/info/intro_cn.do" tabindex="0"><span>충남</span></a></li>
+				                        
+										<li><a href="/info/intro_gn.do" tabindex="0"><span>경남</span></a></li>
+										<li><a href="/info/intro_gj.do" tabindex="0"><span>전남광주</span></a></li>
+										<li><a href="/info/intro_us.do" tabindex="0"><span>울산</span></a></li>
+										<li><a href="/info/intro_seoul.do" tabindex="0"><span>서울</span></a></li>
+				                    </ul>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>이용안내</span></a>
+				            <ul class="depth2" data-title="이용안내">
+				                <li>
+				                    <a href="/info/use_join.do" tabindex="0"><span>가입조건</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_accm.do" tabindex="0"><span>적립안내</span></a>
+				                </li>
+				                <li>
+				                    <a href="/info/use_pay.do" tabindex="0"><span>환급안내</span></a>
+				                </li>
+				               <!--  <li>
+				                    <a href="/info/intro_refund_calculator.do" tabindex="0"><span>예상환급금계산기</span></a>
+				                </li>  -->
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>모두의카드</span></a>
+				            <ul class="depth2" data-title="모두의카드소개">
+				            	<li>
+				                    <a href="/info/card_guide.do" tabindex="0"><span>카드 소개</span></a>
+				                </li>
+				                <li>
+				                    <a href="#" tabindex="0"><span>사용안내</span></a>
+				                    <ul class="depth3">
+				                        <li><a href="/info/kpass_pay.do" tabindex="0"><span>카드사별 지급방식</span></a></li>
+				                        <li><a href="/info/kpass_mob.do" tabindex="0"><span>모바일페이 이용안내</span></a></li>
+				                        <li><a href="/info/kpass_chg.do" tabindex="0"><span>카드변경방법</span></a></li>
+				                        <li><a href="/info/kpass_inq.do" tabindex="0"><span>카드사문의안내</span></a></li>
+				                    </ul>
+				                </li>
+				                <li>
+				                    <a href="/event/eventListView.do" tabindex="0"><span>카드 이벤트</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>공지사항</span></a>
+				            <ul class="depth2" data-title="공지사항">
+				                <li>
+				                    <a href="/notice/noticeList.do" tabindex="0"><span>공지사항</span></a>
+				                </li>
+				                
+				            </ul>
+				        </li>
+				        <li>
+				            <a href="#" tabindex="0"><span>문의하기</span></a>
+				            <ul class="depth2" data-title="문의하기">
+				                <li>
+				                    <a href="/serviceInfo/qnaIntro.do" tabindex="0"><span>문의하기</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaWrite.do" tabindex="0"><span>1:1문의</span></a>
+				                </li>
+				                <li>
+				                    <a href="/serviceInfo/qnaListView.do" tabindex="0"><span>문의내역</span></a>
+				                </li>
+				                <li>
+				                    <a href="/notice/faqList.do" tabindex="0"><span>자주묻는질문</span></a>
+				                </li>
+				            </ul>
+				        </li>
+				        
+				        <li class="from-md">
+				            <a href="#" tabindex="0"><span>이용약관</span></a>
+				            <ul class="depth2" data-title="settings">
+				                <li><a href="/term/term03.do" tabindex="0"><span>개인정보처리방침</span></a></li>
+				                <li><a href="/term/term01.do" tabindex="0"><span>서비스이용약관</span></a></li>
+				            </ul>
+				        </li>
+				    </ul>
+				</nav>
+	        </div>
+	        <div class="alarm-wrap">
+	        	<!-- <button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="moveToNotificationList()"> -->
+	        	<button type="button" class="btn-alarm" data-num="" id ="alarmBtn" onclick="location.href='/notifs/notifsList.do'">
+	           		<!-- <i class="arrow"></i> -->
+	           	</button>
+	           	<!-- <div class="alarm-list-wrap">
+	           		<div class="list-title">
+	           			<h3>알림</h3>
+	           			<button type="button" class="btn-read" id="alarmReadBtn" onclick="notificationReadchk()">전체읽음</button>
+	           		</div>
+	           		<div class="list-inner">
+	           			<div class="no-alarm"> active class로 제어
+	           				<i class="ico-no-alarm"></i>새로운 알림이 없습니다.
+	           			</div>
+	            		<ul class="alarm-list">
+	            			<li>
+	            				<a class="lnk" href="../notification/notificationList.html">
+	            					<span class="date">24.03.07</span>
+	            					<span class="alarm-title">24년 12월 환급금 일부 지자체 감액 안내</span>
+	            					<span class="alarm-content">24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내 24년 12월 환급금 일부 지자체 감액 안내</span>
+	            				</a>
+	            			</li>
+	            		</ul>
+	           		</div>
+	           		<button type="button" class="btn-more" onclick="location.href='../notifs/notifsList.do'">전체보기</button>
+	           	</div> -->
+	        </div>
+	        <button type="button" class="js-header-sitemap" aria-haspopup="true">
+	            <i></i>
+	            <i></i>
+	            <i></i>
+	            <span>사이트맵 보기</span>
+	        </button>
+			<div class="header-utils">
+	            <p class="header-utils-01" id="hello"><!-- 반갑습니다<br> -->로그인 또는 회원가입을 해주세요!</p>
+				
+					
+						<a href="/join/login.do" class="header-utils-02" id="login">로그인</a>
+						<a href="/join/join.do" class="header-utils-03" id="join">회원가입</a>
+					
+					
+				
+	        </div>
+	        <!-- <a href="#" class="header-notice" aria-live="assertive"><i></i><span>새소식</span></a> -->
+        	<a id="backBtn" class="header-back" title="뒤로가기"><i></i></a>
+        	</div>
+        	
+        <!-- 적립내역 띠배너 -->
+		<!-- <div class="header-banner-sub">
+	       <div class="header-banner-container">
+	           <div class="header-banner-swiper">
+	               <div class="swiper-wrapper">
+	                   <div class="swiper-slide">
+	                       <p>K-패스에서 카드 사용 내역 확인까지<br class="from-sm"> <strong>최대 14일</strong>이 소요됩니다.</p>
+	                   </div>
+	               </div>
+	           </div>
+	           <button type="button" id="header-banner-close-sub" class="header-banner-close">닫기</button>
+	       </div>
+	     </div> -->
+	</header>
+    <sub-header></sub-header>
+    
+
+
+
+
+
+
+<link rel="stylesheet" type="text/css" href="/assets/css/refund_calculator.css">
+
+	<script>
+	$(document).ready(function () {
+		fn_addLnb('예상환급금계산기', '이용안내', '예상환급금계산기');
+		//서브 헤더 타이틀
+		$('.header-sub h2 span').text("예상환급금계산기");
+		
+		// 페이지 최초 진입 시 시도 리스트 가져오기
+		selectSidoInfo();
+		
+		// 로그인 상태인 경우 회원 정보 셋팅
+		var chk = '';
+		if (!fn_isNull(chk)) {
+			var param = {
+				alUserSn: '', 
+				csm: '', 
+				tranGroup: ''
+			}
+			// 회원 정보 가져오기
+			fn_callAjax("/selectCalInfo.do", param, {
+				successCallback: function (data) {
+					var data = data.info;
+					if(!fn_isNull(data)) {
+						if (!fn_isNull(data.lowincmeYn) && data.lowincmeYn == 'Y') {
+							$("#chk1").prop("checked", true);
+						}                    
+						
+						if (!fn_isNull(data.chldLevel) && data.chldLevel != 'N') {
+							if (data.chldLevel == 'Y2') {
+								$("#chk2").prop("checked", true);
+							} else if (data.chldLevel == 'Y3') {
+								$("#chk3").prop("checked", true);
+							}
+						} 
+
+						selectInsttInfo(data.sidoCd, data.insttSn);
+						$("#selectAgeList").val(data.ageGroup);
+						$("#useAmt").val(fn_fmtComma(data.useAmtSum));
+						$("#useCnt").val(fn_fmtComma(data.accmlCnt));
+						$("#sidoList").val(data.sidoCd);
+					}
+				}
+			});
+		}
+
+		// 해당없음 체크박스 선택 시 나머지 체크박스 해제처리
+		$("#chk4").change(function(){
+			if ($(this).is(":checked")) {
+				$("#chk1, #chk2, #chk3").prop("checked", false);
+			} 
+		})
+
+		// 해당없음 제외한 체크박스 선택 시 해당없음 체크 해제
+		$("#chk1, #chk2, #chk3").change(function(){
+			if ($(this).is(":checked")) {
+				$("#chk4").prop("checked", false);
+			}
+		})
+
+		// 다자녀 2인 또는 3인 선택 시 각각 체크박스 해제 처리
+		$("#chk2, #chk3").change(function(){
+			var input = $(this).attr("id");
+			$("#chk4").prop("checked", false);
+			if ($(this).is(":checked")) {
+				if(input === "chk3") {
+					$("#chk2").prop("checked", false);
+				} else {
+					$("#chk3").prop("checked", false);
+				}
+			} 
+		})
+	});
+
+	// 시도 선택
+	$(document).on("change", "#sidoList", function() {
+		var sidoCd = $(this).val();
+		selectInsttInfo(sidoCd);
+	}) 
+
+	function selectSidoInfo() {
+		//시도 list 호출
+		fn_callAjax("/selectSidoList.do", null, {
+			successCallback: function (data) {
+				$.each(data.sidoList, function (i, val) {
+					$('<option value="' + val.sidoCd + '">' + val.sidoNm + '</option>').appendTo("#sidoList");   
+				});
+			}
+		});
+	}
+
+	function selectInsttInfo(sidoCd, insttCd) {
+		// 지자체 list 호출
+		fn_callAjax("/selectInsttInfo.do", {"insttSn" : sidoCd}, {
+			successCallback: function (data) {
+				$("#insttList option:not(:first)").remove();
+				$.each(data.insttInfo, function (i, val) {
+					$('<option value="' + val.insttSn + '">' + val.insttNm + '</option>').appendTo("#insttList");
+				});
+
+				if(insttCd) {
+					$("#insttList").val(insttCd);
+				}
+			}
+		});
+	}
+	// 금액 입력 시 콤마 생성
+	$(document).on("input", ".numInput", function() {
+		// 현재 입력값에서 숫자가 아닌 문자 제거
+		var value = $(this).val().replace(/[^0-9]/g, "");
+
+		if (value.length > 0){
+			$(this).val(Number(value).toLocaleString());
+		} else {
+			$(this).val("");
+		}
+	})
+
+	//유효성 체크 에러메세지
+	function msg(id, data, flag) {
+		if (flag == true){
+			$("#"+id).html('');
+			$("#"+id).attr('aria-live', 'false');
+			$("#"+id).removeAttr('role', 'alert');
+		}else{
+			$("#"+id).html(data);
+			$("#"+id).attr('aria-live', 'assertive');
+			$("#"+id).attr('role', 'alert');
+		}
+		return flag;
+	}
+	
+	// 입력값 체크
+	function fnVaildateForm(){
+		$(".chkMsg").html("");
+		$(".chkMsg").attr('aria-live', 'false');
+		$(".chkMsg").removeAttr('role', 'alert');
+
+		var useCnt = $('#useCnt').val(); // 이용횟수
+		var chkAge = $('#selectAgeList').val(); // 연령 
+		var sidoList = $("#sidoList").val();
+		var rawUseAmt = $('#useAmt').val().replace(/,/g, ""); // 이용금액 
+		var useAmt = parseInt(rawUseAmt, 10);
+		var rawWideAmt = $("#useWideAmt").val().replace(/,/g, ""); // 광역이용금액
+		var wideAmt = parseInt(rawWideAmt, 10);
+		var flag = true;
+
+		if(chkAge == "0"){
+			flag = msg("chkAgeMsg", '연령대를 선택해주세요.', false);
+		} 
+		
+		if($('input[name="typeChk"]:checked').length == 0){
+			flag = msg("chkTypeMsg", "다자녀 부모 및 저소득 여부를 선택해주세요.", false);
+		} 
+		
+		if(sidoList == "0"){
+			flag = msg("chkAreaMsg", "주민등록지상 주소지를 선택해주세요.", false);
+		}
+		
+		if(isNaN(useAmt) || useAmt < 900){
+			flag = msg("chkAmtMsg", "이용 금액은 900원 이상 입력해주세요.", false);
+		} 
+		
+		if(!isNaN(wideAmt) && (wideAmt != 0 && wideAmt < 900)){
+			flag = msg("chkWideAmtMsg", "이용 금액은 900원 이상 입력해주세요.", false);
+		} 
+		
+		if(fn_isNull(useCnt) || useCnt < 15){
+			if (!(sidoList == '48' && chkAge == "75up")) {
+				flag = msg("chkCntMsg", "15회 이상 이용시에만 지급됩니다.", false);
+			}
+		} 
+
+		if(!flag) {
+			alertWarning("예상 환급금을 계산하기 위해 입력하신 내용을 다시 확인해주세요.");
+		} else {
+			fnExpRate();
+		}
+	}
+	
+	function fnTktPrice(selectedSido, selectedSigungu){
+	var capitalYn = '';
+	
+	// **수도권 (서울, 경기, 인천)
+	if(selectedSido == '11'||selectedSido == '41'||selectedSido == '28'){
+		capitalYn = 'Y';
+	} else { // **일반 지방권
+		// 부산, 대구, 광주, 울산, 세종, 제주 (6개)
+		// 강원-강릉시, 동해시, 속초시, 원주시, 인제군, 춘천시 (6개)
+		// 충북-음성군, 증평군, 진천군, 청주시, 충주시 (5개)
+		// 충남-계룡시, 당진시, 서산시, 아산시, 천안시, 홍성군 (6개)
+		// 전북-군산시, 완주군, 익산시, 전주시 (4개)
+		// 전남-광양시, 나주시, 목포시, 무안군, 순천시, 여수시 (6개)
+		// 경북-경산시, 경주시, 구미시, 김천시, 예천군, 칠곡군, 포항시 (7개)
+		// 경남-거제시, 김해시, 사천시, 양산시, 진주시, 창원시, 통영시 (7개)
+		capitalYn = 'N';
+	}
+	
+	// **우대지원지역 (지역-지자체)
+	var ggPrefYn = 'N'; // 경기 우대지원지역 -가평군, 연천군 (2개)
+	var gwPrefYn = 'N'; // 강원 우대지원지역 -고성군, 삼척시, 양양군, 영월군, 정선군, 철원군, 태백시, 평창군, 홍천군, 횡성군 (10개)
+	var cbPrefYn = 'N'; // 충북 우대지원지역 -옥천군, 제천시 (2개)
+	var cnPrefYn = 'N'; // 충남 우대지원지역 -공주시, 금산군, 논산시, 보령시, 예산군, 태안군 (6개)
+	var jbPrefYn = 'N'; // 전북 우대지원지역 -김제시, 남원시, 정읍시 (3개)
+	var jnPrefYn = 'N'; // 전남 우대지원지역 -담양군, 영광군, 영암군, 진도군, 화순군 (5개)
+	var gbPrefYn = 'N'; // 경북 우대지원지역 -고령군, 문경시, 성주군, 안동시, 영주시, 영천시, 울릉군, 울진군 (8개)
+	var gnPrefYn = 'N'; // 경남 우대지원지역 -거창군, 밀양시, 산청군, 창녕군, 함안군 (5개)
+	var icPrefYn = 'N'; // 인천 우대지원지역 -강화군, 옹진군 (2개)
+	var dgPrefYn = 'N'; // 대구 우대지원지역 -군위군 (1개)
+	
+	if(selectedSigungu == 'INSTT000000000000044'||selectedSigungu == 'INSTT000000000000063'){
+		ggPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010266'||selectedSigungu == 'INSTT000000000010218'||selectedSigungu == 'INSTT000000000000216'||selectedSigungu == 'INSTT000000000010222'
+		||selectedSigungu == 'INSTT000000000010268'||selectedSigungu == 'INSTT000000000010248'||selectedSigungu == 'INSTT000000000010219'||selectedSigungu == 'INSTT000000000010247'
+		||selectedSigungu == 'INSTT000000000000215'||selectedSigungu == 'INSTT000000000010220'){
+		gwPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000000032'||selectedSigungu == 'INSTT000000000000157'){
+		cbPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000000171'||selectedSigungu == 'INSTT000000000000172'||selectedSigungu == 'INSTT000000000000173'
+		||selectedSigungu == 'INSTT000000000000175'||selectedSigungu == 'INSTT000000000000180'||selectedSigungu == 'INSTT000000000000182'){
+		cnPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010231'||selectedSigungu == 'INSTT000000000000033'||selectedSigungu == 'INSTT000000000000195'){
+		jbPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000000204'||selectedSigungu == 'INSTT000000000010276'||selectedSigungu == 'INSTT000000000010263'
+		||selectedSigungu == 'INSTT000000000010277'||selectedSigungu == 'INSTT000000000010241'){
+		jnPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010244'||selectedSigungu == 'INSTT000000000010243'||selectedSigungu == 'INSTT000000000010245'
+		||selectedSigungu == 'INSTT000000000000205'||selectedSigungu == 'INSTT000000000000023'||selectedSigungu == 'INSTT000000000000162'
+		||selectedSigungu == 'INSTT000000000010283'||selectedSigungu == 'INSTT000000000010284'){
+		gbPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000000201'||selectedSigungu == 'INSTT000000000000039'||selectedSigungu == 'INSTT000000000000040'
+		||selectedSigungu == 'INSTT000000000000042'||selectedSigungu == 'INSTT000000000000190'){
+		gnPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010257'||selectedSigungu == 'INSTT000000000010259'){
+		icPrefYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010258'){
+		dgPrefYn = 'Y';
+	} 
+	
+	// **특별지원지역 (지역-지자체)
+	var gwSpecYn = 'N'; // 강원 특별지원지역 -양구군, 화천군 (2개)
+	var cbSpecYn = 'N'; // 충북 특별지원지역 -괴산군, 단양군, 보은군, 영동군 (4개)
+	var cnSpecYn = 'N'; // 충남 특별지원지역 -부여군, 서천군, 청양군 (3개)
+	var jbSpecYn = 'N'; // 전북 특별지원지역 -고창군, 무주군, 부안군, 순창군, 임실군, 장수군, 진안군 (7개)
+	var jnSpecYn = 'N'; // 전남 특별지원지역 -강진군, 고흥군, 곡성군, 구례군, 보성군, 신안군, 완도군, 장성군, 장흥군, 함평군, 해남군 (11개)
+	var gbSpecYn = 'N'; // 경북 특별지원지역 -봉화군, 상주시, 영덕군, 영양군, 의성군, 청도군, 청송군 (7 개)
+	var gnSpecYn = 'N'; // 경남 특별지원지역 -고성군, 남해군, 의령군, 하동군, 함양군, 합천군 (6개)
+		
+	if(selectedSigungu == 'INSTT000000000010267'||selectedSigungu == 'INSTT000000000010249'){
+		gwSpecYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010228'||selectedSigungu == 'INSTT000000000010229'
+		||selectedSigungu == 'INSTT000000000010225'||selectedSigungu == 'INSTT000000000010226'){
+		cbSpecYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000000176'||selectedSigungu == 'INSTT000000000000179'||selectedSigungu == 'INSTT000000000000181'){
+		cnSpecYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010232'||selectedSigungu == 'INSTT000000000010234'||selectedSigungu == 'INSTT000000000010233'
+		||selectedSigungu == 'INSTT000000000010237'||selectedSigungu == 'INSTT000000000010236'
+		||selectedSigungu == 'INSTT000000000010235'||selectedSigungu == 'INSTT000000000010251'){
+		jbSpecYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010261'||selectedSigungu == 'INSTT000000000010238'||selectedSigungu == 'INSTT000000000010239'
+		||selectedSigungu == 'INSTT000000000010274'||selectedSigungu == 'INSTT000000000010262'||selectedSigungu == 'INSTT000000000000160'
+		||selectedSigungu == 'INSTT000000000010275'||selectedSigungu == 'INSTT000000000010221'||selectedSigungu == 'INSTT000000000010242'
+		||selectedSigungu == 'INSTT000000000010240'||selectedSigungu == 'INSTT000000000000186'){
+		jnSpecYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000010278'||selectedSigungu == 'INSTT000000000000188'||selectedSigungu == 'INSTT000000000010279'
+		||selectedSigungu == 'INSTT000000000010264'||selectedSigungu == 'INSTT000000000010280'||selectedSigungu == 'INSTT000000000010281'
+		||selectedSigungu == 'INSTT000000000010282'){
+		gbSpecYn = 'Y';
+	} else if(selectedSigungu == 'INSTT000000000000095'||selectedSigungu == 'INSTT000000000000198'||selectedSigungu == 'INSTT000000000000197'
+		||selectedSigungu == 'INSTT000000000000199'||selectedSigungu == 'INSTT000000000000200'||selectedSigungu == 'INSTT000000000000202'){
+		gnSpecYn = 'Y';
+	}
+
+	// 사용자 거주지에 따른 정액패스 가격 정의 -> stall:모두의 카드_일반형 , widearea:모두의 카드_플러스형
+	// 수도권, 일반 지방권, 우대지원지역, 특별지원지역 (총 4가지)
+	var dfStall = 0; // 일반층_모두의 카드_일반형
+	var dfWidearea = 0; // 일반층_모두의 카드_플러스형
+	var midStall = 0; // 청년.다자녀2자녀.어르신_모두의 카드_일반형
+	var midWidearea = 0; // 청년.다자녀2자녀.어르신_모두의 카드_플러스형
+	var highStall = 0; // 다자녀3자녀이상.저소득_모두의 카드_일반형
+	var highWidearea = 0; // 다자녀3자녀이상.저소득_모두의 카드_플러스형
+	
+	// 1. 수도권 (서울, 경기, 인천)
+	if(capitalYn == 'Y'){
+		// 일반 : 6.2 / 10만원
+		dfStall = 62000; 
+		dfWidearea = 100000; 
+		// 청년, 다자녀2자녀, 어르신 : 5.5 / 9만원
+		midStall = 55000; 
+		midWidearea = 90000; 
+		// 다자녀3자녀이상, 저소득 : 4.5 / 8만원
+		highStall = 45000;
+		highWidearea = 80000;
+
+		// 1-1. 수도권 우대지원지역
+		if (ggPrefYn=='Y'||icPrefYn=='Y'){
+			// 일반 : 5 / 9만원
+			dfStall = 50000; 
+			dfWidearea = 90000; 
+			// 청년, 다자녀2자녀, 어르신 : 4.5 / 8만원
+			midStall = 45000; 
+			midWidearea = 80000; 
+			// 다자녀3자녀이상, 저소득 : 3.5 / 7만원
+			highStall = 35000;
+			highWidearea = 70000;
+		}
+	// 2. 일반 지방권 
+	} else if (capitalYn == 'N'){
+		// 일반 : 5.5 / 9.5만원
+		dfStall = 55000; 
+		dfWidearea = 95000; 
+		// 청년, 다자녀2자녀, 어르신 : 5 / 8.5만원
+		midStall = 50000; 
+		midWidearea = 85000; 
+		// 다자녀3자녀이상, 저소득 : 4 / 7.5만원
+		highStall = 40000;
+		highWidearea = 75000;
+		
+		// 2-1. 일반 지방권 우대지원지역
+		if (gwPrefYn=='Y' || cbPrefYn=='Y' || cnPrefYn=='Y' || jbPrefYn=='Y' || jnPrefYn=='Y' || gbPrefYn=='Y' || gnPrefYn=='Y' || dgPrefYn=='Y') {
+			// 일반 : 5 / 9만원
+			dfStall = 50000; 
+			dfWidearea = 90000; 
+			// 청년, 다자녀2자녀, 어르신 : 4.5 / 8만원
+			midStall = 45000; 
+			midWidearea = 80000; 
+			// 다자녀3자녀이상, 저소득 : 3.5 / 7만원
+			highStall = 35000;
+			highWidearea = 70000;
+		} 
+		
+		// 2-2. 특별지원지역
+		if (gwSpecYn=='Y' || cbSpecYn=='Y' || cnSpecYn=='Y' || jbSpecYn=='Y' || jnSpecYn=='Y' || gbSpecYn=='Y' || gnSpecYn=='Y') {
+			// 일반 : 4.5 / 8.5만원
+			dfStall = 45000; 
+			dfWidearea = 85000; 
+			// 청년, 다자녀2자녀, 어르신 : 4 / 7.5만원
+			midStall = 40000; 
+			midWidearea = 75000; 
+			// 다자녀3자녀이상, 저소득 : 3 / 6.5만원
+			highStall = 30000;
+			highWidearea = 65000;
+		}
+	} 
+	
+	return {dfStall, dfWidearea, midStall, midWidearea, highStall, highWidearea};
+}
+
+
+// 나이, 계층에 따른 환급률,정액패스 일반형/플러스형 금액처리
+function fnExpRate(){
+    var selectedAge = $('#selectAgeList').val(); // 나이 선택
+    var selectedType = $('input[name="typeChk"]:checked')
+    					.map(function(){ return this.value; }).get(); // 계층 선택
+    var selectedSido = $("#sidoList").val(); // 시도 선택
+    var selectedSigungu = $("#insttList").val(); // 지자체 선택
+    
+    // 지역,지자체에 따른 정액패스 금액 설정
+    var tktPrice = fnTktPrice(selectedSido, selectedSigungu);
+    
+    // 지자체 혜택 없는 경우 rate.Length : 3 [K패스 환급률, 모두의 카드 일반형금액, 모두의 카드 플러스형금액]
+    // 지자체 혜택 있는 경우 rate.Length : 7 [K패스 환급률, 지자체환급률, 시도, 시군구, 지자체계층, 모두의 카드 일반형금액, 모두의 카드 플러스형금액]
+    // 지자체 혜택 있는 케이스 -> K-패스 환급률보다 지자체 환급률이 더 높다 / 모두의카드 일반형 플러스형에 지자체 추가 환급금 있다.
+    // 1. 경기(고양시 제외), 인천 - 만34세~39세(청년층)30%  
+    // 2. 광주 - 만34세~39세(청년층)30%/만 65세이상 50%/저소득 64%
+    // 3. 경남 - 만34세~39세(청년층)/만75세이상 100%/저소득 100%
+    // 4. 을산 - 만34세~39세(청년층)/저소득 100%
+    var rate = [];
+    var youthYn = 'N';
+	
+	// 청년(만35-39세) 혜택 대상 시도 (경기(고양시 제외), 인천, 광주, 경남, 울산)
+	if((selectedSido == '41' && selectedSigungu != 'INSTT000000000000045')||selectedSido == '28'||selectedSido == '29'||selectedSido == '48'||selectedSido == '31'){
+		youthYn = 'Y';
+	}
+    
+	// 일반(혜택없음)
+	if(selectedType.includes("CM")){
+		if(selectedAge == "19_34"){//나이 -(K-패스)청년
+			rate.push("30"); // K-패스 환급률
+			rate.push(tktPrice.midStall); // 청년층_모두의 카드_일반형
+			rate.push(tktPrice.midWidearea); // 청년층_모두의 카드_플러스형
+		} else if(selectedAge == "35_39"){//나이 -(지자체)청년
+			rate.push("20"); // K-패스 환급률
+
+			if(youthYn == 'Y'){//청년층(만35-39세) 혜택 대상 시도
+				rate.push("30"); // ** 지자체 환급률 추가
+				rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+				rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+				rate.push("YT"); // ** 지자체 추가환급금 대상: 청년
+				rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+			}
+
+			rate.push(tktPrice.dfStall); // 일반층_모두의 카드_일반형
+			rate.push(tktPrice.dfWidearea); // 일반층_모두의 카드_플러스형
+		} else if(selectedAge == "40_64"){//나이 -(K-패스)일반
+			rate.push("20"); // K-패스 환급률
+			rate.push(tktPrice.dfStall); // 일반층_모두의 카드_일반형
+			rate.push(tktPrice.dfWidearea); // 일반층_모두의 카드_플러스형
+			rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+		} else if(selectedAge == "65up"){//나이 -(K-패스)어르신
+			rate.push("30"); // K-패스 환급률
+
+			if(selectedSido == '29'){//나이 -(지자체 :광주)어르신
+				rate.push("50"); // ** 지자체 환급률 추가
+				rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+				rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+				rate.push("SL"); // ** 지자체 추가환급금 대상: 어르신
+				rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+			} 
+
+			rate.push(tktPrice.midStall); // 어르신_모두의 카드_일반형
+			rate.push(tktPrice.midWidearea); // 어르신_모두의 카드_플러스형
+		} else if(selectedAge == "75up"){ //나이 -(K-패스)어르신
+			rate.push("30"); // K-패스 환급률
+
+			if(selectedSido == '29'){//나이 -(지자체 :광주)어르신
+				rate.push("50"); // ** 지자체 환급률 추가
+				rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+				rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+				rate.push("SL"); // ** 지자체 추가환급금 대상: 어르신
+				rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+			} else if(selectedSido == '48'){//나이 -(지자체 :경남)어르신
+				rate.push("100"); // ** 지자체 환급률 추가
+				rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+				rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+				rate.push("SL"); // ** 지자체 추가환급금 대상: 어르신
+				rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+			}
+
+			rate.push(tktPrice.midStall); // 어르신_모두의 카드_일반형
+			rate.push(tktPrice.midWidearea); // 어르신_모두의 카드_플러스형
+		}
+
+	// 저소득 (실제 53.3% 적용해서 계산되는데, 화면상 표출되는 환급률은 53%로 보여진다.)
+	} else if(selectedType.includes("LW")){
+		// 저소득 또는 다자녀 중복 선택 가능 -> 하지만 저소득 환급률 및 모두의 카드 금액 혜택이 더 크다
+		rate.push("53.3"); // K-패스 환급률
+
+		if(selectedSido == '29'){// 광주
+			rate.push("64"); // ** 지자체 환급률 추가
+			rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+			rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+			rate.push("LW|SL"); // ** 지자체 추가환급금 대상: 저소득|어르신
+			rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+		} else if(selectedSido == '48' || selectedSido == '31'){// 경남, 울산
+			rate.push("100"); // ** 지자체 환급률 추가
+			rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+			rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+			rate.push("LW|SL"); // ** 지자체 추가환급금 대상: 저소득|어르신
+			rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+		} 
+
+		rate.push(tktPrice.highStall); // 저소득_모두의 카드_일반형
+		rate.push(tktPrice.highWidearea); // 저소득_모두의 카드_플러스형
+
+	// 다자녀 2자녀
+	} else if(selectedType.includes("CH2") && selectedType.length == 1){
+		rate.push("30"); // K-패스 환급률
+
+		// K패스 다자녀 2자녀와 지자체별 어르신 혜택이 둘다 적용되는 경우가 있음
+		if(selectedAge == "65up" && selectedSido == '29'){//나이 -(지자체)어르신, 광주
+			rate.push("50"); // ** 지자체 환급률 추가
+			rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+			rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+			rate.push("CH2|SL"); // ** 지자체 추가환급금 대상: 다자녀 2자녀|어르신
+			rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+		} else if(selectedAge == "75up" && selectedSido == '48'){//나이 -(지자체)어르신, 경남
+			rate.push("100"); // ** 지자체 환급률 추가
+			rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+			rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+			rate.push("CH2|SL"); // ** 지자체 추가환급금 대상: 다자녀 2자녀|어르신
+			rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+		} 
+
+		rate.push(tktPrice.midStall); // 다자녀2자녀_모두의 카드_일반형
+		rate.push(tktPrice.midWidearea); // 다자녀2자녀_모두의 카드_플러스형
+
+	// 다자녀 3자녀 이상	
+	} else if(selectedType.includes("CH3") && selectedType.length == 1){
+		// K패스 다자녀 3자녀와 지자체별 어르신 혜택이  적용되는 경우가 있음
+		rate.push("50"); // K-패스 환급률
+
+		if(selectedAge == "75up" && selectedSido == '48'){//나이 -(지자체)어르신, 경남
+			rate.push("100"); // ** 지자체 환급률 추가
+			rate.push(selectedSido); // ** 지자체 추가환급금 대상: 시도
+			rate.push(selectedSigungu); // ** 지자체 추가환급금 대상: 시군구
+			rate.push("CH3|SL"); // ** 지자체 추가환급금 대상: 다자녀|어르신 (둘다해당)
+			rate.push($('#useCnt').val()); // ** 지자체 추가환급금 대상: 이용횟수
+		} 
+
+		rate.push(tktPrice.highStall); // 다자녀3자녀이상_모두의 카드_일반형
+		rate.push(tktPrice.highWidearea); // 다자녀3자녀이상_모두의 카드_플러스형
+	}
+	
+	fnExpResult(rate);
+}
+
+function fnExpResult(rate){
+    var result = [];
+	var rawUseAmt = $('#useAmt').val().replace(/,/g, ""); // 이용금액
+	var rawUseWideAmt = $('#useWideAmt').val().replace(/,/g, ""); // 플러스형 이용금액
+	var useStallAmt = 0; // 올K패스 계산용 이용금액 셋팅
+    var useAmt = parseInt(rawUseAmt, 10);
+    var useWideAmt = parseInt(rawUseWideAmt, 10);
+	var useCnt = $('#useCnt').val(); // 이용횟수 선택
+	
+	var rateLength = rate.length;
+	var stallMlg = 0; // 예상 모두의 카드 일반형
+	var wideAreaMlg = 0; // 예상 모두의 카드 플러스형
+	var defaultMlg = Math.ceil(useAmt * (parseFloat(rate[0]) / 100) / 10) * 10; // 예상 K-패스 환급액
+	var localMlg = 0; // 예상 지자체 환급액
+	
+	// 모두의 카드 플러스형 금액 입력시 -> 모두의 카드 일반형 이용금액 계산 : 이용금액 - 플러스형 이용금액
+	if(useWideAmt > 0){
+		useStallAmt = useAmt - useWideAmt;
+	} else {
+		useStallAmt = useAmt;
+	}
+
+	// ** result push : 1. 대중교통 이용금액
+	result.push(parseInt(useAmt));
+	
+	// 지자체 혜택 있는 경우 rate.Length : 8 [K패스 환급률, 지자체환급률, 시도, 시군구, 지자체계층, 이용횟수, 모두의 카드 일반형금액, 모두의 카드 플러스형금액]
+	if(rateLength == 8){ // 지자체 혜택 있는 시도 (경기, 인천, 광주, 경남, 울산) 중 K-패스 환급률보다 지자체 환급률이 더 높은경우
+		localMlg = Math.ceil(useAmt * (parseFloat(rate[1]) / 100) / 10) * 10; 
+
+		// 이용금액이(플러스 이용금액 포함 or 미포함) 모두의 카드 일반형보다 많을 때
+		if(useStallAmt > parseInt(rate[6])){ 
+			stallMlg =  useStallAmt - parseInt(rate[6]);
+			if(useAmt > parseInt(rate[7])){ // 이용금액이 플러스형보다 많을때
+				wideAreaMlg = useAmt - parseInt(rate[7]);
+			} 
+		
+		// 이용금액이(플러스 이용금액 포함 or 미포함) 모두의 카드 일반형보다 적을 때
+		} else if(useStallAmt < parseInt(rate[6])){ 
+			if(useAmt > parseInt(rate[7])){ // 이용금액이 플러스형보다 많을때
+				wideAreaMlg = useAmt - parseInt(rate[7]);
+			} 
+		}
+		// ** result push : 2. 지자체 환급률
+		result.push(rate[1]);
+	} else { // 지자체 혜택 없는 경우 rate.Length : 3 [K패스 환급률, 모두의 카드 일반형금액, 모두의 카드 플러스형금액]
+		// 이용금액이(플러스 이용금액 포함 or 미포함) 모두의 카드 일반형보다 많을 때
+		if(useStallAmt > parseInt(rate[1])){ 
+			stallMlg =  useStallAmt - parseInt(rate[1]);
+
+			if(useAmt > parseInt(rate[2])){ // 이용금액이 플러스형보다 많을때
+				wideAreaMlg = useAmt - parseInt(rate[2]);
+			}
+
+		// 이용금액이(플러스 이용금액 포함 or 미포함) 모두의 카드 일반형보다 적을 때
+		} else if(useStallAmt < parseInt(rate[1])){ 
+			if(useAmt > parseInt(rate[2])){ // 이용금액이 플러스형보다 많을때
+				wideAreaMlg = useAmt - parseInt(rate[2]);
+			}
+		}
+
+		// ** result push : 2. K패스 환급률
+		result.push(rate[0]);
+	}
+	
+	// ** result push : 3. K-패스 환급시-> K패스 환급률 적용한 환급금액
+	result.push(defaultMlg);
+
+	// ** result push : 3-1. 지자체 환급시-> 시도, 시군구, 지자체계층, 이용횟수, 지자체 환급적용한 환급금액
+	if(rateLength == 8){
+		result.splice(2, 0, rate[2]); //시도
+		result.splice(3, 0, rate[3]); //시군구
+		result.splice(4, 0, rate[4]); //지자체계층
+		result.splice(5, 0, rate[5]); //이용횟수
+		result.push(localMlg);
+	}
+
+	//  ** result push : 4. 모두의 카드 일반형 
+	result.push(Math.ceil(stallMlg / 10) * 10);
+
+	//  ** result push : 5. 모두의 카드 플러스형
+	result.push(Math.ceil(wideAreaMlg / 10) * 10);
+
+	// 지자체 혜택있는 사람 expLength:10 [대중교통이용금액, 지자체환급률, 시도, 시군구, 지자체계층, 이용횟수, 기본형_환급금액, 기본형_환급금액_지자체포함, 모두의 카드 일반형 환급금액, 모두의 카드 플러스형 환급금액]
+	// 지자체 혜택없는 사람 expLength:5 [대중교통이용금액, K패스환급률, 기본형_환급금, 모두의 카드 일반형환급_금액, 모두의 카드 플러스형환급_금액]
+	localStorage.setItem("expResult", JSON.stringify(result));
+	
+	location.href='../info/refund_calculator_result.do';
+}
+</script>
+<main id="content" class="content">
+    <section class="sub">
+        <div class="contents-inner">
+        	<div class="refund-title">
+        		내가 받을 가장 큰 혜택<br class="mob-br"> 미리 계산해보기!
+        	</div>
+        	<div class="refund-contents">
+        		<div class="align-right required">필수</div>
+        		<div class="question-box">
+        			<div class="title required">1. 회원님의 연령대를 선택해 주세요.</div>
+        			<div class="form-box">
+						<select class="int" id="selectAgeList" aria-invalid="false">
+							<option value="0">연령대를 선택해주세요.</option>
+							<option value="19_34">19세 ~ 34세</option>
+							<option value="35_39">35세 ~ 39세</option>
+							<option value="40_64">40세 ~ 64세</option>
+							<option value="65up">65세 이상</option>
+							<option value="75up">75세 이상</option>
+						</select>
+						<p class="chkMsg" id="chkAgeMsg" role="alert" aria-live="false">연령대를 선택해 주세요.</p>
+					</div>
+        		</div>
+        		<div class="question-box">
+        			<div class="title required">2. 다자녀 부모나 저소득 여부를 선택해 주세요.</div>
+        			<div class="form-box">
+         			<ul class="check-box-list type1">
+         				<li class="check-box">
+         					<label>
+         						<input type="checkbox" name="typeChk" id="chk1" value="LW"/>
+         						<span class="text">저소득</span>
+         					</label>
+         				</li>
+         				<li class="check-box">
+         					<label>
+         						<input type="checkbox" name="typeChk"  id="chk2" value="CH2"/>
+         						<span class="text">다자녀 2인</span>
+         					</label>
+         				</li>
+         				<li class="check-box">
+         					<label>
+         						<input type="radio" name="typeChk" id="chk3" value="CH3"/>
+         						<span class="text">다자녀 3인</span>
+         					</label>
+         				</li>
+         				<li class="check-box">
+         					<label>
+         						<input type="radio" name="typeChk" id="chk4" value="CM" checked/>
+         						<span class="text">해당없음</span>
+         					</label>
+         				</li>
+         			</ul>
+        			</div>
+        		</div>
+        		<div class="question-box">
+        			<div class="title required">3. 주민등록지상의 주소지를 선택해 주세요.</div>
+        			<div class="form-box">
+         			<ul class="check-box-list">
+         				<li>
+							<select class="int" id="sidoList" aria-invalid="false">
+								<option value="0">시도</option>
+           					</select>
+         				</li>
+         				<li>
+							<select class="int" id="insttList" aria-invalid="false">
+								<option value="0">시군구</option>
+           					</select>
+         				</li>
+         			</ul>
+						<p class="chkMsg" id="chkAreaMsg" role="alert" aria-live="false">주민등록지상 주소지를 선택해 주세요.</p>
+        			</div>
+        		</div>
+        		<div class="question-box">
+        			<div class="title required">4. 월 평균 대중교통 이용 금액은 얼마인가요?</div>
+        			<div class="form-box">
+         			<div class="calculator-input">
+        				<input type="text" placeholder="숫자만 입력" class="int numInput" id="useAmt" aria-invalid="false"/>
+         				<span class="input-text">원</span>
+         			</div>
+                        <p class="chkMsg" id="chkAmtMsg" role="alert" aria-live="false">이용 금액은 900원 이상 입력해 주세요.</p>    
+        			</div>
+        		</div>
+        		<div class="question-box">
+            			<div class="title">4-1. 4번의 금액 중 3천원 이상의 이용금액은 월 평균 얼마인가요?</div>
+        			<div class="form-box">
+         			<div class="calculator-input">
+            				<input type="text" placeholder="숫자만 입력해주세요." class="int numInput" id="useWideAmt" aria-invalid="false"/>
+         				<span class="input-text">원</span>
+         			</div>
+	            			<p class="chkMsg" id="chkWideAmtMsg" role="alert" aria-live="false">이용 금액은 900원 이상 입력해 주세요.</p>
+        			</div>
+        		</div>
+        		<div class="question-box">
+        			<div class="title required">5. 월 대중교통 이용 횟수는 몇 회 인가요?</div>
+        			<div class="form-box">
+         			<div class="calculator-input">
+            				<input type="number" placeholder="숫자만 입력해주세요." class="int" id="useCnt" aria-invalid="false"/>
+         				<span class="input-text">회</span>
+         			</div>
+	            			<p class="chkMsg" id="chkCntMsg" role="alert" aria-live="false">15회 이상 이용 시에만 지급됩니다.</p>
+        			</div>
+        		</div>
+        		<div class="contents-desc">예상 환급금은 실제 환급금과 다를 수 있습니다.</div>
+        	</div>
+        </div>
+        <div class="group-btn--center type1">
+            <button class="orange" type="button" onclick="fnVaildateForm()">예상 환급금 결과보기</button>
+        </div>
+    </section>
+</main>
+
+	<common-footer></common-footer>
+</body>
+
+</html>
