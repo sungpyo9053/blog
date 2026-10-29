@@ -1,0 +1,225 @@
+<pre><code># container 1
+docker run --rm --net=host -e ROS_DOMAIN_ID=77 ros:humble-ros-base \
+  bash -c "source /opt/ros/humble/setup.bash; ros2 topic echo /shm_test std_msgs/msg/String"
+# container 2: a node publishing 100 messages on /shm_test at 10 Hz, same flags
+
+$ ros2 topic list          # inside container 1
+/parameter_events
+/rosout
+/shm_test
+$ ros2 node list           # inside container 1
+                           # (empty)
+# ros2 topic echo: 0 of 100 messages, no error printed</code></pre>
+
+<p>Short answer: with <code>--net=host</code> alone, Fast DDS thinks both containers are on the same machine and sends the data over shared memory. Each container has its own private <code>/dev/shm</code>, so the data never arrives. Discovery still gets through, so the topic shows up and the publisher even reports a matched subscriber. Add <code>--ipc=host</code> to both containers, or tell Fast DDS to use UDP only:</p>
+
+<pre><code>docker run --net=host --ipc=host ...                          # fix 1: share IPC (and /dev/shm)
+docker run --net=host -e FASTDDS_BUILTIN_TRANSPORTS=UDPv4 ... # fix 2: no shared memory</code></pre>
+
+<p>Both fixes delivered 100 of 100 messages on Humble, Jazzy and Lyrical. The environment variable worked on Humble too, and it worked when I set it on only one of the two containers.</p>
+
+<h2>Symptom table</h2>
+
+<p>Two containers from the same official image, both started with <code>--net=host</code>, default RMW (Fast DDS). One runs <code>ros2 topic echo</code>, the other publishes 100 messages. Results were the same on Humble, Jazzy and Lyrical.</p>
+
+<table>
+<thead><tr><th>Check</th><th>What I got with <code>--net=host</code> only</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 topic list</code> in the echo container</td><td>shows <code>/shm_test</code></td></tr>
+<tr><td><code>ros2 node list</code> in the echo container</td><td>empty, the publisher node <code>/shm_pub</code> is missing</td></tr>
+<tr><td><code>get_subscription_count()</code> on the publisher</td><td><code>1</code></td></tr>
+<tr><td>Messages received by <code>ros2 topic echo</code></td><td>0 of 100, in 3 of 3 runs per distro</td></tr>
+<tr><td>Error or warning on either side</td><td>none</td></tr>
+</tbody>
+</table>
+
+<p>The empty <code>ros2 node list</code> is a useful clue. Node names travel as ordinary DDS data on a hidden topic, so they get lost the same way your messages do. Topic names come from DDS discovery, which still works. If you see topics but no nodes from the other container, suspect shared memory first.</p>
+
+<p>Many reports quote <code>[RTPS_TRANSPORT_SHM Error] Failed init_port fastrtps_port7412: open_and_lock_file failed</code>. I never got that line, or any other error, in any run. The silent failure was all I saw. So don't wait for an error before you suspect this cause.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-29 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on an Ubuntu 24.04 cloud VM with Docker 29.1.3, one distro after another. For each case:</p>
+
+<ul>
+<li>Container <code>shm-sub</code> runs <code>ros2 topic echo /shm_test std_msgs/msg/String</code> for 20 seconds.</li>
+<li>3 seconds later, container <code>shm-pub</code> starts a small rclpy node. It waits 2 seconds, then publishes <code>msg 1</code> to <code>msg 100</code> at 10 Hz with default QoS, and prints how many subscriptions it matched.</li>
+<li>At about 9 seconds, <code>ros2 node list</code> and <code>ros2 topic list</code> run inside <code>shm-sub</code>.</li>
+<li>I count the <code>data:</code> lines that echo printed.</li>
+</ul>
+
+<p>Every run used <code>ROS_DOMAIN_ID=77</code>, because the host network was shared with other services. Each case took about 22 seconds. Here are the results. "Nodes" means whether <code>/shm_pub</code> showed up in <code>ros2 node list</code>.</p>
+
+<table>
+<thead><tr><th>Case (flags on both containers unless noted)</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>(a) default bridge network, no flags</td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(b) <code>--net=host</code>, 3 runs</td><td>0, 0, 0 (topic listed, no node)</td><td>0, 0, 0 (same)</td><td>0, 0, 0 (same)</td></tr>
+<tr><td>(c) <code>--net=host --ipc=host</code></td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(d) <code>--net=host</code> + the same host directory mounted at <code>/dev/shm</code></td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(e) <code>--net=host -e FASTDDS_BUILTIN_TRANSPORTS=UDPv4</code></td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(e) same variable on the echo container only</td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(e) same variable on the publisher container only</td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(e) UDP-only XML profile via <code>FASTRTPS_DEFAULT_PROFILES_FILE</code></td><td>100/100</td><td>100/100</td><td>100/100, with a deprecation warning</td></tr>
+<tr><td>(e) same XML via <code>FASTDDS_DEFAULT_PROFILES_FILE</code></td><td>0/100</td><td>0/100</td><td>100/100</td></tr>
+<tr><td>(f) <code>--net=host</code>, <code>RMW_IMPLEMENTATION=rmw_cyclonedds_cpp</code></td><td>0/100, topic not listed</td><td>0/100, topic not listed</td><td>0/100, topic not listed</td></tr>
+<tr><td>(f) Cyclone DDS on the default bridge network</td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(f) Cyclone DDS, <code>--net=host</code>, pinned to <code>lo</code> with a unicast peer</td><td>100/100</td><td>100/100</td><td>100/100</td></tr>
+<tr><td>(g) <code>--ipc=host</code> on the echo container only</td><td>0/100</td><td>0/100</td><td>0/100</td></tr>
+<tr><td>(h) both <code>--ipc=host</code>, publisher as <code>--user 1000:1000</code>, echo as root</td><td>0/100</td><td>0/100</td><td>100/100, node not listed</td></tr>
+</tbody>
+</table>
+
+<p>Whenever a case worked, all 100 messages arrived, from <code>msg 1</code> to <code>msg 100</code>. Whenever it failed, none did. I never saw a partial count. The publisher reported <code>matched_subs=1</code> in every Fast DDS case, including the ones that got nothing.</p>
+
+<h2>Why: shared memory without shared memory</h2>
+
+<p>Fast DDS ships with two built-in transports, UDP and shared memory. When it finds a remote participant that it thinks is on the same host, it sends the data through shared memory segments under <code>/dev/shm</code>. With <code>--net=host</code> both containers see the same network interfaces, so each one decides the other is local. But Docker still gives every container its own IPC namespace and its own <code>/dev/shm</code>. The writer puts the data where the reader can't see it.</p>
+
+<p>The eProsima guide on <a href="https://fast-dds.docs.eprosima.com/en/latest/docker/shm_docker.html">Fast DDS shared memory in Docker</a> says the same thing. Without <code>--ipc=host</code>, "Fast DDS will identify both containers as the same host, but since they will have separate shared memory spaces, they will not be able to communicate with one another."</p>
+
+<p>The matrix backs this up in three ways. The bridge network (a) worked, because the containers have different addresses and Fast DDS uses UDP. Every fix that shares <code>/dev/shm</code> (c, d) or removes shared memory (e) worked. And sharing IPC on only one side (g) failed, because the two sides still can't see each other's segments.</p>
+
+<p>This is not a discovery problem. If <code>ros2 topic list</code> doesn't show the other side's topics at all, the cause is somewhere else, such as a mismatched domain ID or a discovery range setting. I covered that case in <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">ROS 2 nodes can't see each other</a>.</p>
+
+<h2>Fix 1: --ipc=host on both containers</h2>
+
+<pre><code>docker run --rm -it --net=host --ipc=host -e ROS_DOMAIN_ID=77 ros:humble-ros-base ...</code></pre>
+
+<p>Result: 100/100 on all three distros, and <code>/shm_pub</code> appeared in <code>ros2 node list</code>. This keeps shared memory, which is the fast path for large messages such as images and point clouds.</p>
+
+<p>Both containers need the flag. With it on only one (g), I got 0/100. The containers also share the host's <code>/dev/shm</code> now, so Fast DDS files land there. Humble left nothing behind after a clean exit. Jazzy left <code>lttng-ust-wait-8*</code> files. Lyrical left <code>fastdds_*</code> and <code>sem.fastdds_*</code> files after every <code>--ipc=host</code> run, all owned by root.</p>
+
+<p>User IDs matter here. In case (h), the echo container ran as root and the publisher as UID 1000, both with <code>--ipc=host</code>. Humble and Jazzy got 0/100, and Lyrical got 100/100. If you mix a root container with a non-root container or a host user, use fix 2 instead. I didn't check why Lyrical got through.</p>
+
+<h2>Fix 2: turn off shared memory with FASTDDS_BUILTIN_TRANSPORTS=UDPv4</h2>
+
+<pre><code>docker run --rm -it --net=host -e FASTDDS_BUILTIN_TRANSPORTS=UDPv4 -e ROS_DOMAIN_ID=77 ros:humble-ros-base ...</code></pre>
+
+<p>Result: 100/100 on all three distros. I expected this variable to be Jazzy-only, but Humble's Fast DDS 2.6.12 honored it. If your Humble image has an older Fast DDS, check the version (see below) or use the XML profile.</p>
+
+<p>It was enough to set it on one side. With UDPv4 on the echo container only, or on the publisher container only, I still got 100/100. That is handy when one side is a container you can't easily change, or a node on the host. My tests used two containers, though. A host process plus one container is in "Not tested".</p>
+
+<p>The cost: data now goes over loopback UDP. For small messages at 10 Hz this made no visible difference. I didn't measure throughput for large messages.</p>
+
+<h2>Fix 3: a UDP-only XML profile</h2>
+
+<p>This is the older way, and it still works on every distro I tried. Save the profile and point Fast DDS at it:</p>
+
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8" ?&gt;
+&lt;profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles"&gt;
+  &lt;transport_descriptors&gt;
+    &lt;transport_descriptor&gt;
+      &lt;transport_id&gt;udp_only&lt;/transport_id&gt;
+      &lt;type&gt;UDPv4&lt;/type&gt;
+    &lt;/transport_descriptor&gt;
+  &lt;/transport_descriptors&gt;
+  &lt;participant profile_name="udp_only_participant" is_default_profile="true"&gt;
+    &lt;rtps&gt;
+      &lt;userTransports&gt;
+        &lt;transport_id&gt;udp_only&lt;/transport_id&gt;
+      &lt;/userTransports&gt;
+      &lt;useBuiltinTransports&gt;false&lt;/useBuiltinTransports&gt;
+    &lt;/rtps&gt;
+  &lt;/participant&gt;
+&lt;/profiles&gt;</code></pre>
+
+<pre><code>docker run --net=host -v $PWD/udp.xml:/udp.xml -e FASTRTPS_DEFAULT_PROFILES_FILE=/udp.xml ...</code></pre>
+
+<p>Result with <code>FASTRTPS_DEFAULT_PROFILES_FILE</code>: 100/100 on Humble, Jazzy and Lyrical. On Lyrical it printed:</p>
+
+<pre><code>[WARN] [1793233294.416841521] [rmw_fastrtps_shared_cpp]: FASTRTPS_DEFAULT_PROFILES_FILE value is used for participant configuration, but it is deprecated and will no longer be supported. Use FASTDDS_DEFAULT_PROFILES_FILE instead.</code></pre>
+
+<p>The variable name matters, and the right one depends on the distro. <code>FASTDDS_DEFAULT_PROFILES_FILE</code> worked on Lyrical but was ignored on Humble and Jazzy, where I got 0/100 with no message at all. If you share one compose file across distros, set both variables to the same path.</p>
+
+<h2>Fix 4: share one /dev/shm directory</h2>
+
+<pre><code>docker run --net=host -v /some/host/dir:/dev/shm ...   # same directory for both containers</code></pre>
+
+<p>Result: 100/100 on all three. This is the <code>-v /dev/shm:/dev/shm</code> fix from older Foxy answers. I mounted a dedicated directory instead of the host's real <code>/dev/shm</code>, to keep the test away from other processes on the machine. It shares less than <code>--ipc=host</code>. I didn't test this with mixed user IDs.</p>
+
+<h2>Switching to Cyclone DDS is not automatically a fix</h2>
+
+<p><code>ros-&lt;distro&gt;-rmw-cyclonedds-cpp</code> installed from apt in all three images. With <code>RMW_IMPLEMENTATION=rmw_cyclonedds_cpp</code> and <code>--net=host</code>, the two containers never found each other on this VM. The topic was missing from <code>ros2 topic list</code>, the publisher reported <code>matched_subs=0</code>, and 0 of 100 messages arrived. That is a discovery failure, not the shared-memory problem. On the default bridge network, Cyclone got 100/100.</p>
+
+<p>Cyclone's trace showed it picked the VM's cloud interface:</p>
+
+<pre><code>ros2: using network interface ens5 (udp/172.26.6.157) selected arbitrarily from: ens5, docker0</code></pre>
+
+<p>When I pinned it to loopback with a unicast peer, it got 100/100 with <code>--net=host</code> on all three distros:</p>
+
+<pre><code class="language-xml">&lt;CycloneDDS&gt;&lt;Domain Id="any"&gt;
+  &lt;General&gt;&lt;Interfaces&gt;&lt;NetworkInterface name="lo"/&gt;&lt;/Interfaces&gt;&lt;AllowMulticast&gt;false&lt;/AllowMulticast&gt;&lt;/General&gt;
+  &lt;Discovery&gt;&lt;Peers&gt;&lt;Peer address="127.0.0.1"/&gt;&lt;/Peers&gt;&lt;ParticipantIndex&gt;auto&lt;/ParticipantIndex&gt;&lt;MaxAutoParticipantIndex&gt;50&lt;/MaxAutoParticipantIndex&gt;&lt;/Discovery&gt;
+&lt;/Domain&gt;&lt;/CycloneDDS&gt;</code></pre>
+
+<p>Pass it with <code>-e CYCLONEDDS_URI=file:///path/to/cyclone.xml</code>. I didn't find out why multicast on <code>ens5</code> failed here. A desktop with a normal LAN interface may behave differently. Also, in my first Humble pass, both Cyclone containers hung on exit and I had to stop them with <code>docker kill</code>. Every side has to use the same RMW, so if you go this way, switch both containers. Fast DDS with fix 1 or fix 2 was the simpler change.</p>
+
+<h2>docker-compose for the fix</h2>
+
+<p>This is the <code>docker run</code> setup I measured, written as compose. I didn't run the compose file itself.</p>
+
+<pre><code class="language-yaml">services:
+  talker:
+    image: ros:humble-ros-base
+    network_mode: host
+    ipc: host                               # fix 1, on every ROS service
+    environment:
+      - ROS_DOMAIN_ID=77
+      # fix 2 instead of ipc: host (works on Humble 2.6.12, Jazzy, Lyrical):
+      # - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    command: bash -c "source /opt/ros/humble/setup.bash; ros2 run my_pkg talker"
+  listener:
+    image: ros:humble-ros-base
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=77
+    command: bash -c "source /opt/ros/humble/setup.bash; ros2 run my_pkg listener"</code></pre>
+
+<p>Run every service as the same user, or use the UDPv4 line. If topics are listed and messages still don't arrive after this, check QoS next. An incompatible reliability setting gives the same "topic visible, no data" picture, and I measured it in <a href="https://huntlab.app/en/ros2-incompatible-qos-reliability-no-messages-will-be-sent/">ROS 2 incompatible QoS: no messages will be sent</a>.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble: <code>ros-humble-fastrtps</code> 2.6.12, <code>rmw_fastrtps_cpp</code> 6.2.10. <code>FASTDDS_BUILTIN_TRANSPORTS=UDPv4</code> worked. Only <code>FASTRTPS_DEFAULT_PROFILES_FILE</code> was read.</li>
+<li>Jazzy: <code>ros-jazzy-fastrtps</code> 2.14.7, <code>rmw_fastrtps_cpp</code> 8.4.4. Same behavior as Humble in every Fast DDS case.</li>
+<li>Lyrical: the package is now <code>ros-lyrical-fastdds</code> 3.6.2, with <code>rmw_fastrtps_cpp</code> 9.4.10. Both profile variables were read, and the old one printed a deprecation warning. The mixed-UID case worked. Files in <code>/dev/shm</code> are named <code>fastdds_*</code> instead of <code>fastrtps_*</code>, so search for both when you clean up.</li>
+<li>Default RMW was <code>rmw_fastrtps_cpp</code> in all three images, with <code>RMW_IMPLEMENTATION</code> unset.</li>
+<li>To check your own version: <code>dpkg -l | grep -E 'fastrtps|fastdds'</code>.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>A ROS node running directly on the host talking to a container node. The runner had no ROS install, so every result above is container to container. Also not tested: Docker Desktop on macOS or Windows, rootless Docker, Podman, Kubernetes pods, <code>--shm-size</code> limits, large messages and throughput, Fast DDS data-sharing or zero-copy (loaned messages), launch files, the <code>[RTPS_TRANSPORT_SHM Error] ... open_and_lock_file failed</code> message (it never appeared), Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 topic list show the topic but ros2 topic echo prints nothing in Docker?</h3>
+<p>With <code>--net=host</code> and no <code>--ipc=host</code>, Fast DDS discovers the other container over UDP, then sends data over shared memory that the other container can't see. I got 0 of 100 messages on Humble, Jazzy and Lyrical, with the topic listed and no error. Add <code>--ipc=host</code> to both containers or set <code>FASTDDS_BUILTIN_TRANSPORTS=UDPv4</code>.</p>
+
+<h3>Does FASTDDS_BUILTIN_TRANSPORTS=UDPv4 work on ROS 2 Humble?</h3>
+<p>Yes, with the Fast DDS 2.6.12 in the current <code>ros:humble-ros-base</code> image. It gave 100 of 100 messages, and setting it on only one of the two containers was enough.</p>
+
+<h3>Do I need --ipc=host on both containers?</h3>
+<p>Yes. With <code>--ipc=host</code> on the echo container only, 0 of 100 messages arrived on all three distros. With it on both, 100 of 100 arrived. They also need to run as the same user: root in one and UID 1000 in the other gave 0 of 100 on Humble and Jazzy.</p>
+
+<h3>Why is ros2 node list empty when ros2 topic list works?</h3>
+<p>Node names are sent as regular DDS data, so they get lost over the broken shared memory path, just like your messages. Topic names come from discovery, which still works. In every failing Fast DDS case, the topic was listed and the publisher node wasn't.</p>
+
+<h3>Is switching to Cyclone DDS the fix?</h3>
+<p>Not on its own in my test. With <code>--net=host</code>, Cyclone DDS picked the cloud VM's network interface, and the containers didn't discover each other at all (0 of 100). It worked once I pinned it to <code>lo</code> with a unicast peer, or ran it on the bridge network.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 topic list show the topic but ros2 topic echo prints nothing in Docker?", "acceptedAnswer": {"@type": "Answer", "text": "With --net=host and no --ipc=host, Fast DDS discovers the other container over UDP, then sends data over shared memory that the other container can't see. I got 0 of 100 messages on Humble, Jazzy and Lyrical, with the topic listed and no error. Add --ipc=host to both containers or set FASTDDS_BUILTIN_TRANSPORTS=UDPv4."}},
+{"@type": "Question", "name": "Does FASTDDS_BUILTIN_TRANSPORTS=UDPv4 work on ROS 2 Humble?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, with the Fast DDS 2.6.12 in the current ros:humble-ros-base image. It gave 100 of 100 messages, and setting it on only one of the two containers was enough."}},
+{"@type": "Question", "name": "Do I need --ipc=host on both containers?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. With --ipc=host on the echo container only, 0 of 100 messages arrived on all three distros. With it on both, 100 of 100 arrived. They also need to run as the same user: root in one and UID 1000 in the other gave 0 of 100 on Humble and Jazzy."}},
+{"@type": "Question", "name": "Why is ros2 node list empty when ros2 topic list works?", "acceptedAnswer": {"@type": "Answer", "text": "Node names are sent as regular DDS data, so they get lost over the broken shared memory path, just like your messages. Topic names come from discovery, which still works. In every failing Fast DDS case, the topic was listed and the publisher node wasn't."}},
+{"@type": "Question", "name": "Is switching to Cyclone DDS the fix?", "acceptedAnswer": {"@type": "Answer", "text": "Not on its own in my test. With --net=host, Cyclone DDS picked the cloud VM's network interface, and the containers didn't discover each other at all (0 of 100). It worked once I pinned it to lo with a unicast peer, or ran it on the bridge network."}}
+]}
+</script>
+
+<p>Measured on 2026-10-29 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, fastrtps 2.6.12, rmw_fastrtps_cpp 6.2.10, rmw_cyclonedds_cpp 1.3.5), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, fastrtps 2.14.7, rmw_fastrtps_cpp 8.4.4, rmw_cyclonedds_cpp 2.2.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, fastdds 3.6.2, rmw_fastrtps_cpp 9.4.10, rmw_cyclonedds_cpp 4.1.5), on Ubuntu 24.04 with kernel 7.0.0-1009-aws and Docker 29.1.3. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-10-ros2-docker-fastdds-shm-topic-echo-nothing/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/98161">ROS2-foxy nodes can't communicate through docker container border</a>, <a href="https://answers.ros.org/question/387076/">ROS2 galactic nodes can't communicate through docker container border</a>, <a href="https://answers.ros.org/question/408379/">Docker container and host communication: source behaves oddly</a>, <a href="https://answers.ros.org/question/394404/">RTPS_TRANSPORT_SHM Error and at the same time no topics are available in ros2 topic list</a>, <a href="https://github.com/eProsima/Fast-DDS/issues/2624">Failed to exchange Messages between two docker containers when run on host network option</a>, <a href="https://github.com/eProsima/Fast-DDS/issues/2956">ROS2 topics on Docker detected by host but can't subscribe</a>.</p>
