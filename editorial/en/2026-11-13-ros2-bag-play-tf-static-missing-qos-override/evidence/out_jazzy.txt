@@ -1,0 +1,180 @@
+### distro: jazzy  RMW_IMPLEMENTATION=default  ROS_DOMAIN_ID=78
+ros-jazzy-rmw-fastrtps-cpp 8.4.4-1noble.20260911.100940
+ros-jazzy-rosbag2 0.26.11-1noble.20261006.034645
+ros-jazzy-rosbag2-compression 0.26.11-1noble.20260911.145111
+ros-jazzy-rosbag2-compression-zstd 0.26.11-1noble.20260911.145430
+ros-jazzy-rosbag2-cpp 0.26.11-1noble.20260911.144538
+ros-jazzy-rosbag2-interfaces 0.26.11-1noble.20260911.094055
+ros-jazzy-rosbag2-py 0.26.11-1noble.20260912.163450
+ros-jazzy-rosbag2-storage 0.26.11-1noble.20260911.134637
+ros-jazzy-rosbag2-storage-default-plugins 0.26.11-1noble.20260911.144711
+ros-jazzy-rosbag2-storage-mcap 0.26.11-1noble.20260911.143733
+ros-jazzy-rosbag2-storage-sqlite3 0.26.11-1noble.20260911.143749
+ros-jazzy-rosbag2-transport 0.26.11-1noble.20260911.150336
+ros-jazzy-tf2-ros 0.36.23-1noble.20260915.173839
+
+### ros2 bag play --help (qos lines)
+                     [--qos-profile-overrides-path QOS_PROFILE_OVERRIDES_PATH]
+                     [-l] [--remap REMAP [REMAP ...]]
+                     [--storage-config-file STORAGE_CONFIG_FILE] [--clock [Hz]
+                     | --clock-topics CLOCK_TOPICS [CLOCK_TOPICS ...] |
+                     --clock-topics-all] [-d DELAY]
+--
+  --qos-profile-overrides-path QOS_PROFILE_OVERRIDES_PATH
+                        Path to a yaml file defining overrides of the QoS
+                        profile for specific topics.
+  -l, --loop            enables loop playback when playing a bagfile: it
+                        starts back at the beginning on reaching the end and
+                        plays indefinitely.
+--
+                        only if the publisher's QOS profile is RELIABLE.
+  --disable-loan-message
+                        Disable to publish as loaned message. By default, if
+                        loaned message can be used, messages are published as
+                        loaned message. It can help to reduce the number of
+
+### record: static_transform_publisher world->base + /tf base->sensor, 6 s bag
+[2]+  Interrupt               python3 tfpub.py > /tmp/tfpub.log 2>&1
+[INFO] [1793240962.419483703] [rosbag2_cpp]: Writing remaining messages from cache to the bag. It may take a while
+[INFO] [1793240962.421360615] [rosbag2_recorder]: Recording stopped
+[INFO] [1793240962.423349253] [rosbag2_recorder]: Event publisher thread: Exited
+
+### ros2 bag info
+
+Files:             bag1_0.mcap
+Bag size:          19.2 KiB
+Storage id:        mcap
+ROS Distro:        jazzy
+Duration:          4.911836689s
+Start:             Oct 29 2026 02:29:17.465838536 (1793240957.465838536)
+End:               Oct 29 2026 02:29:22.377675225 (1793240962.377675225)
+Messages:          50
+Topic information: Topic: /tf | Type: tf2_msgs/msg/TFMessage | Count: 49 | Serialization Format: cdr
+                   Topic: /tf_static | Type: tf2_msgs/msg/TFMessage | Count: 1 | Serialization Format: cdr
+Service:           0
+Service information: 
+
+### metadata.yaml /tf_static entry
+33:        name: /tf_static
+34-        type: tf2_msgs/msg/TFMessage
+35-        serialization_format: cdr
+36-        offered_qos_profiles:
+topic /tf count 49
+  offered_qos_profiles: [{'history': 'unknown', 'depth': 0, 'reliability': 'reliable', 'durability': 'volatile', 'deadline': {'sec': 9223372036, 'nsec': 854775807}, 'lifespan': {'sec': 9223372036, 'nsec': 854775807}, 'liveliness': 'automatic', 'liveliness_lease_duration': {'sec': 9223372036, 'nsec': 854775807}, 'avoid_ros_namespace_conventions': False}]
+topic /tf_static count 1
+  offered_qos_profiles: [{'history': 'unknown', 'depth': 0, 'reliability': 'reliable', 'durability': 'transient_local', 'deadline': {'sec': 9223372036, 'nsec': 854775807}, 'lifespan': {'sec': 9223372036, 'nsec': 854775807}, 'liveliness': 'automatic', 'liveliness_lease_duration': {'sec': 9223372036, 'nsec': 854775807}, 'avoid_ros_namespace_conventions': False}]
+
+### (a_default) ros2 bag play   | listener, tf2_echo, topic echo start 2 s after play
+[a_default] player QoS on /tf_static:
+Node name: rosbag2_player
+Node namespace: /
+Endpoint type: PUBLISHER
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: TRANSIENT_LOCAL
+[a_default] world->base: ok=31 fail=2 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[a_default] world->sensor: ok=31 fail=2 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[a_default] tf2_echo output (first 3 lines, line count):
+[INFO] [1793240968.364728222] [tf2_echo]: Waiting for transform world ->  base: Invalid frame ID "world" passed to canTransform argument target_frame - frame does not exist
+At time 0.0
+- Translation: [1.000, 2.000, 3.000]
+  lines=32 translation_lines=3
+[a_default] player log:
+stdin is not a terminal device. Keyboard handling disabled.[INFO] [1793240966.348080164] [rosbag2_player]: Set rate to 1
+[INFO] [1793240966.357359639] [rosbag2_player]: Adding keyboard callbacks.
+[INFO] [1793240966.357409333] [rosbag2_player]: Press SPACE for Pause/Resume
+[INFO] [1793240966.357417664] [rosbag2_player]: Press CURSOR_RIGHT for Play Next Message
+[INFO] [1793240966.357424145] [rosbag2_player]: Press CURSOR_UP for Increase Rate 10%
+
+### (b_override_tl) ros2 bag play --qos-profile-overrides-path /w/override_tl.yaml  | listener, tf2_echo, topic echo start 2 s after play
+[b_override_tl] player QoS on /tf_static:
+Node name: rosbag2_player
+Node namespace: /
+Endpoint type: PUBLISHER
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: TRANSIENT_LOCAL
+[b_override_tl] world->base: ok=33 fail=1 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[b_override_tl] world->sensor: ok=33 fail=1 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[b_override_tl] tf2_echo output (first 3 lines, line count):
+[INFO] [1793240975.409044939] [tf2_echo]: Waiting for transform world ->  base: Invalid frame ID "world" passed to canTransform argument target_frame - frame does not exist
+At time 0.0
+- Translation: [1.000, 2.000, 3.000]
+  lines=32 translation_lines=3
+[b_override_tl] player log:
+stdin is not a terminal device. Keyboard handling disabled.[INFO] [1793240973.390586337] [rosbag2_player]: Set rate to 1
+[INFO] [1793240973.393145166] [rosbag2_player]: Overriding QoS profile for topic /tf_static
+[INFO] [1793240973.399546454] [rosbag2_player]: Adding keyboard callbacks.
+[INFO] [1793240973.399593667] [rosbag2_player]: Press SPACE for Pause/Resume
+[INFO] [1793240973.399601972] [rosbag2_player]: Press CURSOR_RIGHT for Play Next Message
+
+### (x_override_volatile) ros2 bag play --qos-profile-overrides-path /w/override_volatile.yaml  | listener, tf2_echo, topic echo start 2 s after play
+[WARN] [1793240982.585089652] [late_listener]: New publisher discovered on topic '/tf_static', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY
+[x_override_volatile] player QoS on /tf_static:
+Node name: rosbag2_player
+Node namespace: /
+Endpoint type: PUBLISHER
+  Reliability: RELIABLE
+  History (Depth): UNKNOWN
+  Durability: VOLATILE
+[x_override_volatile] world->base: ok=0 fail=34 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[x_override_volatile] world->sensor: ok=0 fail=34 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[x_override_volatile] tf2_echo output (first 3 lines, line count):
+[INFO] [1793240982.440656180] [tf2_echo]: Waiting for transform world ->  base: Invalid frame ID "world" passed to canTransform argument target_frame - frame does not exist
+[WARN] [1793240984.092296667] [transform_listener_impl_5c5fb34f1930]: New publisher discovered on topic '/tf_static', offering incompatible QoS. No messages will be sent to it. Last incompatible policy: DURABILITY_QOS_POLICY
+[INFO] [1793240984.408075267] [tf2_echo]: Waiting for transform world ->  base: Invalid frame ID "world" passed to canTransform argument target_frame - frame does not exist
+  lines=5 translation_lines=0
+[x_override_volatile] player log:
+stdin is not a terminal device. Keyboard handling disabled.[INFO] [1793240980.423556097] [rosbag2_player]: Set rate to 1
+[INFO] [1793240980.426171982] [rosbag2_player]: Overriding QoS profile for topic /tf_static
+[INFO] [1793240980.432517326] [rosbag2_player]: Adding keyboard callbacks.
+[INFO] [1793240980.432578672] [rosbag2_player]: Press SPACE for Pause/Resume
+[INFO] [1793240980.432591436] [rosbag2_player]: Press CURSOR_RIGHT for Play Next Message
+
+### (e) listener started BEFORE play
+[e_before_default] world->base: ok=54 fail=4 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[e_before_default] world->sensor: ok=53 fail=5 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[WARN] [1793240999.027648766] [late_listener]: New publisher discovered on topic '/tf_static', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY
+[e_before_volatile] world->base: ok=0 fail=58 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[e_before_volatile] world->sensor: ok=0 fail=58 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+
+### (after-end) listener started 1 s AFTER play finished (default)
+[after_end] world->base: ok=0 fail=6 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[after_end] world->sensor: ok=0 fail=6 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+
+### (f) ros2 topic echo /tf_static late join, +2 s after play
+[f_default] echo  -> child_frame_id lines: 1  other: - header: 
+[f_default] echo --qos-durability transient_local -> child_frame_id lines: 0  other: 
+[f_default] echo --qos-durability transient_local --qos-reliability reliable -> child_frame_id lines: 1  other: - header: 
+[f_override_tl] echo  -> child_frame_id lines: 1  other: - header: 
+[f_override_tl] echo --qos-durability transient_local -> child_frame_id lines: 0  other: 
+[f_override_tl] echo --qos-durability transient_local --qos-reliability reliable -> child_frame_id lines: 1  other: - header: 
+[f_volatile] echo  -> child_frame_id lines: 0  other: 
+[f_volatile] echo --qos-durability transient_local -> child_frame_id lines: 0  other: [WARN] [1793241057.731086230] [_ros2cli_727]: New publisher discovered on topic '/tf_static', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY 
+[f_volatile] echo --qos-durability transient_local --qos-reliability reliable -> child_frame_id lines: 0  other: [WARN] [1793241063.259710029] [_ros2cli_770]: New publisher discovered on topic '/tf_static', offering incompatible QoS. No messages will be received from it. Last incompatible policy: DURABILITY 
+
+### (d) --loop: volatile + transient_local counters from before play, 20 s; late listener at +8 s
+Node name: rosbag2_player
+Node namespace: /
+  Durability: TRANSIENT_LOCAL
+[d_loop_late8s] world->base: ok=22 fail=5 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[d_loop_late8s] world->sensor: ok=22 fail=5 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[d_loop_tl] /tf_static messages received (tl, 20.0s): 4
+[d_loop_volatile] /tf_static messages received (vol, 20.0s): 3
+
+### (d2) --loop with override_tl, late listener at +8 s
+[d2_loop_tl_late8s] world->base: ok=41 fail=1 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[d2_loop_tl_late8s] world->sensor: ok=41 fail=1 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+
+### (g) --start-offset 2, listener started before play
+[g_offset_default] world->base: ok=0 fail=38 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[g_offset_default] world->sensor: ok=0 fail=38 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+stdin is not a terminal device. Keyboard handling disabled.[INFO] [1793241105.738099174] [rosbag2_player]: Set rate to 1
+[INFO] [1793241105.747705519] [rosbag2_player]: Adding keyboard callbacks.
+[INFO] [1793241105.747777210] [rosbag2_player]: Press SPACE for Pause/Resume
+[g_offset_override_tl] world->base: ok=0 fail=38 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+[g_offset_override_tl] world->sensor: ok=0 fail=38 first_error="LookupException: "world" passed to lookupTransform argument target_frame does not exist. "
+stdin is not a terminal device. Keyboard handling disabled.[INFO] [1793241113.262458090] [rosbag2_player]: Set rate to 1
+[INFO] [1793241113.265044113] [rosbag2_player]: Overriding QoS profile for topic /tf_static
+[INFO] [1793241113.272181486] [rosbag2_player]: Adding keyboard callbacks.
+### done

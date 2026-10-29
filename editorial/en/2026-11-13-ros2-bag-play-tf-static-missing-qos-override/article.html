@@ -1,0 +1,189 @@
+<pre><code>[INFO] [1793240800.732229790] [tf2_echo]: Waiting for transform world ->  base: Invalid frame ID "world" passed to canTransform argument target_frame - frame does not exist
+[WARN] [1793240800.742655343] [transform_listener_impl_61db43c3ae20]: New publisher discovered on topic '/tf_static', offering incompatible QoS. No messages will be sent to it. Last incompatible policy: DURABILITY_QOS_POLICY</code></pre>
+
+<p>In a Python node the same failure is <code>LookupException: "world" passed to lookupTransform argument target_frame does not exist.</code>, repeated for as long as you keep asking.</p>
+
+<p>Short answer: on current Humble, Jazzy and Lyrical, plain <code>ros2 bag play</code> already republishes <code>/tf_static</code> as TRANSIENT_LOCAL. A tf2 listener that started 2 seconds after play began got the static transform on all three. The frame goes missing in three other cases. The player offers <code>/tf_static</code> as VOLATILE (check with <code>ros2 topic info /tf_static -v</code>). The listener starts after <code>ros2 bag play</code> has exited. Or you used <code>--start-offset</code> and skipped the one static message at the start of the bag. The first case is fixed with a QoS override file that sets <code>durability: transient_local</code> for <code>/tf_static</code>. For the second, keep the player running, for example with <code>--loop</code>. For the third, nothing in <code>ros2 bag play</code> that I tried helped.</p>
+
+<pre><code class="language-yaml"># tf_static_qos.yaml
+/tf_static:
+  history: keep_last
+  depth: 1
+  reliability: reliable
+  durability: transient_local</code></pre>
+
+<pre><code>ros2 bag play my_bag --qos-profile-overrides-path tf_static_qos.yaml</code></pre>
+
+<h2>Find your case</h2>
+
+<p>Every row below is a measured result. "ok" and "fail" count lookups of <code>world</code> to <code>base</code> from a tiny rclpy tf2 listener (a <code>Buffer</code> plus <code>TransformListener</code>) that asked about every 0.5 s. The <code>world</code> to <code>base</code> transform exists only in <code>/tf_static</code>. The bag holds exactly one <code>/tf_static</code> message, recorded at its start.</p>
+
+<table>
+<thead><tr><th>Case</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>(a) Default play, listener starts 2 s after play</td><td>ok=42 fail=0</td><td>ok=31 fail=2</td><td>ok=41 fail=1</td></tr>
+<tr><td>(b) Override <code>transient_local</code>, listener at +2 s</td><td>ok=42 fail=0</td><td>ok=33 fail=1</td><td>ok=30 fail=3</td></tr>
+<tr><td>Override <code>volatile</code>, listener at +2 s</td><td>ok=0 fail=33</td><td>ok=0 fail=34</td><td>ok=0 fail=42</td></tr>
+<tr><td>(e) Default play, listener started 2 s before play</td><td>ok=66 fail=5</td><td>ok=54 fail=4</td><td>ok=66 fail=4</td></tr>
+<tr><td>(e) Override <code>volatile</code>, listener started before play</td><td>ok=0 fail=71</td><td>ok=0 fail=58</td><td>ok=0 fail=69</td></tr>
+<tr><td>Listener starts 1 s after play has finished</td><td>ok=0 fail=6</td><td>ok=0 fail=6</td><td>ok=0 fail=6</td></tr>
+<tr><td>(d) <code>--loop</code>, listener at +8 s (second pass)</td><td>ok=24 fail=4</td><td>ok=22 fail=5</td><td>ok=42 fail=2</td></tr>
+<tr><td><code>--start-offset 2</code>, listener started before play</td><td>ok=0 fail=50</td><td>ok=0 fail=38</td><td>ok=0 fail=49</td></tr>
+<tr><td><code>--start-offset 2</code> plus override <code>transient_local</code></td><td>ok=0 fail=50</td><td>ok=0 fail=38</td><td>ok=0 fail=49</td></tr>
+</tbody>
+</table>
+
+<p>The few failures in the working rows are the first lookups, before the listener had discovered the player. After that every lookup succeeded. In the failing rows not one lookup succeeded. The ok counts differ because the loop runs faster when messages arrive, so compare zero against non-zero, not the exact numbers.</p>
+
+<p><code>tf2_echo world base</code>, started at the same moment as the listener, matched it. With default play and with the <code>transient_local</code> override it printed one <code>Waiting for transform</code> line and then <code>- Translation: [1.000, 2.000, 3.000]</code> two or three times before my 4 s timeout. With the <code>volatile</code> override it printed only <code>Waiting for transform</code> lines and the incompatible-QoS warning at the top of this page. It never printed a translation.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-29 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro after another, each in a single container on the default bridge network with <code>ROS_DOMAIN_ID=78</code> and the default RMW (Fast DDS). Per distro:</p>
+
+<ol>
+<li>Start <code>ros2 run tf2_ros static_transform_publisher --x 1 --y 2 --z 3 --frame-id world --child-frame-id base</code> and a small rclpy node that publishes <code>base</code> to <code>sensor</code> on <code>/tf</code> at 10 Hz.</li>
+<li>Two seconds later, record <code>/tf</code> and <code>/tf_static</code> for about 6 s. On Humble and Jazzy that was <code>ros2 bag record -o bag1 /tf /tf_static</code>. Lyrical needs <code>--topics /tf /tf_static</code> (see Version notes).</li>
+<li>Stop everything, so the only source of <code>/tf_static</code> is the bag.</li>
+<li>Run each playback case from the table and print the player's offered QoS with <code>ros2 topic info /tf_static -v</code>.</li>
+</ol>
+
+<p><code>ros2 bag info</code> showed the same shape on all three distros: <code>Topic: /tf_static | Type: tf2_msgs/msg/TFMessage | Count: 1</code>, and 64, 49 and 62 <code>/tf</code> messages. That single static message is what every late joiner depends on. <code>static_transform_publisher</code> sends it once, and the recorder got it once.</p>
+
+<h2>Why it happens: /tf_static is a durability problem</h2>
+
+<p>A tf2 <code>TransformListener</code> subscribes to <code>/tf_static</code> as RELIABLE and TRANSIENT_LOCAL. TRANSIENT_LOCAL means the publisher keeps its last messages and hands them to subscribers that join later. That is how a static transform published once can reach a node that starts an hour later. I covered the general rule and its limits in <a href="https://huntlab.app/en/ros2-transient-local-late-joiner-lifespan/">transient local late joiners</a>.</p>
+
+<p>During playback the publisher is no longer <code>static_transform_publisher</code>. It is the <code>rosbag2_player</code> node. Three things follow from that, and each matched a row in the table.</p>
+
+<ul>
+<li><strong>If the player offers VOLATILE, nothing gets through.</strong> A TRANSIENT_LOCAL subscriber and a VOLATILE publisher are incompatible, so DDS doesn't connect them at all. That's why the listener started <em>before</em> play also got zero, even though it was online when the message went out. The warning names the policy: <code>Last incompatible policy: DURABILITY</code> in rclpy and <code>DURABILITY_QOS_POLICY</code> in tf2_echo.</li>
+<li><strong>When the player exits, the stored message goes with it.</strong> A listener started 1 s after the bag ended got <code>ok=0</code> on every distro. This is the common RViz case: the bag is short, it has already finished, and then you open RViz.</li>
+<li><strong>If the player never publishes the message, there is nothing to store.</strong> With <code>--start-offset 2</code> the player skipped the static message at t=0. Making the player TRANSIENT_LOCAL didn't help, because it never had a message to keep.</li>
+</ul>
+
+<p>If your error says "extrapolation" instead of "does not exist", the frame is known and the timestamps are the problem. That's a different fix, covered in <a href="https://huntlab.app/en/ros2-tf2-lookup-would-require-extrapolation-into-the-future/">tf2 lookup would require extrapolation into the future</a>.</p>
+
+<h2>Does playback already use the recorded QoS? (c)</h2>
+
+<p>Yes, on all three distros in this run. The recorder writes the publisher's offered QoS into <code>metadata.yaml</code> under <code>offered_qos_profiles</code>, and the player used it. Here is the <code>/tf_static</code> entry each distro wrote, and what the player offered with no override:</p>
+
+<table>
+<thead><tr><th>Distro</th><th><code>offered_qos_profiles</code> for /tf_static</th><th>Player, no override</th></tr></thead>
+<tbody>
+<tr><td>Humble (rosbag2 0.15.17)</td><td>a YAML string: <code>history: 3, depth: 0, reliability: 1, durability: 1</code></td><td><code>RELIABLE</code>, <code>History (Depth): UNKNOWN</code>, <code>TRANSIENT_LOCAL</code></td></tr>
+<tr><td>Jazzy (rosbag2 0.26.11)</td><td><code>history: unknown, depth: 0, reliability: reliable, durability: transient_local</code></td><td><code>RELIABLE</code>, <code>UNKNOWN</code>, <code>TRANSIENT_LOCAL</code></td></tr>
+<tr><td>Lyrical (rosbag2 0.33.4)</td><td><code>history: keep_last, depth: 1, reliability: reliable, durability: transient_local</code></td><td><code>RELIABLE</code>, <code>KEEP_LAST (10)</code>, <code>TRANSIENT_LOCAL</code></td></tr>
+</tbody>
+</table>
+
+<p>On Humble the numbers are the rmw enum values. <code>durability: 1</code> is transient local, and the <code>/tf</code> entry in the same file had <code>durability: 2</code>, which is volatile. Only Lyrical recorded the real history and depth. Even so, its player used depth 10 without an override and depth 1 with mine.</p>
+
+<p>So if the player in your setup shows VOLATILE for <code>/tf_static</code>, look at that bag's metadata first. <a href="https://github.com/ros2/rosbag2/issues/1237">rosbag2 issue #1237</a> shows a bag whose <code>offered_qos_profiles</code> for <code>/tf_static</code> was an empty string. I didn't test a bag like that.</p>
+
+<h2>Fix 1: the QoS override file (b)</h2>
+
+<p>The override is the YAML at the top of this page. In every run the override decided the player's durability. With <code>durability: transient_local</code>, <code>ros2 topic info /tf_static -v</code> showed <code>Durability: TRANSIENT_LOCAL</code>. With <code>durability: volatile</code>, it showed <code>Durability: VOLATILE</code> and every tf2 consumer went blind. The player logs the change on startup:</p>
+
+<pre><code>[INFO] [1793240792.010377710] [rosbag2_player]: Overriding QoS profile for topic /tf_static</code></pre>
+
+<p>Here is how to use it:</p>
+
+<ul>
+<li>The top-level key is the full topic name, <code>/tf_static</code>, with the leading slash.</li>
+<li>Set <code>reliability: reliable</code> as well. A tf2 static listener asks for reliable, and a best-effort publisher doesn't match it.</li>
+<li>If the player already says TRANSIENT_LOCAL, the override changes nothing you will notice. In my bags the default and the override gave the same result on all three distros.</li>
+<li>Check the result with <code>ros2 topic info /tf_static -v</code> while the bag is playing. Look for <code>Node name: rosbag2_player</code> and its <code>Durability</code> line.</li>
+</ul>
+
+<p>The flag is the same on all three distros. <code>ros2 bag play --help</code> printed identical text for it on Humble, Jazzy and Lyrical: "Path to a yaml file defining overrides of the QoS profile for specific topics."</p>
+
+<h2>Fix 2: keep the player running, or use --loop (d)</h2>
+
+<p>Your bag can be correct and the player can be TRANSIENT_LOCAL, and the frame still disappears once playback ends. A late joiner can only get the message while the player is alive. The simplest fixes are to start RViz or your node before the bag finishes, or to play with <code>--loop</code>.</p>
+
+<p>With <code>--loop</code> the player published the static message again on every pass. Two counter subscribers, started together with play, counted <code>/tf_static</code> messages over 20 s:</p>
+
+<table>
+<thead><tr><th>Subscriber</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>TRANSIENT_LOCAL, reliable</td><td>4</td><td>4</td><td>4</td></tr>
+<tr><td>VOLATILE, reliable</td><td>4</td><td>3</td><td>4</td></tr>
+</tbody>
+</table>
+
+<p>A listener that started 8 s into a looped play, after the first pass had ended, got the transform on all three (table above, row d). The same test with the <code>transient_local</code> override added gave <code>ok=42 fail=0</code>, <code>ok=41 fail=1</code> and <code>ok=41 fail=2</code>.</p>
+
+<h2>Fix 3: --start-offset needs the beginning of the bag</h2>
+
+<p>With <code>--start-offset 2</code> no lookup succeeded on any distro, with or without the override, even with the listener running before play. The only static message sat at the start of the bag and was skipped. This matches <a href="https://github.com/ros2/rosbag2/issues/1482">rosbag2 issue #1482</a> and <a href="https://github.com/ros2/rosbag2/issues/2333">#2333</a>, which report latched topics being skipped with <code>--start-offset</code>. In my run that still happened on rosbag2 0.15.17, 0.26.11 and 0.33.4.</p>
+
+<p>What does work: play from the beginning. The first row of the table shows that works. Or publish the static transform yourself next to the player with <code>static_transform_publisher</code>. I didn't test that combination.</p>
+
+<h2>Checking /tf_static by hand with ros2 topic echo (f)</h2>
+
+<p>I started <code>ros2 topic echo /tf_static</code> 2 s after play, gave it 3 s, and counted <code>child_frame_id: base</code> in the output. All three distros gave the same counts:</p>
+
+<table>
+<thead><tr><th>echo command</th><th>Default play</th><th>Override <code>transient_local</code></th><th>Override <code>volatile</code></th></tr></thead>
+<tbody>
+<tr><td><code>ros2 topic echo /tf_static</code></td><td>1</td><td>1</td><td>0</td></tr>
+<tr><td><code>... --qos-durability transient_local</code></td><td>0</td><td>0</td><td>0, plus incompatible QoS warning</td></tr>
+<tr><td><code>... --qos-durability transient_local --qos-reliability reliable</code></td><td>1</td><td>1</td><td>0, plus incompatible QoS warning</td></tr>
+</tbody>
+</table>
+
+<p>The middle row trips people up. Passing only <code>--qos-durability transient_local</code> printed nothing in 3 s on every distro, even when the player was TRANSIENT_LOCAL. Adding <code>--qos-reliability reliable</code> fixed it. Plain <code>ros2 topic echo</code> without QoS flags also worked against a TRANSIENT_LOCAL player. Against a VOLATILE player, the late echo got nothing whatever flags I gave it. That makes echo a fast test: if the full command prints nothing while the bag is playing, your tf2 nodes won't get the transform either.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Lyrical rejects positional topics in <code>ros2 bag record</code>.</strong> <code>ros2 bag record -o bag1 /tf /tf_static</code> failed with <code>ros2: error: unrecognized arguments: /tf /tf_static</code>. Use <code>--topics /tf /tf_static</code>. Humble and Jazzy took the positional form. <code>ros2 bag play</code> still takes the bag path as a positional argument on Lyrical.</li>
+<li><strong>Metadata format.</strong> Humble 0.15.17 stores <code>offered_qos_profiles</code> as a YAML string with enum numbers. Jazzy 0.26.11 stores a list with names and <code>history: unknown, depth: 0</code>. Lyrical 0.33.4 stores the real <code>keep_last</code> and <code>depth: 1</code>.</li>
+<li><strong>Player history.</strong> <code>ros2 topic info -v</code> showed <code>History (Depth): UNKNOWN</code> on Humble and Jazzy and <code>KEEP_LAST (10)</code> on Lyrical without an override.</li>
+<li><strong>Lyrical's player prints a progress block</strong> (<code>====== Playback Progress ======</code>) to stdout.</li>
+<li><strong>Lyrical's <code>ros2 bag record --help</code></strong> lists <code>--static-topics-path</code>, <code>--repeat-transient-local</code> and <code>--repeat-all-transient-local</code>. I didn't test them.</li>
+<li>The help text for <code>--qos-profile-overrides-path</code> and <code>--loop</code> was identical on all three distros.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>RViz2 itself. I used a tf2 Python listener and <code>tf2_echo</code>. RViz's TF display also relies on a tf2 listener, but I didn't open RViz.</li>
+<li>CycloneDDS, Zenoh or any RMW other than the default Fast DDS.</li>
+<li>Bags with an empty or missing <code>offered_qos_profiles</code> entry, or bags recorded by older rosbag2 releases.</li>
+<li><code>--repeat-transient-local</code>, <code>--repeat-all-transient-local</code> and <code>--static-topics-path</code> at record time, and split bags.</li>
+<li>Running <code>static_transform_publisher</code> next to an offset playback.</li>
+<li>Bags with several static publishers, <code>--clock</code> or sim time.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does tf2_echo say frame does not exist after ros2 bag play?</h3>
+<p>In my runs that happened when the player offered <code>/tf_static</code> as VOLATILE, when tf2_echo started after <code>ros2 bag play</code> had exited, or with <code>--start-offset</code>. With default play on Humble, Jazzy and Lyrical, tf2_echo started 2 s into playback printed the static translation.</p>
+
+<h3>Do I need --qos-profile-overrides-path for /tf_static on Humble?</h3>
+<p>Not for a bag recorded by the current Humble rosbag2 (0.15.17). Its player already offered TRANSIENT_LOCAL from the recorded metadata. Use the override when <code>ros2 topic info /tf_static -v</code> shows <code>Durability: VOLATILE</code> for <code>rosbag2_player</code>.</p>
+
+<h3>Why does RViz lose static frames when I open it after the bag finished?</h3>
+<p>The player is the publisher that stores the static message for late joiners, and it exits when the bag ends. A listener started 1 s after playback ended got zero lookups on all three distros. Start RViz while the bag is playing, or play with <code>--loop</code>.</p>
+
+<h3>Does ros2 bag play --start-offset skip /tf_static?</h3>
+<p>Yes, in my run. With <code>--start-offset 2</code> the static message at the start of the bag was never published, and the override didn't change that. Play from the beginning, or publish the static transform separately.</p>
+
+<h3>Why does ros2 topic echo --qos-durability transient_local show nothing?</h3>
+<p>With only that flag, echo printed nothing in 3 s on all three distros. Adding <code>--qos-reliability reliable</code> made it print the static message. Plain <code>ros2 topic echo /tf_static</code> also worked.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does tf2_echo say frame does not exist after ros2 bag play?", "acceptedAnswer": {"@type": "Answer", "text": "In my runs that happened when the player offered /tf_static as VOLATILE, when tf2_echo started after ros2 bag play had exited, or with --start-offset. With default play on Humble, Jazzy and Lyrical, tf2_echo started 2 s into playback printed the static translation."}},
+{"@type": "Question", "name": "Do I need --qos-profile-overrides-path for /tf_static on Humble?", "acceptedAnswer": {"@type": "Answer", "text": "Not for a bag recorded by the current Humble rosbag2 (0.15.17). Its player already offered TRANSIENT_LOCAL from the recorded metadata. Use the override when ros2 topic info /tf_static -v shows Durability: VOLATILE for rosbag2_player."}},
+{"@type": "Question", "name": "Why does RViz lose static frames when I open it after the bag finished?", "acceptedAnswer": {"@type": "Answer", "text": "The player is the publisher that stores the static message for late joiners, and it exits when the bag ends. A listener started 1 s after playback ended got zero lookups on all three distros. Start RViz while the bag is playing, or play with --loop."}},
+{"@type": "Question", "name": "Does ros2 bag play --start-offset skip /tf_static?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, in my run. With --start-offset 2 the static message at the start of the bag was never published, and the override didn't change that. Play from the beginning, or publish the static transform separately."}},
+{"@type": "Question", "name": "Why does ros2 topic echo --qos-durability transient_local show nothing?", "acceptedAnswer": {"@type": "Answer", "text": "With only that flag, echo printed nothing in 3 s on all three distros. Adding --qos-reliability reliable made it print the static message. Plain ros2 topic echo /tf_static also worked."}}
+]}
+</script>
+
+<p>Measured on 2026-10-29 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rosbag2 0.15.17, tf2_ros 0.25.24), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rosbag2 0.26.11, tf2_ros 0.36.23) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rosbag2 0.33.4, tf2_ros 0.45.10), default RMW (Fast DDS), Docker bridge network, <code>ROS_DOMAIN_ID=78</code>. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-13-ros2-bag-play-tf-static-missing-qos-override/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/rosbag2/issues/1049">tf_static doesnt work with rosbag2 but tf does</a>, <a href="https://github.com/ros2/rosbag2/issues/1237">Humble ros2 bag play qos_override doesn't change topic durability</a>, <a href="https://github.com/ros2/rosbag2/issues/1482">Topics with TRANSIENT_LOCAL QoS are not replayed with --start-offset</a>, <a href="https://github.com/ros2/rosbag2/issues/2333">Latched topics skipped with ros2 bag play --start-offset</a>, <a href="https://robotics.stackexchange.com/questions/100823">static_transform_publisher doesn't latch on ROS2</a>, <a href="https://robotics.stackexchange.com/questions/79105">Playback of rosbag with tf2-static transforms</a>.</p>
