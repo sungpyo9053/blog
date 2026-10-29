@@ -19,10 +19,21 @@ from scripts.evidence_topic_miner import (
     existing_run_is_current,
     group_git_events,
     render_markdown,
+    run_git,
 )
 
 
 class EvidenceTopicMinerTests(unittest.TestCase):
+    def test_run_git_tolerates_non_utf8_patch(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            (repo / "page.txt").write_bytes("지방세".encode("euc-kr") + b"\n")
+            subprocess.run(["git", "add", "page.txt"], cwd=repo, check=True)
+            subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x"], cwd=repo, check=True)
+            self.assertIn("page.txt", run_git(repo, ["show", "--format=", "--unified=0", "HEAD"]))
+
     def test_post50_and_post132_are_grouped_by_source_not_shared_commit(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)

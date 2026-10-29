@@ -77,7 +77,8 @@ def sanitize_url(value: str) -> str:
 def run_git(repo: Path, args: Sequence[str]) -> str:
     if not args or args[0] not in ALLOWED_GIT_COMMANDS:
         raise ValueError("only read-only git commands are allowed")
-    return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True, shell=False).stdout
+    # Patches can carry non-UTF-8 bytes (EUC-KR evidence pages); one bad byte must not abort mining.
+    return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, encoding="utf-8", errors="replace", shell=False).stdout
 
 @dataclass(frozen=True)
 class CommitRecord:
