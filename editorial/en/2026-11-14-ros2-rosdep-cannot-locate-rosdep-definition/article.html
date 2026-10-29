@@ -1,0 +1,241 @@
+<pre><code>ERROR: the following packages/stacks could not have their rosdep keys resolved
+to system dependencies:
+pkg_a: Cannot locate rosdep definition for [pkg_b]</code></pre>
+
+<p>That's what <code>rosdep install --from-paths src -r -y</code> printed in my run. The first word after the package name changes with your package, and the key in brackets changes with your <code>package.xml</code>. The message is wrapped over two lines, so search for "Cannot locate rosdep definition for" rather than the whole sentence.</p>
+
+<p>Short answer: rosdep looked up the key in brackets and found no rule for it on your OS. In my measurements that happened for five reasons. The key was a package in your own workspace and <code>--ignore-src</code> was missing. <code>ROS_DISTRO</code> was not set, so ROS package keys could not be looked up. The key was misspelled or an old name (<code>python-numpy</code> instead of <code>python3-numpy</code>). The key doesn't exist anywhere. Or it was your own key and you hadn't added a source for it. The command that worked on Humble, Jazzy and Lyrical, from the workspace root:</p>
+
+<pre><code>source /opt/ros/humble/setup.bash      # sets ROS_DISTRO
+apt-get update                          # in Docker the apt lists are empty
+rosdep update
+rosdep install --from-paths src --ignore-src -y</code></pre>
+
+<p>Then check the key itself with <code>rosdep resolve &lt;key&gt;</code>. If it says <code>no rosdep rule</code>, the key is wrong or missing from the database, and no install flag will fix it.</p>
+
+<p>One warning about <code>-r</code>. With <code>-r</code>, rosdep printed the same error, then <code>Continuing to install resolvable dependencies...</code>, and exited with code 0. In a Dockerfile or CI job the step looks green. Drop <code>-r</code> while you debug.</p>
+
+<h2>Find your error</h2>
+
+<p>Each row was measured with a tiny workspace. The rows were the same on Humble, Jazzy and Lyrical unless the last column says otherwise.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>What rosdep printed</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Workspace package as a dependency, no <code>--ignore-src</code></td><td><code>pkg_a: Cannot locate rosdep definition for [pkg_b]</code></td><td>Add <code>--ignore-src</code></td></tr>
+<tr><td><code>ROS_DISTRO</code> unset, no <code>--rosdistro</code></td><td><code>to system dependencies (ROS distro is not set. Make sure `ROS_DISTRO` environment variable is set, or use `--rosdistro` option to specify the distro, e.g. `--rosdistro indigo`):</code> then <code>pkg_bt: Cannot locate rosdep definition for [turtlesim]</code></td><td>Source <code>/opt/ros/&lt;distro&gt;/setup.bash</code> or pass <code>--rosdistro humble</code></td></tr>
+<tr><td>Old key name <code>python-numpy</code></td><td><code>pkg_typo: Cannot locate rosdep definition for [python-numpy]</code></td><td>Use <code>python3-numpy</code></td></tr>
+<tr><td>Key that exists nowhere</td><td><code>pkg_fake: Cannot locate rosdep definition for [not_a_real_key_xyz]</code></td><td>Find the right key, or add your own source</td></tr>
+<tr><td>Own key, no custom source yet</td><td><code>pkg_custom: Cannot locate rosdep definition for [my_custom_tool]</code></td><td>Add a <code>yaml file://</code> source, then <code>rosdep update</code></td></tr>
+<tr><td>rosdep cache empty</td><td><code>ERROR: your rosdep installation has not been initialized yet.  Please run:</code> <code>rosdep update</code></td><td><code>rosdep update</code></td></tr>
+<tr><td><code>--rosdistro jazzy</code> on Ubuntu 22.04</td><td><code>ERROR: No definition of [rclpy] for OS version [jammy]</code></td><td>Use the distro that matches the OS</td></tr>
+<tr><td><code>rosdep init</code> when already initialized</td><td><code>ERROR: default sources list file already exists:</code></td><td>Nothing, skip init</td></tr>
+<tr><td>apt lists empty (fresh container)</td><td><code>E: Unable to locate package tree</code> then <code>apt: command [apt-get install -y tree] failed</code></td><td><code>apt-get update</code> first</td></tr>
+<tr><td>pip key, pip not installed</td><td><code>pip: pip is not installed</code></td><td>Install <code>python3-pip</code></td></tr>
+<tr><td>pip key on Jazzy or Lyrical (Python 3.12 and 3.14)</td><td><code>rosdep installation of pip packages requires installing packages globally as root.</code> ... <code>PIP_BREAK_SYSTEM_PACKAGES=1</code></td><td>Set <code>PIP_BREAK_SYSTEM_PACKAGES=1</code>. Humble didn't need it</td></tr>
+</tbody>
+</table>
+
+<p>The last five rows are not "Cannot locate rosdep definition". They are the errors you are likely to hit next, or instead, in the same command.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-29 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another. All three ship rosdep 0.27.0. Inside each one, a script wrote a set of one-file packages: a <code>package.xml</code> with <code>&lt;depend&gt;</code> lines and nothing else. rosdep only reads <code>package.xml</code>, so no code was needed. Each case had its own <code>src</code> folder:</p>
+
+<table>
+<thead><tr><th>Folder</th><th>Packages and dependencies</th></tr></thead>
+<tbody>
+<tr><td><code>/ws/c/src</code></td><td><code>pkg_a</code> depends on <code>pkg_b</code>, <code>rclpy</code>, <code>python3-numpy</code>. <code>pkg_b</code> is in the same folder.</td></tr>
+<tr><td><code>/ws/b/src</code></td><td><code>pkg_bt</code> depends on <code>turtlesim</code>, which is not in the ros-base image</td></tr>
+<tr><td><code>/ws/d/src</code>, <code>/ws/d2/src</code></td><td><code>pkg_typo</code> depends on <code>python-numpy</code>. <code>pkg_fake</code> depends on <code>not_a_real_key_xyz</code>.</td></tr>
+<tr><td><code>/ws/e/src</code></td><td><code>pkg_pip</code> depends on <code>python3-anytree-pip</code></td></tr>
+<tr><td><code>/ws/g/src</code></td><td><code>pkg_typo</code> again, plus <code>pkg_a2</code> depending on <code>rclpy</code>, <code>python3-numpy</code>, <code>tree</code></td></tr>
+<tr><td><code>/ws/h/src</code></td><td><code>pkg_custom</code> depends on <code>my_custom_tool</code>, a key I defined myself</td></tr>
+</tbody>
+</table>
+
+<p>Most install commands used <code>-s</code> (simulate) so they print what they would install. The pip, fix and custom-key cases ran for real. Every command's exit code is in the raw output. rosdep resolved against the rosdistro <code>master</code> branch at commit <code>ad81cc6</code> (committed 2026-10-28T23:48:54Z). It was the same commit before and after the runs.</p>
+
+<p>One thing failed before any of this worked. My first <code>package.xml</code> used <code>a@b.c</code> as the maintainer email, and rosdep refused every command with <code>Invalid email "a@b.c" for person "t"</code>. If rosdep fails on a <code>package.xml</code> before it gets to the keys, check the maintainer email.</p>
+
+<h2>A package in your own workspace: --ignore-src</h2>
+
+<p>Without <code>--ignore-src</code>, rosdep treats every <code>&lt;depend&gt;</code> as a system dependency, including packages that sit next to it in <code>src</code>. There is no rule for <code>pkg_b</code>, so it fails:</p>
+
+<pre><code>$ rosdep install --from-paths /ws/c/src -y -s
+ERROR: the following packages/stacks could not have their rosdep keys resolved
+to system dependencies:
+pkg_a: Cannot locate rosdep definition for [pkg_b]
+[exit=1]</code></pre>
+
+<p>With <code>--ignore-src</code> the same folder passed, and the real install ended with <code>#All required rosdeps installed successfully</code>. <code>rosdep keys</code> shows why. Without the flag it listed <code>rclpy</code>, <code>pkg_b</code>, <code>ament_cmake</code> and <code>python3-numpy</code>. With it, only <code>python3-numpy</code> was left. <code>pkg_b</code> was dropped because it's in the workspace. <code>rclpy</code> and <code>ament_cmake</code> were dropped too, because the image already had them under <code>/opt/ros</code>.</p>
+
+<p>If the missing key is a package you expected to come from source, check that it really is under the path you passed to <code>--from-paths</code>. If it isn't, cloning it into <code>src</code> fixes rosdep. A dependency that's in neither place fails later in the build too, as described in <a href="https://huntlab.app/en/ros2-colcon-could-not-find-a-package-configuration-file-provided-by/">"Could not find a package configuration file" in colcon builds</a>.</p>
+
+<h2>ROS_DISTRO not set</h2>
+
+<p>Keys for ROS packages such as <code>turtlesim</code> or <code>rclpy</code> come from the distro's release file, not from the shared yaml files. rosdep needs the distro name to pick that file. It reads it from <code>ROS_DISTRO</code>, which <code>setup.bash</code> sets. With the variable removed:</p>
+
+<pre><code>$ env -u ROS_DISTRO rosdep install --from-paths /ws/b/src --ignore-src -y -s
+ERROR: the following packages/stacks could not have their rosdep keys resolved
+to system dependencies (ROS distro is not set. Make sure `ROS_DISTRO` environment variable is set, or use `--rosdistro` option to specify the distro, e.g. `--rosdistro indigo`):
+pkg_bt: Cannot locate rosdep definition for [turtlesim]
+[exit=1]</code></pre>
+
+<p>System keys didn't care. <code>env -u ROS_DISTRO rosdep resolve python3-numpy</code> still printed <code>python3-numpy</code>, while <code>rosdep resolve turtlesim</code> printed <code>ERROR: no rosdep rule for 'turtlesim'</code>. So if only your ROS package keys fail, look at the distro first. Passing <code>--rosdistro humble</code> fixed it, and the simulated install became <code>apt-get install -y ros-humble-turtlesim</code>. On Jazzy and Lyrical it was <code>ros-jazzy-turtlesim</code> and <code>ros-lyrical-turtlesim</code>.</p>
+
+<p>A wrong distro gives a different error. On the Humble image (Ubuntu 22.04), <code>rosdep resolve rclpy --rosdistro jazzy</code> printed <code>WARNING: given --rosdistro jazzy but ROS_DISTRO is "humble". Ignoring environment.</code> and then <code>ERROR: No definition of [rclpy] for OS version [jammy]</code>, with the rule data below it. The data showed Jazzy packages only for <code>noble</code> on Ubuntu, and Lyrical packages only for <code>resolute</code> (Ubuntu 26.04). Each distro is built for its own Ubuntu release.</p>
+
+<h2>A misspelled or old key: python-numpy</h2>
+
+<p>The key in <code>package.xml</code> is a rosdep key, not an apt package name. They often look the same, but not always. <code>python-numpy</code> was the old Python 2 key, and there is no rule for it in the current database:</p>
+
+<pre><code>$ rosdep resolve python-numpy
+ERROR: no rosdep rule for 'python-numpy'
+[exit=1]
+
+$ rosdep resolve python3-numpy
+#apt
+python3-numpy
+[exit=0]
+
+$ rosdep where-defined python3-numpy
+https://raw.githubusercontent.com/ros/rosdistro/master/rosdep/python.yaml</code></pre>
+
+<p>After changing <code>python-numpy</code> to <code>python3-numpy</code> in <code>package.xml</code>, the install printed <code>#All required rosdeps installed successfully</code>. A key that exists nowhere, <code>not_a_real_key_xyz</code>, failed in exactly the same way. rosdep can't tell a typo from a missing key, so the error looks the same. To find the right name, search the files in the <a href="https://github.com/ros/rosdistro/tree/master/rosdep">rosdistro rosdep folder</a> (<code>base.yaml</code> for system packages, <code>python.yaml</code> for Python ones) and then check your guess with <code>rosdep resolve</code>.</p>
+
+<h2>pip-only keys</h2>
+
+<p>Keys ending in <code>-pip</code> install with pip, not apt. <code>rosdep resolve python3-anytree-pip</code> printed <code>#pip</code> and <code>anytree</code> on all three distros. Installing it failed differently by distro:</p>
+
+<table>
+<thead><tr><th>Distro (Python)</th><th>No pip installed</th><th>After <code>apt-get install python3-pip</code></th><th>With <code>PIP_BREAK_SYSTEM_PACKAGES=1</code></th></tr></thead>
+<tbody>
+<tr><td>Humble (3.10.12)</td><td><code>pip: pip is not installed</code>, exit 1</td><td>Installed: <code>Successfully installed anytree-2.13.0</code>, via <code>pip3 install -U anytree</code></td><td>Already installed</td></tr>
+<tr><td>Jazzy (3.12.3)</td><td>Same</td><td>Failed with the PEP 668 message below, exit 1</td><td>Installed <code>anytree-2.13.0</code></td></tr>
+<tr><td>Lyrical (3.14.4)</td><td>Same</td><td>Failed with the PEP 668 message, exit 1</td><td>Installed <code>anytree-2.13.0</code></td></tr>
+</tbody>
+</table>
+
+<pre><code>ERROR: the following rosdeps failed to install
+  pip:
+rosdep installation of pip packages requires installing packages globally as root.
+When using Python &gt;= 3.11, PEP 668 compliance requires you to allow pip to install alongside
+externally managed packages using the 'break-system-packages' option.
+The recommeded way to set this option when using rosdep is to set the environment variable
+PIP_BREAK_SYSTEM_PACKAGES=1
+in your environment.</code></pre>
+
+<p>The ros-base images don't include <code>python3-pip</code>, so the first column hit every distro. rosdep didn't install pip on its own. On Jazzy and Lyrical, set the variable in the same command or Dockerfile <code>ENV</code>: <code>PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install ...</code>. pip also printed its usual warning about running as root. These errors are not "Cannot locate rosdep definition". The key resolved fine, and the install step failed.</p>
+
+<h2>Your own key: a local source list</h2>
+
+<p>If the dependency isn't in rosdistro, you can add your own rule. I wrote <code>/ws/custom.yaml</code>:</p>
+
+<pre><code class="language-yaml">my_custom_tool:
+  ubuntu: [tree]</code></pre>
+
+<p>and pointed rosdep at it with a list file. Files in <code>sources.list.d</code> are read in name order, so <code>10-</code> comes before the default <code>20-default.list</code>:</p>
+
+<pre><code>echo "yaml file:///ws/custom.yaml" &gt; /etc/ros/rosdep/sources.list.d/10-local.list</code></pre>
+
+<p>Before <code>rosdep update</code>, <code>rosdep resolve my_custom_tool</code> still printed <code>ERROR: no rosdep rule for 'my_custom_tool'</code>. rosdep reads only its cache, so adding the list file isn't enough. After <code>rosdep update</code>:</p>
+
+<pre><code>$ rosdep resolve my_custom_tool
+#apt
+tree
+
+$ rosdep where-defined my_custom_tool
+file:///ws/custom.yaml</code></pre>
+
+<p>Then <code>rosdep install --from-paths /ws/h/src --ignore-src -r -y</code> ran <code>apt-get install -y tree</code> and <code>rosdep check</code> printed <code>All system dependencies have been satisfied</code>. Same result on all three distros. If you edit the yaml later, run <code>rosdep update</code> again. If the key is useful to others, the long-term fix is a pull request to rosdistro.</p>
+
+<h2>rosdep update, rosdep init and fresh containers</h2>
+
+<p>The official images already ran <code>rosdep init</code> and <code>rosdep update</code> when they were built. Each had a cache in <code>/root/.ros/rosdep/sources.cache</code> dated Oct 27 00:32, about two days old at the time of the run. A stale cache is the usual reason a key that was added to rosdistro recently isn't found, so run <code>rosdep update</code> anyway. It took 8.9 s on Humble and 6.8 s on Jazzy and Lyrical, and it added the distros humble, jazzy, kilted, lyrical and rolling, skipping the end-of-life ones. As root it also printed <code>Warning: running 'rosdep update' as root is not recommended.</code>. It still exited with 0.</p>
+
+<p>With the cache folder removed, rosdep didn't say "Cannot locate". It refused to run:</p>
+
+<pre><code>ERROR: your rosdep installation has not been initialized yet.  Please run:
+
+    rosdep update</code></pre>
+
+<p>Running <code>rosdep init</code> in the image failed at once, because the image had already done it:</p>
+
+<pre><code>ERROR: default sources list file already exists:
+	/etc/ros/rosdep/sources.list.d/20-default.list
+Please delete if you wish to re-initialize</code></pre>
+
+<p>After I deleted that file, the first <code>rosdep init</code> printed <code>Wrote /etc/ros/rosdep/sources.list.d/20-default.list</code> and the second one failed with the same "already exists" error, exit 1. The error is harmless. Init only writes that one file. In a Dockerfile that may run on an image that's already initialized, use <code>rosdep init || true</code> or delete the file first, then <code>rosdep update</code>.</p>
+
+<p>The ros-base images also have empty apt lists (<code>/var/lib/apt/lists</code> had no files). Without <code>apt-get update</code>, a key that resolved fine still failed at install time with <code>E: Unable to locate package tree</code>.</p>
+
+<h2>What -r does</h2>
+
+<p>I ran the <code>/ws/g/src</code> folder, with one bad key (<code>python-numpy</code>) and one good uninstalled key (<code>tree</code>), with and without <code>-r</code>:</p>
+
+<table>
+<thead><tr><th>Command</th><th>Error printed</th><th>Installed the good keys?</th><th>Exit code</th></tr></thead>
+<tbody>
+<tr><td>without <code>-r</code></td><td>yes</td><td>no, nothing was installed</td><td>1</td></tr>
+<tr><td>with <code>-r</code></td><td>yes, plus <code>Continuing to install resolvable dependencies...</code></td><td>yes, <code>apt-get install -y tree</code></td><td>0</td></tr>
+</tbody>
+</table>
+
+<p><code>-r</code> means "continue on errors". It's handy when one unknown key would otherwise block everything else. But an exit code of 0 means a script won't stop, and the build fails later with a less clear error. In every case I ran with <code>-r</code>, the unresolved key still exited 0.</p>
+
+<h2>Useful rosdep diagnostic commands</h2>
+
+<table>
+<thead><tr><th>Command</th><th>What it printed in my run</th></tr></thead>
+<tbody>
+<tr><td><code>rosdep resolve &lt;key&gt;</code></td><td>The installer and package (<code>#apt</code> <code>python3-numpy</code>, <code>#pip</code> <code>anytree</code>, <code>ros-humble-rclpy</code>), or <code>ERROR: no rosdep rule for '&lt;key&gt;'</code></td></tr>
+<tr><td><code>rosdep where-defined &lt;key&gt;</code></td><td>The source file URL, for example <code>.../rosdep/python.yaml</code> or <code>file:///ws/custom.yaml</code></td></tr>
+<tr><td><code>rosdep keys --from-paths src --ignore-src</code></td><td>The keys rosdep will try to resolve, one per line, after dropping workspace and installed ROS packages</td></tr>
+<tr><td><code>rosdep check --from-paths src --ignore-src</code></td><td>For a bad key: <code>ERROR[pkg_typo]: Cannot locate rosdep definition for [python-numpy]</code> with OS name and version, then <code>System dependencies have not been satisfied:</code> and the missing <code>apt tree</code>. When everything is fine: <code>All system dependencies have been satisfied</code></td></tr>
+<tr><td><code>rosdep install ... -s</code></td><td>The <code>apt-get install</code> commands it would run, without running them</td></tr>
+</tbody>
+</table>
+
+<p><code>rosdep check</code> is the best first command. It tells you which package and which key failed, and what is still missing, and it doesn't install anything.</p>
+
+<h2>Version notes</h2>
+
+<p>All three images had python3-rosdep 0.27.0-1, python3-rosdep-modules 0.27.0-1 and python3-rosdistro-modules 1.1.0-1. Every error text above was identical on Humble (Ubuntu 22.04.5), Jazzy (Ubuntu 24.04.5) and Lyrical (Ubuntu 26.04.1). Only these things differed: the OS codename in messages (<code>jammy</code>, <code>noble</code>, <code>resolute</code>), the <code>ros-&lt;distro&gt;-</code> package prefix, and the pip behaviour. Humble's Python 3.10 installed pip keys without <code>PIP_BREAK_SYSTEM_PACKAGES</code>. Jazzy (Python 3.12.3) and Lyrical (Python 3.14.4) did not. The python3-pip versions installed were 22.0.2, 24.0 and 25.1.1.</p>
+
+<p>One oddity: pip reported <code>Successfully installed anytree-2.13.0</code>, but <code>anytree.__version__</code> printed <code>2.12.1</code> on all three. That's the package's own version string, not a rosdep issue. I didn't look further.</p>
+
+<h2>Not tested</h2>
+
+<p>Running rosdep as a non-root user with <code>sudo</code>, <code>rosdep fix-permissions</code>, <code>--skip-keys</code> as a fix for a missing key, <code>ROSDISTRO_INDEX_URL</code> or a custom rosdistro index, <code>--include-eol-distros</code>, an http(s) custom source instead of <code>file://</code>, pip keys inside a virtual environment, non-Ubuntu OSes, Foxy, Iron, Kilted and Rolling, and ROS 1.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Cannot locate rosdep definition for [key]" mean?</h3>
+<p>rosdep found no rule that maps that key to a system package for your OS and distro. In my runs the cause was a workspace package without <code>--ignore-src</code>, an unset <code>ROS_DISTRO</code>, a wrong or old key name, or a custom key with no source. Run <code>rosdep resolve &lt;key&gt;</code> to see whether the key exists at all.</p>
+
+<h3>Does --ignore-src fix it?</h3>
+<p>Only when the key is another package in your workspace. Then <code>--ignore-src</code> drops it from the list and the error goes away. For a misspelled key like <code>python-numpy</code>, the error stayed with <code>--ignore-src</code>.</p>
+
+<h3>Why does rosdep install succeed even though it printed an error?</h3>
+<p>Because of <code>-r</code>. With <code>-r</code>, rosdep printed the error, installed the keys it could resolve, and exited with 0. Without <code>-r</code> it installed nothing and exited with 1.</p>
+
+<h3>How do I fix "ERROR: default sources list file already exists"?</h3>
+<p>You don't need to. <code>rosdep init</code> was already run, and in the official ROS images it was run when the image was built. Skip init and run <code>rosdep update</code>. To re-initialize, delete <code>/etc/ros/rosdep/sources.list.d/20-default.list</code> first.</p>
+
+<h3>How do I add a rosdep key for a package that isn't in rosdistro?</h3>
+<p>Write a yaml file that maps the key to a package per OS, add a line like <code>yaml file:///path/custom.yaml</code> to a file in <code>/etc/ros/rosdep/sources.list.d/</code>, and run <code>rosdep update</code>. The key didn't resolve until after <code>rosdep update</code>. Then <code>rosdep where-defined</code> showed the local file.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Cannot locate rosdep definition for [key] mean?", "acceptedAnswer": {"@type": "Answer", "text": "rosdep found no rule that maps that key to a system package for your OS and distro. In my runs the cause was a workspace package without --ignore-src, an unset ROS_DISTRO, a wrong or old key name, or a custom key with no source. Run rosdep resolve with the key to see whether the key exists at all."}},
+{"@type": "Question", "name": "Does --ignore-src fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Only when the key is another package in your workspace. Then --ignore-src drops it from the list and the error goes away. For a misspelled key like python-numpy, the error stayed with --ignore-src."}},
+{"@type": "Question", "name": "Why does rosdep install succeed even though it printed an error?", "acceptedAnswer": {"@type": "Answer", "text": "Because of -r. With -r, rosdep printed the error, installed the keys it could resolve, and exited with 0. Without -r it installed nothing and exited with 1."}},
+{"@type": "Question", "name": "How do I fix ERROR: default sources list file already exists?", "acceptedAnswer": {"@type": "Answer", "text": "You don't need to. rosdep init was already run, and in the official ROS images it was run when the image was built. Skip init and run rosdep update. To re-initialize, delete /etc/ros/rosdep/sources.list.d/20-default.list first."}},
+{"@type": "Question", "name": "How do I add a rosdep key for a package that isn't in rosdistro?", "acceptedAnswer": {"@type": "Answer", "text": "Write a yaml file that maps the key to a package per OS, add a line like yaml file:///path/custom.yaml to a file in /etc/ros/rosdep/sources.list.d/, and run rosdep update. The key didn't resolve until after rosdep update. Then rosdep where-defined showed the local file."}}
+]}
+</script>
+
+<p>Measured on 2026-10-29 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Ubuntu 22.04.5, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Ubuntu 24.04.5, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Ubuntu 26.04.1, Python 3.14.4), all with python3-rosdep 0.27.0-1 and python3-rosdistro-modules 1.1.0-1, resolving against rosdistro <code>master</code> at <code>ad81cc6df71f</code> (2026-10-28T23:48:54Z). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-14-ros2-rosdep-cannot-locate-rosdep-definition/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/107920">How to solve the ERROR Cannot locate rosdep definition for [PCL] in ROS2 Humble?</a>, <a href="https://robotics.stackexchange.com/questions/99330">Rosdep install not locating definitions [rostime] [catkin] [rospy]</a>, <a href="https://robotics.stackexchange.com/questions/52458">Cannot locate rosdep definition for [nodelet]</a>, <a href="https://robotics.stackexchange.com/questions/51146">Install rosdep definition locally in a package</a>, <a href="https://robotics.stackexchange.com/questions/101794">Can't init rosdep</a>, <a href="https://github.com/ros2/ros2/issues/1310">tf2_kdl: Cannot locate rosdep definition for [orocos_kdl]</a>.</p>
