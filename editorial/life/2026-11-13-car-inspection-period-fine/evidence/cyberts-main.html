@@ -1,0 +1,1313 @@
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	
+	
+
+	<title>사이버검사소 | 한국교통안전공단</title>
+	<link type="text/css" rel="stylesheet" href="/css/common.css?202610290953">
+	<link type="text/css" rel="stylesheet" href="/css/font.css">
+	<link type="text/css" rel="stylesheet" href="/css/layout.css?202610290953">
+	<link type="text/css" rel="stylesheet" href="/css/style.css?202610290953">
+	<link type="text/css" rel="stylesheet" href="/css/icon.css?20230627">
+	<link type="text/css" rel="stylesheet" href="/css/main.css?20250624">
+	<link type="text/css" rel="stylesheet" href="/css/jquery/jquery-ui.min.css">
+	<link type="text/css" rel="stylesheet" href="/js/DataTables-1.10.23/css/jquery.dataTables.min.css">
+	
+	<link type="text/css" rel="stylesheet" href="/css/header.css">
+	
+	<script>var CONTEXT_PATH=""</script>
+	
+	<!-- JQuery -->
+	<script src="/js/jquery/jquery.min.js"></script>
+	<script src="/js/jquery/jquery-ui.min.js"></script>
+	<script src="/js/DataTables-1.10.23/js/jquery.dataTables.min.js"></script>
+	<script src="/js/header.js"></script>
+	
+	<!-- 공통 -->
+	<script src="/js/common.js?202610290953"></script>
+	<script src="/js/main.js?202610290953"></script>
+	<script src="/js/noticePopup.js"></script>
+	
+	
+	<!-- 퀵메뉴 -->
+	<script src="/js/quickmenu.js"></script>
+	
+	<!-- 파일 -->
+	<script src="/js/file.js"></script>
+	<script src="/js/egovframework/com/cmm/fms/EgovMultiFiles.js"></script>
+	
+	<!-- 도면 -->
+	<script src="/js/drwCmm.js?202610290953"></script>	
+	<script>
+	
+	var messageInfo = {
+		'common.nodata.msg'		: 'There is no data. please choose another seach keyword'		// 자료가 없습니다. 다른 검색조건을 선택해주세요
+		, 'fail.common.select'	: 'fail to select'	// 조회에 실패하였습니다.
+	};
+	
+	$.ajaxSetup({
+		beforeSend : function(xhr) {
+			xhr.setRequestHeader("X-CSRF-TOKEN", "54434779-80ca-4fb6-bfcd-c236e8dad00f");
+		}
+	});
+	
+	$(document).ready(function() {	
+		$('#divProgressLoading').hide(); //첫 시작시 로딩바를 숨겨준다.
+		
+		$("form").each(function(index, item) {
+			
+			var csrfInput = $("<input/>");
+			csrfInput = csrfInput.attr("type", "hidden");
+			csrfInput = csrfInput.attr("name", "_csrf");
+			csrfInput = csrfInput.attr("value", "54434779-80ca-4fb6-bfcd-c236e8dad00f");
+			$(item).append(csrfInput);
+		});
+	});
+	
+	$.gfnAjaxLodingStartStop(false);
+	
+	function fn_openNoticePopup(menuPopupList){
+		
+		var posX = 0;
+		var w = 600;
+		var h = 606;
+		var _csrf = "54434779-80ca-4fb6-bfcd-c236e8dad00f";
+		
+		var list;
+		var popupUrl;
+		
+		if(menuPopupList == undefined){
+			list = noticePopupList;
+			popupUrl = "/common/popup/main/readNoticeContentPopup.do";
+		}else{
+			list = menuPopupList;
+			posX += 615;
+			popupUrl = "/common/popup//readNoticeContentPopup.do";
+		}
+		
+		for (var i = 0; i < list.length; i++ ) {
+			
+			var mainPop;
+			var nttId = list[i].nttId;
+			var encNttId = list[i].encNttId;
+			encNttId = encodeURIComponent(encNttId);
+			var cookie = "nttId" + nttId;
+			var popName = '_blank' + encNttId;
+	
+			if(fn_getCookie(cookie) != cookie){
+				var _form = document.createElement('form');
+				document.body.appendChild(_form);
+				_form.method="POST";
+				_form.action = CONTEXT_PATH + popupUrl;
+				_form.appendChild($.gfnElementAdd("encNttId", encNttId));
+				_form.appendChild($.gfnElementAdd("_csrf", _csrf));
+				
+				popCart['popId' + encNttId] = window.open(popupUrl + "?encNttId=" + encNttId, 'popId' + encNttId, 'scrollbars = yes, width=600, height=606, left=' + posX + ', top=0');
+				
+				setTimeout(function(){
+					//popCart['popId' + encNttId].focus();
+				}, 1400);
+				
+				if(popCart['popId' + encNttId]){
+					popCart['popId' + encNttId].focus();
+				}
+				posX += 615;
+				
+			}
+		}
+	};
+	
+function fn_openNoticeCustomPopup(customPopupCode){
+		var posX = 0;
+		var w = 520;
+		var h = 906;
+		var _csrf = "54434779-80ca-4fb6-bfcd-c236e8dad00f";
+		
+		var list;
+		var popupUrl;
+		
+		posX += 615;
+		popupUrl = "/common/popup/main/readCustomContentPopup.do";
+		
+	
+		
+		
+		var mainPop;
+		var nttId = customPopupCode;
+		var cookie = "nttId" + nttId;
+		var popName = '_blank' + nttId;
+		
+		//console.log("nttId="+nttId+", cookie="+cookie+", popName="+popName);
+		//console.log(fn_getCookie(cookie));
+		
+		if(fn_getCookie(cookie) != cookie){
+			var _form = document.createElement('form');
+			document.body.appendChild(_form);
+			_form.method="POST";
+			_form.action = CONTEXT_PATH + popupUrl;
+			_form.appendChild($.gfnElementAdd("nttId", nttId));
+			_form.appendChild($.gfnElementAdd("_csrf", _csrf));
+			if(nttId == "108730"){
+				popCart['popId' + nttId] = window.open(popupUrl + "?nttId=" + nttId, "popId" + nttId, "scrollbars=yes, width=800, height=740, left="+posX+", top=0");
+			}else{
+				popCart['popId' + nttId] = window.open(popupUrl + "?nttId=" + nttId, "popId" + nttId, "scrollbars=yes, width=600, height=380, left="+posX+", top=0");
+			}
+			
+			setTimeout(function(){
+				//popCart['popId' + nttId].focus();
+			}, 1400);
+			
+			if(popCart['popId' + nttId]){
+				popCart['popId' + nttId].focus();
+			}
+			posX += 615;
+			
+		}
+		
+	};
+	
+	function fn_openNoticeCustomPopup2(customPopupCode){
+		var posX = 0;
+		var w = 520;
+		var h = 906;
+		var _csrf = "54434779-80ca-4fb6-bfcd-c236e8dad00f";
+		
+		var list;
+		var popupUrl;
+		
+		posX += 10;
+		popupUrl = "/common/popup/main/readCustomContentPopup2.do";
+		
+	
+		
+		
+		var mainPop;
+		var nttId = customPopupCode;
+		var cookie = "nttId" + nttId;
+		var popName = '_blank' + nttId;
+		
+		//console.log("nttId="+nttId+", cookie="+cookie+", popName="+popName);
+		//console.log(fn_getCookie(cookie));
+		
+		if(fn_getCookie(cookie) != cookie){
+			var _form = document.createElement('form');
+			document.body.appendChild(_form);
+			_form.method="POST";
+			_form.action = CONTEXT_PATH + popupUrl;
+			_form.appendChild($.gfnElementAdd("nttId", nttId));
+			_form.appendChild($.gfnElementAdd("_csrf", _csrf));
+			
+			popCart['popId' + nttId] = window.open(popupUrl + "?nttId=" + nttId, "popId" + nttId, "scrollbars=yes, width=670, height=600, left="+posX+", top=10");
+			
+			setTimeout(function(){
+				//popCart['popId' + nttId].focus();
+			}, 1400);
+			
+			if(popCart['popId' + nttId]){
+				popCart['popId' + nttId].focus();
+			}
+			posX += 615;
+			
+		}
+		
+	};
+	
+	
+			
+
+</script>
+</head>
+<body>
+	<!--Start of header-->
+	
+
+
+
+
+
+
+
+
+
+	<!-- 웹접근성 건너뛰기 링크 -->
+	<ul class="skip skip_menu">
+		<li><a href="#skip_to_header">대메뉴 바로가기</a></li>
+		<li><a href="#skip_to_content">본문 바로가기</a></li>
+	</ul>
+	<header>
+			
+		<div class="header_top">
+			<div class="header_top_inner">
+				<h1>
+					<a href="/portal/main.do" id="btnLogo" title="한국교통안전공단 사이버검사소">한국교통안전공단 사이버검사소</a>
+				</h1>
+				<div class="member">
+					<img alt="공공서비스를 민간플랫폼에서 한 번에 디지털서비스개방" src="/images/PDS_HEADER.png" style="width:170px;position:absolute;float:left;top:5px;left:-200px;"/>
+					<ul style="margin:15px 15px 0 0">
+				
+					
+				
+					<li><a href="javascript:void(0);" id="btnLogin" tabindex="0"><span style="color:#595959;font-weight:bold;">로그인</span></a></li>
+				
+				
+					</ul>
+				</div>
+			</div>
+		</div>
+		<div class="gnb" id ="skip_to_header">
+			<ul class="gnb_inner">
+			</ul>
+		</div>
+		<div class="gnb_sub_bg">
+		</div>
+		
+	</header>
+	<!-- 세션 유무로 div하나 추가  -->
+	
+	<!--End of header-->
+	<div id="inb_direct_view" style="display:none;">
+		<div class="lnb_wrap_custom">
+			<div id="inb_direct_view_con" class="lnb_custom">
+				
+			</div>
+		</div>
+	</div>
+<form id="frmMenu" method="POST">
+	<input type="hidden" id="upperMenuNo" name="upperMenuNo"/>
+	<input type="hidden" id="currentMenuNo" name="currentMenuNo" value=""/>
+	<input type="hidden" id="userDefParam" name="userDefParam"/>
+</form>
+<form name="frmMenuList" method="post">
+	
+	<input type="hidden" name="tmpMenuNm" value="301080000|308000000|튜닝안전확인부품|/|/|/tp/spm/scm/tpSpmSaftyCfrmCmnsMntnList.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302010000|302000000|튜닝승인신청|/|/|/ts/tcr/trm/readTsTcrTuningReqstMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303010000|303000000|검사차량 조회/예약|/|/|/cp/pvr/prm/readCpPvrPrsecResveMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="304010000|304000000|자동차등록정보|/|/|/is/cri/cri/readIsCriCarRegistInfoView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="305010000|305000000|교육신청|/|/|/ge/gpe/gpe/readGeGpeGnrlzPrsecEdcFxListMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="306010000|306000000|내압용기정보조회|/|/|/ic/ici/ici/readIcIciInprssurCntnrInfoListMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="307010000|307000000|법인사업자전자안내|/|/|/cg/ceg/ceg/readCgCegCprElctrnGuidanceView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="308000000|3|안전확인부품|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="401000000|4|자동차검사스마트예약|/|/|/mobile/cp/readMobileCpMainListView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="301000000|3|TS튜닝알리고|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302020000|302000000|튜닝승인결과확인|/|/|/ts/tcr/crm/readTsTcrConfmResultMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303020000|303000000|예약확인 및 변경취소|/|/|/cp/rcc/rcc/readCpRccResveCnfirmChangeTab.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="304020000|304000000|중고차수출이력검사|/|/|/is/xhp/xhp/readIsXhpXportHistPrsecView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="305020000|305000000|교육신청관리|/|/|/ge/erm/erm/readGeErmEdcReqstManageListMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="306020000|306000000|내압용기 검사유효기간 조회|/|/|/ic/icp/icp/readIcIcpInprssurCntnrPrsecView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="402000000|4|튜닝승인결과확인|/|/|/mobile/ts/tcr/readMobileTsTcrConfmResultList.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="3|0|사이버검사소_대국민|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302030000|302000000|조회 서비스|/|/|/ts/tis/ism/readTsTisInqireSvcMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303000000|3|자동차검사예약|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303030000|303000000|콜센터예약결제|/|/|/cp/crs/crs/readCpCrsCllrResveSetleTab.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="304030000|304000000|검사유효기간조회|/|/|/is/pvi/pvi/readIsPviPrsecValidityInqireView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="305040000|305000000|내부직원 교육신청|/|/|/ge/gpe/gpe/readGeGpeImemEdcFxListMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="306030000|306000000|내압용기 검사예약|/|/|/ic/ipr/ipr/readIcIprInprssurResveMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="4|0|사이버검사소_모바일|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302000000|3|튜닝 서비스|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302040000|302000000|튜닝고객지원|/|/|/ts/tcs/csm/readTsTcsCstmrSportMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303040000|303000000|영수증출력|/|/|/cp/cro/rpo/readCpCroResvePrsecOutptTab.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="304040000|304000000|검사·튜닝 이력조회|/|/|/is/phi/phi/readIsPhiPrsecHistInqireTab.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="305050000|305000000|내부직원 교육관리|/|/|/ge/erm/erm/readGeErmImemEdcReqstManageListMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="306040000|306000000|내압용기 예약 확인 및 변경 취소|/|/|/ic/icc/icc/readIcIccInprssurCnfirmChange.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302050000|302000000|튜닝작업등록관리|/|/|/ts/tor/orm/readTsTorOpertRegistMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="304000000|3|자동차검사정보조회|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="304050000|304000000|민간검사소 조회|/|/|/cp/pvr/prm/readCpPvrPrsecResvePrivateInspofc.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="304060000|304000000|제원정보 조회|/|/|/ts/tis/ism/readTsTisSpecSvcMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="305030000|305000000|교육도우미|/|/|/ge/egc/egc/readGeEgcEdcGuidanceCnterListMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="306050000|306000000|내압용기 검사 영수증 출력|/|/|/ic/ipo/ipo/readIcIpoInprssurPrsecOutpt.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="308050000|308000000|국민 아이디어 제안|/|/|/tp/spm/scm/idear.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302060000|302000000|튜닝대리인등록관리|/|/|/ts/tar/tar/readTsTarTuningAgentRegistRegistMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303060000|303000000|예약신청 Q&amp;A|/|/|/cp/rr/rr/readCpRrResveReqstList.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="305000000|3|자동차검사원교육|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="306060000|306000000|내압용기 검사 결과 확인|/|/|/ic/ihi/ihi/readIcIhiInprssurPrsecHistInqire.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="308060000|308000000|튜닝부품소개|/|/|/tp/spm/scm/tuningPart.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="301070000|301000000|튜닝종합지원포털|/|/|/vtsp/"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302070000|302000000|튜닝업체목록조회|/|/|/ts/tor/tel/readTsTorTuningEntrpsListEntrpsListNmbr.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303070000|303000000|온라인재검사 신청|/|/|/cp/rinsp/rinsp/readCpPvrCarRinspResveMainView.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="306000000|3|내압용기 자동차|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302080000|302000000|튜닝 청렴상담신고|/|/|/ts/tor/tel/readTsTorTuningQaMlrdBbsListMain.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="303080000|303000000|온라인재검사 결과조회|/|/|/cp/rinsp/rinsp/readRinspAcapQryList.do"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="307000000|3|법인사업자 전자안내|/|/|dir"/>
+	
+	<input type="hidden" name="tmpMenuNm" value="302090000|302000000|튜닝 불편사항신고|/|/|/ts/tor/tel/readTsTorTuningCmplBbsListMain.do"/>
+	
+</form>
+
+<script>
+var customCurrentMenuNo = $("#currentMenuNo").val();
+var inbLocationUri = window.location.pathname;
+console.log(inbLocationUri);
+let inb_view_html = "";
+if(inbLocationUri=="/ny/gpe/cnm/readNyGpeCarNoticeMatterList.do"){
+	if (!$.gfnIsEmpty(customCurrentMenuNo)) {
+		$(".lnb_wrap").hide();
+	}
+	$("#inb_direct_view").show();
+	inb_view_html += "<a href=\"/portal/main.do\"><i class=\"lnb_icon_home\" id=\"btnHome\">홈으로</i></a>";
+	inb_view_html += "<div class=\"lnb_menu_custom\">";
+	inb_view_html += "<button>알림마당</button>";
+	inb_view_html += "<ul>";
+	inb_view_html += "<li><a href=\"/ny/gpe/cnm/readNyGpeCarNoticeMatterList.do?currentTab=0\" class=\"active\">알림마당</a></li>";
+	inb_view_html += "</ul>";
+	inb_view_html += "</div>";
+	$("#inb_direct_view_con").html(inb_view_html);
+	
+}else if(inbLocationUri=="/dr/cdp/cdp/readDrCdpCarDtaPublicListMain.do"){
+	if (!$.gfnIsEmpty(customCurrentMenuNo)) {
+		$(".lnb_wrap").hide();
+	}
+	$("#inb_direct_view").show();
+	inb_view_html += "<a href=\"/portal/main.do\"><i class=\"lnb_icon_home\" id=\"btnHome\">홈으로</i></a>";
+	inb_view_html += "<div class=\"lnb_menu_custom\">";
+	inb_view_html += "<button>자료실/공공데이터</button>";
+	inb_view_html += "<ul>";
+	inb_view_html += "<li><a href=\"/dr/cdp/cdp/readDrCdpCarDtaPublicListMain.do\" class=\"active\">자료실/공공데이터</a></li>";
+	inb_view_html += "</ul>";
+	inb_view_html += "</div>";
+	$("#inb_direct_view_con").html(inb_view_html);
+}else if(inbLocationUri=="/pr/gpe/cp/readPrGpeCarPrseclink.do"){
+	if (!$.gfnIsEmpty(customCurrentMenuNo)) {
+		$(".lnb_wrap").hide();
+	}
+	$("#inb_direct_view").show();
+	inb_view_html += "<a href=\"/portal/main.do\"><i class=\"lnb_icon_home\" id=\"btnHome\">홈으로</i></a>";
+	inb_view_html += "<div class=\"lnb_menu_custom\">";
+	inb_view_html += "<button>자동차 검사 홍보관</button>";
+	inb_view_html += "<ul>";
+	inb_view_html += "<li><a href=\"/pr/gpe/cp/readPrGpeCarPrseclink.do\" class=\"active\">자동차 검사 홍보관</a></li>";
+	inb_view_html += "</ul>";
+	inb_view_html += "</div>";
+	$("#inb_direct_view_con").html(inb_view_html);
+}else if(inbLocationUri=="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do"){
+	if (!$.gfnIsEmpty(customCurrentMenuNo)) {
+		$(".lnb_wrap").hide();
+	}
+	$("#inb_direct_view").show();
+	inb_view_html += "<a href=\"/portal/main.do\"><i class=\"lnb_icon_home\" id=\"btnHome\">홈으로</i></a>";
+	inb_view_html += "<div class=\"lnb_menu_custom\">";
+	inb_view_html += "<button>FAQ</button>";
+	inb_view_html += "<ul>";
+	inb_view_html += "<li><a href=\"/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do\" class=\"active\">FAQ</a></li>";
+	inb_view_html += "</ul>";
+	inb_view_html += "</div>";
+	$("#inb_direct_view_con").html(inb_view_html);
+}
+
+
+
+if(Number('202610290953') >= 202305181900 && Number('202610290953')< 202305182200) 
+{
+	location.href="/portal/publicServiceNoticeView.do";
+}
+	$(document).ready(function() {
+
+// 		window.onpopstate = function(event){
+// 			location.reload();
+// 		}
+// 		window.onpageshow = function(event){
+// 			if(event.persisted || (window.performance && window.performance.navigation.type == 2)){
+// 				location.reload();
+// 			}
+// 		}
+		
+		
+		$('header > .gnb > ul > li a').focus(function(){
+			$('header').addClass("on");
+		})
+		$('header > .gnb > ul > li:last-child > ul > li:last-child a').blur(function(){
+			$('header').removeClass("on");
+		})
+		
+		$("#btnLogin").click(function() {
+			fn_login();
+		});
+		
+		$("#btnLogin").keydown(function (e) {
+			if(e.keyCode == "13" || e.keyCode == "32") {
+				$(this).trigger("click");
+			}
+		});
+		
+		$("#btnLogout").click(function() {
+			fn_logout();
+		});
+		
+		$("#btnLogout").keydown(function (e) {
+			if(e.keyCode == "13" || e.keyCode == "32") {
+				$(this).trigger("click");
+			}
+		});
+	});
+	
+	/**
+	 * @class		:	로그인
+	 * @author		:	sangbum
+	 * @date		:	2020. 12. 22.
+	 */
+	function fn_login() {
+		//location.href = "https://www.kotsa.or.kr/mbs/inqFrmLogin.do?nextPage=https://www.cyberts.kr/sso/CreateRequest.jsp?RelayState=/common/redirectSsoLogin.do?turl=/portal/main.do";
+		//location.href = "https://www.kotsa.or.kr/tsum/mbs/inqFrmLogin.do?nextPage=https://www.cyberts.kr/sso/CreateRequest.jsp?RelayState=/common/redirectSsoLogin.do?turl=/portal/main.do";// [2023차세대통합SSO작업]
+		location.href = "https://tsum.kotsa.or.kr/tsum/mbs/inqFrmLogin.do?nextPage=https://www.cyberts.kr/sso/CreateRequest.jsp?RelayState=/common/redirectSsoLogin.do?turl=/portal/main.do";// [2024통합SSO 통전 이전 작업]
+	}
+	
+
+	
+    /**
+	 * @class		:	MY 페이지 회원자동차 정보 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 12. 02.
+	 */
+	function fn_readPGpeMberCarInfoView() {
+		location.href="/p/gpe/mci/readPGpeMberCarInfoView.do";
+	}
+</script>
+	<!--End of header-->
+	
+	<!--Start of contents-->
+
+	
+		
+
+
+
+
+
+
+
+
+
+	<!--Start of maintop-->
+	<div class="main_top_wrap" id="skip_to_content">
+		
+<div class="ieCloseNoticeTop">
+	<div class="ieCloseNoticeBody" id="ieCloseNoticeBodyIe">
+		<p>&nbsp;현재 고객님께서는 인터넷 익스플로러 브라우저를 이용하고 계십니다.</p>
+		<p><span class="ui-icon ui-icon-notice"></span><span style="color:#FF0000;font-weight:bold;">인터넷 익스플로러(Internet Explorer)[<img src="/images/ie_icon2.png" style="width:20px;" alt="인터넷 익스플로러 아이콘">] 브라우저 이용 시 일부 기능이 동작하지 않거나 오류</span>가 발생할 수 있습니다.</p>
+		<p>&nbsp;보안에 취약한 Internet Explorer 대신 아래의 권장 브라우저를 다운로드 및 설치해 이용 부탁드립니다.</p>
+		<br>
+		<span class="ui-icon ui-icon-info"></span> 권장 브라우저<br>
+		<span class="ui-icon ui-icon-notice"></span>사이버검사소 홈페이지는 웹 표준을 준수하는 구글 크롬[<a href="https://www.google.com/chrome" target="_blank" title="(새창)구글 크롬 다운로드 홈페이지로 이동합니다."><img src="/images/chrome_icon.png" style="width:18px;" alt="구글 크롬 아이콘"></a>]을 비롯해 크로뮴엔진을 이용한 브라우저(Microsoft Edge, 파이어폭스 등)에 최적화 되어있습니다.
+		<p>&nbsp;원활한 홈페이지 이용을 위해 크롬 브라우저 사용을 권장합니다.</p>
+		<p>&nbsp;크롬 브라우저는 아래의 링크에서 다운받으실 수 있습니다.</p>
+		<br>
+		<p>&nbsp;구글 크롬 다운로드 바로가기 링크 : <a href="https://www.google.com/chrome" target="_blank" title="(새창)구글 크롬 다운로드 홈페이지로 이동합니다." style="color:#0000FF;font-weight:bold;"><img src="/images/chrome_icon.png" style="width:34px;" alt="구글 크롬 아이콘">https://www.google.com/chrome</a></p>
+		
+		<a href="javascript:viod(0);return false;" class="isNoticeCloseIcon ui-icon ui-icon-circle-close" onclick="ieNoticeClose();return false;"></a>
+	</div>
+	<div class="ieCloseNoticeBody" id="ieCloseNoticeBodyKakao">
+		<p>&nbsp;</p>
+		<p>&nbsp;사이버검사소의 서비스는 카카오 브라우저 이용 시 일부 기능이 동작하지 않거나 오류가 발생할 수 있습니다.</p>
+		<br>
+		<span class="ui-icon ui-icon-info"></span> 권장 브라우저<br>
+		<p>&nbsp;권장(표준) 브라우저 접속방법(오류 발생시)</p>
+		<p>&nbsp;갤럭시 등(Android) : 우측 하단 ⋮ 버튼 누른 뒤 다른 브라우저로 열기</p>
+		<p>&nbsp;아이폰(iOS) : 우측 하단 공유(사진) 버튼 누른 뒤 Chrome에서 열기</p>
+		<a href="javascript:viod(0);return false;" class="isNoticeCloseIcon ui-icon ui-icon-circle-close" onclick="ieNoticeClose();return false;"></a>
+	</div>
+</div>
+<div class="clear" style="clear:both;"></div>
+<br>
+<script>
+
+$(document).ready(function(){
+	let agent = navigator.userAgent.toLowerCase();
+	console.log(agent);
+	
+	if( (navigator.appName == 'Netscape' && navigator.userAgent.search('Trident') != -1 ) || (agent.indexOf('msie') != -1) ){
+		$("#ieCloseNoticeBodyIe").slideDown(1000);
+	}
+	if( (agent.indexOf('kakaotalk') > -1 )){
+		$("#ieCloseNoticeBodyKakao").slideDown(1000);
+	}
+});
+
+function ieNoticeClose(){
+	$(".ieCloseNoticeBody").slideUp();
+}
+</script>
+		<div class="main_top">
+			<div class="box box1">
+				<div class="title">
+					<div class="subtit">VEHICLE TUNING SUPPORT PORTAL</div>
+					<h1>TS튜닝알리고</h1>
+<!-- 					<a onclick="javascript:fn_pageMove('301010000',CONTEXT_PATH+'/tj/tjj/tjj/readTjTjjTuningJoJbhntMain.do')">바로가기</a> -->
+				</div>
+				<div class="item">
+					<ul> 
+						<li><a href="https://www.cyberts.kr/vtsp/mrk/tchnlgy/list.do" target="_blank"><i class="main_icon_01_01"></i><span>기술<br/>제품 마켓</span></a></li>
+						<li><a href="https://www.cyberts.kr/vtsp/bsn/exfi/system/list.do" target="_blank"><i class="main_icon_01_02"></i><span>튜닝<br/>비즈니스지원</span></a></li>
+						<li><a href="https://www.cyberts.kr/vtsp/job/edc/cldr/selectView.do" target="_blank"><i class="main_icon_01_03"></i><span>Edu·Job</span></a></li>
+					</ul>
+				</div>
+				<p>중소튜닝업체들의 판로지원과 홍보지원을 통해<br>국민들이 튜닝업체를 신뢰하고 이용할 수 있는 <br>시스템적 환경 마련과 튜닝 산업 활성화를 위해<br>튜닝업체를 지원하는 플랫폼입니다.</p>
+			</div>
+			<div class="box box2">
+				<div class="title">
+					<div class="subtit">EASY & QUICK</div>
+					<img alt="디지털서비스개방" src="/images/PDS_CONTENT.png" class="boxtit_img"/><span class="boxtit">으로</span><br>
+					<span class="boxtit2">누구나 쉽게, 한 곳에서,<br>한 번에 이용하는</span><br><br>
+					<h1 style="font-weight:bold;">자동차 검사 예약</h1>
+				</div>
+				<div class="item">
+					<ul>
+						<li><a href="javascript:;" onclick="javascript:fn_pageMove('303010000',CONTEXT_PATH+'/cp/pvr/cpr/readCpPvrCarPrsecResveMainView.do')"><i class="main_icon_02_01"></i><span>자동차</span></a></li>
+						<li><a href="javascript:;" onclick="javascript:fn_pageMove('303010000',CONTEXT_PATH+'/cp/pvr/apr/readCpPvrAbylPrsecResveMainView.do')"><i class="main_icon_02_02"></i><span>이륜차</span></a></li>
+						<li><a href="javascript:;" onclick="javascript:fn_pageMove('303010000',CONTEXT_PATH+'/cp/pvr/ber/readCpPvrBusEcshgResveMainView.do')"><i class="main_icon_02_03"></i><span>대형버스</span></a></li>
+						<li><a href="javascript:;" onclick="javascript:fn_etcPageMove('303010000',CONTEXT_PATH+'/cp/pvr/prm/readCpPvrPrsecResveMainView.do','303000000')"><i class="main_icon_02_04"></i><span>기타검사</span></a></li>
+					</ul>
+				</div>
+				<p>신규검사, 정기(종합)검사, 튜닝검사, 임시검사,<br>수리검사 및 안전검사 예약 가능합니다.</p>	
+			</div>
+			
+			<div class="box box3">
+				<div class="title">
+					<div class="subtit">SAFTY KOREA</div>
+					<h1>자동차<br>튜닝 서비스</h1>
+				</div>	
+				<div class="item">
+					<ul>
+						<li><a href="javascript:;" onclick="javascript:fn_pageMove('302010000',CONTEXT_PATH+'/ts/tcr/ctr/readTsTcrCarTuningReqstCarInfoTab.do')"><i class="main_icon_03_01"></i><span>자동차<br>튜닝신청</span></a></li>
+						<li><a href="javascript:;" onclick="javascript:fn_pageMove('302010000',CONTEXT_PATH+'/ts/tcr/ttr/readTsTcrTwowhlCarTuningReqstInfo.do')"><i class="main_icon_03_02"></i><span>이륜차<br>튜닝신청</span></a></li>
+						<li><a href="javascript:;" onclick="javascript:fn_pageMove('302050000',CONTEXT_PATH+'/ts/tor/orm/readTsTorOpertRegistMainView.do')"><i class="main_icon_03_03"></i><span>튜닝작업<br>등록관리</span></a></li>
+					</ul>
+				</div>	
+			</div>
+			
+		</div>
+	</div>
+	<!--End of maintop-->
+
+
+	<!--Start of mainbottom-->
+	
+	
+
+	<div class="main_bottom_wrap">
+		<div class="main_bottom">			
+			<div class="main_notice">
+			<form id="noticeForm">
+				<input type="hidden" id="nttId"     	name="nttId"/>
+				<input type="hidden" id="encNttId"     	name="encNttId"/>
+				<input type="hidden" id="bbsId"     	name="bbsId"/>
+			</form>
+				<h4>공지사항</h4>
+				<button class="more main_notice_more_btn" onclick="javascript: fn_pageMove('203050100',CONTEXT_PATH+'/ny/gpe/cnm/readNyGpeCarNoticeMatterList.do');">공지사항 더보기</button>
+				<ul>
+					
+						
+						<li>
+							
+								<a href="javascript:;" onclick="fn_Detail('iqbNPk7Zm2snLgt2YJE9zw==','BBSMSTR_000000000011')" title="새창 열기"><p><span style="display:inline-block;background:#db182c;padding:0px 7px;color:#ffffff;font-size:11px;line-height:20px;border-radius:4px;">중요</span>&nbsp;2026 코리아 튜닝카 페스티벌 안내</p></a>
+							
+							
+							
+	                    </li>
+	                
+						
+						<li>
+							
+								<a href="javascript:;" onclick="fn_Detail('QFuBNK6Y1Cnw+mGIRB2mkg==','BBSMSTR_000000000011')" title="새창 열기"><p><span style="display:inline-block;background:#db182c;padding:0px 7px;color:#ffffff;font-size:11px;line-height:20px;border-radius:4px;">중요</span>&nbsp;VIMS DB메모리 교체작업 안내</p></a>
+							
+							
+							
+	                    </li>
+	                
+						
+						<li>
+							
+								<a href="javascript:;" onclick="fn_Detail('jBnQiDFXGdAuDS5I6goMYA==','BBSMSTR_000000000011')" title="새창 열기"><p><span style="display:inline-block;background:#db182c;padding:0px 7px;color:#ffffff;font-size:11px;line-height:20px;border-radius:4px;">중요</span>&nbsp;2026 자동차튜닝 사무편람 개정본 배포</p></a>
+							
+							
+							
+	                    </li>
+	                
+						
+						<li>
+							
+								<a href="javascript:;" onclick="fn_Detail('NrXkkJMAXJ+hgqe9fgojiw==','BBSMSTR_000000000011')" title="새창 열기"><p><span style="display:inline-block;background:#db182c;padding:0px 7px;color:#ffffff;font-size:11px;line-height:20px;border-radius:4px;">중요</span>&nbsp;방문 컨설팅 안내</p></a>
+							
+							
+							
+	                    </li>
+	                
+						
+						<li>
+							
+								<a href="javascript:;" onclick="fn_Detail('z4glYxt1ie8+PfFEY46aig==','BBSMSTR_000000000011')" title="새창 열기"><p><span style="display:inline-block;background:#db182c;padding:0px 7px;color:#ffffff;font-size:11px;line-height:20px;border-radius:4px;">중요</span>&nbsp;2026 TS 이륜자동차 튜닝 사무편람(매뉴얼) 알림</p></a>
+							
+							
+							
+	                    </li>
+	                
+						
+						<li>
+							
+								<a href="javascript:;" onclick="fn_Detail('gZT6roe8Qh1iwdZwJXdOvg==','BBSMSTR_000000000011')" title="새창 열기"><p><span style="display:inline-block;background:#db182c;padding:0px 7px;color:#ffffff;font-size:11px;line-height:20px;border-radius:4px;">중요</span>&nbsp;튜닝승인 신청 안내</p></a>
+							
+							
+							
+	                    </li>
+	                
+						
+						<li>
+							
+								<a href="javascript:;" onclick="fn_Detail('V4Irgeq8/TBwb9sdY5t9eA==','BBSMSTR_000000000011')" title="새창 열기"><p><span style="display:inline-block;background:#db182c;padding:0px 7px;color:#ffffff;font-size:11px;line-height:20px;border-radius:4px;">중요</span>&nbsp;승인담당자 변경으로 인한 연락처 변경 안내_260901</p></a>
+							
+							
+							
+	                    </li>
+	                
+						
+						<li>
+							
+							
+								<a href="javascript:;" onclick="fn_Detail('sL+PkhjDxj5bQnLO2z/xLg==','BBSMSTR_000000000011')" title="새창 열기"><p>이륜자동차 튜닝 승인 신청 방법 안내(PPT 자료 첨부)</p>
+								
+								</a>
+							
+							
+	                    </li>
+	                
+				</ul>				
+			</div>
+			<div>				
+				<h4>자료실</h4>
+ 				<button class="more main_notice_more_btn" onclick="fn_readDtaPublic();return false;">자료실 더보기</button>
+				<ul>
+					
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('0f8aQctoNYHKL6STKoILgg==','BBSMSTR_000000000091');return false;" title="이동"><p>튜닝 전산자료 수정요청서 등록 방법 안내</p></a></li>
+	                
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('2L76lnxZNfXkAdU465fLDw==','BBSMSTR_000000000091');return false;" title="이동"><p>승용일반형↔승용겸화물 튜닝 신청방법 예시</p></a></li>
+	                
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('taPdvX+mxpdI/CSYxLE16g==','BBSMSTR_000000000091');return false;" title="이동"><p>튜닝신청 수수료 영수증 출력 방법 안내</p></a></li>
+	                
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('r9I1Ab7TrWfUtmpLgf76DA==','BBSMSTR_000000000091');return false;" title="이동"><p>보조틀 설치 튜닝 신청방법 예시</p></a></li>
+	                
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('M37nQ1w/gxL8FVEduiAbnQ==','BBSMSTR_000000000091');return false;" title="이동"><p>튜닝 대리인 등록, 신청방법 안내드립니다.</p></a></li>
+	                
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('N4VimKamUR3R5G0TzabNTA==','BBSMSTR_000000000091');return false;" title="이동"><p>선거유세차 튜닝승인 신청시 주의사항 안내</p></a></li>
+	                
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('8VjXnlmp3IrjL4xS1VenvQ==','BBSMSTR_000000000091');return false;" title="이동"><p>일시적튜닝(선거유세차) 관련 튜닝승인 신청방법 등 공지</p></a></li>
+	                
+						<li><a href="javascript:void(0);" onclick="fn_Detail2('6xg4BwYTHc161VAG+B4mbg==','BBSMSTR_000000000091');return false;" title="이동"><p>서치라이트, 경광등 탈거 튜닝 신청방법 예시</p></a></li>
+	                
+				</ul>
+			</div>
+			<div id="empmList">				
+				<h4>FAQ</h4>
+ 				<button class="more main_notice_more_btn" onclick="javascript: fn_pageMove('203050100',CONTEXT_PATH+'/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=all&nttDeptCode=00');">FAQ 더보기</button>
+				<ul>
+					
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=ZZxZdk/+xZX9bSwA7nXnGw==&nttDeptCode=01" title="이동"><p>물품적재장치 변경 시 시야확보장치를 튜닝승인대상으로 볼 수 있나요??</p></a></li>
+	                
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=RvfTqLuM2hSmwSn5AM2ROg==&nttDeptCode=01" title="이동"><p>가변축 복륜을 단륜으로 변경하는 경우 튜닝승인대상인가요?</p></a></li>
+	                
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=gZT6roe8Qh1iwdZwJXdOvg==&nttDeptCode=01" title="이동"><p>포장탑 경미한 구조장치</p></a></li>
+	                
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=BKJODBCFyP+HPIm49Ew4XQ==&nttDeptCode=01" title="이동"><p>튜닝인증부품 설치 시 스티커 부착 또는 전산등록이 안되었을 때 자동차 검사 적부판정</p></a></li>
+	                
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=a0eNx9vtC7sgyAQRLD52Og==&nttDeptCode=01" title="이동"><p>조향핸들 지금 측정방법이 어떻게 될까요?</p></a></li>
+	                
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=6KgaYwxKhV4qtU7STQe6iw==&nttDeptCode=01" title="이동"><p>어린이 승합자동차 상부에 표시등 중 일부가 점등이 안되는 경우 부적합 사항일까요?</p></a></li>
+	                
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=Er4JuAzJIGGL41pnr/10dA==&nttDeptCode=01" title="이동"><p>포장탑(측면합판보강)을 튜닝한 소형화물자동차가 측면보강을 제거하는 경우 경미한 구조장치에 해당이 되는지요??</p></a></li>
+	                
+						<li><a href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do?viewId=5F7weM2198DE2sUoQ7yowQ==&nttDeptCode=01" title="이동"><p>특수자동차에 인버터함을 수납함으로 볼 수 있나요??</p></a></li>
+	                
+				</ul>
+			</div>
+
+
+		</div>
+	</div>
+	
+	
+	
+	<!-- 포인트 부족시 alert -->
+	<div id="noticeMsgLayerPopup" class="cymd_layerPop_wrap" style="display:none; position: fixed; top:0; left:0;align-items: center;justify-content: center;">
+		<div class="cymd_layerPop" style="width:600px;" tabindex="0">
+			<div class="cymd_layerPop_head">
+				<span>CVD, VDP 사업 관련 안내</span>
+				<button type="button" class="close_btn" title="닫기" onclick="fn_closeNoticePopuplay();"><i class="close_icon">팝업창 닫기</i></button>
+			</div>
+			<div class="cymd_layerPop_body" tabindex="0" style="padding: 10px; text-align: center;">
+				<img id="upDrwId0" src="/ts/tcr/ctr/readDrwImage.do?atchFileId=FILE_mgunjnfx4862083&amp;fileSn=0" style="width:100%;">
+				<!--Start of cymd_reference-->
+				<div class="cymd_reference">					
+					<div class="cont_reference">
+						<ul>
+							<li>기간 : 2026. 6. 29.~ 2026. 7. 24.</li>
+							<li>대상 : https://cyberts.kr(해당 도메인 반드시 포함)</li>
+							<li>예외 : https://cyberts.kr/vstp 및 대상 도메인과 무관한 URL</li>
+							<li>- 신청, 등록, 수정, 삭제와 관련된 서비스 공격 금지</li>
+							<li>(※ 자동자관리법 제43조의 의거하여 대리인 신청,등록 가능 시스템)</li>
+						</ul>
+						<div class="board_a_view_btn center">
+							<a href="javascript:void(0);" onclick="noticeGo('bg0rEjVLbJWII3jG4SSrbA==');return false;" style="font-weight:bold;color:#0000FF;">[※ 상세 공지사항 자세히 보기]</a>
+						</div>	
+					</div>
+				</div>
+				<!--End of cymd_reference-->
+			</div>
+		</div>
+	</div>
+	<!--End of cymd_layerPop-->
+	 
+	<!--End of mainbottom-->
+<script type="text/javascript">
+
+
+var noticePopupList = [];	// 메인 팝업공지
+
+	if('iqbNPk7Zm2snLgt2YJE9zw==' != ""){
+		noticePopupList.push({nttId: '108981', encNttId: 'iqbNPk7Zm2snLgt2YJE9zw=='});
+	}
+
+	if('sL+PkhjDxj5bQnLO2z/xLg==' != ""){
+		noticePopupList.push({nttId: '108980', encNttId: 'sL+PkhjDxj5bQnLO2z/xLg=='});
+	}
+
+	if('6UYevMuc1/dE33WxYF6gPg==' != ""){
+		noticePopupList.push({nttId: '108930', encNttId: '6UYevMuc1/dE33WxYF6gPg=='});
+	}
+
+
+
+$(document).ready( function () {
+	
+
+		fn_openNoticePopup();	// 팝업 표시
+// 	}
+	
+	if(Number('202610290953') >= 202403120001 && Number('202610290953')< 202407010000){
+		fn_openNoticeCustomPopup("107017");	// 팝업 표시
+	}
+	
+	if(Number('202610290953') >= 202410180001 && Number('202610290953')< 202410310000){
+		fn_openNoticeCustomPopup2("207392");	// 팝업 표시
+	}
+
+
+// 		fn_openNoticeCustomPopup("108730");	// 팝업 표시
+// 	}
+	
+	if("Y" == "N") {
+		$.gfnShowPopupLayerTuning("/ts/tar/tar/readTsTarTuningAgentRegistStplatAgrePopup.do", "580", "agentStplatAgre", "", "안내");
+	}
+	
+	//fn_openNoticePopuplay();
+	
+
+});
+
+
+
+/**
+ * @class		:	자료실 메인 화면으로 이동 한다.
+ * @author		:	SeonminKim
+ * @date		:	2020. 11. 30.
+ */
+function fn_readDtaPublic() {
+	location.href="/dr/cdp/cdp/readDrCdpCarDtaPublicListMain.do";
+}
+
+
+function fn_chkPopupOpend(p){
+	if(p != undefined)
+		if(!p.closed)
+			p.close();
+}
+
+// //공지사항 상세화면으로 이동
+function fn_Detail(encNttId,bbsId) {
+	$("#noticeForm input[name='nttId']").val(0);
+	$("#noticeForm input[name='encNttId']").val(encNttId);
+ 	$("#noticeForm input[name='bbsId']").val(bbsId);
+	
+ 	var $frm = $("#noticeForm");
+ 	$frm.attr("action", "/ny/gpe/cnm/readNyGpeCarNoticeMatterDetail.do");
+ 	$frm.submit();
+ }
+ 
+////자료실 상세화면으로 이동
+function fn_Detail2(encNttId,bbsId) {
+	$("#noticeForm input[name='nttId']").val(0);
+	$("#noticeForm input[name='encNttId']").val(encNttId);
+	$("#noticeForm input[name='bbsId']").val(bbsId);
+
+	var $frm = $("#noticeForm");
+	$frm.attr("action", "/dr/cdp/cdp/readDrCdpCarDtaPublicDetailView.do");
+	$frm.submit();
+}
+// /**
+//  * @class		:	쿠키조회
+//  * @author		:	Jaehyun Kim
+//  * @date		:	2021. 1. 12.
+//  */
+function fn_goJobDatail(url){
+	window.open(url)
+}
+function fn_getCookie(key){
+	var keyEq  =  key + "=";
+	var getKey = document.cookie.split(";");
+	for(var i = 0; i < getKey.length; i++){
+		var f = getKey[i];
+		while(f.charAt(0) == ' ') f = f.substring(1,f.length);
+		if(f.indexOf(keyEq) == 0){
+			return f.substring(keyEq.length, f.length);
+		}
+	}
+	return null;
+}
+function textOverCut(txt,leng, lastTxt){
+	if(leng =="" || leng == null){ 
+		leng=30;
+	}
+	if(lastTxt =="" || lastTxt == null){
+		lastTxt ="...";
+	}
+	if(txt.length > leng){
+		txt = txt.substr(0, leng) + lastTxt;
+	}
+	return txt;
+}
+function formatDate(dateVal, delimiter) {
+	var sRegexp = /[@*\\\'\"#]/gi;
+	
+	if( $.gfnIsEmpty(dateVal) ) return "";
+	if( $.gfnIsEmpty(delimiter) || sRegexp.test(delimiter) ) delimiter = ".";
+	
+	return $.gfnMaskFormatString(dateVal, "####" + delimiter + "##" + delimiter + "##");
+};
+
+function fn_etcPageMove(currentMenuNo, menuUrl, upperMenuNo) {
+	var $frmTopMenu = $("#frmMenu");
+	var arrLeftMenu = new Array();
+	var sParentMenuNo = "";
+	if( $.gfnIsEmpty(currentMenuNo) ) {
+		alert("선택된 메뉴가 없습니다.");
+		return;
+	}
+	//<a href="javascript:fn_pageMove('303010000','/cp/pvr/prm/readCpPvrPrsecResveMainView.do','303000000')">검사차량 조회/예약</a>
+	//fn_pageMove('303010000','/cp/pvr/prm/readCpPvrPrsecResveMainView.do','303000000')
+	if( g_arrMenuList == null || g_arrMenuList.length == 0 ) {
+		fn_initMenuArr();
+	}
+	
+	// 마지막 노드 아니면
+	if( fn_hasChildTreeNode(currentMenuNo) ) {
+		var arrLastMenu = fn_lastTreeNode(sParentMenuNo);
+		
+		if( arrLastMenu != null && arrLastMenu.length > 0 ) {
+			$("#currentMenuNo").val(arrLastMenu[0]);
+			menuUrl = arrLastMenu[5];
+		}
+	} else {
+		$("#currentMenuNo").val(currentMenuNo);
+	}
+	
+	$("#upperMenuNo").val(upperMenuNo);
+	$("#userDefParam").val("Y");
+	
+	$frmTopMenu.attr("action", menuUrl);
+	$frmTopMenu.attr("method", "POST");
+	$frmTopMenu.submit();
+}
+
+function fn_openNoticePopuplay() {
+	$("#noticeMsgLayerPopup").css("display", "flex");
+}
+
+function fn_closeNoticePopuplay() {
+	$("#noticeMsgLayerPopup").hide();
+}
+
+function noticeGo(encNttId){
+	fn_closeNoticePopuplay();
+	location.href = "/ny/gpe/cnm/readNyGpeCarNoticeMatterDetail.do?nttId=0&encNttId="+encNttId+"&bbsId=BBSMSTR_000000000011";
+}
+</script>
+
+	
+	
+
+	<!--End of contents-->
+	
+	<!--Start of quickmenu-->
+	
+
+
+	<!--Start of quickmenu-->
+	<div id="quickmenu" class="qm_main"><!--메인페이지에는 퀵메뉴에 지금처럼 qm_main 클래스가 삽입되어야 합니다.-->
+		<div class="qm_items">
+			<div class="qm_customer">
+				<div>
+					<p>고객센터</p>
+					<i class="qm_icon_customer"></i>
+					<p class="qm_cust_num">1577<br>0990</p>
+				</div>
+			</div>
+			<ul>
+				<li>
+					<a href="javascript:;" onclick="fn_readPrsvsList();">
+						<i class="qm_icon_01"></i>
+						<p>내압용기<br>검사</p>
+					</a>					
+				</li>
+				<li>
+					<a href="javascript:;" onclick="fn_readSynsInscList();">
+						<i class="qm_icon_02"></i>
+						<p>자동차<br>종합검사교육</p>
+					</a>
+				</li>
+				<li>
+					<a href="javascript:;" onclick="fn_readCarInfoServList();">
+						<i class="qm_icon_03"></i>
+						<p>자동차<br>정보서비스</p>
+					</a>
+				</li>
+				<li>
+					<a href="javascript:;" onclick="javascript:fn_readNtceMttrList();">
+						<i class="qm_icon_01"></i>
+						<p>알림마당</p>
+					</a>
+				</li>
+				<li>
+					<a href="javascript:;" id="btnDtaPublic">
+						<i class="qm_icon_02"></i>
+						<p>자료실</p>
+					</a>
+				</li>
+				<li>
+					<a href="javascript:;" onclick="javascript:fn_readPrsecLink();">
+						<i class="qm_icon_03"></i>
+						<p>홍보관</p>
+					</a>
+				</li>
+				<li>
+					<a href="javascript:;" onclick="javascript:fn_readFaqList();">
+						<i class="qm_icon_04"></i>
+						<p>FAQ</p>
+					</a>
+				</li>
+				
+				<li>
+					<a href="javascript:;" onclick="javascript:fn_pageMove('303070000','/cp/rinsp/rinsp/readCpPvrCarRinspResveMainView.do','303000000');">
+						<i class="qm_icon_03"></i>
+						<p>온라인<br>재검사</p>
+					</a>
+				</li>
+				
+			</ul>
+		</div>
+		<!-- <div class="qm_top">
+			<div>
+				<i class="qm_icon_top">맨 위로</i>
+				<p>TOP</p>
+			</div>
+		</div> -->
+	</div>
+	<!--End of quickmenu-->
+<script type="text/javascript">
+	$(document).ready(function() {
+		$("#btnDtaPublic").on("click keydown", function(e) {
+			if( e.type == "click" || (e.type == "keydown" && e.keyCode == "13") ) {
+				fn_readDtaPublic();
+			}
+		});
+	});
+	/**
+	 * @class		:	내압용기 자동차 검사 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 11. 30.
+	 */
+	function fn_readPrsvsList() {
+// 		fn_pageMove('306010000','/ic/ici/ici/readIcIciInprssurCntnrInfoListMain.do','306000000');
+		fn_pageMove("306010000","/ic/ici/ici/readIcIciInprssurCntnrInfoListMain.do","306000000");
+		// 세션문제로 fn_pageMove
+		//location.href="/ic/ici/ici/readIcIciInprssurCntnrInfoListMain.do";
+		
+	}
+	/**
+	 * @class		:	자동차 종합검사 교육 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 11. 30.
+	 */
+	function fn_readSynsInscList() {
+		 fn_pageMove("305010000","/ge/gpe/gpe/readGeGpeGnrlzPrsecEdcFxListMain.do","305000000");
+		//location.href="/ge/gpe/gpe/readGeGpeGnrlzPrsecEdcFxListMain.do";
+	}
+	/**
+	 * @class		:	자동차 정보 서비스 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 11. 30.
+	 */
+	function fn_readCarInfoServList() {
+		 fn_pageMove("304010000","/is/cri/cri/readIsCriCarRegistInfoView.do","304000000");
+		//location.href="/is/cri/cri/readIsCriCarRegistInfoView.do";
+	}
+	/**
+	 * @class		:	알림마당 메인 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 11. 30.
+	 */
+	function fn_readNtceMttrList() { 
+		location.href="/ny/gpe/cnm/readNyGpeCarNoticeMatterList.do?currentTab=0";
+	}
+	
+	/**
+	 * @class		:	자료실 메인 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 11. 30.
+	 */
+	function fn_readDtaPublic() {
+		location.href="/dr/cdp/cdp/readDrCdpCarDtaPublicListMain.do";
+	}
+	
+	/**
+	 * @class		:	홍보관 메인 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 12. 1.
+	 */
+	function fn_readPrsecLink() {
+		location.href="/pr/gpe/cp/readPrGpeCarPrseclink.do";
+	}
+	
+	/**
+	 * @class		:	FAQ 메인 화면으로 이동 한다.
+	 * @author		:	SeonminKim
+	 * @date		:	2020. 12. 1.
+	 */
+	function fn_readFaqList() {
+		location.href="/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do";
+	}
+
+</script>
+	<!--End of quickmenu-->
+	
+	<!--Start of footer-->
+	
+
+
+
+
+
+		<footer>
+		<hr>
+		<div class="footer_top">
+			<div class="ft_call">
+				<i class="footer_icon_call">전화 아이콘</i>
+				<p>TS 고객만족센터 <span>1577-0990</span></p>
+			</div>
+			<div class="ft_time">
+				<p>일반상담 : 월 ~ 금 09:00 ~ 18:00 (토요일 및 공휴일 휴무)</p>
+			</div>
+			<div class="ft_link"><!--'관련사이트'' 버튼 클릭 시 'on' class 추가해 주세요-->
+				<button>관련 사이트</button>
+				<ul>
+					
+					<li><a href="http://www.2018familyevent.co.kr/" target="_blank">모든 가족이 웃음 짓는 대한민국 함께 만들어요</a></li>
+					
+					<li><a href="http://www.simpan.go.kr/nsph/index.html" target="_blank">온라인행정심판</a></li>
+					
+					<li><a href="https://www.car365.go.kr/" target="_blank">자동차 365</a></li>
+					
+					<li><a href="https://ts2020.kr/tslms/main.do" target="_blank">중장년층 취업을 위한 버스운전자 양성</a></li>
+					
+					<li><a href="http://www.gov.kr" target="_blank">정부24</a></li>
+					
+					<li><a href="http://www.ecar.go.kr/Services" target="_blank">자동차민원 대국민포털</a></li>
+					
+					<li><a href="http://kpchome.kotsa.or.kr/potal/parking/edu/writeReceiptEdu.do?sys_code=003&amp;amp;dept=08" target="_blank">기계식주차장 관리인 교육안내</a></li>
+					
+					<li><a href="http://www.ecar.go.kr/Services?nc_menuId=MLA001&amp;amp;selectedPage=SIS000" target="_blank">자동차 압류 조회·해제 서비스</a></li>
+					
+					<li><a href="http://safeinfo.ts2020.kr/member/issue/searchSafeInfo.do" target="_blank">전세버스 정보확인</a></li>
+					
+					<li><a href="http://1398.acrc.go.kr/index.html" target="_blank">청렴신문고부패방지공익보호</a></li>
+					
+					<li><a href="http://pvn.ts2020.kr/#none" target="_blank">주정차 지킴이 통합서비스 신</a></li>
+					
+					<li><a href="http://www.molit.go.kr/portal.do" target="_blank">국토교통부</a></li>
+					
+					<li><a href="http://www.safe182.go.kr/home/lcm/lcmMssList.do?rptDscd=2" target="_blank">안전Dream</a></li>
+					
+					<li><a href="http://job.alio.go.kr" target="_blank">공공기관 채용정보시스템(JOB-ALIO)</a></li>
+					
+					<li><a href="http://blog.daum.net/loveacrc/2277" target="_blank">청렴韓세상</a></li>
+					
+					<li><a href="http://stat.molit.go.kr" target="_blank">국토교통 통계누리</a></li>
+					
+				</ul>
+			</div>
+		</div>
+		<hr>
+		<div class="footer_bottom">
+			<div class="ft_logo">
+				<ul>
+					<li class="ft_logo_cyb"><a href="/portal/main.do">한국교통안전공단 사이버검사소</a></li>
+					<li><img src="/images/footer_logo_ig01.png" alt="굿콘텐츠서비스 마크"></li>
+					<li><img src="/images/footer_logo_ig02.png" alt="웹어워드코리아 최우수상 수상 마크"></li>
+				</ul>
+			</div>
+			<div class="ft_wa_logo">
+				<ul>
+					<li><a href="http://www.wa.or.kr/board/list.asp?BoardId=0006" target="_blank" title="새창"><img class="ft_logo_cyb_wa" alt="(사)한국장애인단체총연합회 한국웹접근성인증평가원 웹 접근성 우수사이트 인증마크(WA인증마크)" src="/images/wa2.png" style="width:111px;"/></a></li>					
+				</ul>
+			</div>
+			<div class="ft_pds_logo">
+				<ul>
+					<li><img alt="공공서비스를 민간플랫폼에서 한 번에 디지털서비스개방" src="/images/PDS_FOOTER.png" style="width:110px;"/></li>					
+				</ul>
+			</div>
+			<div class="ft_cprt">
+				<ul class="list_corp">
+<!-- 					<li><a href="javascript:fn_privacy('9');" style="font-weight:bold;color:#0000FF;">개인정보처리방침</a></li> -->
+					<li><a href="https://main.kotsa.or.kr/portal/contents.do?menuCode=07020100" style="font-weight:bold;color:#0000FF;">개인정보처리방침</a></li>
+					<li><a href="https://main.kotsa.or.kr/portal/contents.do?menuCode=07010000" target="_blank">이용약관</a></li>
+					<li><a href="https://main.kotsa.or.kr/portal/contents.do?menuCode=04010200" target="_blank">검사예약문의</a></li>
+					<li><a href="javascript:fn_publicDataPolicy();">공공데이터 이용정책</a></li>
+					<li><a href="https://main.kotsa.or.kr/portal/contents.do?menuCode=04010200" target="_blank">고객의소리</a></li>
+					<li><a href="http://stat.molit.go.kr/portal/quality/qualityCenterWrite.do?system_id=S0041" target="_blank">품질오류신고</a></li>
+					<li><a href="http://stat.molit.go.kr/portal/quality/qualityCenterList.do?system_id=S0041" target="_blank">품질오류신고확인</a></li>
+					
+				</ul>
+				<div class="siteinfo">
+					<p class="address">[39660] 경상북도 김천시 혁신6로 17 (율곡동, 한국교통안전공단) TEL.1577-0990</p>
+					<p class="copyright">Copyright(c) TS. All rights reserved.</p>					
+				</div>
+			</div>
+			<div class="ft_down">
+				<a class="noneicon" href="javascript:fn_tngLink('1');"><span>튜닝승인신청 FAQ</span></a>
+				<a class="noneicon" href="javascript:fn_tngLink('2');"><span>튜닝매뉴얼</span></a>
+				<a class="noneicon" href="javascript:fn_tngLink('3');"><span>튜닝승인신청 가이드</span></a>
+			</div>
+		</div>
+	</footer>
+<form id="frmTngLink" name="frmTngLink" method="post">
+	<input type="hidden" name="searchGubun" value="" >
+</form>	
+<script type="text/javascript" >
+$(document).ready(function() {
+	$(".ft_link > button").keydown(function (e) {
+		if(e.keyCode == "13" || e.keyCode == "32") {
+			$(this).trigger("click");
+		}
+	});
+});
+
+//튜닝 링크
+function fn_tngLink(se) {
+	
+	var idx = se.trim();
+	
+	var $frm = $("#frmTngLink");
+	var tabIdx;
+	var url;
+		
+	if(idx == '1') {
+		tabIdx = 2;
+		url = "/ub/ubf/ubf/readUbUbfUnityBbsFaqList.do" ;
+	} else if(idx == '2') {
+		tabIdx = 1;
+		url = "/ts/tcs/csm/readTsTcsCstmrSportMainView.do";
+		
+	} else if(idx == '3') {
+		tabIdx = 0;
+		url = "/ts/tcs/csm/readTsTcsCstmrSportMainView.do";
+	}
+	
+	$frm.attr("action", url);
+	$("#frmTngLink input[name='searchGubun']").val(tabIdx);
+	$frm.submit();
+}
+
+
+function fn_privacy(curr)
+{
+	var $frm = $("#frmTngLink");
+	url = "/ny/gpe/cnm/privacy/readPrivacy.do";
+	
+	$frm.attr("action", url);
+	$("#frmTngLink input[name='searchGubun']").val(curr);
+	$frm.submit();
+}
+
+
+</script>
+	<!--End of footer-->
+
+<div id="divProgressLoading" style="position: absolute;left:0px;top:0px; background: #fff; width:100%; height:100%; z-index:200000;opacity: 0.8;">
+	<div style="position: absolute;left: 50%;top: 50%; background: #fff;">
+		<img src="/images/ajax-loader.gif" alt="로딩중" />
+	</div>
+</div>
+<script>
+$(document).ready( function () {
+	titleChange();
+});
+</script>
+</body>
+</html>
