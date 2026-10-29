@@ -1,0 +1,380 @@
+=== distro=humble
+os=Ubuntu 22.04.5 LTS
+Python 3.10.12
+setuptools 59.6.0
+colcon-core 0.21.3
+python3-colcon-core 0.21.3+upstream-1
+python3-colcon-ros 0.5.0+upstream-1
+python3-setuptools 59.6.0-1.2ubuntu0.22.04.3
+ros-humble-launch-ros 0.19.14-1jammy.20260907.214826
+ros-humble-ros2run 0.18.20-1jammy.20260907.222251
+
+##### CASE good: entry point + full setup.cfg, plain build
+Starting >>> my_pkg
+Finished <<< my_pkg [0.85s]
+Summary: 1 package finished [1.06s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+$ ros2 launch /tmp/l.launch.py
+[INFO] [my_node-1]: process started with pid [90]
+[my_node-1] HELLO from my_node v1
+[INFO] [my_node-1]: process has finished cleanly [pid 90]
+exit=0
+$ ros2 pkg executables my_pkg
+my_pkg my_node
+--- head -1 of installed script:
+#!/usr/bin/python3
+
+##### CASE a1: no entry_points at all
+Starting >>> my_pkg
+Finished <<< my_pkg [0.84s]
+Summary: 1 package finished [1.05s]
+--- find install -name my_node / talker:
+$ ros2 run my_pkg my_node
+No executable found
+exit=1
+$ ros2 launch /tmp/l.launch.py
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): package 'my_pkg' found at '/ws_a1/install/my_pkg', but libexec directory '/ws_a1/install/my_pkg/lib/my_pkg' does not exist
+exit=1
+--- ls install/my_pkg/lib/my_pkg:
+ls: cannot access '/ws_a1/install/my_pkg/lib/my_pkg': No such file or directory
+
+##### CASE a2: entry point with wrong module path (my_pkg.wrong_mod:main)
+Starting >>> my_pkg
+Finished <<< my_pkg [0.84s]
+Summary: 1 package finished [1.05s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'my_pkg.wrong_mod'
+[ros2run]: Process exited with failure 1
+exit=1
+
+##### CASE a3: entry point with wrong function name (my_pkg.my_node:mian)
+Starting >>> my_pkg
+Finished <<< my_pkg [0.85s]
+Summary: 1 package finished [1.06s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+  File "/ws_a3/install/my_pkg/lib/my_pkg/my_node", line 25, in importlib_load_entry_point
+    return next(matches).load()
+  File "/usr/lib/python3.10/importlib/metadata/__init__.py", line 173, in load
+    return functools.reduce(getattr, attrs, module)
+AttributeError: module 'my_pkg.my_node' has no attribute 'mian'
+[ros2run]: Process exited with failure 1
+exit=1
+
+##### CASE a4: entry name differs from what is run (talker = ...)
+Starting >>> my_pkg
+Finished <<< my_pkg [0.86s]
+Summary: 1 package finished [1.07s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/talker
+$ ros2 run my_pkg my_node
+No executable found
+exit=1
+$ ros2 launch /tmp/l.launch.py
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executable 'my_node' not found on the libexec directory '/ws_a4/install/my_pkg/lib/my_pkg' 
+exit=1
+$ ros2 pkg executables my_pkg
+my_pkg talker
+$ ros2 run my_pkg talker
+HELLO from my_node v1
+exit=0
+
+##### CASE b1: no setup.cfg, plain build
+Starting >>> my_pkg
+Finished <<< my_pkg [0.84s]
+Summary: 1 package finished [1.05s]
+--- find install -name my_node / talker:
+install/my_pkg/bin/my_node
+$ ros2 run my_pkg my_node
+No executable found
+exit=1
+$ ros2 launch /tmp/l.launch.py
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): package 'my_pkg' found at '/ws_b1/install/my_pkg', but libexec directory '/ws_b1/install/my_pkg/lib/my_pkg' does not exist
+exit=1
+$ ros2 pkg executables my_pkg
+$ which my_node
+/ws_b1/install/my_pkg/bin/my_node
+$ my_node
+HELLO from my_node v1
+
+##### CASE b2: no setup.cfg, --symlink-install
+Starting >>> my_pkg
+Finished <<< my_pkg [1.19s]
+Summary: 1 package finished [1.40s]
+--- find install -name my_node / talker:
+install/my_pkg/bin/my_node
+$ ros2 run my_pkg my_node
+No executable found
+exit=1
+$ ros2 launch /tmp/l.launch.py
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): package 'my_pkg' found at '/ws_b2/install/my_pkg', but libexec directory '/ws_b2/install/my_pkg/lib/my_pkg' does not exist
+exit=1
+
+##### CASE b3: setup.cfg with [install] only, --symlink-install
+Starting >>> my_pkg
+Finished <<< my_pkg [1.18s]
+Summary: 1 package finished [1.39s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+##### CASE b3p: setup.cfg with [install] only, plain build
+Starting >>> my_pkg
+Finished <<< my_pkg [0.83s]
+Summary: 1 package finished [1.04s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+
+##### CASE b4: setup.cfg with dash keys (script-dir / install-scripts), plain build
+Starting >>> my_pkg
+/usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+  warnings.warn(
+/usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'install-scripts' will not be supported in future versions. Please use the underscore name 'install_scripts' instead
+  warnings.warn(
+--- stderr: my_pkg
+/usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+  warnings.warn(
+---
+Finished <<< my_pkg [0.84s]
+Summary: 1 package finished [1.05s]
+  1 package had stderr output: my_pkg
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+##### CASE b4s: dash keys, --symlink-install
+Starting >>> my_pkg
+/usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+  warnings.warn(
+/usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'install-scripts' will not be supported in future versions. Please use the underscore name 'install_scripts' instead
+  warnings.warn(
+--- stderr: my_pkg
+/usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+  warnings.warn(
+---
+Finished <<< my_pkg [1.19s]
+Summary: 1 package finished [1.40s]
+  1 package had stderr output: my_pkg
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+
+##### CASE c1: built but install/setup.bash not sourced (new terminal)
+$ ros2 run my_pkg my_node
+Package 'my_pkg' not found
+exit=1
+$ ros2 launch /tmp/l.launch.py
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): "package 'my_pkg' not found, searching: ['/opt/ros/humble']"
+exit=1
+##### CASE c2: workspace sourced, then a NEW package built (not re-sourced)
+Starting >>> other_pkg
+Finished <<< other_pkg [0.85s]
+Summary: 1 package finished [1.06s]
+(shell sourced only /ws_good; other_pkg is in /ws_c2)
+$ ros2 run other_pkg my_node
+Package 'other_pkg' not found
+exit=1
+(after sourcing /ws_c2/install/setup.bash)
+$ ros2 run other_pkg my_node
+HELLO from my_node v1
+exit=0
+##### CASE c3: sourced shell, new entry point added to existing package, rebuild, NO re-source
+Finished <<< my_pkg [0.84s]
+Summary: 1 package finished [1.05s]
+$ ros2 run my_pkg my_node2
+HELLO from my_node v1
+exit=0
+
+##### CASE d: package / executable name mix-ups
+$ ros2 run my_node my_pkg
+Package 'my_node' not found
+exit=1
+$ ros2 run my_pkg my_node.py
+No executable found
+exit=1
+$ ros2 run my_pkg my_pkg
+No executable found
+exit=1
+$ ros2 run my-pkg my_node
+Package 'my-pkg' not found
+exit=1
+
+##### CASE e: --symlink-install behaviour
+--- full build output with --symlink-install:
+Starting >>> my_pkg
+Finished <<< my_pkg [1.19s]
+
+Summary: 1 package finished [1.40s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+--- commands colcon ran (log/latest_build/my_pkg/command.log):
+Invoking command in '/ws_e/build/my_pkg': /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /ws_e/build/my_pkg/build --no-deps symlink_data
+Invoked command in '/ws_e/build/my_pkg' returned '0': /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /ws_e/build/my_pkg/build --no-deps symlink_data
+--- ls -l install/my_pkg/lib/my_pkg/my_node:
+-rwxr-xr-x 1 root root 934 Oct 29 00:53 /ws_e/install/my_pkg/lib/my_pkg/my_node
+--- what is in install/my_pkg/lib/python3*/site-packages:
+total 12
+drwxr-xr-x 2 root root 4096 Oct 29 00:53 .
+drwxr-xr-x 3 root root 4096 Oct 29 00:53 ..
+-rw-r--r-- 1 root root   20 Oct 29 00:53 my-pkg.egg-link
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+--- e1: edit my_node.py (v1 -> v2), NO rebuild
+$ ros2 run my_pkg my_node
+HELLO from my_node v2
+exit=0
+--- e2: add entry point my_node2 in setup.py, NO rebuild
+$ ros2 run my_pkg my_node2
+No executable found
+exit=1
+--- e3: rebuild with --symlink-install
+Starting >>> my_pkg
+Finished <<< my_pkg [1.19s]
+Summary: 1 package finished [1.40s]
+$ ros2 run my_pkg my_node2
+HELLO from my_node v2
+exit=0
+--- e4: same edit test WITHOUT --symlink-install
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+--- e5: plain build output (stderr warnings):
+Starting >>> my_pkg
+Finished <<< my_pkg [0.83s]
+
+Summary: 1 package finished [1.04s]
+$ ros2 run my_pkg my_node
+HELLO from my_node v2
+exit=0
+--- e6: plain build after a --symlink-install build in same workspace
+Starting >>> my_pkg
+Finished <<< my_pkg [2.10s]
+
+Summary: 1 package finished [2.31s]
+
+##### CASE e7: newer setuptools (>=80, from pip) put in front via PYTHONPATH, then colcon
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+colcon-core 0.21.3 requires setuptools<80,>=30.3.0, but you have setuptools 84.2.1 which is incompatible.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+now packaging 26.3
+now setuptools 84.2.1 /st/setuptools/__init__.py
+--- e7 plain build:
+Starting >>> my_pkg
+Finished <<< my_pkg [0.95s]
+
+Summary: 1 package finished [1.09s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+--- e7 --symlink-install build:
+Starting >>> my_pkg
+Finished <<< my_pkg [1.17s]
+
+Summary: 1 package finished [1.31s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+--- e7 commands colcon ran:
+Invoking command in '/ws_e7/src/my_pkg': /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/my_pkg build --build-base /ws_e7/build/my_pkg/build install --record /ws_e7/build/my_pkg/install.log --install-scripts $base/lib/my_pkg --single-version-externally-managed install_data
+Invoked command in '/ws_e7/src/my_pkg' returned '0': /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/my_pkg build --build-base /ws_e7/build/my_pkg/build install --record /ws_e7/build/my_pkg/install.log --install-scripts $base/lib/my_pkg --single-version-externally-managed install_data
+--- e7 site-packages:
+/ws_e7/install/my_pkg/lib/python3.10/site-packages/:
+total 16
+drwxr-xr-x 4 root root 4096 Oct 29 00:54 .
+drwxr-xr-x 3 root root 4096 Oct 29 00:54 ..
+drwxr-xr-x 3 root root 4096 Oct 29 00:54 my_pkg
+drwxr-xr-x 2 root root 4096 Oct 29 00:54 my_pkg-0.0.0-py3.10.egg-info
+
+/ws_e7/install/my_pkg/lib/python3.10/site-packages/my_pkg:
+total 16
+drwxr-xr-x 3 root root 4096 Oct 29 00:54 .
+drwxr-xr-x 4 root root 4096 Oct 29 00:54 ..
+-rw-r--r-- 1 root root    0 Oct 29 00:54 __init__.py
+drwxr-xr-x 2 root root 4096 Oct 29 00:54 __pycache__
+-rw-r--r-- 1 root root   47 Oct 29 00:54 my_node.py
+--- e7 colcon log lines about --editable:
+[0.824s] DEBUG:colcon.colcon_core.task.python.build:Available setuptools commands: build_clib, bdist_rpm, build, bdist, symlink_data, build_ext, install_egg_info, build_scripts, alias, install_lib, develop, clean, editable_wheel, rotate, saveopts, bdist_egg, install, build_py, install_headers, check
+[1.048s] INFO:colcon.colcon_core.task.python.build:No '--editable' capability in setuptools, falling back to full install
+--- e7 edit v1->v2 no rebuild:
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+
+##### CASE e8: workspace built with --symlink-install under apt setuptools, then rebuilt under setuptools>=80
+Finished <<< my_pkg [1.20s]
+
+Summary: 1 package finished [1.41s]
+rebuild with setuptools 84.2.1
+--- e8 rebuild --symlink-install:
+Starting >>> my_pkg
+--- stderr: my_pkg
+usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+   or: setup.py --help [cmd1 cmd2 ...]
+   or: setup.py --help-commands
+   or: setup.py cmd --help
+
+error: option --uninstall not recognized
+---
+Failed   <<< my_pkg [1.03s, exited with code 1]
+
+Summary: 0 packages finished [1.18s]
+  1 package failed: my_pkg
+  1 package had stderr output: my_pkg
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+--- e8 rebuild plain:
+Starting >>> my_pkg
+--- stderr: my_pkg
+usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+   or: setup.py --help [cmd1 cmd2 ...]
+   or: setup.py --help-commands
+   or: setup.py cmd --help
+
+error: option --uninstall not recognized
+---
+Failed   <<< my_pkg [0.81s, exited with code 1]
+
+Summary: 0 packages finished [0.96s]
+  1 package failed: my_pkg
+  1 package had stderr output: my_pkg
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+--- e8 fix: rm -rf build install log, rebuild:
+Finished <<< my_pkg [1.18s]
+
+Summary: 1 package finished [1.32s]
+--- find install -name my_node / talker:
+install/my_pkg/lib/my_pkg/my_node
+$ ros2 run my_pkg my_node
+HELLO from my_node v1
+exit=0
+=== done

@@ -1,0 +1,166 @@
+<pre><code>$ ros2 run my_pkg my_node
+No executable found</code></pre>
+
+<p>The same problem under <code>ros2 launch</code> prints one of two lines, depending on whether the folder exists:</p>
+
+<pre><code>[ERROR] [launch]: Caught exception in launch (see debug for traceback): executable 'my_node' not found on the libexec directory '/ws_a4/install/my_pkg/lib/my_pkg'
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): package 'my_pkg' found at '/ws_b1/install/my_pkg', but libexec directory '/ws_b1/install/my_pkg/lib/my_pkg' does not exist</code></pre>
+
+<p>Short answer: <code>ros2 run my_pkg my_node</code> only looks in one folder, <code>install/my_pkg/lib/my_pkg/</code>. "No executable found" means the package was found but no file called <code>my_node</code> is in that folder. For an <code>ament_python</code> package, that file is created by a <code>console_scripts</code> entry point in <code>setup.py</code>, and <code>setup.cfg</code> decides which folder it goes to. In my runs, the error appeared when the entry point was missing, when its name didn't match what I typed, and when <code>setup.cfg</code> was missing (the script went to <code>install/my_pkg/bin/</code> instead). Run this first:</p>
+
+<pre><code>cd ~/ros2_ws
+find install -name my_node
+ros2 pkg executables my_pkg</code></pre>
+
+<p>If <code>find</code> prints <code>install/my_pkg/lib/my_pkg/my_node</code>, the install is fine and you typed a different name. If it prints <code>install/my_pkg/bin/my_node</code>, fix <code>setup.cfg</code>. If it prints nothing, fix <code>entry_points</code> and rebuild. If you get <code>Package 'my_pkg' not found</code> instead, that's a different error: the workspace isn't sourced.</p>
+
+<h2>Find your cause</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th><code>ros2 run</code> printed</th><th><code>find install -name my_node</code></th></tr></thead>
+<tbody>
+<tr><td>No <code>entry_points</code> in <code>setup.py</code></td><td><code>No executable found</code></td><td>nothing; <code>lib/my_pkg</code> doesn't exist</td></tr>
+<tr><td>Entry point named <code>talker</code>, ran <code>my_node</code></td><td><code>No executable found</code></td><td><code>install/my_pkg/lib/my_pkg/talker</code></td></tr>
+<tr><td>No <code>setup.cfg</code> (plain or <code>--symlink-install</code>)</td><td><code>No executable found</code></td><td><code>install/my_pkg/bin/my_node</code></td></tr>
+<tr><td>Entry point with wrong module, <code>my_pkg.wrong_mod:main</code></td><td><code>ModuleNotFoundError: No module named 'my_pkg.wrong_mod'</code></td><td><code>install/my_pkg/lib/my_pkg/my_node</code></td></tr>
+<tr><td>Entry point with wrong function, <code>my_pkg.my_node:mian</code></td><td><code>AttributeError: module 'my_pkg.my_node' has no attribute 'mian'</code></td><td><code>install/my_pkg/lib/my_pkg/my_node</code></td></tr>
+<tr><td>New entry point added with <code>--symlink-install</code>, no rebuild</td><td><code>No executable found</code></td><td>only the old executable</td></tr>
+<tr><td>Built, but <code>install/setup.bash</code> not sourced</td><td><code>Package 'my_pkg' not found</code></td><td><code>install/my_pkg/lib/my_pkg/my_node</code></td></tr>
+<tr><td>Arguments swapped, <code>ros2 run my_node my_pkg</code></td><td><code>Package 'my_node' not found</code></td><td>(fine)</td></tr>
+<tr><td><code>ros2 run my_pkg my_node.py</code> or <code>ros2 run my_pkg my_pkg</code></td><td><code>No executable found</code></td><td>(fine)</td></tr>
+</tbody>
+</table>
+
+<p>The wrong module and wrong function rows are worth noticing. They don't give "No executable found". The script is installed, it starts, and it fails on import. Both end with <code>[ros2run]: Process exited with failure 1</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-29 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another. The script builds a tiny <code>ament_python</code> package called <code>my_pkg</code> with one module, <code>my_pkg/my_node.py</code>, whose <code>main()</code> prints <code>HELLO from my_node v1</code>. Each case gets a fresh workspace and a <code>colcon build</code>. Then I ran <code>ros2 run my_pkg my_node</code>, ran a small launch file that starts <code>Node(package='my_pkg', executable='my_node')</code>, and listed where the script landed with <code>find install -name my_node</code>. I changed one thing per case: the entry point, the <code>setup.cfg</code>, sourcing, the names typed, or the build flags. The last two cases put a newer setuptools from pip (84.2.1) in front of the one from apt.</p>
+
+<h2>Cause 1: the entry point is missing or has another name</h2>
+
+<p>With no <code>entry_points</code> argument in <code>setup.py</code>, the build finished without a warning. Nothing was installed under <code>lib</code>. <code>ros2 run</code> printed <code>No executable found</code>, and the launch file failed with <code>libexec directory '/ws_a1/install/my_pkg/lib/my_pkg' does not exist</code>, because the folder was never created.</p>
+
+<p>The name to the left of <code>=</code> in the entry point is the executable name. The file name of your Python module doesn't count. With <code>'talker = my_pkg.my_node:main'</code> the installed file was <code>install/my_pkg/lib/my_pkg/talker</code>. <code>ros2 run my_pkg my_node</code> failed, <code>ros2 run my_pkg talker</code> worked, and the launch file gave the other variant of the error:</p>
+
+<pre><code>executable 'my_node' not found on the libexec directory '/ws_a4/install/my_pkg/lib/my_pkg'</code></pre>
+
+<p><code>ros2 pkg executables my_pkg</code> showed <code>my_pkg talker</code>, which is the fastest way to see the real name. The fix is to write the entry point like this, and then rebuild:</p>
+
+<pre><code class="language-python">entry_points={
+    'console_scripts': [
+        'my_node = my_pkg.my_node:main',
+    ],
+},</code></pre>
+
+<p>The part after <code>=</code> is <code>package.module:function</code>. If the module path is wrong, the build still passes and the script is still installed in the right place. The error only shows up at run time, as <code>ModuleNotFoundError</code> for a wrong module or <code>AttributeError</code> for a wrong function name. So a traceback means the install worked and the path after <code>=</code> is wrong.</p>
+
+<h2>Cause 2: setup.cfg is missing, so the script lands in bin/</h2>
+
+<p>This is the cause the error text hides best. With a correct entry point and no <code>setup.cfg</code>, the build finished with no warning, and the script was installed as <code>install/my_pkg/bin/my_node</code>. <code>ros2 run</code> doesn't look in <code>bin</code>, so it printed <code>No executable found</code>. <code>ros2 pkg executables my_pkg</code> printed nothing. The launch file said the libexec directory <code>does not exist</code>. Yet, in a sourced shell, <code>which my_node</code> found <code>/ws_b1/install/my_pkg/bin/my_node</code> and running <code>my_node</code> on its own printed the hello line. The same thing happened with <code>--symlink-install</code>. This matches the <a href="https://answers.ros.org/question/402977/">question</a> where the executable ended up in <code>install/&lt;pkg&gt;/bin</code> instead of <code>install/&lt;pkg&gt;/lib</code>.</p>
+
+<p>The fix is this <code>setup.cfg</code> next to <code>setup.py</code>, with your package name in both lines:</p>
+
+<pre><code class="language-ini">[develop]
+script_dir=$base/lib/my_pkg
+[install]
+install_scripts=$base/lib/my_pkg</code></pre>
+
+<p>With it, the script landed in <code>install/my_pkg/lib/my_pkg/my_node</code> and both <code>ros2 run</code> and the launch file worked. One detail surprised me. A <code>setup.cfg</code> with only the <code>[install]</code> section also put the script in <code>lib/my_pkg</code>, with a plain build and with <code>--symlink-install</code>, on all three distros. I wouldn't rely on that. Keep both sections.</p>
+
+<p>Older packages use dashes: <code>script-dir</code> and <code>install-scripts</code>. Those still built and installed to the right folder on all three distros, but every build printed a deprecation warning. On Humble it was <code>UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead</code>. On Jazzy and Lyrical it was a longer <code>SetuptoolsDeprecationWarning</code> block that adds "This deprecation is overdue, please update your project and remove deprecated calls to avoid build errors in the future." Switch to underscores.</p>
+
+<h2>Cause 3: the workspace isn't sourced in this terminal</h2>
+
+<p>In a shell that only sourced <code>/opt/ros/&lt;distro&gt;/setup.bash</code>, a package that built fine gave <code>Package 'my_pkg' not found</code>, not "No executable found". The launch file said <code>package 'my_pkg' not found, searching: ['/opt/ros/humble']</code>. The search list is the useful part: if your workspace isn't in it, source <code>install/setup.bash</code> in that terminal. The two files and the order to source them are covered in <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">setup.bash vs local_setup.bash</a>.</p>
+
+<p>When do you need to source again? I tested two cases in a shell that was already sourced. A brand-new package built into a different workspace gave <code>Package 'other_pkg' not found</code> until I sourced that workspace's <code>install/setup.bash</code>. A new entry point added to a package the shell already knew about worked right after the rebuild, with no new source. <code>ros2 run</code> found <code>my_node2</code> because it looks in the package's <code>lib</code> folder each time. So re-sourcing matters for new packages and new terminals. It doesn't fix a missing executable in a package that is already found.</p>
+
+<h2>Cause 4: package and executable names mixed up</h2>
+
+<p>The order is <code>ros2 run &lt;package&gt; &lt;executable&gt;</code>. Swapping them gave <code>Package 'my_node' not found</code>. Typing the module file name, <code>ros2 run my_pkg my_node.py</code>, gave <code>No executable found</code>, and so did <code>ros2 run my_pkg my_pkg</code>. A dash instead of an underscore, <code>ros2 run my-pkg my_node</code>, gave <code>Package 'my-pkg' not found</code>. The package name is the <code>&lt;name&gt;</code> in <code>package.xml</code>. The executable name is the left side of the entry point. <code>ros2 pkg executables my_pkg</code> prints both, one pair per line.</p>
+
+<p>If the script is installed and runs, but fails because of the Python interpreter (a conda env or venv package not found), that is a shebang problem, not an install problem. The installed script started with <code>#!/usr/bin/python3</code> on all three images. See <a href="https://huntlab.app/en/ros2-run-conda-venv-no-module-named-torch-shebang/">ros2 run in a conda or venv: the shebang</a>.</p>
+
+<h2>A correct minimal setup.py and setup.cfg</h2>
+
+<p>This is the package that worked with <code>ros2 run</code> and <code>ros2 launch</code> on all three distros, with a plain build and with <code>--symlink-install</code>. The layout is <code>src/my_pkg/package.xml</code>, <code>setup.py</code>, <code>setup.cfg</code>, an empty <code>resource/my_pkg</code> marker file, and <code>my_pkg/__init__.py</code> plus <code>my_pkg/my_node.py</code> with a <code>main()</code>.</p>
+
+<pre><code class="language-python">from setuptools import setup
+setup(
+    name='my_pkg', version='0.0.0', packages=['my_pkg'],
+    data_files=[('share/ament_index/resource_index/packages', ['resource/my_pkg']),
+                ('share/my_pkg', ['package.xml'])],
+    install_requires=['setuptools'], zip_safe=True,
+    entry_points={'console_scripts': ['my_node = my_pkg.my_node:main']},
+)</code></pre>
+
+<pre><code class="language-ini">[develop]
+script_dir=$base/lib/my_pkg
+[install]
+install_scripts=$base/lib/my_pkg</code></pre>
+
+<p>Launch files and config files go through <code>data_files</code> too, which is a separate topic. If <code>ros2 launch</code> says your launch file isn't in the share directory, see <a href="https://huntlab.app/en/ros2-launch-file-was-not-found-in-the-share-directory-of-package/">launch file was not found in the share directory</a>.</p>
+
+<h2>--symlink-install and setuptools</h2>
+
+<p>With <code>--symlink-install</code>, colcon ran <code>setup.py develop --editable</code>. The site-packages folder held only a <code>my-pkg.egg-link</code> file pointing at the source. The installed <code>lib/my_pkg/my_node</code> was a regular 934-byte file, not a symlink. What that means in practice:</p>
+
+<ul>
+<li>Editing <code>my_node.py</code> showed up without a rebuild (<code>v1</code> became <code>v2</code> on the next <code>ros2 run</code>). Without <code>--symlink-install</code>, the same edit didn't show up until I rebuilt.</li>
+<li>Adding a new entry point to <code>setup.py</code> did not. <code>ros2 run my_pkg my_node2</code> gave <code>No executable found</code> until I ran <code>colcon build --symlink-install</code> again. Any change to <code>setup.py</code> or <code>setup.cfg</code> needs a rebuild.</li>
+<li>Switching the same workspace back to a plain <code>colcon build</code> worked without errors.</li>
+</ul>
+
+<p>The apt setuptools versions were 59.6.0 on Humble, 68.1.2 on Jazzy and 78.1.1 on Lyrical, all with colcon-core 0.21.3. None of the builds printed "setup.py install is deprecated" or "easy_install command is deprecated". The reason is in the command colcon ran: it starts Python with <code>-W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated</code>, so those two warnings are filtered. If you see them, check your colcon version. That matches the long-running <a href="https://robotics.stackexchange.com/questions/101255/setuptoolsdeprecationwarning-setup-py-install-is-deprecated-use-build-and-pip">SetuptoolsDeprecationWarning question</a>. With this colcon the two warnings were filtered and the builds were unaffected.</p>
+
+<p>colcon-core 0.21.3 declares <code>setuptools&lt;80</code>. To see what happens past that, I put setuptools 84.2.1 from pip in front through <code>PYTHONPATH</code>. pip warned <code>colcon-core 0.21.3 requires setuptools&lt;80,&gt;=30.3.0, but you have setuptools 84.2.1 which is incompatible.</code> Then:</p>
+
+<ul>
+<li>A plain build worked, and the script landed in <code>lib/my_pkg</code>.</li>
+<li>A fresh <code>--symlink-install</code> build also finished with no error on screen. But it wasn't a symlink install. colcon's log said <code>No '--editable' capability in setuptools, falling back to full install</code>, it ran <code>setup.py ... install</code>, and site-packages held copies. Editing the source didn't change what ran. That message is logged at INFO level and appears only in <code>log/latest_build/logger_all.log</code>.</li>
+<li>A workspace built earlier with <code>--symlink-install</code> under the apt setuptools, then rebuilt under 84.2.1, failed. Both <code>--symlink-install</code> and a plain build stopped with <code>error: option --uninstall not recognized</code>. colcon tries to undo the old develop install first and the newer setuptools rejects the option. The old install was still there and still ran. Deleting <code>build</code>, <code>install</code> and <code>log</code> and building again fixed it.</li>
+</ul>
+
+<p>I never got "error: option --editable not recognized". colcon checks for <code>--editable</code> before using it, and falls back without saying so on screen. The option that failed was <code>--uninstall</code>. If you upgraded setuptools with pip and your edits stopped showing up, or a rebuild fails with that line, remove the pip setuptools so the apt one is used, or clear <code>build</code>, <code>install</code> and <code>log</code>.</p>
+
+<h2>Version notes</h2>
+
+<p>Every error text in this post was identical on Humble, Jazzy and Lyrical, and so was every file location. The differences were small. The traceback lines for the wrong module and wrong function differ, because Python is 3.10.12, 3.12.3 and 3.14.4. The dash-key warning is a one-line <code>UserWarning</code> on Humble and a boxed <code>SetuptoolsDeprecationWarning</code> on Jazzy and Lyrical. On Lyrical that block names the file and section: <code>Invalid dash-separated key 'script-dir' in 'develop' (setup.cfg)</code>.</p>
+
+<h2>Not tested</h2>
+
+<p>Foxy, Iron, Kilted and Rolling. <code>ament_cmake</code> packages and <code>ament_cmake_python</code>. Installing Python scripts through <code>data_files</code> or <code>scripts=</code> instead of entry points. A <code>setup.cfg</code> using <code>[options.entry_points]</code> or a <code>pyproject.toml</code>-only package. Running colcon itself inside a venv or conda env. Upgrading setuptools system-wide with pip instead of through <code>PYTHONPATH</code>. Windows and macOS.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 run say "No executable found" when colcon build succeeded?</h3>
+<p>The build doesn't check that an executable was installed. In my runs it passed with no entry point at all and with no <code>setup.cfg</code>. Run <code>find install -name my_node</code>. If the file isn't under <code>install/my_pkg/lib/my_pkg/</code>, <code>ros2 run</code> can't see it.</p>
+
+<h3>Why is my Python node installed in install/my_pkg/bin instead of lib/my_pkg?</h3>
+<p><code>setup.cfg</code> is missing or doesn't set the script folder. Add <code>[develop] script_dir=$base/lib/my_pkg</code> and <code>[install] install_scripts=$base/lib/my_pkg</code>, then rebuild. Without it the script landed in <code>bin</code> with both a plain build and <code>--symlink-install</code>.</p>
+
+<h3>What does "executable not found on the libexec directory" mean in ros2 launch?</h3>
+<p>The launch file asked for an executable name that isn't in <code>install/my_pkg/lib/my_pkg</code>. Usually the entry point has a different name. If the message says the libexec directory "does not exist" instead, nothing was installed there at all, so check <code>entry_points</code> and <code>setup.cfg</code>.</p>
+
+<h3>Do I need to rebuild after adding an entry point with --symlink-install?</h3>
+<p>Yes. Edits to existing Python code showed up without a rebuild, but a new entry point gave "No executable found" until I ran <code>colcon build --symlink-install</code> again. Re-sourcing wasn't needed for a package the shell already knew about.</p>
+
+<h3>Why does colcon build fail with "error: option --uninstall not recognized"?</h3>
+<p>In my run, that came from a workspace built with <code>--symlink-install</code> under the apt setuptools and rebuilt with setuptools 84.2.1 from pip. colcon-core 0.21.3 requires setuptools below 80. Use the apt setuptools, or delete <code>build</code>, <code>install</code> and <code>log</code> and build again.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 run say No executable found when colcon build succeeded?", "acceptedAnswer": {"@type": "Answer", "text": "The build doesn't check that an executable was installed. In my runs it passed with no entry point at all and with no setup.cfg. Run find install -name my_node. If the file isn't under install/my_pkg/lib/my_pkg/, ros2 run can't see it."}},
+{"@type": "Question", "name": "Why is my Python node installed in install/my_pkg/bin instead of lib/my_pkg?", "acceptedAnswer": {"@type": "Answer", "text": "setup.cfg is missing or doesn't set the script folder. Add [develop] script_dir=$base/lib/my_pkg and [install] install_scripts=$base/lib/my_pkg, then rebuild. Without it the script landed in bin with both a plain build and --symlink-install."}},
+{"@type": "Question", "name": "What does executable not found on the libexec directory mean in ros2 launch?", "acceptedAnswer": {"@type": "Answer", "text": "The launch file asked for an executable name that isn't in install/my_pkg/lib/my_pkg. Usually the entry point has a different name. If the message says the libexec directory does not exist instead, nothing was installed there at all, so check entry_points and setup.cfg."}},
+{"@type": "Question", "name": "Do I need to rebuild after adding an entry point with --symlink-install?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Edits to existing Python code showed up without a rebuild, but a new entry point gave No executable found until I ran colcon build --symlink-install again. Re-sourcing wasn't needed for a package the shell already knew about."}},
+{"@type": "Question", "name": "Why does colcon build fail with error: option --uninstall not recognized?", "acceptedAnswer": {"@type": "Answer", "text": "In my run, that came from a workspace built with --symlink-install under the apt setuptools and rebuilt with setuptools 84.2.1 from pip. colcon-core 0.21.3 requires setuptools below 80. Use the apt setuptools, or delete build, install and log and build again."}}
+]}
+</script>
+
+<p>Measured on 2026-10-29 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Ubuntu 22.04.5, Python 3.10.12, setuptools 59.6.0), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Ubuntu 24.04.5, Python 3.12.3, setuptools 68.1.2) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Ubuntu 26.04.1, Python 3.14.4, setuptools 78.1.1), all with colcon-core 0.21.3 and colcon-ros 0.5.0. The newer setuptools test used 84.2.1 and packaging 26.3 from pip. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-11-ros2-run-no-executable-found-ament-python/evidence">evidence folder</a>. Questions this answers: <a href="https://answers.ros.org/question/402977/">"No executable found" for Python script</a>, <a href="https://answers.ros.org/question/416849/">ROS2 No executable found (ros2 run pack nodo)</a>, <a href="https://robotics.stackexchange.com/questions/88273/ros2-run-python-executable-not-found">ros2 run python executable not found</a>, <a href="https://answers.ros.org/question/372654/">Executable not found in libexec directory</a>, <a href="https://discourse.openrobotics.org/t/ros2-cannot-run-my-python-script-no-executable-found-error/3912">ROS2: Cannot run my Python script, "No executable found" error</a>, <a href="https://robotics.stackexchange.com/questions/101255/setuptoolsdeprecationwarning-setup-py-install-is-deprecated-use-build-and-pip">SetuptoolsDeprecationWarning: setup.py install is deprecated</a>.</p>
