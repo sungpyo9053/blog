@@ -1,0 +1,193 @@
+<pre><code>1793253207.833901 [0]     talker: Failed to find a free participant index for domain 0
+[ERROR] [1793253207.834001388] [rmw_cyclonedds_cpp]: rmw_create_node: failed to create domain, error Error
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to initialize rcl node: error not set, at ./src/rcl/node.c:252</code></pre>
+
+<p>That is the 33rd talker on one Jazzy host with <code>RMW_IMPLEMENTATION=rmw_cyclonedds_cpp</code>. The first line is the real error. The rest is ROS 2 reporting that the node has no DDS participant. Humble and Lyrical print the same first two lines with a different <code>what():</code> text, listed in the table below.</p>
+
+<p>Short answer: Cyclone DDS gives every process on a host a participant index, and the default range is small. On Jazzy and Lyrical, 32 processes started per domain on one host and the 33rd failed, even on a network with multicast. On Humble there was no limit on a multicast-capable network, but with <code>ROS_LOCALHOST_ONLY=1</code> or a loopback-only container only 9 started. The fix that worked on all three distros is to raise the limit in <code>CYCLONEDDS_URI</code>:</p>
+
+<pre><code class="language-bash">export CYCLONEDDS_URI='&lt;CycloneDDS&gt;&lt;Domain&gt;&lt;Discovery&gt;&lt;ParticipantIndex&gt;auto&lt;/ParticipantIndex&gt;&lt;MaxAutoParticipantIndex&gt;100&lt;/MaxAutoParticipantIndex&gt;&lt;/Discovery&gt;&lt;/Domain&gt;&lt;/CycloneDDS&gt;'</code></pre>
+
+<p>I measured this setting with 20, and exactly 20 processes started on every distro. Pick a number above the count of ROS 2 processes you run on that host, plus the <code>ros2</code> CLI and its daemon. Every process that uses the domain counts, not every node.</p>
+
+<h2>Find your error text</h2>
+
+<p>The first two lines were identical on all three distros. The line after them depends on the distro and on whether the process is C++ or Python. In every case the process exits right away; C++ nodes abort.</p>
+
+<table>
+<thead><tr><th>Where</th><th>Line after <code>failed to create domain, error Error</code></th></tr></thead>
+<tbody>
+<tr><td>Humble, C++ node</td><td><code>what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415</code>, after an "error state is being overwritten" block that contains <code>'error not set, at ./src/rcl/node.c:263'</code></td></tr>
+<tr><td>Humble, rclpy or <code>ros2</code> CLI</td><td><code>rclpy._rclpy_pybind11.RCLError: error creating node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415</code></td></tr>
+<tr><td>Jazzy, C++ node</td><td><code>what():  failed to initialize rcl node: error not set, at ./src/rcl/node.c:252</code></td></tr>
+<tr><td>Jazzy, rclpy or <code>ros2</code> CLI</td><td><code>error creating node: error not set, at ./src/rcl/node.c:252</code></td></tr>
+<tr><td>Lyrical, C++ node</td><td><code>what():  failed to initialize rcl node: Expected error message, but none set: 1, at ./src/rcl/node.c:251</code></td></tr>
+<tr><td>Lyrical, rclpy or <code>ros2</code> CLI</td><td><code>error creating node: Expected error message, but none set: 1, at ./src/rcl/node.c:251</code></td></tr>
+</tbody>
+</table>
+
+<p>"error not set" and "Expected error message, but none set" don't point to a second problem. The RMW layer failed without setting an error string, and rcl reports that. Search your logs for <code>Failed to find a free participant index</code> instead.</p>
+
+<p>A line that often comes just before it is <code>selected interface "lo" is not multicast-capable: disabling multicast</code>. I saw it on Humble whenever only loopback was used, and on Jazzy when the container had only <code>lo</code> or the URI named <code>lo</code>. Lyrical never printed it. On Humble that line was the reason the limit applied at all.</p>
+
+<p>The <code>ros2</code> command line hits the same wall. With the host full, <code>ros2 node list --no-daemon</code> and <code>ros2 topic list --no-daemon</code> printed <code>ros2: Failed to find a free participant index for domain 0</code> and exited.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-29 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2-vCPU Ubuntu server, one distro at a time. Each container got <code>rmw_cyclonedds_cpp</code> and <code>demo_nodes_cpp</code> from apt. A script started <code>demo_nodes_cpp</code> talkers one per second, each as its own process, and checked one second later whether the process was still alive. It stopped a few processes after the first failure and killed everything before the next case. A listener started at the end showed whether the talkers could actually be heard. "Loopback only" means the container's Docker network was disconnected, so <code>lo</code> was the only interface.</p>
+
+<table>
+<thead><tr><th>Setup (Cyclone DDS, domain 0)</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Default, Docker bridge network (multicast-capable <code>eth0</code>)</td><td>40 of 40 started</td><td>32, the 33rd failed</td><td>32, the 33rd failed</td></tr>
+<tr><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>9, the 10th failed</td><td>32, the 33rd failed</td><td>32, the 33rd failed</td></tr>
+<tr><td><code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code></td><td>Not tested</td><td>32, the 33rd failed</td><td>32, the 33rd failed</td></tr>
+<tr><td>Loopback only, default</td><td>9, the 10th failed</td><td>32, the 33rd failed</td><td>32, the 33rd failed</td></tr>
+<tr><td><code>ParticipantIndex auto</code>, no maximum set</td><td>9, the 10th failed</td><td>32, the 33rd failed</td><td>32, the 33rd failed</td></tr>
+<tr><td>Localhost setting + <code>MaxAutoParticipantIndex 20</code></td><td>20, the 21st failed</td><td>20, the 21st failed</td><td>20, the 21st failed</td></tr>
+<tr><td>Localhost setting + <code>ParticipantIndex none</code></td><td>9, the 10th failed</td><td>40 of 40 started, listener heard nothing</td><td>40 of 40 started, listener heard nothing</td></tr>
+<tr><td>Loopback only + <code>ParticipantIndex none</code></td><td>9, the 10th failed</td><td>32, the 33rd failed</td><td>40 of 40 started, listener heard them</td></tr>
+<tr><td><code>lo</code> with <code>multicast="true"</code> in the URI + <code>ParticipantIndex none</code>, no localhost variable</td><td>30 of 30, listener heard them</td><td>30 of 30, listener heard them</td><td>30 of 30, listener heard them</td></tr>
+<tr><td>Fast DDS (<code>rmw_fastrtps_cpp</code>), localhost setting</td><td>45 of 45</td><td>36 of 36</td><td>36 of 36</td></tr>
+<tr><td>Fast DDS, loopback only</td><td>45 of 45</td><td>36 of 36</td><td>36 of 36</td></tr>
+</tbody>
+</table>
+
+<p>"Localhost setting" is <code>ROS_LOCALHOST_ONLY=1</code> on Humble and <code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code> on Jazzy and Lyrical. The numbers where nothing failed are where I stopped, not a limit.</p>
+
+<h2>Why 9 on Humble and 32 on Jazzy and Lyrical</h2>
+
+<p>Cyclone DDS can run in two modes. With <code>ParticipantIndex none</code> it finds peers by multicast and picks any free port. With <code>ParticipantIndex auto</code> each process takes the next free index between 0 and <code>MaxAutoParticipantIndex</code>, and that index decides its fixed UDP port. Peers find each other by sending to those known ports, which works without multicast. When every index is taken, the next process gets "Failed to find a free participant index".</p>
+
+<p>On Humble (<code>rmw_cyclonedds_cpp</code> 1.3.5, Cyclone 0.10.5) Cyclone's config trace showed <code>MaxAutoParticipantIndex</code> 9 when nothing set it, and an explicit <code>ParticipantIndex auto</code> with no maximum also stopped at 9, even on the bridge network. On the Docker bridge, where <code>eth0</code> supports multicast, the talkers bound no index ports at all and 40 of 40 ran. Once only <code>lo</code> was used, through <code>ROS_LOCALHOST_ONLY=1</code> or a loopback-only container, Cyclone printed that <code>lo</code> is not multicast-capable, switched to indexes, and the 10th process failed.</p>
+
+<p>On Jazzy (<code>rmw_cyclonedds_cpp</code> 2.2.4, Cyclone 0.10.5) and Lyrical (<code>rmw_cyclonedds_cpp</code> 4.1.5, Cyclone 11.0.1) the config trace showed <code>MaxAutoParticipantIndex</code> 32. Jazzy ships the same Cyclone 0.10.5 as Humble, which gave 9, so the 32 comes from the RMW. The limit applied in every default case, including the bridge network with multicast. That is why a launch file that worked on Humble can fail after an upgrade with nothing else changed.</p>
+
+<h2>Fix 1: raise MaxAutoParticipantIndex</h2>
+
+<p>This kept the localhost discovery behaviour and only moved the limit. With <code>MaxAutoParticipantIndex</code> 20, exactly 20 talkers started on all three distros and the 21st failed. That held with the localhost setting and with <code>lo</code> named in the URI. With 5 talkers under the same setting, a listener heard 36 to 38 messages in 8 seconds on every distro, so discovery kept working.</p>
+
+<pre><code class="language-xml">&lt;CycloneDDS&gt;
+  &lt;Domain&gt;
+    &lt;Discovery&gt;
+      &lt;ParticipantIndex&gt;auto&lt;/ParticipantIndex&gt;
+      &lt;MaxAutoParticipantIndex&gt;100&lt;/MaxAutoParticipantIndex&gt;
+    &lt;/Discovery&gt;
+  &lt;/Domain&gt;
+&lt;/CycloneDDS&gt;</code></pre>
+
+<p>Save it as a file and point to it with <code>export CYCLONEDDS_URI=file:///path/to/cyclonedds.xml</code>, or pass the XML inline as in the short answer. Set it in every shell and launch environment on that host. The value has to cover the most processes you will run at once. I only measured 20. Higher values were not measured here, and the issues linked at the end discuss whether very large values add discovery traffic.</p>
+
+<h2>Fix 2: ParticipantIndex none, only where multicast works</h2>
+
+<p><code>ParticipantIndex none</code> removes the index, so there is no limit to hit. My results show it is not a safe drop-in, because it depends on multicast for discovery.</p>
+
+<ul>
+<li><strong>Jazzy and Lyrical with the localhost setting:</strong> 40 of 40 talkers started and no error was printed, but a fresh listener heard nothing in 8 seconds. With only 5 talkers it was the same. The config trace showed <code>AllowMulticast</code> false under the localhost setting, so with no index and no multicast the processes never found each other. Adding <code>multicast="true"</code> on <code>lo</code> did not change this while the localhost variable was set.</li>
+<li><strong>Humble with no multicast:</strong> the setting did nothing useful. With <code>ROS_LOCALHOST_ONLY=1</code>, with a loopback-only container, and with <code>lo</code> named in the URI, the 10th process still failed. The config trace reported <code>ParticipantIndex: none</code> and the processes still bound index ports.</li>
+<li><strong>Jazzy, loopback only:</strong> the 33rd process failed, same as without the setting.</li>
+<li><strong>Lyrical, loopback only:</strong> it worked. 40 of 40 started, the listener heard them, and Cyclone did not print the "not multicast-capable" line.</li>
+</ul>
+
+<p>The version that worked on all three distros was to drop the localhost variable and mark <code>lo</code> as multicast-capable in the URI yourself:</p>
+
+<pre><code class="language-xml">&lt;CycloneDDS&gt;
+  &lt;Domain&gt;
+    &lt;General&gt;
+      &lt;Interfaces&gt;&lt;NetworkInterface name="lo" multicast="true"/&gt;&lt;/Interfaces&gt;
+    &lt;/General&gt;
+    &lt;Discovery&gt;&lt;ParticipantIndex&gt;none&lt;/ParticipantIndex&gt;&lt;/Discovery&gt;
+  &lt;/Domain&gt;
+&lt;/CycloneDDS&gt;</code></pre>
+
+<p>With that, 30 of 30 talkers started on each distro, none of them bound an index port, and the listener heard 230 or more messages in 8 seconds. On Humble, keeping <code>ROS_LOCALHOST_ONLY=1</code> and adding this interface failed on the first node with <code>lo: the same interface may not be selected twice</code>, because the RMW adds <code>lo</code> too. Unset the variable first.</p>
+
+<p>This keeps traffic on the loopback interface, which is the same scope the localhost setting gives you. For what the discovery range settings do across machines, see <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">why ROS 2 nodes can't see each other and ROS_AUTOMATIC_DISCOVERY_RANGE</a>.</p>
+
+<h2>Fix 3: a different ROS_DOMAIN_ID per group</h2>
+
+<p>The index range is per domain. On Humble I filled domain 0 until the 10th talker failed, then started talkers with <code>ROS_DOMAIN_ID=1</code>: 9 more started and the 10th failed. On Jazzy and Lyrical I filled domain 0 to 32, and all 10 talkers I started on domain 1 ran. Nodes on different domains don't see each other, so this only helps when the groups don't need to talk. It is a workaround, not a fix.</p>
+
+<h2>Fix 4: fewer processes, more nodes per process</h2>
+
+<p>The limit counts DDS participants, and in these runs one process with one context was one participant, no matter how many nodes it held.</p>
+
+<ul>
+<li>One Python process created 40 nodes in one context, each with a publisher, and spun them in one executor. It used one index port. After it, 8 more talkers fit on Humble and 31 on Jazzy and Lyrical, one fewer than the empty-host count.</li>
+<li>One <code>component_container</code> with 20 Talker components loaded through <code>ros2 component load</code> used two index ports. <code>ros2 node list</code> showed all 20 components. The second port belonged to the <code>ros2</code> daemon, which <code>ros2 component load</code> started in the background; <code>ps</code> and <code>ss -ulnp</code> on Jazzy showed the container on 7410 and the daemon on 7414. After that, 7 talkers fit on Humble and 30 on Jazzy and Lyrical.</li>
+</ul>
+
+<p>If your launch file starts many small executables, putting them into a container, or a few multi-node processes, reduces how many indexes you use. It does not raise the limit.</p>
+
+<h2>Things that quietly use an index</h2>
+
+<ul>
+<li><strong>The ros2 daemon.</strong> With the daemon running, 8 talkers fit on Humble with the localhost setting and 31 on Jazzy and Lyrical. <code>ros2</code> commands start it in the background when it is not running, as <code>ros2 component load</code> did here, and it keeps running after the command exits.</li>
+<li><strong>Every ros2 CLI call while it runs.</strong> With the host full, <code>ros2 node list --no-daemon</code> and <code>ros2 topic list --no-daemon</code> failed with the same error, so the CLI needs a free index of its own.</li>
+<li><strong>Any other process that creates a node.</strong> A one-line Python script that only called <code>rclpy.create_node()</code> failed at the limit with the same error as the talkers.</li>
+</ul>
+
+<h2>How to count participants on a host</h2>
+
+<p>With <code>ParticipantIndex auto</code>, each participant binds a unicast discovery port at <code>7400 + 250 * domain + 10 + 2 * index</code>. On domain 0 that is 7410, 7412, 7414 and so on. List them with the owning process:</p>
+
+<pre><code class="language-bash">ss -ulnp | grep -E ':74(1[02468]|[2-9][02468])\b'</code></pre>
+
+<p>In my runs this matched what failed: 9 even ports in use at the Humble limit, 32 at the Jazzy and Lyrical limit, 20 with <code>MaxAutoParticipantIndex</code> 20, and 1 for the 40-node Python process. <code>ros2 node list</code> counts nodes, not participants, so it can't tell you how close you are. In <code>none</code> mode the ports are not at fixed numbers, so this check shows nothing. On Humble with a multicast-capable network, 40 talkers bound no index ports.</p>
+
+<h2>What about Fast DDS</h2>
+
+<p>Under the same conditions Fast DDS (<code>rmw_fastrtps_cpp</code>) did not fail. With the localhost setting and in a loopback-only container, 45 of 45 talkers started on Humble and 36 of 36 on Jazzy and Lyrical, and the listener heard them. I stopped there, so I don't know where Fast DDS would stop. It did use more memory: 45 Fast DDS talkers on Humble used 1,406 MB RSS in total, while 40 Cyclone talkers on the bridge used 652 MB. On Jazzy, 36 Fast DDS talkers used 1,321 MB and 32 Cyclone talkers used 587 MB. Switching RMW is a valid answer to this error, but it changes more than the participant limit.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble:</strong> <code>rmw_cyclonedds_cpp</code> 1.3.5, Cyclone DDS 0.10.5. Default <code>MaxAutoParticipantIndex</code> 9 in the config trace. No index used while a multicast-capable interface was available. The limit of 9 appeared only on loopback, and <code>ParticipantIndex none</code> did not lift it there.</li>
+<li><strong>Jazzy:</strong> <code>rmw_cyclonedds_cpp</code> 2.2.4, Cyclone DDS 0.10.5. <code>MaxAutoParticipantIndex</code> 32 from the RMW, applied in every default case. <code>ROS_LOCALHOST_ONLY=1</code> behaved like <code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code> for the count.</li>
+<li><strong>Lyrical:</strong> <code>rmw_cyclonedds_cpp</code> 4.1.5, Cyclone DDS 11.0.1. Same 32 limit and the same error wording on the first two lines, a different <code>what():</code> text. Unlike Jazzy, <code>ParticipantIndex none</code> on a loopback-only container worked and the nodes heard each other.</li>
+<li>Fast DDS versions: 2.6.12 on Humble, 2.14.7 on Jazzy, Fast DDS 3.6.2 on Lyrical.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li><code>MaxAutoParticipantIndex</code> values other than 20, and any effect of large values on discovery traffic or CPU.</li>
+<li>More than 45 processes on Humble or 40 on Jazzy and Lyrical. The cap was for a 2-vCPU machine.</li>
+<li><code>ParticipantIndex none</code> on a real multicast network interface on Jazzy and Lyrical.</li>
+<li>Processes in separate containers or on separate hosts. Every process here ran in one container.</li>
+<li>Galactic and Iron, and other Cyclone DDS builds than the apt packages above.</li>
+<li>Launch files and <code>ComposableNodeContainer</code> from launch. I used <code>ros2 component load</code>.</li>
+<li>Fast DDS limits beyond the counts above, and Zenoh or Connext.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does Failed to find a free participant index for domain 0 mean?</h3>
+<p>Every ROS 2 process with Cyclone DDS needs a participant index on that host, and all indexes were taken. In my runs that happened at the 10th process on Humble when only loopback was used, and at the 33rd process on Jazzy and Lyrical in every default setup.</p>
+
+<h3>How do I fix rmw_create_node: failed to create domain?</h3>
+<p>If the line before it is "Failed to find a free participant index", set ParticipantIndex auto and a higher MaxAutoParticipantIndex in CYCLONEDDS_URI. With 20, exactly 20 processes started on Humble, Jazzy and Lyrical, and nodes below the limit still heard each other.</p>
+
+<h3>Does ParticipantIndex none fix it?</h3>
+<p>Only where multicast works. With the localhost setting on Jazzy and Lyrical, nodes started without errors but could not hear each other. On Humble with loopback only, it did not lift the limit. Unsetting the localhost variable and putting lo with multicast="true" in the URI worked on all three distros.</p>
+
+<h3>Why did this start after upgrading from Humble to Jazzy?</h3>
+<p>Jazzy's rmw_cyclonedds_cpp sets MaxAutoParticipantIndex to 32 and uses indexes even on a multicast network. Humble ran 40 of 40 talkers on the same Docker network, Jazzy failed at the 33rd.</p>
+
+<h3>Does running many nodes in one process avoid the limit?</h3>
+<p>Yes. A Python process with 40 nodes in one context used one index, and a component container with 20 components used one more, for the ros2 daemon that ros2 component load started. Each process counts, not each node.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Failed to find a free participant index for domain 0 mean?", "acceptedAnswer": {"@type": "Answer", "text": "Every ROS 2 process with Cyclone DDS needs a participant index on that host, and all indexes were taken. In my runs that happened at the 10th process on Humble when only loopback was used, and at the 33rd process on Jazzy and Lyrical in every default setup."}},
+{"@type": "Question", "name": "How do I fix rmw_create_node: failed to create domain?", "acceptedAnswer": {"@type": "Answer", "text": "If the line before it is Failed to find a free participant index, set ParticipantIndex auto and a higher MaxAutoParticipantIndex in CYCLONEDDS_URI. With 20, exactly 20 processes started on Humble, Jazzy and Lyrical, and nodes below the limit still heard each other."}},
+{"@type": "Question", "name": "Does ParticipantIndex none fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Only where multicast works. With the localhost setting on Jazzy and Lyrical, nodes started without errors but could not hear each other. On Humble with loopback only, it did not lift the limit. Unsetting the localhost variable and putting lo with multicast=true in the URI worked on all three distros."}},
+{"@type": "Question", "name": "Why did this start after upgrading from Humble to Jazzy?", "acceptedAnswer": {"@type": "Answer", "text": "Jazzy's rmw_cyclonedds_cpp sets MaxAutoParticipantIndex to 32 and uses indexes even on a multicast network. Humble ran 40 of 40 talkers on the same Docker network, Jazzy failed at the 33rd."}},
+{"@type": "Question", "name": "Does running many nodes in one process avoid the limit?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. A Python process with 40 nodes in one context used one index, and a component container with 20 components used one more, for the ros2 daemon that ros2 component load started. Each process counts, not each node."}}
+]}
+</script>
+
+<p>Measured on 2026-10-29 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rmw_cyclonedds_cpp 1.3.5, Cyclone DDS 0.10.5, rmw_fastrtps_cpp 6.2.10, Fast DDS 2.6.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rmw_cyclonedds_cpp 2.2.4, Cyclone DDS 0.10.5, rmw_fastrtps_cpp 8.4.4, Fast DDS 2.14.7) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rmw_cyclonedds_cpp 4.1.5, Cyclone DDS 11.0.1, rmw_fastrtps_cpp 9.4.10, Fast DDS 3.6.2), <code>demo_nodes_cpp</code> talkers, one container per distro on a 2-vCPU Ubuntu host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-15-ros2-cyclonedds-free-participant-index/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/rmw_cyclonedds/issues/458">[Iron][nav2] error: Failed to find a free participant index for domain 0</a>, <a href="https://github.com/ros2/rclpy/issues/1212">failed to create domain error when spawning many python nodes at once from launch file with cyclonedds</a>, <a href="https://github.com/autowarefoundation/autoware/issues/6759">Fix [rmw_cyclonedds_cpp]: rmw_create_node: failed to create domain, error</a>, <a href="https://answers.ros.org/question/408753/ros2-galacitc-failed-to-find-a-free-participant-index-for-domain/">ROS2 galactic: Failed to find a free participant index for domain</a>.</p>
