@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko" xml:lang="ko">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<!-- 명시된 날짜 이후가 되면 페이지가 캐싱되지 않는다.(1990년 이후 쭉 )-->
+<meta http-equiv="Expires" content="Mon, 06 Jan 1990 00:00:01 GMT" />
+<!-- 캐시된 페이지가 만료되어 삭제되는 시간을 정의하나 특별한 경우가 아니면 -1로 설정-->
+<meta http-equiv="Expires" content="-1" />
+<!-- 페이지 로드시마다 페이지를 캐싱하지 않는다.(HTTP 1.0)-->
+<meta http-equiv="Pragma" content="no-cache" />
+<!--  페이지 로드시마다 페이지를 캐싱하지 않는다.(HTTP 1.1)-->
+<meta http-equiv="Cache-Control" content="no-cache" />
+<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta http-equiv="Content-Style-Type" content="text/css" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+<title>한국사능력검정시험</title>
+<!-- Bootstrap core CSS -->
+<!--  link href="/css/bootstrap/bootstrap.min.css" rel="stylesheet" / -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" />
+<!-- Custom styles for this template -->
+<link href="/css/intro/intro.css" rel="stylesheet" />
+<script type="text/javascript" src="/js/jquery-1.9.1.js" charset="UTF-8"></script>
+<!-- 매크로 진단 : MBUSTER API 연동 
+-->
+<script type="text/javascript" src="/js/mbuster/resource/js/mbuster_meta.js?lastMD=20261102" charset="UTF-8"></script>
+<script type="text/javascript" src="/js/mbuster/resource/js/mbuster_api_plain.js?lastMD=20261102" charset="UTF-8"></script>
+<!-- 대량접속제어 : NetFUNNEL -->
+<script type="text/javascript" src="/js/netfunnel.js?lastMD=20240618" charset="UTF-8"></script>
+<script type="text/javascript">
+//엠버스터 WEB연동
+const _userIpAddress = "127.0.0.1";
+const _userId = "";
+function fnMbusterAction(_url, _aid){
+	MBUSTER_API({
+		clientIp : _userIpAddress,
+		user_login_id : _userId,
+		callback : function(res){
+			fnNetFunnelAction(_url, _aid, 'check');
+		}
+	});
+}
+function fnNetFunnelAction(_url, _aid, _mgubun){
+	if ( _mgubun == undefined && _aid === "step01"){
+		fnMbusterAction(_url, _aid);
+		return;
+	}
+	if ( _aid == undefined ){
+		_aid = "load";
+	}
+	NetFunnel_Action({action_id:_aid}, {
+		//진입 성공 시 호출되는 수행
+		success:function(ev,ret){
+			if ( _url.indexOf('?') > -1 ){
+				_url = _url + "&";
+			}
+			else {
+				_url = _url + "?";
+			}
+			location.href = _url + "netfunnel_key=" + ret.data.key;// 암호화된 넷퍼넬 키
+		},
+		//넷퍼넬 서버에 의해 Block 처리될 때 수행
+		block:function(ev,ret){
+			//alert(NetFunnel.TS_BLOCK_MSG);
+			if ( _aid === "step01" ){
+				NetFunnel.PopupSetup("alert", ret, "blockSkin");
+			}
+			else {
+				NetFunnel.PopupSetup("alert", ret, "blockSkin2");
+			}
+			return false;
+		}/*,
+		//진입 대기 시 대기창을 보여주지 않고 백그라운드 대기 루틴 수행
+		continued:function(ev,ret){
+		},
+		//대기창의 [중ए] 버튼 누를 경우 수행
+		stop:function(ev,ret){
+		},
+		//넷퍼넬 API 실행 간 error 발생 시 수행
+		error:function(ev,ret){
+			var msg = "error:"
+			+ "code="+ret.code
+			+ ",msg="+ret.data.msg;
+			console.log(msg);
+		},
+		//넷퍼넬 서버가 Bypass 설정으로 진입 시 수행
+		bypass:function(ev,ret){
+		},
+		//넷퍼넬 서버߾서 IP Block 처리가 되었을 때 수행
+		ipblock:function(ev,ret){
+		},
+		//넷퍼넬 서버에 등록된 우회 사용࢕의 Bypass 진입 시 수행
+		expressnumber:function(ev,ret){
+		}*/
+	});
+}
+function fnGoMain(){
+	fnNetFunnelAction("/main/mainPage.do", "main");
+}
+function fnGoAcptExam(){
+	//접수화면 이동
+	fnNetFunnelAction("/mypage/exam/apply.do", "step01");
+}
+var mobileKeyWords = new Array('iPhone', 'iPod', 'BlackBerry', 'Android', 'Windows CE', 'LG', 'MOT', 'SAMSUNG', 'SonyEricsson');
+/*
+for (var word in mobileKeyWords){
+	if ( navigator.userAgent.match(mobileKeyWords[word]) != null ){
+		fnNetFunnelAction("http://m.historyexam.go.kr" + location.pathname + location.search, "main");
+		//location.href = "http://m.historyexam.go.kr" + location.pathname + location.search;
+		break;
+	}
+}
+*/
+for (var word in mobileKeyWords){
+	if ( navigator.userAgent.match(mobileKeyWords[word]) != null ){
+		location.href = "http://m.historyexam.go.kr" + location.pathname + location.search;
+		break;
+	}
+}
+window.onload = function(){
+	/* 원서접수기간 아닐때.
+	var array = document.getElementById("index_header").style.display = "none";
+	var array = document.getElementById("index_main").style.display = "none";
+	var array = document.getElementById("index_footer").style.display = "none";
+	fnGoMain();
+	*/
+}
+//새로고침(F5) 방지
+function noEvent(){
+	if ( event.keyCode == 116 ){
+		event.keyCode = 2;
+		return false;
+	}
+	else if ( event.ctrlKey && (event.keyCode == 78 || event.keyCode == 82) ){
+		return false;
+	}
+}
+document.onkeydown = noEvent;
+//우클릭 방지
+document.oncontextmenu = function(e){
+//	alert("오른쪽버튼을 이용할 수 없습니다...");
+	return false;
+}
+//드래그 방지
+document.ondragstart = new Function('return false');
+//선택 방지
+document.onselectstart = new Function('return false');
+
+$('#goAcptExam').click(function(){
+	$(this).prop('disabled', true);
+	setTimeout(() => {
+		$(this).prop('disabled', false);
+	}, 3000);
+});
+$('#goHome').click(function(){
+	$(this).prop('disabled', true);
+	setTimeout(() => {
+		$(this).prop('disabled', false);
+	}, 3000);
+});
+</script>
+</head>
+<body>
+	<header>
+		<!-- Fixed navbar -->
+		<div class="navbar navbar-expand-md fixed-top navbar-white bg-white" style="border-bottom:2px solid #406a99;">
+			<div class="container">
+				<a class="navbar-brand" href="javascript:void(0);"><img src="/images/common/main_17.jpg" alt="로고" /></a>
+			</div>
+		</div>
+	</header>
+	<!-- Begin page content -->
+	<main role="main" class="container">
+		<div class="container" style="margin-top:3%;">
+			<div class="card-deck mb-3 text-center" style="height:100%">
+				<div class="card mb-4 box-shadow col-md-7 mx-auto" style="background-color: rgba(131, 178, 212, 0.8509803921568627);margin: 0 20% !important">
+					<div class="card-body" style="color:darkblue;padding: 25px;text-shadow: 0 .05rem .1rem rgba(0, 0, 0, .5);">
+						<ul class="list-unstyled" style="font-size: 2.0em;line-height: 40px;">
+							<li style="font-weight: 600;letter-spacing:-2px;word-spacing:2px">
+								제81회 한국사능력검정시험
+								<span style="font-size: 0.7em;font-weight: 600;letter-spacing:-2px;wordr-spacing:2px;color:red">(※심화만 시행)</span>
+							</li>
+						</ul>
+						<ul class="list-unstyled" style="font-size: 2em;line-height: 40px;">
+							<li style="font-weight: 600;letter-spacing:-2px;word-spacing:2px">시험일 : 2026년 11월 28일(토) 10:00</li>
+						</ul>
+						<ul class="list-unstyled mt-3 mb-4">
+							<table style="width:100%;margin-top:10px;" cellspacing="0" cellpadding="10" border="1">
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td style="text-align:left;color:red">홈페이지 방문자 증가로 접수 지연이 발생하고 있습니다. <br> 비정상적인 접속 및 자동화 프로그램 사용 시 서비스 이용이 제한될 수 있으며, 관련 법령에 따른 조치가 진행될 수 있습니다. <br> 원활한 접수를 위하여 이용자 여러분들의 협조 부탁드립니다 </td>
+								</tr>
+							</table>							
+							<table style="width:100%;margin-top:10px;" cellspacing="0" cellpadding="10" border="1">
+								<colgroup>
+									<col width="47%" />
+									<col width="*" />
+								</colgroup>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #D5D5D5;">
+									<td>원서접수 기간</td>
+									<td>접수가능 지역</td>
+								</tr>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td>11.3.(화) 10:00 ~ 11.4.(수) 09:00</td>
+									<td style="text-align:left;">인천, 경기</td>
+								</tr>
+								<tr style="font-size:1.1em;font-weight:600;letter-spacing:1px;background: #F6F6F6;">
+									<td colspan="2" style="color:red;background-color:#fff;padding:0!important">[원서접수 불가] 11.4.(수) 09:00 ~ 10:00</td>
+								</tr>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td>11.4.(수) 10:00 ~ 11.5.(목) 09:00</td>
+									<td style="font-size:0.9em;text-align:left;line-height:30px;">대전, 세종, 광주, 충남, 충북, 전남, 전북</td>
+								</tr>
+								<tr style="font-size:1.1em;font-weight:600;letter-spacing:1px;background: #F6F6F6;">
+									<td colspan="2" style="color:red;background-color:#fff;padding:0!important">[원서접수 불가] 11.5.(목) 09:00 ~ 10:00</td>
+								</tr>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td>11.5.(목) 10:00 ~ 11.6.(금) 09:00</td>
+									<td style="text-align:left;line-height:30px;">부산, 대구, 울산, 경남, 경북</td>
+								</tr>
+								<tr style="font-size:1.1em;font-weight:600;letter-spacing:1px;background: #F6F6F6;">
+									<td colspan="2" style="color:red;background-color:#fff;padding:0!important">[원서접수 불가] 11.6.(금) 09:00 ~ 10:00</td>
+								</tr>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td>11.6.(금) 10:00 ~ 11.6.(금) 12:00</td>
+									<td style="text-align:left;">서울, 강원, 제주</td>
+								</tr>
+								<tr style="font-size:1.1em;font-weight:600;letter-spacing:1px;background: #F6F6F6;">
+									<td colspan="2" style="color:red;background-color:#fff;padding:0!important">[원서접수 불가] 11.6.(금) 12:00 ~ 13:00</td>
+								</tr>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td>11.6.(금) 13:00 ~ 11.10.(화) 17:00</td>
+									<td style="text-align:left;">전지역</td>
+								</tr>
+							</table>
+							<table style="width:100%;margin-top:10px;" cellspacing="0" cellpadding="10" border="1">
+								<colgroup>
+									<col width="47%" />
+									<col width="*" />
+								</colgroup>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #D5D5D5;">
+									<td>사진 등록(변경) 기간</td>
+									<td>시험장 변경 기간</td>
+								</tr>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td>11.11.(수) 10:00 ~ 11.28.(토) 10:00</td>
+									<td>11.11.(수) 10:00 ~ 11.20.(금) 17:00</td>
+								</tr>
+							</table>
+							<table style="width:100%;margin-top:10px;" cellspacing="0" cellpadding="10" border="1">
+								<colgroup>
+									<col width="47%" />
+									<col width="*" />
+								</colgroup>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #D5D5D5;">
+									<td>취소좌석 접수 기간</td>
+									<td>접수가능 지역</td>
+								</tr>
+								<tr style="font-size:1.2em;font-weight:600;letter-spacing:-1px;line-height:20px;background: #F6F6F6;">
+									<td>11.11.(수) 10:00 ~ 11.13.(금) 17:00</td>
+									<td style="text-align:left;line-height:20px;">전지역 (정기 원서접수 후 좌석이 남은 경우(잔여 좌석)에 한하여 시행)</td>
+								</tr>
+							</table>
+						</ul>
+						<ul class="list-unstyled mt-3 mb-4">
+							<button type="button" class="btn btn-lg btn-primary" id="goHome" style="float:left" onclick="fnGoMain()">홈페이지 바로가기</button>
+							<button type="button" class="btn btn-lg btn-info" id="goAcptExam" style="float:right" onclick="fnGoAcptExam()">원서접수 바로가기</button>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+	<footer class="footer" style="border-top:1px solid #dddddd;">
+		<div class="container">
+			<span class="text-muted">Copyright National Institute of Korean History. ALL Rights reserved.</span>
+		</div>
+	</footer>
+</body>
+</html>
