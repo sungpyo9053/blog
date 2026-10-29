@@ -1,0 +1,780 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+PSP761M01(전자소송도움말) 화면 XML
+
+============ ============ ==========================
+ Date         Author       Description
+============ ============ ==========================
+2023.11.21.   김기오                    [NELS]최초 생성
+2026.07.23.   김다솔                    [26A-PSP-0091] 각종 메시지 내용 및 안내문구 수정
+============ ============ ==========================
+-->
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+   <head meta_screenName="전자소송도움말">
+    	<w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+        	<xf:instance>
+        		<data xmlns="" />
+        	</xf:instance>
+        	<w2:dataCollection baseNode="map"></w2:dataCollection>
+        	<w2:workflowCollection></w2:workflowCollection>
+        	<xf:submission id="sbm_search" ref="data:json,dma_search"
+        		target='data:json,[{"id":"dlt_cpctScdleList","key":"data.dlt_cpctScdleList"}]' action="/psp/psp712/selectNtcMtrList.on"
+        		method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+        		mode="asynchronous" processMsg="일정 조회중입니다." ev:submit="" ev:submitdone="" ev:submiterror=""
+        		abortTrigger="">
+        	</xf:submission>
+        </xf:model>
+        <script src="/psp/cm/js/psppoppdsv.js" scopeExternal="true" cache="false"/>
+        <script type="text/javascript" lazy="false"><![CDATA[/**
+* PSP761M01.xml
+* AS-IS  ECF920.jsp
+* ============= ============ ==========================
+*  Date          Author       Description
+* ============= ============ ==========================
+*  2023.11.21.  김기오        [NELS]최초 생성
+* ============= ============ ==========================
+*/
+
+/*
+* [0] 화면 전역변수 ******************************************************************************************************
+*/
+scwin.pageParam     = null;     //화면에 전달된 파라미터
+scwin.smaInfo       = null;     //세션메뉴권한 정보
+scwin.BPOP_CNTR = "/psp/ui/pspcom/PSPBPopCntr.xml"; //PSPBPopContainer //브라우저팝업 컨테이너
+/**
+* [1] 화면 pageload ******************************************************************************************************
+*/
+scwin.onpageload = function() {
+    //[1-1] select box 숫자 변경
+	document.title = `전자소송도움말`;
+    scwin.pageParam = psp.getPageInit($p);
+    scscrno.setScPgmId('PSP761M01');
+	psppoppdsv.getPopupPdsvObj();
+};
+
+scwin.onpageunload = function() {
+};
+
+scwin.isMain = function() {
+    return true;
+};
+
+scwin.dmfn_authed = function(objSmaInfo) {
+    scwin.smaInfo = objSmaInfo; //메뉴권한 체크후 호출되는 콜백함수에 기본정보 포함됨
+}
+
+scwin.fnCloseWindowPopup = function(){
+    close();
+}
+
+scwin.btn_close_onclick = function(e) {
+    close();
+};
+/**
+* 메인 도움말 콘텐츠 링크 호출
+*
+* ============= ============ ==========================
+*  Date          Author       Description
+* ============= ============ ==========================
+*  2024.12.09.  주인철       [NELS]최초 생성
+* ============= ============ ==========================
+*/
+scwin.btn_help_contents_onclick = function(e) {
+    let tindex  = this.getUserData("userData1");
+	let tgubun  = this.getUserData("userData3");
+	let fileSysName = "";
+	let m_url = "";
+	let u_url = "";
+	let openPopupUrl = "";
+	let openPopupName = "";
+	let openPopupWidth = "";
+
+    //나의전자소송
+    if(tindex == "01"){
+		fileSysName = "/help/도움말_나의전자소송.pdf"
+	}
+    //서류제출
+    else if(tindex == "02"){
+		fileSysName = "/help/도움말_서류제출.pdf"
+    }
+    //제증명
+    else if(tindex == "03"){
+		fileSysName = "/help/도움말_제증명.pdf"
+    }
+    //송달문서확인
+    else if(tindex == "04"){
+		fileSysName = "/help/도움말_송달문서확인.pdf"
+    }
+    //납부환급
+    else if(tindex == "05"){
+		fileSysName = "/help/도움말_납부환급.pdf"
+    }
+    //나홀로소송
+    else if(tindex == "06"){
+		fileSysName = "/help/도움말_나홀로소송.pdf"
+    }
+    if(scutilo.isEmpty(m_url) && scutilo.isEmpty(u_url) && scutilo.isEmpty(fileSysName)){
+        return false;
+    }
+
+	if(tgubun == "youtu"){
+		if (psp.isMobileApp() === true) {
+        	psp.windowOpen(u_url);
+    	} else {
+			window.open(u_url);
+		}
+	}else if(tgubun == "link"){
+		window.open(fileSysName,'pop', 'location=no, directories=no, resizable=yes, status=no, toolbar=no, menubar=no, width=680, height=800, scrollbars=yes');
+		return false;
+	}else if(tgubun == "linkPDF"){
+		let port = document.location.port;
+		let hostname = scutilo.isEmpty(port) ? document.location.hostname : document.location.host;
+		let contextRoot = psputils.isLocal() ? "" : psp.CONTEXT_ROOT;
+		let baseUrl = hostname + contextRoot;
+		let url = '';
+		if (psp.isIosApp() === true) {
+			url = psputils.IOS_HREF + fileSysName;
+			psp.windowOpen(url);
+		} else {
+			url = "https://" + baseUrl + fileSysName;
+			psp.windowOpen(url);
+		}
+	}else if(tgubun == "openPopup"){
+		var param = {
+			"dma_paramData": {
+				"initTabIdx": "",
+				"openerInputId":""
+			}
+		}
+		var h = window.screen.availHeight;
+		psp.openBrowserPopup(openPopupUrl, openPopupName, param, 1200, h, null, false);
+	}
+};
+
+
+/**
+* 메인 하단 목록 콘텐츠 링크 호출
+*
+* ============= ============ ==========================
+*  Date          Author       Description
+* ============= ============ ==========================
+*  2024.12.09.         [NELS]최초 생성
+*  2026.07.23.         [26A-PSP-0091] 각종 메시지 내용 및 안내문구 수정
+* ============= ============ ==========================
+*/
+scwin.btn_help_list_contents_onclick = function(e) {
+    let tindex  = this.getUserData("userData1");
+	let tFileGubun  = this.getUserData("userData2");
+	let tgubun  = this.getUserData("userData3");
+	let fileSysName = "";
+	let m_url = "";
+	let u_url = "";
+	let openPopupUrl = "";
+	let openPopupName = "";
+	let openPopupWidth = "";
+	let fileOrgName = "";
+	let filePath = "";
+
+	// 문서파일
+	if(tFileGubun == "doc"){
+		//사용자매뉴얼
+		if(tindex == "01"){
+			fileSysName = "/help/ecfs_scourt_manual_v1.1.pdf"
+			//fileOrgName = "psp761m01_psp_list_doc_01.pdf" ;  //파일원본명
+			//fileDwldName = "전자소송포털_사용자설명서.pdf" ;  //다운로드파일원본명
+		}
+		//전자발급서류첨부하기
+		else if(tindex == "02"){
+			fileSysName = "/help/elctn_issu_docmt_atch.pdf"
+			//fileOrgName = "psp761m01_psp_list_doc_02.pdf" ;  //파일원본명
+			//fileDwldName = "전자발급서류첨부하기.pdf" ;  //다운로드파일원본명
+		}
+		//기록뷰어 사용자설명서
+		else if(tindex == "03"){
+			fileSysName = "/help/elctn_rv_user_manual.pdf"
+			//fileDwldName = "기록뷰어 사용자설명서.pdf" ;  //다운로드파일원본명
+		//서류별 작성방법안내
+		}else if(tindex == "04"){
+            fileSysName = "/help/elctn_doc_write_user_manual.pdf"
+        }
+	//동영상파일
+	}else if(tFileGubun == "video"){
+		if(tindex == "01"){
+            // 1. 전자소송포털 안내영상
+            u_url="https://youtu.be/2COdsw9y6ps";
+		}else if(tindex == "02"){
+            // 2. 전자소송포털 사용안내
+            u_url="https://youtu.be/3XKNC9xDMFE";
+		}else if(tindex == "03"){
+            // 3. [전자소송포털]소장작성 방법안내
+            u_url="https://youtu.be/I-BL1v31vOc?si=I2yGNvj3J8rFQOUa";
+		}else if(tindex == "04"){
+            // 4. [전자소송포털]서류제출 사용안내
+            u_url="https://youtu.be/omEJLCvHJR0";
+		}else if(tindex == "05"){
+            // 5. [전자소송포털]제증명 이용안내
+            u_url="https://youtu.be/-7Vwmp1NTQc";
+		}else if(tindex == "06"){
+            // 6. [전자소송포털]대조형 쟁점요약 이용안내
+            u_url="https://youtu.be/9QW75EiMLMU";
+		}else if(tindex == "07"){
+            // 7. [전자소송포털]사건별 게시판 이용안내
+            u_url="https://youtu.be/tZE0XilOrUg";
+		}else if(tindex == "08"){
+            // 8. [전자소송포털]서증목록편집 이용안내
+            u_url="https://youtu.be/KT_-7eFl9OU";
+		}else if(tindex == "09"){
+            // 9. [전자소송포털]전자발급서류 첨부하기 이용안내
+            u_url="https://youtu.be/qNBiwGiLWnI";
+		}else if(tindex == "10"){
+            // 10. [전자소송포털]서식파일업로드 이용안내
+            u_url="https://youtu.be/xY6K1B1K5m0";
+		}else if(tindex == "11"){
+            // 11. [전자소송포털]지급명령신청서 일괄제출 이용안내
+            u_url="https://youtu.be/izhuJP-cw4g";
+		}else if(tindex == "12"){
+            // 12. [전자소송포털]나홀로소송  소장작성 방법안내
+            u_url="https://youtu.be/3XGQbIWx-KU";
+		}
+    }
+
+    if(scutilo.isEmpty(m_url) && scutilo.isEmpty(u_url) && scutilo.isEmpty(fileSysName)  && scutilo.isEmpty(fileOrgName)){
+        return false;
+    }
+
+	if(tgubun == "youtu"){
+		if (psp.isMobileApp() === true) {
+        	psp.windowOpen(u_url);
+    	} else {
+			window.open(u_url);
+		}
+	}else if(tgubun == "link"){
+		window.open(fileSysName,'pop', 'location=no, directories=no, resizable=yes, status=no, toolbar=no, menubar=no, width=680, height=800, scrollbars=yes');
+		return false;
+	}else if(tgubun == "linkPDF"){
+		let port = document.location.port;
+		let hostname = scutilo.isEmpty(port) ? document.location.hostname : document.location.host;
+		let contextRoot = psputils.isLocal() ? "" : psp.CONTEXT_ROOT;
+		let baseUrl = hostname + contextRoot;
+		let url = '';
+		if (psp.isIosApp() === true) {
+			url = psputils.IOS_HREF + fileSysName;
+			psp.windowOpen(url);
+		} else {
+			url = "https://" + baseUrl + fileSysName;
+			psp.windowOpen(url);
+		}
+	}else if(tgubun == "openPopup"){
+		var param = {
+			"dma_paramData": {
+				"initTabIdx": "",
+				"openerInputId":""
+			}
+		}
+		var h = window.screen.availHeight;
+		psp.openBrowserPopup(openPopupUrl, openPopupName, param, 1200, h, null, false);
+	}else if(tgubun == "dwld"){
+		var params = {
+			"dma_param": {
+				fileType : "information",
+				fileName : fileOrgName,
+				saveName : fileDwldName
+			}
+		};
+		psputils.dwldPspFile(psp.CONTEXT_ROOT + "/psp761/information/dwld.on", params); //psp.CONTEXT_ROOT + '/pspa02/docforms/dwld.on';
+	}
+};
+]]></script>
+        <style type="text/css"><![CDATA[
+            .fc-day-grid-container.fc-scroller{
+                height: auto !important;
+            }
+            .fc-toolbar.fc-header-toolbar {height:30px;}
+        ]]></style>
+    </head>
+   <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+   	<xf:group class="popup_wrap" id="" style="">
+   		<xf:group class="popup_content PSP761M01" id="" style=""><w2:span style="" id="" label="전자소송포털 이용에 대한 도움말 서비스입니다." class="con_stit ic" escape="false"></w2:span><w2:textbox style="" id="" label="전자소송 이용에 대한 상세한 도움말을 제공합니다." class="fs14" escape="false"></w2:textbox><w2:textbox style="" id="" label="전자소송포털을 이용한 서류제출, 기록열람 등 궁금하고 어려웠던 전자소송에 대해서 자세히 안내드립니다." class="fs14 mt4" escape="false">
+   			</w2:textbox><xf:group style="" id="" class="PSP761M01_wrap">
+   				<xf:group tagname="ul" style="" id="" class="ctb_con">
+   					<xf:group tagname="li" style="" id="" class="ctb_box">
+   						<xf:group style="" id="" class="ctb_ty_tit">
+   							<w2:span style="" id="" label="나의 전자소송" class=""></w2:span>
+   						</xf:group>
+
+   						<xf:group style="" id="" class="ctb_ty_con">
+   							<w2:textbox tagname="span" style="" id="" label="전자소송으로 진행하는 나의 사건을 보다 편리하게 열람하고 관리할 수 있습니다." escape="false">
+   							</w2:textbox>
+   							<xf:group id="" class="ar">
+   								<xf:trigger style="" id="btn_help_contents01" type="button" class="btn_ic btn_ic_viewer" userData1="01" ev:onclick="scwin.btn_help_contents_onclick" userData3="linkPDF">
+   									<xf:label><![CDATA[선택삭제]]></xf:label>
+   								</xf:trigger>
+   							</xf:group>
+   						</xf:group>
+
+   					</xf:group>
+   					<xf:group tagname="li" style="" id="" class="ctb_box">
+   						<xf:group style="" id="" class="ctb_ty_tit">
+   							<w2:span style="" id="" label="서류제출" class=""></w2:span>
+   						</xf:group>
+   						<xf:group style="" id="" class="ctb_ty_con">
+   							<w2:textbox tagname="span" style="" id="" label="법원에 직접 제출하던 서류를 전자소송으로 직접 작성하고 제출할 수 있습니다." escape="false">
+   							</w2:textbox>
+   							<xf:group style="" id="" class="ar">
+   								<xf:trigger style="" id="btn_help_contents02" type="button" class="btn_ic btn_ic_viewer" userData1="02" ev:onclick="scwin.btn_help_contents_onclick" userData3="linkPDF">
+   									<xf:label><![CDATA[선택삭제]]></xf:label>
+   								</xf:trigger>
+   							</xf:group>
+   						</xf:group>
+
+   					</xf:group>
+   					<xf:group tagname="li" style="" id="" class="ctb_box">
+   						<xf:group style="" id="" class="ctb_ty_tit">
+   							<w2:span style="" id="" label="제증명" class=""></w2:span>
+   						</xf:group>
+   						<xf:group style="" id="" class="ctb_ty_con">
+   							<w2:textbox tagname="span" style="" id="" label="전자소송으로 진행하는 제증명 신청, 발급을 보다 편리하게 사용할 수 있습니다." escape="false">
+   							</w2:textbox>
+   							<xf:group style="" id="" class="ar">
+   								<xf:trigger style="" id="btn_help_contents03" type="button" class="btn_ic btn_ic_viewer" userData1="03" ev:onclick="scwin.btn_help_contents_onclick" userData3="linkPDF">
+   									<xf:label><![CDATA[선택삭제]]></xf:label>
+   								</xf:trigger>
+   							</xf:group>
+   						</xf:group>
+
+   					</xf:group>
+   					<xf:group tagname="li" style="" id="" class="ctb_box">
+   						<xf:group style="" id="" class="ctb_ty_tit">
+   							<w2:span style="" id="" label="송달문서확인" class=""></w2:span>
+   						</xf:group>
+   						<xf:group style="" id="" class="ctb_ty_con">
+   							<w2:textbox tagname="span" style="" id="" label="법원에서 전자송달하는 모든 문서를 확인하고 관리할 수 있습니다." escape="false">
+   							</w2:textbox>
+   							<xf:group style="" id="" class="ar">
+   								<xf:trigger style="" id="btn_help_contents04" type="button" class="btn_ic btn_ic_viewer" userData1="04" ev:onclick="scwin.btn_help_contents_onclick" userData3="linkPDF">
+   									<xf:label><![CDATA[선택삭제]]></xf:label>
+   								</xf:trigger>
+   							</xf:group>
+   						</xf:group>
+
+   					</xf:group>
+   					<xf:group tagname="li" style="" id="" class="ctb_box">
+   						<xf:group style="" id="" class="ctb_ty_tit">
+   							<w2:span style="" id="" label="납부/환급" class=""></w2:span>
+   						</xf:group>
+   						<xf:group style="" id="" class="ctb_ty_con">
+   							<w2:textbox tagname="span" style="" id="" label="인지액, 송달료 등 소송비용을 온라인으로 직접 납부할 수 있습니다." escape="false"></w2:textbox>
+   							<xf:group style="" id="" class="ar">
+   								<xf:trigger style="" id="btn_help_contents05" type="button" class="btn_ic btn_ic_viewer" userData1="05" ev:onclick="scwin.btn_help_contents_onclick" userData3="linkPDF">
+   									<xf:label><![CDATA[선택삭제]]></xf:label>
+   								</xf:trigger>
+   							</xf:group>
+   						</xf:group>
+
+   					</xf:group>
+   					<xf:group tagname="li" style="" id="" class="ctb_box">
+   						<xf:group style="" id="" class="ctb_ty_tit">
+   							<w2:span style="" id="" label="나홀로소송" class=""></w2:span>
+   						</xf:group>
+   						<xf:group style="" id="" class="ctb_ty_con">
+   							<w2:textbox tagname="span" style="" id="" label="소송대리인의 도움 없이 직접 민사 소송서류를 쉽게 작성할 수 있습니다." escape="false"></w2:textbox>
+   							<xf:group style="" id="" class="ar">
+   								<xf:trigger style="" id="btn_help_contents06" type="button" class="btn_ic btn_ic_viewer" userData1="06" ev:onclick="scwin.btn_help_contents_onclick" userData3="linkPDF">
+   									<xf:label><![CDATA[선택삭제]]></xf:label>
+   								</xf:trigger>
+   							</xf:group>
+   						</xf:group>
+
+   					</xf:group>
+   				</xf:group>
+   			</xf:group><xf:group id="" class="mo_grp"><w2:span style="" id="" label="매뉴얼/ 동영상" class="con_stit ic mt25" escape="false"></w2:span><w2:textbox style="" id="" label="전자소송에 대한 매뉴얼 및 동영상을 확인할 수 있습니다." class="fs14 mb5" escape="false"></w2:textbox><xf:group id="" style="min-width: 100%;overflow-x:scroll;"><xf:group captionTitle="안내(홍보)자료 모음 게시판 " tagname="table" style="min-width: 390px;" id="" class="w2tb">
+   		        <w2:attributes>
+   		            <w2:summary></w2:summary>
+   		        </w2:attributes>
+   		        <xf:group tagname="caption"></xf:group>
+   		        <xf:group tagname="colgroup">
+   		            <xf:group tagname="col" style="width:60px;"></xf:group>
+   		            <xf:group tagname="col" style="width:30px;"></xf:group>
+   		            <xf:group tagname="col" style="width:300px;"></xf:group>
+   		            <xf:group tagname="col" style="width:80px;"></xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="th" id="" class="w2tb_th ac"><w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes><w2:span style="" id="" label="구분" class=""></w2:span></xf:group>
+   		            <xf:group tagname="th" style="" id="" class="w2tb_th ac"><w2:attributes>
+   		                    <w2:scope>col</w2:scope>
+   		                </w2:attributes><w2:span style="" id="" label="번호" class=""></w2:span></xf:group>
+   		            <xf:group tagname="th" style="" id="" class="w2tb_th ac"><w2:attributes>
+   		                    <w2:scope>col</w2:scope>
+   		                </w2:attributes><w2:span style="" id="" label="제목"></w2:span></xf:group>
+   		            <xf:group tagname="th" style="" id="" class="w2tb_th ac"><w2:attributes>
+   		                    <w2:scope>col</w2:scope>
+   		                </w2:attributes><w2:span style="" id="" label="열기"></w2:span></xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="매뉴얼" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="1" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="전자소송포털 사용자 설명서"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor outerDiv="false" ev:onclick="scwin.btn_help_list_contents_onclick" userData3="linkPDF" style="" userData2="doc" id="" userData1="01" title="새창 열기" class="btn_fcm ty2 btn_icT_pdfopen" target="_blank">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        
+                <xf:group tagname="tr">
+                    <xf:group tagname="td" id="" class="w2tb_td ac">
+                        <w2:attributes>
+                            <w2:scope>row</w2:scope>
+                        </w2:attributes>
+                        <w2:span style="" id="" label="매뉴얼" class=""></w2:span>
+                    </xf:group>
+                    <xf:group tagname="td" class="w2tb_td ac">
+                        <w2:attributes></w2:attributes>
+                        <w2:span style="" id="" label="2" class=""></w2:span>
+                    </xf:group>
+                    <xf:group tagname="td" class="w2tb_td">
+                        <w2:attributes></w2:attributes>
+                        <w2:span style="" id="" label="서류별 작성방법안내"></w2:span>
+                    </xf:group>
+                    <xf:group tagname="td" class="w2tb_td ac">
+                        <w2:attributes></w2:attributes>
+                        <w2:anchor outerDiv="false" ev:onclick="scwin.btn_help_list_contents_onclick" userData3="linkPDF" style="" userData2="doc" id="" userData1="04" title="새창 열기" class="btn_fcm ty2 btn_icT_pdfopen" target="_blank">
+                            <xf:label><![CDATA[바로열기]]></xf:label>
+                        </w2:anchor>
+                    </xf:group>
+                </xf:group>
+                
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="매뉴얼" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="3" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="전자발급 서류 첨부하기 안내"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="linkPDF" style="" userData2="doc" id="" userData1="02" title="새창 열기" class="btn_fcm ty2 btn_icT_pdfopen" target="_blank">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="매뉴얼" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="4" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="기록뷰어 사용자설명서.pdf"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="linkPDF" style="" userData2="doc" id="" userData1="03" title="새창 열기" class="btn_fcm ty2 btn_icT_pdfopen" target="_blank">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="1" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="전자소송포털 홍보 동영상"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor outerDiv="false" ev:onclick="scwin.btn_help_list_contents_onclick" userData3="youtu" style="" userData2="video" id="" userData1="01" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="2" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="전자소송포털 사용안내"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="02" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="3" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="소장작성"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="03" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="4" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="서류제출 이용안내"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="04" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="5" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="제증명 신청 및 발급"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="05" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="6" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="대조형 쟁점요약 이용안내"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="06" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="7" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="사건별 게시판 이용안내"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="07" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="8" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="서증목록편집 이용안내"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="08" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="9" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="전자발급서류 첨부하기"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="09" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="10" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="소장일괄제출(서식파일 업로드)"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="10" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="11" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="지급명령 일괄제출(xml)"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="11" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		        <xf:group tagname="tr" style="">
+   		            <xf:group tagname="td" id="" class="w2tb_td ac">
+   		                <w2:attributes>
+   		                    <w2:scope>row</w2:scope>
+   		                </w2:attributes>
+   		                <w2:span style="" id="" label="동영상" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="12" class=""></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:span style="" id="" label="나홀로소송 소장작성"></w2:span>
+   		            </xf:group>
+   		            <xf:group tagname="td" class="w2tb_td ac">
+   		                <w2:attributes></w2:attributes>
+   		                <w2:anchor ev:onclick="scwin.btn_help_list_contents_onclick" outerDiv="false" userData3="youtu" style="" userData2="video" id="" userData1="12" title="새창 열기" class="btn_fcm ty2 btn_icT_video">
+   		                    <xf:label><![CDATA[바로열기]]></xf:label>
+   		                </w2:anchor>
+   		            </xf:group>
+   		        </xf:group>
+   		    </xf:group></xf:group><xf:group style="" id="grp_close" class="btn_group ">
+   				<xf:trigger ev:onclick="scwin.btn_close_onclick" style="" id="btn_close" type="button" class="btn_cm pop confirm">
+   					<xf:label><![CDATA[닫기]]></xf:label>
+   				</xf:trigger>
+   			</xf:group></xf:group></xf:group>
+   	</xf:group>
+   </body>
+</html>

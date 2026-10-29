@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head>
+        <w2:type>DEFAULT</w2:type>
+        <w2:buildDate />
+        <xf:model>
+            <xf:instance>
+                <data xmlns="" />
+            </xf:instance>
+            <w2:dataCollection baseNode="map"></w2:dataCollection>
+            <w2:workflowCollection></w2:workflowCollection>
+        </xf:model>
+        <script type="text/javascript" lazy="false"><![CDATA[/**
+ * 최상단(opener, parent 포함) 기준 함수
+ */
+
+scwin.title = '나의사건검색';
+scwin.topParam = {};
+
+scwin.isMain = function() {
+    return true;
+};
+
+scwin.onpageload = function() {
+    // parameter
+    scwin.topParam   = com.data.getParameter() || ssgo.getParameter();
+        
+    if(scwin.topParam.initChk === "Y") {
+        ssgoTopMainTab.setSelectedTabIndex(1);
+        ssgo.setDocumentTitle(scwin.title, true);
+        
+    } else {
+        ssgo.setDocumentTitle(scwin.title, true);
+    }
+
+    // 대국민홈페이지에서 호출되었을시 css클래스명 변경
+    if(scwin.topParam.cortId != "undefined" && !scutilo.isEmpty(scwin.topParam.cortId)){
+        top_group.changeClass("poter_wrap","poter_wrap ucs");
+    }
+    
+};
+
+
+scwin.ssgoTopMainTab_ontabclick = function(tabID,idx) {
+    console.log("tabID:"+tabID+" idx:"+idx);
+
+    ssgo.setTabTitleOnChange(this , idx);
+};
+
+scwin.ssgoTopMainTab_onbeforeselect  = function(selectedIndex, index) {
+    console.log("selectedIndex:"+selectedIndex+" index:"+index);
+
+    if(index == 0) {
+	    // 사건검색 메인으로 이동
+	    // 조건1 : 공인인증 및 SSO 로그인중일때는 메시지를 표시한다.(예:페이지 이동시 공인인증 또는 SSO로그인 처리를 다시 하셔야합니다 그래도 이동하시겠습니까?)
+	    scwin.topParam.initChk = "";
+        ssgo.sendPostForm(ssgo.getCtxtPathUrl("/index.on"), scwin.topParam);
+        ssgo.setDocumentTitle(scwin.title, true);
+    }else if(index == 1) {
+        ssgo.setDocumentTitle(scwin.title, true);
+        
+        // 0번째 탭 초기화
+        ssgoTopMainTab.getFrame(0).setSrc("/ssgo/ui/ssgo10l/SSGO10LM01.xml?initTabYn=Y");        
+    }
+    
+};
+
+/**
+ * [웹접근성] 탭 선택 title 처리를 위한 함수
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2024.10.22.   최주한       [NELS]최초생성
+ * ============ ============ ==========================
+ */  
+scwin.ssgoTopMainTab_ontabload = function(tabID,idx,userID) {
+    ssgo.setTabTitleOnChange(this , idx);
+};
+]]></script>
+		<style type="text/css"><![CDATA[
+
+         ]]></style>
+	</head>
+
+	<body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+        <xf:group id="top_group" style="" class="poter_wrap">
+            <xf:group id="" style="" class="container inner">
+				<w2:tabControl id="ssgoTopMainTab" alwaysDraw="false" class="tab ty1 tab_dsN" confirmFalseAction="new"
+					confirmTrueAction="exist"  style="" useConfirmMessage="false" useMoveNextTabFocus="false" useTabKeyOnly="true" 
+					ev:ontabclick="scwin.ssgoTopMainTab_ontabclick"
+					ev:onbeforeselect="scwin.ssgoTopMainTab_onbeforeselect" ev:ontabload="scwin.ssgoTopMainTab_ontabload">
+					<w2:tabs disabled="false" id="ssgoTab1" label="사건번호로 검색" style="" class="t_100" title="사건번호로 검색으로 이동"></w2:tabs>
+					<w2:tabs disabled="false" id="ssgoTab2" label="인증서로 검색" style="" class="t_dsN" title="인증서로 검색으로 이동"></w2:tabs>
+		            <w2:content alwaysDraw="false" id="content1" style="" src="/ssgo/ui/ssgo10l/SSGO10LM01.xml"></w2:content>
+		            <w2:content alwaysDraw="false" id="content2" style="" src="/ssgo/ui/ssgo10l/SSGO10LM02.xml"></w2:content>
+				</w2:tabControl>
+			</xf:group>
+		</xf:group>
+	</body>
+</html>

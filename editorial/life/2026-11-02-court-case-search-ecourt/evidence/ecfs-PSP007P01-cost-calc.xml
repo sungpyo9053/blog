@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head meta_screenName="소송비용계산_계산방법(1)_popup" meta_vertical_guides="" meta_horizontal_guides="645">
+    	<w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+            <xf:instance>
+                <data xmlns=""/>
+            </xf:instance>
+            <w2:dataCollection baseNode="map">
+            	<w2:dataMap baseNode="map" id="dma_parentInfo">
+            	    <w2:keyInfo>
+            	        <w2:key id="openerInputId" name="초기파라미터" dataType="text"></w2:key>
+            	        <w2:key id="openPage" name="호출페이지" dataType="text"></w2:key>
+            	        <w2:key id="ofdocDvsCd" name="문건구분코드" dataType="text"></w2:key>
+            	        <w2:key id="vsmlRslt" name="소가정산 결과" dataType="text"></w2:key>
+            	        <w2:key id="vsmlParam" name="소가정산액 입력값" dataType="text"></w2:key>
+            	        <w2:key id="msgIdx" name="안내메시지 Idx" dataType="text"></w2:key>
+            	        <w2:key id="elpEcdocNo" name="소송포탈전자문서번호" dataType="text"></w2:key>
+            	        <w2:key id="elctnLwstTaskTypCd" name="전자소송업무유형코드" dataType="text"></w2:key>
+            	        <w2:key id="initTabIdx" name="시작Tab" dataType="text"></w2:key>
+            	        <w2:key id="isStmpInfoSetYn" name="인지정보세팅여부" dataType="text"></w2:key>
+            	    </w2:keyInfo>
+            	    <w2:data>
+            	        <openerInputId><![CDATA[1]]></openerInputId>
+            	        <openPage><![CDATA[CHC-2030]]></openPage>
+            	        <ofdocDvsCd><![CDATA[Samsung CHC-2030 93x1 Series]]></ofdocDvsCd>
+            	    </w2:data>
+            	</w2:dataMap>
+            </w2:dataCollection>
+            <w2:workflowCollection>
+            </w2:workflowCollection>
+        </xf:model>
+         <script type="text/javascript" lazy="false"><![CDATA[/**
+* PSP007P01.xml(소송비용 계산)
+*
+* ============= ============ ==========================
+*  Date          Author       Description
+* ============= ============ ==========================
+*  2023.06.19.   김기오       [NELS]최초 생성
+* ============= ============ ==========================
+*/
+
+/* ==================================
+ * 1.전역변수 선언부
+ * ==================================*/
+scwin.localVariable = {
+	wfmArr: [{ "name": "wfm_lwstTypeCalcGuide", "src": "/psp/ui/psp000/PSP007F01.xml", "isInitLoaded": true },
+	{ "name": "wfm_vsmlClclt", "src": "/psp/ui/psp000/PSP007F02.xml", "isInitLoaded": false },
+	{ "name": "wfm_stmpAmtCalc", "src": "/psp/ui/psp000/PSP007F03.xml", "isInitLoaded": false },
+	{ "name": "wfm_hskpFeeCalc", "src": "/psp/ui/psp000/PSP007F04.xml", "isInitLoaded": false },
+	{ "name": "wfm_dlvrChrgCalc", "src": "/psp/ui/psp000/PSP007F05.xml", "isInitLoaded": false }],
+
+	subFrameParam: {
+		"dataObject": {
+			"type": "json",
+			"name": "wframeParam",
+			"data": { "pPgmId": "PSP007P01" } //실제 하위 프레임에 전달되는 파라미터 객체
+		}
+	},
+
+	isInit: true,
+	isClick: false,
+
+}
+//이전페이지로부터 전달받은 param
+scwin.wfparam = null;
+
+/* ================================== 
+* 2.페이지 Onload/Unload 선언부  
+* ==================================*/
+/**
+ * 화면 pageload 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.onpageload = function () {
+	scglblo.setCtxtPath("/psp");
+	scwin.wfparam = $p.getParameter("paramData");
+	if (!scutilo.isEmpty(scwin.wfparam)){
+		dma_parentInfo.setJSON(scwin.wfparam.dma_paramData);
+	}
+	if (!scutilo.isEmpty(dma_parentInfo.get("initTabIdx"))) {
+		tac_select.setSelectedTabIndex(dma_parentInfo.get("initTabIdx"));
+	} else {
+		scwin.localVariable.isInit = false;
+		scwin.localVariable.isClick = true;
+	}
+};
+
+
+scwin.isMain = function() {
+    return true;
+};
+
+/**
+ * 화면 onpageunload 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.onpageunload = function () {
+
+};
+
+/* ================================== 
+* 4.컴포넌트 이벤트 처리부
+* ==================================*/
+
+/**
+* 상단 탭 onbeforeselect event
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.tac_select_onbeforeselect = function (selectedIndex, index) {
+	var wfmObj = scwin.getSelectedFrame(selectedIndex);
+	if (scwin.localVariable.isInit) {
+		scwin.localVariable.isInit = false;
+		scwin.localVariable.isClick = true;
+	} else {
+		if (scwin.localVariable.isClick) {
+			dma_parentInfo.setEmptyValue();
+			var param = wfmObj.scope.dma_parentInfo.getJSON();
+			//소가산정 탭을 클릭한 경우
+			if (index == 1) {
+				dma_parentInfo.setJSON(param);
+				//인지액 계산 탭에서 진입시
+				if (selectedIndex == 2 && index == 1) {
+					dma_parentInfo.set("isStmpInfoSetYn", "N");
+				}
+			} else {//그 외 탭 이동시
+				dma_parentInfo.setJSON(
+					{
+						"elctnLwstTaskTypCd": param.elctnLwstTaskTypCd,
+						"openerInputId": param.openerInputId,
+					}
+				)
+				//소가산정 탭에서 인지액 계산 탭으로 이동시
+				if (selectedIndex == 1 && index == 2) {
+					dma_parentInfo.set("ofdocDvsCd", param.ofdocDvsCd);
+				}
+			}
+		} else {
+			scwin.localVariable.isClick = true;
+		}
+		var wfmArr = scwin.localVariable.wfmArr;
+		var wfmObj = scwin.getSelectedFrame(index);
+		//탭 reload를 위한 스크립트
+		wfmObj.setSrc(wfmArr[index].src, scwin.localVariable.subFrameParam);
+	}
+};
+
+/**
+ * 소송비용계산 중분류 TabControl onchange Event
+ * 최초 load가 아닐시 수동으로 서브프레임에 해당화면을 setting한다.
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+
+scwin.tac_select_onchange = function (tabID, idx, userTabID) {
+	var wfmArr = scwin.localVariable.wfmArr;
+	if (!wfmArr[idx].isInitLoaded) {
+		wfmArr[idx].isInitLoaded = true;
+	}
+};
+
+/**
+ * 닫기 버튼 onclick event
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btn_close_onclick = function (e) {
+	com.win.closePopup();
+};
+
+/* ================================== 
+* 5. 사용자 정의 이벤트
+* ==================================*/
+
+/**
+ * 탭으로부터 paramData 받아서 세팅하는 Method
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.setParentInfo = function (paramData) {
+	//Object.keys(data).forEach(function (key)) : object 형태의 data의 key에 대하여 loop를 돌며 로직을 수행한다.
+	Object.keys(paramData).forEach(function (key) {
+		if (key == "dma_parentInfo") {
+			dma_parentInfo.setJSON(paramData[key]);
+		} else {
+			scwin.localVariable[key] = paramData[key];
+		}
+	});
+}
+
+/**
+ * Id로 Opener 창의 변수 object 접근Method
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.getOpenerComponent = function (componentId) {
+	return opener ? opener.$p.comp[componentId] : parent.$p.comp[componentId];
+}
+
+/**
+ * 탭으로부터 결과계산 값 받아서 세팅하는 Method(소가산정)
+ * 부모창에서 호출시 건네받은 componentId로 해당 component를 찾아서 값을 건네주고 팝업창을 닫는다.
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.setOpenerInputValue = function (result) {
+	var compId = dma_parentInfo.get("openerInputId");
+	var openerObj = scwin.getOpenerComponent(compId);
+	openerObj.setValue(result);
+	openerObj.focus();
+	com.win.closePopup();
+}
+
+/**
+ * 자식 탭으로부터 호출하고자 하는 함수를 parameter에 따라 호출하는 Method
+ *   - setValue : scwin.setOpenerInputValue Method 호출
+ *   - modifyParam : scwin.setParentInfo Method 호출
+ *   - movePage : tac_select.setSelectedTabIndex Method 호출
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.fnCalledFromChild = function (flag, param) {
+	switch (flag) {
+		case "setValue":
+			scwin.setOpenerInputValue(param);
+			break;
+		case "modifyParam":
+			scwin.setParentInfo(param);
+			break;
+		case "movePage":
+			tac_select.setSelectedTabIndex(param);
+			break;
+	}
+}
+
+/**
+* 현재 화면에 나오는 탭의 content Object를 반환하는 Method
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2023.07.19.   김기오       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.getSelectedFrame = function (idx) {
+	var wfmObj;
+	switch (idx) {
+		case 0:
+			wfmObj = wfm_lwstTypeCalcGuide;
+			break;
+		case 1:
+			wfmObj = wfm_vsmlClclt;
+			break;
+		case 2:
+			wfmObj = wfm_stmpAmtCalc;
+			break;
+		case 3:
+			wfmObj = wfm_hskpFeeCalc;
+			break;
+		case 4:
+			wfmObj = wfm_dlvrChrgCalc;
+			break;
+	}
+	return wfmObj;
+}]]></script>
+    </head>
+    <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+    	<xf:group class="popup_wrap " id="" style="">
+    		<xf:group class="popup_content PSP007P01" id="" style="">
+    			<xf:group class="tabs" id="" style="">
+    			    <w2:tabControl alwaysDraw="false" class="tab ty1 wty2_1" confirmFalseAction="new" confirmTrueAction="exist"
+    			        id="tac_select" style="" useConfirmMessage="false" useMoveNextTabFocus="false" useTabKeyOnly="true"
+    			        ev:onchange="scwin.tac_select_onchange" ev:onbeforeselect="scwin.tac_select_onbeforeselect"
+    			        ev:ontabclick="scwin.tac_select_ontabclick" adaptiveThreshold="480">
+    			        <w2:tabs disabled="false" id="tabs1" label="소송유형별 계산방법" style=""></w2:tabs>
+    			        <w2:tabs disabled="false" id="tabs2" label="소가산정" style=""></w2:tabs>
+    			        <w2:tabs disabled="false" id="tabs3" label="인지액 계산" style=""></w2:tabs>
+    			        <w2:tabs disabled="false" id="tabs4" label="가사수수료계산" style=""></w2:tabs>
+    			        <w2:tabs disabled="false" id="tabs13" label="송달료 계산" style=""></w2:tabs>
+    			        <w2:content alwaysDraw="false" class="con pt20" id="content1" style="">
+    			            <w2:wframe class="" id="wfm_lwstTypeCalcGuide" src="/psp/ui/psp000/PSP007F01.xml" style=""></w2:wframe>
+    			        </w2:content>
+    			        <w2:content alwaysDraw="false" class="con pt20" id="content2" style="">
+    			            <w2:wframe style="" id="wfm_vsmlClclt" src="/psp/ui/psp000/PSP007F02.xml" class=""></w2:wframe>
+    			        </w2:content>
+    			        <w2:content alwaysDraw="false" class="con pt20" id="content3" style="">
+    			            <w2:wframe class="" id="wfm_stmpAmtCalc" src="/psp/ui/psp000/PSP007F03.xml" style=""></w2:wframe>
+    			        </w2:content>
+    			        <w2:content alwaysDraw="false" class="con pt20" id="content4" style="">
+    			            <w2:wframe class="" id="wfm_hskpFeeCalc" src="/psp/ui/psp000/PSP007F04.xml" style=""></w2:wframe>
+    			        </w2:content>
+    			        <w2:content alwaysDraw="false" class="con pt20" id="content5" style="">
+    			            <w2:wframe class="" id="wfm_dlvrChrgCalc" src="/psp/ui/psp000/PSP007F05.xml" style=""></w2:wframe>
+    			        </w2:content>
+    			    </w2:tabControl>
+    			    <xf:group class="btn_group wTy1 ar" id="" style="">
+    			        <xf:trigger class="btn_cm pop" ev:onclick="scwin.btn_close_onclick" id="btn_close" style="" type="button" title="닫기">
+    			            <xf:label><![CDATA[닫기]]></xf:label>
+    			        </xf:trigger>
+    			    </xf:group>
+    			</xf:group>
+    		</xf:group>
+    	</xf:group>
+    </body>
+</html>

@@ -1,0 +1,1174 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko" xml:lang="ko">
+ <head></head>
+ <body>
+  <input type="hidden" id="lsNm" name="lsNm" value="민사소송 등에서의 전자문서 이용 등에 관한 규칙" /> 
+  <input type="hidden" id="lsId" name="lsId" value="011356" /> 
+  <input type="hidden" id="lsiSeq" name="lsiSeq" value="287469" /> 
+  <input type="hidden" id="ancYd" name="ancYd" value="20260625" /> 
+  <input type="hidden" id="efYd" name="efYd" value="20260801" /> 
+  <input type="hidden" id="ancNo" name="ancNo" value="03264" /> 
+  <input type="hidden" id="lsBdyChrCls" name="lsBdyChrCls" value="010202" /> 
+  <input type="hidden" id="lumIsConOrdin" value="" /> 
+  <input type="hidden" id="nwYnValue" value="Y" /> 
+  <input type="hidden" id="hstLnkDpYn" value="0" /> 
+  <style>
+.byl_pop ul li {
+	padding: 7px;
+	margin-left: 10px;
+}
+</style> 
+  <script type="text/javascript">
+$(document).ready(function(){
+	customResizePop(); // 본문 리사이즈
+	initEDotXPress('\uBBFC\uC0AC\uC18C\uC1A1 \uB4F1\uC5D0\uC11C\uC758 \uC804\uC790\uBB38\uC11C \uC774\uC6A9 \uB4F1\uC5D0 \uAD00\uD55C \uADDC\uCE59');
+});
+
+function customResizePop() {
+		// 본문 버튼 높이 만큼 제공한다. 13은 패딩값
+		var $contentHeight = $("#center").height() - ($('.body_top_area').height() + 13);
+		var $conTopHeight = $('#conTop').height() + 35;
+
+		var bdyValue = lsVO.bdyUpdValue.updateContentNm || 'lsBdy';
+		
+        //lsInfoP 가 열릴 때 본문은 무조건 조회 하기 때문에 조건문 밖에 위치 하도록 변경.
+		$('#viewwrapCenter').css('overflow-y', 'hidden');
+        $('#bodyContentTOP > #viewwrapCenter').height($contentHeight);
+        $('#conScroll').height($('#viewwrapCenter').height() - $conTopHeight);
+        
+        if (bdyValue == 'lsBdy') {
+			/* 본문에서는 법령명 고정 때문에 hidden 처리*/
+			$('#viewwrapCenter').css('overflow-y', 'hidden');
+			$('#bodyContentTOP > #viewwrapCenter').height($contentHeight);
+			if($('#viewwrapCenter2').height() != null || $('#viewwrapCenter2').height() == 0){
+				$('#bodyContentTOP > #viewwrapCenter2').height($contentHeight);
+				$('#conScroll').height($('#viewwrapCenter2').height() - $conTopHeight);
+				$('#viewwrapCenter2').css('overflow', 'hidden');
+			}
+			$('#bodyContent').css('width', 'inherit');
+		} else if (bdyValue == 'lsPtnThdCmp') {
+			lspttnThdCmpResize();
+		} else if (bdyValue == 'lumThdCmp') {
+			thdCmpNewScPResize();
+		} else if (bdyValue == 'lumThdCmpSc') {
+
+		} else if (bdyValue == 'thdCmpNew') {
+
+		} else if (bdyValue == 'lsOldAndNew') {				
+			// 신구법은 이전 이후 버튼 높이까지 마이너스 한다. 
+			$('#bodySideContent > #oldAndNewDiv').height(($contentHeight + $('#tmpWidth').height()-114));
+		} else if (bdyValue == 'lsRvsDocInfoR') {
+
+			$('#bodySideContent > #viewwrapCenter').height($contentHeight);
+			$('#conScroll').height($('#viewwrapCenter').height() - $conTopHeight);
+			$('#conTop').height($('.cont_top').height());
+			$('#rvsConScroll').height($('#viewwrapCenter').height() - $('#rvsConTop').height());
+			
+		} else {
+			$('#bodySideContent > #viewwrapCenter').height($contentHeight);
+		}
+}
+
+function fileLayer(temp){
+	var tempStr = $("#hwptext"+temp).attr("value");
+	if(tempStr.length > 32){
+ 		$("#hwptext"+temp).css("width", "80%").css("text-overflow", "ellipsis").css("overflow","hidden").css("white-space","nowrap");
+ 		$("#hwpxtext"+temp).css("width", "80%").css("text-overflow", "ellipsis").css("overflow","hidden").css("white-space","nowrap");
+ 		$("#pdftext"+temp).css("width", "80%").css("text-overflow", "ellipsis").css("overflow","hidden").css("white-space","nowrap");
+ 	}
+
+ 	$(".byl_pop").css("display","none");
+
+ 	//레이어높이값
+ 	var height = $("#fileSaveLayer"+temp).height();
+ 	//본문 제일 하단 위치값 
+	var pagePos = document.querySelector('#center');
+	pagePos = pagePos.getBoundingClientRect().bottom;
+	//레이어버튼위치값
+	var layPos =document.querySelector('#imgPos'+temp);
+	layPos = layPos.getBoundingClientRect().bottom;
+	var lay_pop = $('#fileSaveLayer'+temp);
+	var pos = $('#imgPos'+temp).position();
+	
+	if(pagePos > height+layPos){ //레이어가 잘리지 않을 때 
+		lay_pop.css('top', (pos.top)+25 + 'px');
+		lay_pop.css('left', '250px')
+	}else{ //레이어가 잘릴 때
+		lay_pop.css('top', ((pos.top)-height)+ 'px');
+		lay_pop.css('left', (pos.left)+25+'px');
+	}
+	document.getElementById("fileSaveLayer"+temp).style.display="block";
+}
+
+function copyToClipBoard(temp2){
+	var content = document.getElementById('textarea'+temp2);
+	content.select();
+	document.execCommand('copy');
+	alert("주소가 클립보드에 저장되었습니다.");
+	content.setSelectionRange(0,0);
+}
+
+function delLayer(temp){
+	document.getElementById("fileSaveLayer"+temp).style.display="none";
+}
+
+</script> 
+  <div id="contentBody" class="scr_ctrl"> 
+   <div id="sideCenter" class="cont_area"> 
+    <ul class="cont_icon"> 
+     <li><a><img alt="판" src="/LSW/images/button/btn_jostmdico.gif" />판례</a></li> 
+     <li><a><img alt="연" src="/LSW/images/button/btn_year3.gif" />연혁</a></li> 
+     <li><a><img alt="행" src="/LSW/images/button/btn_entrust3_2.gif" />위임행정규칙</a></li> 
+     <li><a><img alt="규" src="/LSW/images/button/btn_entrust4_2.gif" />규제</a></li> 
+     <li><a><img alt="한" src="/LSW/images/button/btn_oneviewIcon.gif" />한눈보기</a></li> 
+    </ul> 
+    <!-- 연혁법령 안내문구 --> 
+    <!-- 법령명 --> 
+    <div id="conTop" class="cont_top"> 
+     <a id="top"></a> 
+     <!-- 국민신문고 연결배너 출력 --> 
+     <h2> 민사소송 등에서의 전자문서 이용 등에 관한 규칙 </h2> 
+     <div class="ct_sub"> 
+      <span>[시행 2026. 8. 1.] [대법원규칙 제3264호, 2026. 6. 25., 일부개정]</span> 
+     </div> 
+    </div> 
+    <!-- 소관부처 --> 
+    <div id="conScroll" class="scr_area" style="overflow-y: auto;"> 
+     <div class="cont_subtit"> 
+      <p> <a title="팝업으로 이동" onclick="javascript:cptOfiPop('http://www.scourt.go.kr'); return false;" href="#AJAX" target="_blank"> <span title="http://www.scourt.go.kr" style="cursor: pointer;">법원행정처</span> (<span title="" style="cursor: pointer;">사법지원심의관실</span>), 02-3480-1711 </a> </p> 
+     </div> 
+     <!-- 조문정보 --> 
+     <a name="pjuk:98455109" id="pjuk:98455109"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="000100" data-joseq="98455109">         제1장 총칙 </p> 
+     </div> 
+     <a name="J1:0" id="J1:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0001', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="1:0:000100:98455111" /> <span class="bl"><label for="Y000100"> 제1조(목적) </label> </span> 이 규칙은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209463','ALLJO','');" href="javascript:;">「민사소송 등에서의 전자문서 이용 등에 관한 법률」</a>(다음부터 “법”이라 한다)에 따른 소송절차별 전자문서의 이용에 관한 사항 및 전산정보처리시스템의 운영에 관하여 필요한 사항을 규정함으로써, 편리하고 투명한 소송절차 이용과 재판사무의 효율적 운영 및 법정 중심의 충실한 심리를 도모함을 목적으로 한다. </p> 
+      </div> 
+     </div> 
+     <a name="J2:0" id="J2:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0002', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455113', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="2:0:000200:98455113" /> <span class="bl"><label for="Y000200"> 제2조(정의) </label> </span> 이 규칙에서 사용하는 용어의 뜻은 다음과 같다. <span class="sfon">&lt;개정 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2_1"> </p> 
+       <p class="pty1_de2h">1. “전자소송시스템”이란 법원행정처가 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209865','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209871','JO','');" href="javascript:;">제3조</a> 각 호 가운데 어느 하나에 해당하는 법률에 따른 절차(다음부터 “민사소송 등”이라 한다)에 필요한 전자문서를 작성ㆍ제출ㆍ송달하거나 관리할 수 있도록 하드웨어ㆍ소프트웨어ㆍ데이터베이스ㆍ네트워크ㆍ보안요소 등을 결합시켜 구축ㆍ운영하는 전산정보처리시스템으로서 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209863','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209879','JO','');" href="javascript:;">제2조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209873','JO','');" href="javascript:;">제2호</a>에 따라 지정된 것을 말한다. </p> 
+       <p class="pty1_de2h">2. “전자소송포털”이란 이 규칙에서 정한 바에 따라 전자문서를 이용하여 소송을 진행할 수 있도록 전자소송시스템에 의하여 구축된 인터넷 활용공간을 말한다. </p> 
+       <p class="pty1_de2h">3. “전자기록”이란 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209869','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209877','JO','');" href="javascript:;">제10조</a> 및 이 규칙 제19조에서 정한 기준에 따라 전자문서화 되는 사건의 기록을 말하고, 사건기록이 전자기록으로 관리되는 사건을 “전자기록사건”이라 한다. </p> 
+       <p class="pty1_de2h">4. “정보통신망”이란 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209875','ALLJO','');" href="javascript:;">「전기통신기본법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209881','JO','');" href="javascript:;">제2조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209867','JO','');" href="javascript:;">제2호</a>에 의한 전기통신설비를 이용하거나 전기통신설비와 컴퓨터 및 컴퓨터의 이용기술을 활용하여 정보를 수집ㆍ가공ㆍ저장ㆍ검색ㆍ송신 또는 수신하는 정보통신체제를 말한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J3:0" id="J3:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0003', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455115', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="3:0:000300:98455115" /> <span class="bl"><label for="Y000300"> 제3조(전자문서를 제출할 수 있는 자) </label> </span> <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209481','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209485','JO','');" href="javascript:;">제5조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209483','JO','');" href="javascript:;">제1항</a>에 따라 당사자와 소송대리인 이외에 전자소송시스템을 이용하여 전자문서를 제출할 수 있는 자는 다음과 같다. <span class="sfon">&lt;개정 2013. 1. 8., 2013. 6. 27., 2014. 4. 3., 2014. 11. 27.&gt;</span> </p>
+       <p class="pty1_de2_1"> </p> 
+       <p class="pty1_de2h">1. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209479','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209471','JO','');" href="javascript:;">제3조</a> 각 호의 법률에 따른 참가인 </p> 
+       <p class="pty1_de2h">1의2. 회생사건ㆍ파산사건ㆍ개인회생사건 및 국제도산사건(다음부터 “회생ㆍ파산사건”이라 한다)의 채무자 중 신청인이 아닌 자 </p> 
+       <p class="pty1_de2h">1의3. 법원이 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209477','ALLJO','');" href="javascript:;">「민사집행법」</a>에 따라 진행하는 경매사건의 이해관계인으로서 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209467','ALLJO','');" href="javascript:;">같은 법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209469','JO','');" href="javascript:;">제90조</a> 각 호 중 어느 하나에 해당하거나 이에 준하는 지위에 있는 자 </p> 
+       <p class="pty1_de2h">1의4. 과태료사건의 검사 </p> 
+       <p class="pty1_de2h">2. 법정대리인 </p> 
+       <p class="pty1_de2h">3. 특별대리인 </p> 
+       <p class="pty1_de2h">4. 사건본인 </p> 
+       <p class="pty1_de2h">5. 증인 </p> 
+       <p class="pty1_de2h">6. 전문심리위원 </p> 
+       <p class="pty1_de2h">7. 법원으로부터 조사 또는 문서의 송부를 촉탁 받은 자 </p> 
+       <p class="pty1_de2h">8. 감정인, 법원으로부터 감정을 촉탁 받은 기관 </p> 
+       <p class="pty1_de2h">9. 법원으로부터 문서제출명령을 받은 자 </p> 
+       <p class="pty1_de2h">10. 조정위원 </p> 
+       <p class="pty1_de2h">10의2. 상담위원, 법원으로부터 상담을 촉탁 받은 기관 </p> 
+       <p class="pty1_de2h">10의3. 성년후견ㆍ한정후견ㆍ특정후견ㆍ임의후견ㆍ미성년후견의 후견인, 후견감독인 </p> 
+       <p class="pty1_de2h">10의4. 회생ㆍ파산사건의 채권자ㆍ주주ㆍ지분권자 중 신청인이 아닌 자, 관리인ㆍ보전관리인ㆍ조사위원ㆍ감사ㆍ파산관재인ㆍ감사위원ㆍ국제도산관리인(다음부터 관리인 이하의 자를 “회생ㆍ파산사건의 절차관계인”이라 한다) </p> 
+       <p class="pty1_de2h">10의5. 법원이 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209465','ALLJO','');" href="javascript:;">「민사집행법」</a>에 따라 진행하는 사건과 관련된 집행관, 관리인, 감수ㆍ보존인(다음부터 “집행관등”이라 한다) </p> 
+       <p class="pty1_de2h">11. 그 밖에 이해관계를 소명하거나 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209473','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209475','JO','');" href="javascript:;">제3조</a> 각 호의 법률에 따른 절차에 관하여 서면을 제출할 정당한 권한이 있는 제3자 또는 기관 </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:98455117" id="pjuk:98455117"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="000400" data-joseq="98455117">         제2장 사용자등록 </p> 
+     </div> 
+     <a name="J4:0" id="J4:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0004', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455119', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="4:0:000400:98455119" /> <span class="bl"><label for="Y000400"> 제4조(사용자등록) </label> </span> ① 전자소송시스템을 이용하려는 자는 전자소송시스템에 접속하여 다음 각 호의 회원 유형별로 전자소송포털에서 요구하는 정보를 해당란에 입력한 후 전자서명을 위한 인증서를 사용하여 사용자등록을 신청하여야 한다. 등록한 사용자 정보는 인증서의 내용과 일치하여야 한다. <span class="sfon">&lt;개정 2014. 4. 3., 2014. 11. 27., 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2h">1. 개인회원 </p> 
+       <p class="pty1_de2h">2. 법인회원 </p> 
+       <p class="pty1_de2h">3. 변호사회원 </p> 
+       <p class="pty1_de2h">4. 법무사회원 </p> 
+       <p class="pty1_de2h">5. 회생ㆍ파산사건의 절차관계인회원 </p> 
+       <p class="pty1_de2h">6. 집행관등 </p> 
+       <p class="pty1_de2_1">② 제1항제2호부터 제6호까지의 사용자등록을 한 자(다음부터 “등록사용자”라 한다)는 이용권한의 범위를 정하여 소속사용자를 지정할 수 있고, 그에 따라 지정된 자는 전자소송시스템에 소속사용자로 등록할 수 있다. <span class="sfon">&lt;개정 2014. 4. 3., 2014. 11. 27.&gt;</span> </p> 
+       <p class="pty1_de2_1">③ 법원은 다음 각 호의 어느 하나에 해당하는 경우에 소송을 수행할 자에게 사용자등록과 전자소송시스템을 이용한 민사소송 등의 진행에 대한 동의(다음부터 “전자소송 동의”라고 한다)를 할 것을 명할 수 있다. <span class="sfon">&lt;개정 2012. 5. 2., 2013. 1. 8.&gt;</span> </p> 
+       <p class="pty1_de2h">1. 전자기록사건에서 소송대리인의 선임ㆍ변경ㆍ해임ㆍ사임이나 소송수계 그 밖의 사유로 소송을 수행할 자가 변경된 때 </p> 
+       <p class="pty1_de2h">2. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209893','JO','');" href="javascript:;">제24조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209897','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209885','JO','');" href="javascript:;">제2호</a> 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209891','JO','');" href="javascript:;">제25조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209883','JO','');" href="javascript:;">제1항</a> 각 호의 자가 소송대리인을 선임한 때 </p> 
+       <p class="pty1_de2h">3. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209887','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209895','JO','');" href="javascript:;">제3항</a> 단서에 따라 전자소송 동의를 할 것임을 확약하는 취지의 서면을 작성한 위임인이 전자소송 동의 없이 직접 소송서류를 제출하거나 송달받으려 할 때 </p> 
+       <p class="pty1_de2_1">④ 전자기록사건에서 사용자등록 또는 전자소송 동의를 하지 않은 당사자, 소송대리인 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209899','JO','');" href="javascript:;">제3조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209889','JO','');" href="javascript:;">제1호부터 제4호</a>까지의 자에 대하여 재판장, 수명법관, 수탁판사, 조정담당판사, 조정장 또는 사법보좌관(다음부터 “재판장등”이라 한다)은 사용자등록과 전자소송 동의를 할 것을 권고할 수 있다. 다만, 당사자 등의 권리 행사에 현저한 지장을 초래할 것으로 예상되는 경우에는 그러하지 아니하다. <span class="sfon">&lt;신설 2012. 5. 2., 2013. 1. 8., 2014. 11. 27.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J5:0" id="J5:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0005', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000500" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="5:0:000500:98455121" /> <span class="bl"><label for="Y000500"> 제5조(사용자등록의 철회 등) </label> </span> ① 등록사용자는 전자소송시스템에 접속하여 사용자등록 철회의 취지를 입력함으로써 사용자등록을 철회할 수 있다. </p>
+       <p class="pty1_de2_1">② 계속 중인 사건이 있으면 그 전부에 관하여 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209489','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209487','JO','');" href="javascript:;">제2항</a>에 따른 절차를 마친 때에만 제1항의 철회를 할 수 있다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J6:0" id="J6:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0006', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000600" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="6:0:000600:98455123" /> <span class="bl"><label for="Y000600"> 제6조(사용자등록의 말소 등) </label> </span> ① 다음 각 호 가운데 어느 하나에 해당하면 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209505','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209507','JO','');" href="javascript:;">제6조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209497','JO','');" href="javascript:;">제3항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209499','JO','');" href="javascript:;">제5호</a>에 따라 등록사용자(<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209513','JO','');" href="javascript:;">제4조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209511','JO','');" href="javascript:;">제2항</a>이 정하는 소속사용자를 포함한다. 이하 같다)의 사용을 정지하거나 사용자등록을 말소할 수 있다. </p>
+       <p class="pty1_de2h">1. 사용자등록이 소송 지연 등 본래의 용도와 다른 목적으로 이용되는 경우 </p> 
+       <p class="pty1_de2h">2. 등록사용자에게 소송능력이 없는 경우 </p> 
+       <p class="pty1_de2h">3. 그 밖에 위 각 호의 사유에 준하는 경우 </p> 
+       <p class="pty1_de2_1">② 법원행정처장은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209501','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209509','JO','');" href="javascript:;">제6조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209503','JO','');" href="javascript:;">제3항</a> 각 호 가운데 어느 하나에 해당하는지 여부를 결정하기 위하여 필요하다고 인정하는 때에는 당사자ㆍ이해관계인의 신청에 따라 또는 직권으로 해당 등록사용자의 사용을 일시적으로 정지할 수 있다. 이 때 법원행정처장은 등록사용자에게 적당한 방법으로 그 사실을 통지하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 법원행정처장은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209491','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209493','JO','');" href="javascript:;">제6조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209495','JO','');" href="javascript:;">제3항</a>에 따라 사용자등록을 말소하기 전에 해당 등록사용자에게 미리 그 사유를 통지하고 소명할 기회를 부여하여야 한다. </p> 
+       <p class="pty1_de2_1">④ 등록사용자가 전자소송시스템을 마지막으로 이용한 날부터 5년이 지나면 사용자등록은 효력을 상실한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:98455125" id="pjuk:98455125"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="000700" data-joseq="98455125">         제3장 전자문서의 제출 및 접수 </p> 
+     </div> 
+     <a name="J7:0" id="J7:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0007', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455127', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000700" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="7:0:000700:98455127" /> <span class="bl"><label for="Y000700"> 제7조(전자서명 등) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209915','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209911','JO','');" href="javascript:;">제5조</a>에 따라 법원에 전자문서를 제출하는 자는 이 규칙에서 달리 정하는 경우를 제외하고는 전자문서에 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209923','ALLJO','');" href="javascript:;">「전자정부법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209919','JO','');" href="javascript:;">제2조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209903','JO','');" href="javascript:;">제9호</a>에 따른 행정전자서명 또는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209913','ALLJO','');" href="javascript:;">전자서명법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209909','JO','');" href="javascript:;">제2조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209921','JO','');" href="javascript:;">제2호</a>에 따른 전자서명(서명자의 실지명의를 확인할 수 있는 것으로서 법원행정처장이 지정ㆍ공고하는 인증서를 말한다)을 하여야 한다. <span class="sfon">&lt;개정 2013. 1. 8., 2020. 11. 26., 2021. 5. 27.&gt;</span> </p>
+       <p class="pty1_de2_1">② 법관ㆍ사법보좌관 또는 법원서기관ㆍ법원사무관ㆍ법원주사ㆍ법원주사보(다음부터 “법원사무관등”이라 한다)가 재판서나 조서 등을 작성하는 때에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209905','ALLJO','');" href="javascript:;">「법원 행정전자서명 인증업무에 관한 규칙」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209901','JO','');" href="javascript:;">제2조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209925','JO','');" href="javascript:;">제2항</a>에 따라 설치된 ‘법원 행정전자서명 인증관리센터’에서 발급받은 행정전자서명 인증서에 의한 사법전자서명을 하여야 한다. <span class="sfon">&lt;개정 2014. 11. 27.&gt;</span> </p> 
+       <p class="pty1_de2_1">③ 전자소송시스템을 이용하여 전자문서를 제출할 필요성이 있다고 인정되고 그 신원이 확인되어 재판장등의 허가를 받은 자는 전자서명(서명자의 실지명의를 확인할 수 있는 것을 제외한다)을 하거나 전자서명을 하지 아니하고 사용자등록 또는 전자문서 제출을 할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8., 2020. 11. 26.&gt;</span> </p> 
+       <p class="pty1_de2_1">④ 제1항과 제3항에 따라 전자문서를 제출하는 경우에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209907','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209917','JO','');" href="javascript:;">제3조</a> 각 호의 법률에 따른 절차에서 인감의 날인 또는 인감증명서 첨부를 하지 아니할 수 있다. <span class="sfon">&lt;신설 2014. 4. 3.&gt;</span> </p> 
+       <p class="pty1_de2_1">⑤ 이 규칙에서 달리 정한 경우 이외에는 재판장등의 허가가 있으면 민사소송 등에 적용되거나 준용되는 법령에서 정한 서명, 서명날인 또는 기명날인은 전자서명(서명자의 실지명의를 확인할 수 있는 것을 제외한다)으로 대신할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8., 2014. 4. 3., 2020. 11. 26.&gt;</span> </p> 
+       <p class="pty1_de2_1">⑥ 제1항의 공고는 전자소송포털에 하여야 한다. <span class="sfon">&lt;신설 2021. 5. 27., 2024. 12. 31.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J8:0" id="J8:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0008', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455129', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000800" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="8:0:000800:98455129" /> <span class="bl"><label for="Y000800"> 제8조(전자문서의 파일 형식 등) </label> </span> ① 법원행정처장은 전자소송시스템을 이용하여 제출할 수 있는 전자문서의 파일 형식, 구성 방식 그 밖의 사항을 지정하여 전자소송포털에 공고하여야 한다. <span class="sfon">&lt;개정 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2_1">② 제1항에 따라 지정된 파일 형식을 사용하지 아니한 전자문서는 부득이한 사정을 소명하지 아니하는 한 전자소송시스템을 이용하여 제출할 수 없다. </p> 
+       <p class="pty1_de2_1">③ 주장, 증거, 그 밖의 사항을 담은 전자문서는 전자소송포털에서 요구하는 방식에 따라 각 별도의 파일로 구분하여 제출하여야 하고 이를 합하여 하나의 파일로 제출하여서는 아니된다. <span class="sfon">&lt;개정 2024. 12. 31.&gt;</span> </p> 
+       <p class="pty1_de2_1">④ 등록사용자가 작성한 전자문서(서증 제외)의 경우 부득이한 사정이 없는 한 문자정보의 검색 및 추출이 가능한 파일로 제출하여야 한다. <span class="sfon">&lt;신설 2017. 6. 29.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J9:0" id="J9:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0009', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000900" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="9:0:000900:98455131" /> <span class="bl"><label for="Y000900"> 제9조(전자문서로 제출할 의무) </label> </span> <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209519','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209521','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209523','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209525','JO','');" href="javascript:;">제3호</a>의 자가 서류를 제출할 때에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209515','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209517','JO','');" href="javascript:;">제8조</a>에 따라 전자문서로 제출하여야 한다. </p> 
+      </div> 
+     </div> 
+     <a name="J10:0" id="J10:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0010', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455133', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001000" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="10:0:001000:98455133" /> <span class="bl"><label for="Y001000"> 제10조(전자소송 동의의 효력기간과 철회) </label> </span> ① 전자소송 동의는 당해 사건이 확정될 때까지 효력이 있다. 다만 소송대리인의 전자소송 동의는 당해 심급에만 효력이 있으나, 원심과 상소심의 소송대리인이 동일인일 때에는 상소심에도 효력이 있다. </p>
+       <p class="pty1_de2_1">② 전자소송 동의를 한 등록사용자는 재판장등의 허가를 받아 전자소송 동의를 철회하거나 그 철회를 취소할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p class="pty1_de2_1">③ 본안사건에 관한 전자소송 동의의 효력은 그에 부수하는 신청사건에도 미친다. <span class="sfon">&lt;신설 2012. 5. 2.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J11:0" id="J11:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0011', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455135', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="11:0:001100:98455135" /> <span class="bl"><label for="Y001100"> 제11조(전자문서의 작성ㆍ제출) </label> </span> ① 등록사용자는 전자소송포털에서 요구하는 사항을 빈칸 채우기 방식으로 입력한 후, 나머지 사항을 해당란에 직접 입력하거나 전자문서를 등재하는 방식으로 소송서류를 작성ㆍ제출할 수 있다. <span class="sfon">&lt;개정 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2_1">② 공동의 이해관계를 가진 여러 당사자나 대리인은 다음 각 호 가운데 어느 하나의 방법에 따라 공동 명의로 하나의 전자문서를 제출할 수 있다. <span class="sfon">&lt;개정 2020. 11. 26., 2021. 5. 27.&gt;</span> </p> 
+       <p class="pty1_de2h">1. 해당 전자문서에 공동명의자 전원이 전자서명(서명자의 실지명의를 확인할 수 있는 것으로서 법원행정처장이 지정ㆍ공고하는 인증서를 말한다)을 하여 제출하는 방법 </p> 
+       <p class="pty1_de2h">2. 해당 전자문서를 최초로 제출하는 등록사용자가 그 전자문서 속에 다른 공동명의자 전원의 전자서명(서명자의 실지명의를 확인할 수 있는 것을 제외한다)을 포함시켜 제출하는 방법 </p> 
+       <p class="pty1_de2h">3. 해당 전자문서를 최초로 제출하는 등록사용자가 다른 공동명의자 전원의 서명 또는 날인이 이루어진 확인서를 전자문서로 변환하여 함께 제출하는 방법 </p> 
+       <p class="pty1_de2_1">③ <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209945','JO','');" href="javascript:;">제4조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209939','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209957','JO','');" href="javascript:;">제4호</a>의 법무사회원은 다음 각 호 가운데 어느 하나의 방법에 따라 전자문서를 작성ㆍ제출할 수 있다. 다만, 민사소송 등의 당사자, 소송대리인 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209963','JO','');" href="javascript:;">제3조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209933','JO','');" href="javascript:;">제1호부터 제4호</a>까지 규정된 자에 해당하는 위임인이 전자소송 동의를 하지 않은 경우에는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209929','JO','');" href="javascript:;">제24조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209947','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209959','JO','');" href="javascript:;">제3호</a>에 따라 등록사용자를 송달영수인으로 신고하는 취지의 서면 및 추후 위임인이 직접 소송서류를 제출하거나 송달받을 때에 전자소송 동의를 할 것임을 확약하는 취지의 서면을 첨부하여야 한다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p class="pty1_de2h">1. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209943','JO','');" href="javascript:;">제7조</a>에 의한 위임인 본인의 전자서명 정보를 함께 전송하는 방법 </p> 
+       <p class="pty1_de2h">2. 제2항제2호 또는 제3호의 방법 </p> 
+       <p class="pty1_de2_1">④ <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209935','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209941','JO','');" href="javascript:;">제89조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209927','JO','');" href="javascript:;">제1항</a>의 규정에 따른 소송대리인의 권한의 증명은 전자문서로 할 수 있다. </p> 
+       <p class="pty1_de2_1">⑤ <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209953','ALLJO','');" href="javascript:;">「공증인법」</a> 제5장의2(전자문서등에 대한 인증)의 각 규정에 따라 인증된 전자문서를 제출할 때에는 그 취지와 인증의 증명에 관한 사항을 밝혀야 한다. </p> 
+       <p class="pty1_de2_1">⑥ <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209949','JO','');" href="javascript:;">제4조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209931','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209951','JO','');" href="javascript:;">제2호</a> 법인회원(<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209961','JO','');" href="javascript:;">제25조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209937','JO','');" href="javascript:;">제1항</a> 각 호의 자 포함)으로부터 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209955','JO','');" href="javascript:;">제4조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209965','JO','');" href="javascript:;">제2항</a>에 따라 전자문서 제출권한을 지정받은 소속사용자는 다음 각 호 가운데 어느 하나의 방법으로 전자문서를 제출할 수 있다. <span class="sfon">&lt;신설 2014. 11. 27., 2020. 11. 26., 2021. 5. 27.&gt;</span> </p> 
+       <p class="pty1_de2h">1. 해당 전자문서에 등록사용자의 전자서명(서명자의 실지명의를 확인할 수 있는 것으로서 법원행정처장이 지정ㆍ공고하는 인증서를 말한다)을 하여 제출하는 방법 </p> 
+       <p class="pty1_de2h">2. 등록사용자의 위임장과 제2항제3호에 따른 확인서(전산양식 A6105)를 전자문서로 변환하여 함께 제출하는 방법 </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J12:0" id="J12:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0012', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455137', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="12:0:001200:98455137" /> <span class="bl"><label for="Y001200"> 제12조(전자문서로의 변환ㆍ제출) </label> </span> ① 전자소송 동의를 한 등록사용자가 전자문서가 아닌 서류를 법원에 제출하고자 할 때에는 그 서류를 전자문서로 변환하여 제출하여야 한다. </p>
+       <p class="pty1_de2_1">② 제1항의 규정을 따르지 아니하는 경우 그 서류는 제출되지 아니한 것으로 본다. 다만, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209527','JO','');" href="javascript:;">제19조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209529','JO','');" href="javascript:;">제1항</a>에 따라 전자문서화되지 아니한 사건에 대해서는 그러하지 아니하다. <span class="sfon">&lt;개정 2014. 11. 27.&gt;</span> </p> 
+       <p class="pty1_de2_1">③ 제1항에 따라 변환된 전자문서로 소송서류를 제출한 경우 제출자는 그 원본을 해당 소송절차가 확정될 때까지 보관하여야 한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J13:0" id="J13:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0013', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455139', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="13:0:001300:98455139" /> <span class="bl"><label for="Y001300"> 제13조(멀티미디어 자료의 제출 등) </label> </span> ① 등록사용자는 주장이나 공격ㆍ방어방법에 관한 음성ㆍ영상 등 멀티미디어 방식의 자료를 전자소송시스템을 이용하여 제출할 수 있다. 이 때 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209967','ALLJO','');" href="javascript:;">「민사소송규칙」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209971','JO','');" href="javascript:;">제69조</a>의 3이 정하는 적당한 시기에 전자소송포털에서 요구하는 방식에 따라 제출하되, 해당 자료의 주요 내용, 제출 취지 및 용량을 밝혀야 한다. <span class="sfon">&lt;개정 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2_1">② 제1항의 멀티미디어 자료는 재판장등이 허가한 경우에만 전자기록에 편입하거나 기일에서 진술할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p class="pty1_de2_1">③ 제2항의 허가를 받은 멀티미디어 자료는 상대방에게 상당하다고 인정되는 방법으로 송달할 수 있다. 법원은 이를 위하여 멀티미디어 자료를 제출한 자에게 해당 자료를 자기디스크 등에 담아 제출하거나 그 출력물을 제출하게 할 수 있다. </p> 
+       <p class="pty1_de2_1">④ 법원은 제1항의 멀티미디어 자료가 공공의 질서 또는 선량한 풍속을 해하거나 관계인의 명예 또는 생활의 평온을 해할 우려가 있는 때에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209969','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209973','JO','');" href="javascript:;">제162조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209975','JO','');" href="javascript:;">제1항</a>에 따른 복사를 제한할 수 있다. </p> 
+       <p class="pty1_de2_1">⑤ 제2항에 따른 허부의 결정 및 제4항에 따른 복사 제한 여부의 결정에 대하여는 불복할 수 없다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J14:0" id="J14:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0014', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455141', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="14:0:001400:98455141" /> <span class="bl"><label for="Y001400"> 제14조(전자소송시스템 등을 이용할 수 없는 경우의 제출방법 등) </label> </span> ① 전자소송시스템 또는 정보통신망에 장애가 발생한 경우로서 다음 각 호 가운데 어느 하나에 해당하면, 등록사용자는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209531','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209533','JO','');" href="javascript:;">제8조</a>에 따라 법원에 제출할 서류를 자기디스크 등에 전자문서의 형태로 담아 제출하거나 전자문서가 아닌 형태로 제출할 수 있다. </p>
+       <p class="pty1_de2h">1. 전자소송시스템의 장애가 언제 제거될 수 있는지 알 수 없는 경우 </p> 
+       <p class="pty1_de2h">2. 전자소송시스템의 장애가 제거될 시점에 서류를 제출하면 소송이 지연되거나 권리 행사에 불이익을 입을 염려가 있는 경우 </p> 
+       <p class="pty1_de2h">3. 등록사용자가 사용하는 정보통신망의 장애가 제거될 시점에 서류를 제출하면 소송이 지연되거나 권리 행사에 불이익을 입을 염려가 있는 경우 </p> 
+       <p class="pty1_de2_1">② 제1항에 따라 전자문서를 자기디스크 등에 담아 제출할 때에는 다음 각 호의 사항을 밝혀야 한다. </p> 
+       <p class="pty1_de2h">1. 사건의 표시, 자기디스크 등을 제출하는 당사자와 대리인의 이름ㆍ주소와 연락처, 자기디스크 등에 담긴 전자문서의 표시, 작성자의 이름과 작성한 날짜, 작성자와 제출자와의 관계, 법원의 표시 </p> 
+       <p class="pty1_de2h">2. 전자문서를 자기디스크 등에 담아 제출하여야 하는 사유 </p> 
+       <p class="pty1_de2_1">③ 전자서명 방식으로 작성되지 아니한 전자문서를 제2항에 따라 제출하는 경우에는 작성자의 의사에 따라 작성한 것이라는 취지를 추가로 밝혀야 한다. </p> 
+       <p class="pty1_de2_1">④ 재판장등은 제1항에 따라 서류를 제출한 등록사용자에게 제1항 각 호의 장애가 해소된 뒤에 해당 서류를 전자적 방법으로 제출할 것을 명할 수 있다. 이 명령에 따른 경우에는 최초에 제출한 때에 제출한 것으로 본다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p class="pty1_de2_1">⑤ <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209539','JO','');" href="javascript:;">제43조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209541','JO','');" href="javascript:;">제3항</a>의 전자소송시스템 장애로 인하여 불변기간을 지킬 수 없었던 경우에는<a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209535','ALLJO','');" href="javascript:;">「민사소송법」</a><a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209537','JO','');" href="javascript:;">제173조</a>에 따라 게을리 한 소송행위를 보완할 수 있다. <span class="sfon">&lt;신설 2012. 5. 2.&gt;</span> </p> 
+       <p class="pty1_de2"> <span class="sfon">[제목개정 2012. 5. 2.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J15:0" id="J15:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0015', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455143', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001500" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="15:0:001500:98455143" /> <span class="bl"><label for="Y001500"> 제15조(전자문서화가 곤란하거나 부적합한 경우) </label> </span> ① 전자문서로 제출하는 것이 현저히 곤란하거나 적합하지 아니한 경우로서 다음 각 호의 어느 하나에 해당하면, 등록사용자는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209543','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209545','JO','');" href="javascript:;">제8조</a>에 따라 법원에 제출할 서류를 전자문서가 아닌 형태로 제출할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p>
+       <p class="pty1_de2h">1. 서적을 제출하는 경우(이 경우 서적의 내용 가운데 중요한 부분을 전자문서로 변환하여 그 서적과 함께 제출하여야 한다) </p> 
+       <p class="pty1_de2h">2. 기술적으로 서류를 전자문서로 변환하기 어려운 경우 </p> 
+       <p class="pty1_de2h">3. 서류에 당사자가 가지는 영업비밀(<a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209551','ALLJO','');" href="javascript:;">「부정경쟁방지 및 영업비밀보호에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209547','JO','');" href="javascript:;">제2조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209549','JO','');" href="javascript:;">제2호</a>에 규정된 영업비밀을 말한다)에 관한 정보가 담겨 있는 경우 </p> 
+       <p class="pty1_de2h">4. 사생활 보호 또는 그 밖의 사유로 필요하다고 인정하여 재판장등이 허가한 경우 </p> 
+       <p class="pty1_de2_1">② 제1항제3호 및 제4호에 해당하는 서류가 전자문서로 작성되어 있을 때에는 등록사용자는 그 원본을 당해 소송절차가 확정될 때까지 보관하여야 한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J16:0" id="J16:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0016', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455145', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001600" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="16:0:001600:98455145" /> <span class="bl"><label for="Y001600"> 제16조(기일에서의 소송서류 제출) </label> </span> 전자소송 동의를 한 등록사용자는 기일에 재판장등의 허가가 있는 경우에만 전자문서인 소송서류를 자기디스크 등을 이용하여 제출할 수 있다. 이 경우 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209553','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209555','JO','');" href="javascript:;">제3항</a>을 준용한다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p>
+       <p class="pty1_de2"> <span class="sfon">[제목개정 2013. 1. 8.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J17:0" id="J17:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0017', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455147', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001700" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="17:0:001700:98455147" /> <span class="bl"><label for="Y001700"> 제17조(제출ㆍ변환된 전자문서의 확인의무) </label> </span> ① 전자소송 동의를 한 등록사용자가 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209569','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209557','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209559','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209561','JO','');" href="javascript:;">제1항</a>에 의하여 전자문서를 제출한 날부터 1주일이 경과하거나 기일이 끝날 때까지 이의를 제기하지 아니한 때에는 제출하고자 한 문서와 전자소송시스템에 등재된 전자문서 사이의 동일성에 관하여 이의를 제기할 권리를 잃는다. <span class="sfon">&lt;개정 2013. 1. 8., 2013. 6. 27.&gt;</span> </p>
+       <p class="pty1_de2_1">② 전자기록사건에서 전자소송 동의를 하지 아니한 당사자가 전자문서가 아닌 형태로 제출한 서류를 법원사무관등이 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209563','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209565','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209567','JO','');" href="javascript:;">제2항</a>에 따라 전자문서로 변환하고 제출자에게 그 동일성을 확인할 기회를 부여한 때에도 제1항과 같다. </p> 
+       <p class="pty1_de2"> <span class="sfon">[제목개정 2013. 6. 27.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J18:0" id="J18:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0018', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455149', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001800" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="18:0:001800:98455149" /> <span class="bl"><label for="Y001800"> 제18조(제출된 전자문서의 보완) </label> </span> ① 재판장등은 전자문서로 변환ㆍ제출된 서류의 판독이 곤란하거나 그 밖에 원본을 확인할 필요가 있을 때에는 이를 제출한 자에게 상당한 기간을 정하여 판독이 가능한 전자문서를 다시 제출하거나 원본을 제출할 것을 명할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p>
+       <p class="pty1_de2_1">② 제1항의 명령에 따른 경우 최초에 제출한 때에 제출한 것으로 보고, 이 명령에 따르지 아니하는 경우 해당 서류를 제출하지 아니한 것으로 본다. </p> 
+       <p class="pty1_de2_1">③ 등록사용자가 전자소송시스템을 이용하여 소송서류를 제출한 후에는 전자소송시스템에서 이를 삭제하거나 수정된 내용으로 다시 등재할 수 없다. 이 때 등록사용자는 법원사무관등에게 해당 소송서류의 삭제나 등재사항의 수정을 요청할 수 있다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J18:2" id="J18:2"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0018', '02' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455151', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001802" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="18:2:001802:98455151" /> <span class="bl"><label for="Y001802"> 제18조의2(전자문서의 접수통지) </label> </span> <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209839','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209841','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209843','JO','');" href="javascript:;">제4항</a>에서 정한 전자문서 접수사실의 전자적 통지는 전자우편, 그 밖에 이에 준하는 것으로서 법원행정처장이 정하는 방법에 따른다. <span class="sfon">&lt;개정 2023. 8. 31.&gt;</span> </p>
+       <p class="pty1_de2"> <span class="sfon">[본조신설 2013. 1. 8.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J18:3" id="J18:3"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0018', '03' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001803" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="18:3:001803:98455153" /> <span class="bl"><label for="Y001803"> 제18조의3(법 적용 전 전자문서의 제출) </label> </span> <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209571','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209573','JO','');" href="javascript:;">제3조</a> 각 호의 법률에 따른 절차 중 법 적용시기가 도래하지 아니한 절차에 관하여 전자소송시스템을 통하여 제출된 전자문서는 제출되지 아니한 것으로 본다. </p>
+       <p class="pty1_de2"> <span class="sfon">[본조신설 2013. 6. 27.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:98455155" id="pjuk:98455155"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="001900" data-joseq="98455155">         제4장 사건기록의 전자문서화 </p> 
+     </div> 
+     <a name="J19:0" id="J19:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0019', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455157', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001900" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="19:0:001900:98455157" /> <span class="bl"><label for="Y001900"> 제19조(사건기록의 전자문서화) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209981','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209979','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209987','JO','');" href="javascript:;">제2항</a>의 사유는 다음 각 호 가운데 어느 하나에 해당하는 경우를 말한다. 다만, 이 경우에도 재판장등은 사건기록의 전자문서화를 명할 수 있다. <span class="sfon">&lt;개정 2012. 5. 2., 2013. 1. 8., 2013. 6. 27., 2014. 11. 27., 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2h">1. 상소심 사건의 원심사건이 전자기록사건이 아닌 경우 </p> 
+       <p class="pty1_de2h">2. 재심 또는 준재심 사건의 대상사건이 전자기록사건이 아닌 경우 </p> 
+       <p class="pty1_de2h">3. 기본이 되는 본안사건 또는 신청사건이 전자기록사건이 아닌 경우 그에 부수하는 신청사건. 단, 보전처분 신청사건은 본안사건의 전자기록화 여부에 따르지 아니한다. </p> 
+       <p class="pty1_de2h">4. 그 밖에 법원행정처장이 전자기록화의 대상이 아닌 사건으로 정하여 전자소송포털에 공고한 사건 </p> 
+       <p class="pty1_de2_1">② 전자기록사건에 있어서 법원사무관등은 전자문서를 출력한 서면을 제출한 자에게 해당 전자문서를 자기디스크 등에 담아 제출하게 하거나 지정된 전자우편주소로 전송하게 한 후 그 전자문서에 사법전자서명을 하고 전자소송시스템에 등재할 수 있다. 이러한 방식으로 제출한 전자문서는 이를 출력하여 제출한 서면을 갈음하는 것으로 본다. </p> 
+       <p class="pty1_de2_1">③ <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209985','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209983','JO','');" href="javascript:;">제2항</a>, <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209977','JO','');" href="javascript:;">제3항</a>의 규정은 제2항에 따라 전자문서를 자기디스크 등에 담아 제출하는 경우에 준용한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J19:2" id="J19:2"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0019', '02' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001902" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="19:2:001902:98455159" /> <span class="bl"><label for="Y001902"> 제19조의2(재판서, 조서 등의 전자문서화) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209575','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209577','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209579','JO','');" href="javascript:;">제1항</a>에 따라 재판서, 조서 등을 전자문서화함에 있어 전자소송시스템의 장애 그밖에 현저히 곤란하거나 부적합한 사유가 발생한 경우에는 전자문서가 아닌 형태로 작성할 수 있다. </p>
+       <p class="pty1_de2_1">② 제1항의 규정에 따라 작성된 재판서, 조서 등은 이후 장애 등 사유가 해소되어 전자소송시스템에 등재되기 전에는 이를 원본으로 본다. </p> 
+       <p class="pty1_de2"> <span class="sfon">[본조신설 2014. 11. 27.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J20:0" id="J20:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0020', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002000" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="20:0:002000:98455161" /> <span class="bl"><label for="Y002000"> 제20조(전자문서가 아닌 형태로 제출된 서류의 관리) </label> </span> ① 전자기록사건에서 전자문서로 제출하지 아니한 서류가 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209597','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209599','JO','');" href="javascript:;">제1항</a>에 정하여진 서류에 해당하는 때에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209589','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209591','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209595','JO','');" href="javascript:;">제2항</a>에 따른 변환 및 등재를 하지 아니할 수 있다. 이 경우 법원사무관등은 전자문서로 변환하지 않은 서류를 별도의 기록으로 관리ㆍ보존하고 전자소송시스템에 그 사실을 입력하여야 한다. </p>
+       <p class="pty1_de2_1">② <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209593','JO','');" href="javascript:;">제19조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209581','JO','');" href="javascript:;">제2항</a>에 의하여 제출된 출력서면은 그 제출자에게 반환하거나 폐기한다. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209583','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209585','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209587','JO','');" href="javascript:;">제2항</a>에 따라 전자문서가 아닌 형태로 제출된 서류로서 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209601','JO','');" href="javascript:;">제17조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209603','JO','');" href="javascript:;">제2항</a>에 따른 확인의 기회를 부여한 경우에도 같다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J21:0" id="J21:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0021', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455163', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="21:0:002100:98455163" /> <span class="bl"><label for="Y002100"> 제21조(조서 등의 폐기 또는 정정) </label> </span> ① 법원사무관등은 전자문서로 작성한 조서(화해ㆍ조정 조서, 청구의 포기ㆍ인낙 조서는 제외한다)에 잘못이 있는 때에는 전자소송시스템을 이용하여 다음 각 호의 예에 따라 바로잡을 수 있다. </p>
+       <p class="pty1_de2h">1. 전산등재 과정에서의 잘못 등으로 효력이 없음이 분명한 경우 : 폐기 </p> 
+       <p class="pty1_de2h">2. 잘못된 계산이나 기재 등이 있음이 분명한 때 : 정정 </p> 
+       <p class="pty1_de2_1">② 제1항의 폐기 또는 정정의 절차와 방법은 법원행정처장이 정한다. </p> 
+       <p class="pty1_de2_1">③ 전자문서로 작성한 재판서와 화해ㆍ조정 조서, 청구의 포기ㆍ인낙 조서는 제1항에 따라 폐기할 수 있다. </p> 
+       <p class="pty1_de2_1">④ 법원은 제1항, 제3항의 폐기 또는 정정에 대하여 당사자의 이의가 있는 때에는 폐기 또는 정정 전의 조서 또는 재판서를 확인할 수 있도록 하여야 한다. <span class="sfon">&lt;개정 2014. 4. 3.&gt;</span> </p> 
+       <p class="pty1_de2"> <span class="sfon">[전문개정 2013. 6. 27.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J22:0" id="J22:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0022', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="22:0:002200:98455165" /> <span class="bl"><label for="Y002200"> 제22조(전자문서의 반환ㆍ폐기) </label> </span> 법원은 제출자의 의견을 들어 변론기일 또는 변론준비기일에서 진술하지 아니하거나 불필요한 전자문서를 돌려주거나 폐기할 수 있다. </p> 
+      </div> 
+     </div> 
+     <a name="J23:0" id="J23:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0023', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455167', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="23:0:002300:98455167" /> <span class="bl"><label for="Y002300"> 제23조(법원사무관등에 의한 전자기록 관리) </label> </span> ① 법원사무관등은 전자문서의 형태, 제출방식, 전자소송시스템 이용 방식 등에 관하여 필요한 사항을 지적하고 보정을 권고할 수 있다. </p>
+       <p class="pty1_de2_1">② 법원사무관등은 전자적으로 제출된 소송서류가 전자소송포털에서 요구하는 방식과 달리 등재되거나 소송서류에 관한 정보 입력이 잘못된 때에는 재판장등의 허가를 얻어 이를 정정ㆍ변경할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8., 2024. 12. 31.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:98455169" id="pjuk:98455169"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="002400" data-joseq="98455169">         제5장 전자적 송달 및 통지 </p> 
+     </div> 
+     <a name="J24:0" id="J24:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0024', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="24:0:002400:98455171" /> <span class="bl"><label for="Y002400"> 제24조(전자적 송달ㆍ통지를 받을 자) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209627','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209605','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209607','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209609','JO','');" href="javascript:;">제1호</a>에 따른 전자적 송달 또는 통지를 받을 자는 다음 각 호와 같다. </p>
+       <p class="pty1_de2h">1. 민사소송 등의 개별 사건에 관하여 전자소송 동의를 한 등록사용자 </p> 
+       <p class="pty1_de2h">2. 1년의 범위에서 일정한 기간을 정하여 그 기간 안에 민사소송 등의 당사자 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209621','JO','');" href="javascript:;">제3조</a> 각 호의 자가 될 것을 예정하여 전자소송시스템을 이용한 진행에 동의한 등록사용자 </p> 
+       <p class="pty1_de2h">3. 민사소송 등의 당사자와 소송대리인 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209623','JO','');" href="javascript:;">제3조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209625','JO','');" href="javascript:;">제1호부터 제4호</a>까지 규정된 자가 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209617','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209619','JO','');" href="javascript:;">제184조</a>에 의하여 송달영수인으로 신고한 등록사용자 </p> 
+       <p class="pty1_de2_1">② 법원사무관등은 전자문서로 작성된 재판서 또는 조서의 송달을 신청한 등록사용자에게 전자소송시스템을 이용하여 전자적인 방법으로 송달할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 제1항제3호의 신고가 있는 경우에 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209611','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209613','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209615','JO','');" href="javascript:;">제1항</a>의 송달 또는 통지는 그 송달영수인에게 하여야 한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J25:0" id="J25:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0025', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455173', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002500" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="25:0:002500:98455173" /> <span class="bl"><label for="Y002500"> 제25조(전자적 송달ㆍ통지를 받을 기관 등) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034210041','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209429','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209431','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209433','JO','');" href="javascript:;">제3호</a>에 따른 전자적 송달 또는 통지를 받을 자는 다음 각 호와 같다. <span class="sfon">&lt;개정 2013. 1. 8., 2013. 6. 27., 2014. 4. 3., 2014. 11. 27., 2024. 12. 31., 2026. 6. 25.&gt;</span> </p>
+       <p class="pty1_de2h">1. 국가 </p> 
+       <p class="pty1_de2h">2. 지방자치단체 </p> 
+       <p class="pty1_de2h">3. 행정사건, 특허사건과 관련된 행정청 </p> 
+       <p class="pty1_de2h">3의2. 가사사건, 비송(과태료 포함)사건과 관련된 검사 </p> 
+       <p class="pty1_de2h">3의3. 가사사건과 관련된 지방자치단체의 장 </p> 
+       <p class="pty1_de2h">3의4. 회생ㆍ파산사건의 절차관계인 및 회생ㆍ파산사건과 관련된 법무부장관, 금융위원회, 세무서장, 그 밖의 행정청 </p> 
+       <p class="pty1_de2h">4. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034210039','ALLJO','');" href="javascript:;">「공공기관의 운영에 관한 법률」</a>에 따라 지정된 공공기관 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034210037','ALLJO','');" href="javascript:;">「지방공기업법」</a>에 따라 설립된 지방공사 중 법원행정처장이 지정하여 전자소송포털에 공고하는 기관 </p> 
+       <p class="pty1_de2_1">② 제1항 각 호의 자는 미리 전자적 송달 또는 통지를 받을 수 있도록 사용자등록을 하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 사용자등록을 하지 않은 제1항 각 호의 자를 상대로 소가 제기된 경우 재판장등은 사용자등록을 할 것을 명할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J25:2" id="J25:2"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0025', '02' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002502" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="25:2:002502:98455175" /> <span class="bl"><label for="Y002502"> 제25조의2(국가 또는 행정청에 대한 전자적 송달ㆍ통지) </label> </span> 국가 또는 행정청이 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209653','ALLJO','');" href="javascript:;">「국가를 당사자로 하는 소송에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209643','JO','');" href="javascript:;">제3조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209651','JO','');" href="javascript:;">제1항</a>, <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209645','JO','');" href="javascript:;">제2항</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209631','JO','');" href="javascript:;">제5조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209633','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209647','JO','');" href="javascript:;">제6조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209649','JO','');" href="javascript:;">제2항</a>에 따라 지정한 소송수행자가 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209639','JO','');" href="javascript:;">제4조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209641','JO','');" href="javascript:;">제3항</a>의 명령에 따르지 아니하는 경우 법원사무관등은 국가에 대하여는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209629','ALLJO','');" href="javascript:;">같은 법</a>률 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209635','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209637','JO','');" href="javascript:;">제1항</a>에서 정한 검찰청의 장에게, 행정청에 대하여는 그 장에게 전자적으로 송달하거나 통지할 수 있다. </p>
+       <p class="pty1_de2"> <span class="sfon">[본조신설 2014. 4. 3.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J26:0" id="J26:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0026', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455177', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002600" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="26:0:002600:98455177" /> <span class="bl"><label for="Y002600"> 제26조(전자적 송달ㆍ통지의 방법 등) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209993','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209999','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209995','JO','');" href="javascript:;">제3항</a>에 따른 전자문서 등재사실의 통지는 등록사용자가 전자소송시스템에 입력한 전자우편주소로 전자우편을 보내고, 휴대전화번호로 문자메시지나 이에 준하는 메시지(이하 “문자메시지등”이라 한다)를 보내는 방법으로 한다. 다만, 문자메시지등은 등록사용자의 요청에 따라 보내지 아니할 수 있다. <span class="sfon">&lt;개정 2013. 6. 27., 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2_1">② 제1항의 통지는 전자우편이 전자우편주소로 전송된 때 또는 문자메시지등이 휴대전화번호로 전송된 때 효력이 생긴다. <span class="sfon">&lt;신설 2013. 6. 27., 2024. 12. 31.&gt;</span> </p> 
+       <p class="pty1_de2_1">③ 등록사용자가 책임질 수 없는 사유로 전자소송시스템에 등재된 전자문서를 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209989','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210003','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209997','JO','');" href="javascript:;">제4항</a>의 기간 안에 확인하지 못한 경우에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209991','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210001','JO','');" href="javascript:;">제173조</a>에 따라 게을리 한 소송행위를 보완할 수 있다. <span class="sfon">&lt;개정 2013. 6. 27.&gt;</span> </p> 
+       <p class="pty1_de2_1">④ 제1항의 통지를 받은 등록사용자는 전자소송시스템에 접속하여 등재된 전자문서를 확인 또는 출력할 수 있다. <span class="sfon">&lt;개정 2013. 6. 27.&gt;</span> </p> 
+       <p class="pty1_de2_1">⑤ 전자소송시스템을 이용하여 송달한 전자문서 정본에 의하여 출력한 서면은 정본의 효력이 있다. 이 경우 전자소송시스템 장애 등 등록사용자가 책임질 수 없는 사유로 등재된 전자문서 정본의 출력이 정상적으로 끝나지 아니하였으면, 등록사용자는 그 사유를 소명하여 재발급을 신청할 수 있다. <span class="sfon">&lt;개정 2013. 6. 27.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J27:0" id="J27:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0027', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002700" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="27:0:002700:98455179" /> <span class="bl"><label for="Y002700"> 제27조(법정에서의 전자문서 송달) </label> </span> 전자소송시스템에 의하여 제출된 소송서류를 법정에서 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209655','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209657','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209659','JO','');" href="javascript:;">제1항</a>의 등록사용자에게 송달할 필요가 있을 때에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209661','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209663','JO','');" href="javascript:;">제177조</a>에 의한 방법 이외에 그 제출자로 하여금 해당 전자문서의 요지를 설명하게 하고, 송달받을 자의 요청에 따라 컴퓨터 등 정보처리능력을 갖춘 장치에 의하여 전자문서를 현출한 화면을 이용하여 주요 부분을 즉석에서 열람하는 방법으로 할 수 있다. </p> 
+      </div> 
+     </div> 
+     <a name="J28:0" id="J28:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0028', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002800" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="28:0:002800:98455181" /> <span class="bl"><label for="Y002800"> 제28조(기간의 계산) </label> </span> ① 송달받을 자가 전자소송시스템 장애로 인하여 전자문서를 확인할 수 없는 기간이 1일당 1시간을 초과하는 경우에는 해당 일을 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209665','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209667','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209669','JO','');" href="javascript:;">제4항</a> 단서의 기간에 산입하지 아니한다. 그 기간의 마지막 날 오전 9시 이후에 전자소송시스템 장애로 인하여 전자문서를 확인할 수 없게 된 때에도 1일을 그 기간에 산입하지 아니한다. </p>
+       <p class="pty1_de2_1">② 전자소송시스템의 유지ㆍ보수를 위하여 그 사용을 일시 중단한 경우로서 법원행정처장이 사전에 공지한 경우에는 제1항을 적용하지 아니한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J29:0" id="J29:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0029', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455183', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002900" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="29:0:002900:98455183" /> <span class="bl"><label for="Y002900"> 제29조(출력서면의 송달 등) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209697','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209699','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209703','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209705','JO','');" href="javascript:;">제3호</a>의 사유는 다음 각 호 가운데 어느 하나를 말한다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p>
+       <p class="pty1_de2h">1. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209721','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209723','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209717','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209719','JO','');" href="javascript:;">제1항</a>에 해당하는 경우 </p> 
+       <p class="pty1_de2h">2. 송달받을 자가 책임질 수 없는 사유로 전자소송시스템에 등재된 전자문서를 확인할 수 없다는 점을 소명하여 출력서면의 송달을 신청한 경우 </p> 
+       <p class="pty1_de2h">3. 그 밖에 재판장등이 출력서면의 송달이 필요하다고 인정하는 경우 </p> 
+       <p class="pty1_de2_1">② 법원사무관등은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209687','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209689','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209691','JO','');" href="javascript:;">제1항</a>에 따라 출력서면을 송달하는 경우 다음 각 호 가운데 어느 하나에 해당하면 그 제출자로 하여금 전자문서의 출력서면을 제출하게 할 수 있다. </p> 
+       <p class="pty1_de2h">1. 출력할 서면의 분량이 상당히 많은 경우 </p> 
+       <p class="pty1_de2h">2. 송달받을 상대방의 수가 상당히 많은 경우 </p> 
+       <p class="pty1_de2h">3. 당해 전자문서에 표시된 색상이 나타나도록 서면을 출력할 필요가 있는 경우 </p> 
+       <p class="pty1_de2h">4. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209677','ALLJO','');" href="javascript:;">「민사소송규칙」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209679','JO','');" href="javascript:;">제4조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209681','JO','');" href="javascript:;">제2항</a>에 따른 소송서류의 용지와 다른 크기의 서면을 출력할 필요가 있는 경우 </p> 
+       <p class="pty1_de2h">5. 그 밖에 위 각 호의 사유에 준하는 경우 </p> 
+       <p class="pty1_de2_1">③ <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209671','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209673','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209675','JO','');" href="javascript:;">제1항</a>에 따라 전자문서를 출력할 경우에는 전자소송시스템을 이용하여 출력문서와 전자문서 사이의 동일성에 관한 사항을 출력문서에 표시되도록 하여야 한다. </p> 
+       <p class="pty1_de2_1">④ 법원사무관등은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209693','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209701','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209695','JO','');" href="javascript:;">제1항</a>에 따라 전자문서를 출력한 서면을 송달하는 경우 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209683','ALLJO','');" href="javascript:;">「우편법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209685','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209711','JO','');" href="javascript:;">제3항</a>, <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209707','ALLJO','');" href="javascript:;">「우편법 시행규칙」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209713','JO','');" href="javascript:;">제25조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209709','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209715','JO','');" href="javascript:;">제12호</a>에서 정한 전자우편을 이용하여 할 수 있다. <span class="sfon">&lt;신설 2013. 6. 27.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:98455185" id="pjuk:98455185"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="003000" data-joseq="98455185">         제6장 변론과 증거조사 </p> 
+     </div> 
+     <a name="J30:0" id="J30:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0030', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003000" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="30:0:003000:98455187" /> <span class="bl"><label for="Y003000"> 제30조(전자문서에 의한 변론 등의 방법) </label> </span> ① 소장, 답변서, 준비서면 그 밖에 이에 준하는 서류가 전자문서로 등재되어 있는 경우 그에 따른 변론은 당사자가 말로 중요한 사실상 또는 법률상 사항에 대하여 진술하거나 법원이 당사자에게 말로 해당사항을 확인하는 방식으로 한다. </p>
+       <p class="pty1_de2_1">② 제1항에 따른 변론은 컴퓨터 등 정보처리능력을 갖춘 장치에 의하여 전자문서를 현출한 화면에서 필요한 사항을 지적하면서 할 수 있다. </p> 
+       <p class="pty1_de2_1">③ <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209725','JO','');" href="javascript:;">제13조</a>에 의하여 제출된 멀티미디어 방식의 자료에 따른 변론은 제1항의 방식과 함께 컴퓨터 등 정보처리능력을 갖춘 장치에 의하여 재생되는 음성이나 영상 중 필요한 부분을 청취 또는 시청하는 방법으로 한다. </p> 
+       <p class="pty1_de2_1">④ 변론준비기일에서 당사자가 변론의 준비에 필요한 주장과 증거를 정리하는 경우, 변론기일에서 변론준비기일의 결과를 진술하는 경우 또는 항소심에서 제1심 변론결과를 진술하는 경우에 제1항 내지 제3항을 준용한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J31:0" id="J31:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0031', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="31:0:003100:98455189" /> <span class="bl"><label for="Y003100"> 제31조(전자문서에 대한 증거조사의 신청 등) </label> </span> ① 전자문서에 대한 증거조사의 신청은 다음 각 호의 구분에 의한다. </p>
+       <p class="pty1_de2h">1. 전자문서가 전자소송시스템에 등재되어 있는 경우에는 그 취지를 진술한다. </p> 
+       <p class="pty1_de2h">2. 전자문서가 자기디스크 등에 담긴 경우에는 이를 제출한다. </p> 
+       <p class="pty1_de2h">3. 다른 사람이 전자문서를 가지고 있을 경우에는 그것을 제출하도록 명할 것을 신청한다. </p> 
+       <p class="pty1_de2_1">② 다음 각 호 가운데 어느 하나에 해당하면 증거신청을 하는 전자문서를 자기디스크 등에 담아 제출할 수 있다. 이때에는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209733','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209735','JO','');" href="javascript:;">제3항</a>을 준용한다. </p> 
+       <p class="pty1_de2h">1. 전자문서에 대한 증거조사를 신청하는 자가 전자소송시스템을 이용한 소송의 진행에 동의하지 아니한 경우 </p> 
+       <p class="pty1_de2h">2. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209737','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209739','JO','');" href="javascript:;">제1항</a> 각 호 가운데 어느 하나에 해당하는 사유가 있는 경우 </p> 
+       <p class="pty1_de2h">3. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209727','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209729','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209741','JO','');" href="javascript:;">제3호</a> 또는 <a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209731','JO','');" href="javascript:;">제4호</a>에 해당하는 서류가 전자문서로 작성되어 있을 경우 </p> 
+       <p class="pty1_de2_1">③ 전자문서에 대한 증거조사를 신청하는 때에는 전자문서의 내용에 따라 다음 각 호의 사항을 밝혀야 한다. 다만, 전자문서의 내용에 비추어 명백한 경우에는 그러하지 아니하다. </p> 
+       <p class="pty1_de2h">1. 전자문서가 문자, 그 밖의 기호, 도면, 사진 등에 관한 정보(다음부터 “문자등 정보”라고 한다)인 경우에는 전자문서의 명칭과 작성자 및 작성일(전자문서로 변환하여 제출된 경우에는 원본의 작성자와 작성일을 말한다) </p> 
+       <p class="pty1_de2h">2. 전자문서가 음성ㆍ음향이나 영상정보(다음부터 “음성ㆍ영상등 정보”라고 한다)인 경우에는 음성이나 영상이 녹음 또는 녹화된 사람, 녹음 또는 녹화를 한 사람 및 그 일시ㆍ장소, 주요내용과 용량, 입증할 사항과 사이의 적합한 관련성 </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J32:0" id="J32:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0032', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="32:0:003200:98455191" /> <span class="bl"><label for="Y003200"> 제32조(문자등 정보에 대한 증거조사) </label> </span> ① 문자등 정보에 해당하는 전자문서에 대한 증거조사는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209743','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209745','JO','');" href="javascript:;">제13조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209747','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209749','JO','');" href="javascript:;">제1호</a>의 방법 이외에 필요한 경우 직권 또는 당사자의 신청에 따라 검증 또는 감정의 방법으로 할 수 있다. </p>
+       <p class="pty1_de2_1">② 전자문서로 변환하여 제출된 증거에 대하여 원본의 존재나 내용에 대하여 이의가 있는 때에는 원본을 열람하는 방법에 의한다. </p> 
+       <p class="pty1_de2_1">③ 컴퓨터 등 정보처리능력을 갖춘 장치를 이용하여 증거조사를 하기 곤란한 사유가 있을 때에는 그 출력문서로 증거조사를 할 수 있다. 이때에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209751','ALLJO','');" href="javascript:;">「민사소송규칙」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209753','JO','');" href="javascript:;">제120조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209755','JO','');" href="javascript:;">제2항</a>을 준용한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J33:0" id="J33:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0033', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455193', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="33:0:003300:98455193" /> <span class="bl"><label for="Y003300"> 제33조(음성ㆍ영상등 정보에 대한 증거조사) </label> </span> ① 음성ㆍ영상등 정보에 해당하는 전자문서에 대한 증거조사는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209763','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209765','JO','');" href="javascript:;">제13조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209767','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209769','JO','');" href="javascript:;">제2호</a>의 방법 이외에 필요한 경우 직권 또는 당사자의 신청에 따라 다른 방법으로 검증하거나 감정의 방법으로 할 수 있다. </p>
+       <p class="pty1_de2_1">② 제1항의 전자문서에 대한 증거조사를 신청한 당사자는 법원이 명하거나 상대방이 요구한 경우에는 녹취서, 그 밖에 그 내용을 설명하는 문서를 전자문서로 제출하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 법원사무관등이 증거조사 결과에 따라 조서를 작성하는 때에는 재판장등의 허가를 받아 제2항에 따라 제출된 전자문서 가운데 필요한 부분을 그 조서에 인용할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p class="pty1_de2_1">④ 음성ㆍ영상등 정보인 증거의 복사에 대하여는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209757','JO','');" href="javascript:;">제13조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209759','JO','');" href="javascript:;">제4항</a> 및 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209761','JO','');" href="javascript:;">제5항</a>을 준용한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J34:0" id="J34:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0034', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455195', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="34:0:003400:98455195" /> <span class="bl"><label for="Y003400"> 제34조(증거조사의 특칙) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209777','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209775','JO','');" href="javascript:;">제13조</a> 및 이 규칙 제32조, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209779','JO','');" href="javascript:;">제33조</a>에 따른 증거조사는 주요 변론내용과 관련된 부분에 한정하여 할 수 있다. </p>
+       <p class="pty1_de2_1">② 재판장등은 증거인 전자문서 중 주요 변론내용과 관련된 부분을 특정할 것을 명할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p class="pty1_de2_1">③ 증거신청인의 상대방이 사전에 증거인 전자문서를 열람ㆍ청취ㆍ시청할 수 있었던 경우 또는 법원이나 증거신청인이 기일에서 전자문서의 주요내용을 설명한 경우에는 증거신청인과 상대방에게 그에 관한 의견을 진술하게 하고 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209771','ALLJO','');" href="javascript:;">법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209773','JO','');" href="javascript:;">제13조</a> 및 이 규칙 제32조, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209781','JO','');" href="javascript:;">제33조</a>가 규정하는 절차의 전부 또는 일부를 생략할 수 있다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J35:0" id="J35:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0035', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455197', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003500" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="35:0:003500:98455197" /> <span class="bl"><label for="Y003500"> 제35조(증인진술서 등의 제출) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209785','ALLJO','');" href="javascript:;">「민사소송규칙」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209783','JO','');" href="javascript:;">제79조</a>의 증인진술서는 전자소송시스템을 이용하여 전자적으로 제출할 수 있다. </p>
+       <p class="pty1_de2_1">② 재판장등이 명하거나 상대방이 신청한 때에는 제1항의 증인진술서 원본을 제출하여야 한다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J36:0" id="J36:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0036', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455199', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003600" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="36:0:003600:98455199" /> <span class="bl"><label for="Y003600"> 제36조(전자문서 등을 이용한 신문ㆍ설명) </label> </span> ① 전자기록사건에서 당사자는 재판장등의 허가를 받아 멀티미디어 자료 등 전자문서를 이용하여 증인을 신문할 수 있다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p>
+       <p class="pty1_de2_1">② 제1항의 규정은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209801','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209803','JO','');" href="javascript:;">제339조</a>에 따른 의견진술과 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209795','ALLJO','');" href="javascript:;">같은 법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209797','JO','');" href="javascript:;">제341조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209799','JO','');" href="javascript:;">제2항</a>에 따른 감정서의 설명에 준용한다. </p> 
+       <p class="pty1_de2_1">③ 제1항 및 제2항의 경우 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209805','JO','');" href="javascript:;">제33조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209807','JO','');" href="javascript:;">제3항</a>, <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209787','ALLJO','');" href="javascript:;">「민사소송규칙」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209789','JO','');" href="javascript:;">제96조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209791','JO','');" href="javascript:;">제2항</a>, <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209793','JO','');" href="javascript:;">제3항</a>을 준용한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J37:0" id="J37:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0037', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455201', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003700" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="37:0:003700:98455201" /> <span class="bl"><label for="Y003700"> 제37조(문서송부촉탁 등의 특칙) </label> </span> ① 전자기록사건에서 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209809','JO','');" href="javascript:;">제3조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209811','JO','');" href="javascript:;">제6호부터 제10호의2</a>까지에 해당하는 기관 등이 그 촉탁사항이나 송부대상인 문서를 전자데이터 또는 전자문서로 가지고 있는 경우에는 전자소송시스템을 이용하여 이를 전송하여야 한다. <span class="sfon">&lt;개정 2013. 1. 8.&gt;</span> </p>
+       <p class="pty1_de2_1">② 법원은 제1항의 촉탁사항이나 송부대상인 문서가 전자데이터 또는 전자문서가 아닌 경우 이를 전자문서로 변환하여 전송하여 줄 것을 요청할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 법원은 제1항의 각종 촉탁 등을 전자적 송달 또는 통지의 방법으로 할 수 있다. <span class="sfon">&lt;신설 2012. 5. 2.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:98455203" id="pjuk:98455203"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="003800" data-joseq="98455203">         제7장 전자적 열람과 이관 </p> 
+     </div> 
+     <a name="J38:0" id="J38:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0038', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455205', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003800" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="38:0:003800:98455205" /> <span class="bl"><label for="Y003800"> 제38조(전자기록의 열람 등) </label> </span> ① 등록사용자로서 전자소송 동의를 한 당사자, 소송대리인 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210019','JO','');" href="javascript:;">제3조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034210007','JO','');" href="javascript:;">제1호부터 제4호</a>까지의 자(<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210023','JO','');" href="javascript:;">제38조의2</a>의 적용을 받는 자를 제외한다)가 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034210017','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210021','JO','');" href="javascript:;">제162조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034210009','JO','');" href="javascript:;">제1항</a>에 따라 전자기록을 열람, 출력 또는 복제하는 경우에는, 전자소송시스템에 접속한 후 전자소송포털에서 그 내용을 확인하고 이를 서면으로 출력하거나 해당 사항을 자신의 자기디스크 등에 내려받는 방식으로 한다. <span class="sfon">&lt;개정 2014. 4. 3., 2014. 11. 27., 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2_1">② <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034210005','ALLJO','');" href="javascript:;">「민사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210011','JO','');" href="javascript:;">제162조</a>에 따라 민사소송 등의 전자기록을 열람하고자 하는 자가 법원에 출석하여 당해 사건의 전자기록 열람을 신청한 때에는, 법원사무관등은 법원에 비치된 컴퓨터 단말기를 이용하여 해당 내용을 열람하게 할 수 있다. 이 때 당사자나 이해관계를 소명한 제3자의 신청에 따라 해당 사항을 복제하게 하거나 출력한 서면을 교부할 수도 있다. </p> 
+       <p class="pty1_de2_1">③ <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210013','JO','');" href="javascript:;">제3조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034210025','JO','');" href="javascript:;">제5호부터 제11호</a>(<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210015','JO','');" href="javascript:;">제38조의2</a>의 적용을 받는 자를 제외한다)까지의 등록사용자는 재판장등의 허가를 얻어 제1항에 따른 전자적 방법으로 전자기록을 열람ㆍ복제ㆍ출력할 수 있다. <span class="sfon">&lt;개정 2014. 4. 3., 2014. 11. 27.&gt;</span> </p> 
+       <p class="pty1_de2_1">④ 사용자등록을 한 법무사는 당사자 또는 법정대리인 등의 위임을 받아 전자소송시스템을 이용하여 전자기록 열람을 신청할 수 있다. </p> 
+       <p class="pty1_de2_1">⑤ 삭제 <span class="sfon">&lt;2014. 4. 3.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J38:2" id="J38:2"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0038', '02' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455207', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003802" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="38:2:003802:98455207" /> <span class="bl"><label for="Y003802"> 제38조의2(가사사건과 회생ㆍ파산사건에 관한 특칙) </label> </span> 가사사건의 전자기록은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209851','ALLJO','');" href="javascript:;">「가사소송법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209847','JO','');" href="javascript:;">제10조의2</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209861','JO','');" href="javascript:;">제2항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1034209853','JO','');" href="javascript:;">제2호</a>에 따라, 회생ㆍ파산사건의 전자기록은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209857','ALLJO','');" href="javascript:;">「채무자 회생 및 파산에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209859','JO','');" href="javascript:;">제28조</a>에 따라 열람, 출력 또는 복제할 수 있다. 이 경우 그 방식에 관하여는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209845','JO','');" href="javascript:;">제38조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209855','JO','');" href="javascript:;">제1항</a>, <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209849','JO','');" href="javascript:;">제2항</a>에 따른다. <span class="sfon">&lt;개정 2024. 6. 26.&gt;</span> </p>
+       <p class="pty1_de2"> <span class="sfon">[본조신설 2014. 4. 3.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J39:0" id="J39:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0039', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455209', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y003900" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="39:0:003900:98455209" /> <span class="bl"><label for="Y003900"> 제39조(전자기록의 열람 등에 따른 수수료) </label> </span> ① 전자기록의 열람, 출력 또는 복제를 신청할 경우 납부하여야 할 수수료의 금액은 <a title="팝업으로 이동" class="link sfon6" onclick="javascript:fncLsLawPop('1034209813','BE','');" href="javascript:;">별표 1</a>과 같다. </p>
+       <p class="pty1_de2_1">② 민사소송 등이 법원에 계속되는 동안에 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209815','JO','');" href="javascript:;">제38조</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209817','JO','');" href="javascript:;">제38조의2</a>에 따라 전자기록을 열람, 출력 또는 복제하는 경우 다음 각 호의 어느 하나에 해당하면 제1항의 수수료를 납부하지 아니한다. <span class="sfon">&lt;개정 2014. 4. 3.&gt;</span> </p> 
+       <p class="pty1_de2h">1. 법원에서 제공되지 아니하는 컴퓨터 등을 이용하여 열람, 출력 또는 복제하는 경우 </p> 
+       <p class="pty1_de2h">2. 법원에서 제공되는 컴퓨터 등을 이용하여 열람하는 경우 </p> 
+       <p class="pty1_de2_1">③ 전자기록의 열람ㆍ출력 또는 복제에 관하여 이 규칙에 특별한 규정이 없으면 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209819','ALLJO','');" href="javascript:;">「재판기록 열람ㆍ복사 규칙」</a>을 준용한다. <span class="sfon">&lt;개정 2012. 12. 27.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J40:0" id="J40:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0040', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y004000" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="40:0:004000:98455211" /> <span class="bl"><label for="Y004000"> 제40조(사건기록의 전자적 이관) </label> </span> ① 심급사이 또는 이송결정에 따른 전자기록 송부는 전자적인 방법으로 한다. 다만, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209821','JO','');" href="javascript:;">제20조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209823','JO','');" href="javascript:;">제1항</a>에 의하여 별도로 보관하는 기록 또는 문서는 그 자체를 송부하는 방법으로 한다. </p>
+       <p class="pty1_de2_1">② 제1항에 따라 기록을 송부할 때 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209825','ALLJO','');" href="javascript:;">「상고심절차에 관한 특례법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209827','JO','');" href="javascript:;">제6조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209829','JO','');" href="javascript:;">제2항</a>에 정해진 기간은 대법원이 마지막으로 기록을 받은 날부터 진행한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:98455213" id="pjuk:98455213"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="004100" data-joseq="98455213">         제8장 보칙 </p> 
+     </div> 
+     <a name="J41:0" id="J41:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0041', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455215', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y004100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="41:0:004100:98455215" /> <span class="bl"><label for="Y004100"> 제41조(소송비용 등의 납부 등) </label> </span> ① 등록사용자는 인지액, 송달료(문자메시지등 전송으로 인한 비용을 포함한다), 그 밖에 소송행위에 필요한 비용과 전자소송시스템의 이용수수료(다음부터 “이용수수료”라 한다)를 신용카드에 의한 결제 방식 또는 계좌이체에 의한 결제 방식 그 밖에 법원행정처장이 정하여 전자소송포털에 공고하는 방식에 따라 전자적으로 납부할 수 있다. 다만, <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034210029','ALLJO','');" href="javascript:;">민사소송법</a> 제5편 독촉절차에 따른 사건에서는 전자적으로 납부하여야 한다. <span class="sfon">&lt;개정 2014. 11. 27., 2024. 12. 31.&gt;</span> </p>
+       <p class="pty1_de2_1">② 법원행정처장은 이용수수료를 당사자가 납부할 인지액, 송달료 그 밖에 소송행위에 필요한 비용 상당액에 다음 각 호의 구분에 따른비율을 곱하여 산정한 금액의 범위 안에서 전자소송포털에 공고한다. <span class="sfon">&lt;개정 2017. 2. 2., 2024. 12. 31.&gt;</span> </p> 
+       <p class="pty1_de2h">1. 신용카드ㆍ직불카드 또는 금융기관 계좌이체를 이용하여 납부하는 경우 : 1000분의 35 </p> 
+       <p class="pty1_de2h">2. 그 외 결제수단을 이용하는 경우 : 1000분의 80 </p> 
+       <p class="pty1_de2_1">③ 제2항에 따라 산정한 값이 200원 미만인 경우에 이용수수료 금액은 200원으로 한다. </p> 
+       <p class="pty1_de2_1">④ 제1항의 이용수수료는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034210027','ALLJO','');" href="javascript:;">「민사소송비용법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210031','JO','');" href="javascript:;">제9조</a>에 따라 그 전액을 소송비용으로 본다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J42:0" id="J42:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0042', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455217', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y004200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="42:0:004200:98455217" /> <span class="bl"><label for="Y004200"> 제42조(전자문서의 이용ㆍ관리) </label> </span> ① 전자소송시스템에 기록된 전자문서는 전자파일로 보존하되, 위조ㆍ변조ㆍ훼손ㆍ유출 등을 방지하기 위한 보안조치를 하여야 한다. </p>
+       <p class="pty1_de2_1">② 전자기록사건의 경우 법원행정처장은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209831','ALLJO','');" href="javascript:;">「법원재판사무 처리규칙」</a> 제4장 각 조의 사항에 관하여 전자기록의 특성을 고려하여 달리 정할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 전자기록사건의 경우 법관 또는 법원사무관등은 현장검증이나 서증조사 등 법원 밖에서의 증거조사 또는 재택근무 그 밖에 업무상 필요하다고 인정되는 때에는 법원청사 이외의 곳에서 전자기록을 이용할 수 있다. 이 때 전자기록이 정당한 이유 없이 공개되지 않도록 조치하여야 한다. <span class="sfon">&lt;개정 2014. 4. 3.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J43:0" id="J43:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0043', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455219', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y004300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="43:0:004300:98455219" /> <span class="bl"><label for="Y004300"> 제43조(전자소송시스템의 운영) </label> </span> ① 법원행정처장은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034210035','JO','');" href="javascript:;">제41조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034210033','JO','');" href="javascript:;">제1항</a>에서 정한 소송비용 등의 전자적 납부를 위하여 필요한 범위 안에서 전자소송시스템의 이용시간을 지정할 수 있다. </p>
+       <p class="pty1_de2_1">② 법원행정처장은 전자소송시스템의 점검을 위하여 필요한 시간 동안 전자소송시스템의 이용시간을 일시 제한할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 법원행정처장은 전자소송시스템에 장애가 발생하거나 그 밖에 부득이한 사정이 있을 때에는 장애발생사실 및 그 복구사실을 법원 홈페이지 및 전자소송포털에 게시하여야 한다. <span class="sfon">&lt;개정 2012. 12. 27., 2024. 12. 31.&gt;</span> </p> 
+       <p class="pty1_de2_1">④ 법원행정처장은 전자기록사건에 관하여 담당 재판장등이 전자소송시스템의 장애 또는 그 밖의 사유로 기술적 지원을 요청한 경우 필요한 범위 내에서 사건 정보 또는 기록 등을 열람하거나 그 밖의 조치를 취할 수 있다. <span class="sfon">&lt;신설 2013. 6. 27.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J44:0" id="J44:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('287469', '0044', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '011356', '287469', '98455221', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y004400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="44:0:004400:98455221" /> <span class="bl"><label for="Y004400"> 제44조(특칙) </label> </span> ① <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1034209837','ALLJO','');" href="javascript:;">「민사집행법」</a>에 따라 강제집행의 실시를 위하여 집행권원이나 그 집행력 있는 정본(이하 “집행권원 등”이라 한다)을 전자문서로 변환하여 제출하는 자는 법원이 그 집행권원 등에 부여한 문서고유번호를 전자소송시스템에 입력하여야 한다. </p>
+       <p class="pty1_de2_1">② 제1항의 문서고유번호를 입력하지 못한 경우에는, 제출하고자 한 집행권원 등을 전자문서가 아닌 본래의 형태로 법원에 제출하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 제2항에 따라 집행권원 등을 제출하지 아니한 때에는 해당 서류를 제출하지 아니한 것으로 본다. 제2항에 따라 제출된 집행권원 등의 관리에 대하여는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1034209833','JO','');" href="javascript:;">제20조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1034209835','JO','');" href="javascript:;">제1항</a>제2문을 준용한다. </p> 
+       <p class="pty1_de2"> <span class="sfon">[전문개정 2014. 11. 27.]</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <!-- 조문정보 --> 
+     <!-- 부칙 영역 끝 --> 
+     <br /> 
+     <div id="arDivArea"> 
+      <a name="arArea"></a> 
+      <a name="J12744175" id="J12744175"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744175','<대법원규칙 제2332호, 2011. 3. 28.>'); return false;" href="#AJAX"> <img id="ar12744175btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2332호, 2011. 3. 28.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744175" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2332호, 2011. 3. 28.>체크박스 " value="12744175" /> <a class="nun" onclick="javascript:arView('ar12744175','<대법원규칙 제2332호, 2011. 3. 28.>'); return false;" href="#AJAX"> <label for="chk12744175"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2332호, 2011. 3. 28.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744175','<대법원규칙 제2332호, 2011. 3. 28.>');return false;" href="#AJAX"> <img id="ar12744175MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2332호, 2011. 3. 28.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2011년 5월 2일부터 시행한다.</p>
+       <div id="ar12744175">
+        <p class="pty3_dep1"><span class="bl">제2조(적용시기)</span> ① 법과 이 규칙의 적용 시기는 별표 2와 같다. 다만 법원행정처장은 시ㆍ군법원의 사건에 대하여 그 적용시기를 달리 정할 수 있다.</p>
+        <p class="pty3_dep2"> ② 제1항의 규정에도 불구하고 법원행정처장이 정하는 재판서ㆍ조서 등에 관하여는 2015년 3월 22일까지 법 제10조제1항을 적용하지 아니한다. <span class="sfon">&lt;개정 2014. 11. 27.&gt;</span></p>
+        <p class="pty3_dep1"><span class="bl">제3조(적용례)</span> ① 이 규칙은 이 규칙 시행 후 제1심에 최초로 접수되는 사건부터 적용한다. 다만, 병합사건 중 일부가 이 규칙 시행 당시 계속 중인 사건 및 이 규칙 시행 이전에 접수된 사건에 대한 재심 또는 준재심사건은 그러하지 아니하다.</p>
+        <p class="pty3_dep2"> ② 재판장은 제1항에 해당하지 아니하는 사건의 경우에도 제19조제1항에 의한 전자기록화를 명할 수 있다.</p>
+        <p class="pty3_dep1"><span class="bl">제4조(다른 규칙의 폐지 등)</span> ① 「특허소송에서의 전자문서 이용 등에 관한 규칙」 및 「민사소송 등에서의 전자문서 이용 등에 관한 법률 적용시기에 관한 규칙」은 이를 모두 폐지한다.</p>
+        <p class="pty3_dep2"> ② 이 규칙 시행 전에 「특허소송에서의 전자문서 이용 등에 관한 규칙」에 따라 접수된 사건은 이 규칙에 의한다.</p>
+       </div> 
+      </div> 
+      <a name="J12744177" id="J12744177"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744177','<대법원규칙 제2397호, 2012. 5. 2.>'); return false;" href="#AJAX"> <img id="ar12744177btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2397호, 2012. 5. 2.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744177" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2397호, 2012. 5. 2.>체크박스 " value="12744177" /> <a class="nun" onclick="javascript:arView('ar12744177','<대법원규칙 제2397호, 2012. 5. 2.>'); return false;" href="#AJAX"> <label for="chk12744177"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2397호, 2012. 5. 2.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744177','<대법원규칙 제2397호, 2012. 5. 2.>');return false;" href="#AJAX"> <img id="ar12744177MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2397호, 2012. 5. 2.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 공포한 날부터 시행한다.</p>
+       <div id="ar12744177">
+        <p class="pty3_dep1"><span class="bl">제2조(계속 사건에 관한 적용례)</span> 이 규칙은 이 규칙 시행 당시 법원에 계속 중인 사건에도 적용한다.</p>
+       </div> 
+      </div> 
+      <a name="J12744179" id="J12744179"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744179','<대법원규칙 제2437호,  2012. 12. 27.>'); return false;" href="#AJAX"> <img id="ar12744179btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2437호,  2012. 12. 27.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744179" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2437호,  2012. 12. 27.>체크박스 " value="12744179" /> <a class="nun" onclick="javascript:arView('ar12744179','<대법원규칙 제2437호,  2012. 12. 27.>'); return false;" href="#AJAX"> <label for="chk12744179"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2437호, 2012. 12. 27.&gt;</span> </a> <a class="nun" onclick="javascript:fncArLawPop('대법원규칙 등의 제ㆍ개정절차 등에 관한 규칙', '20121227', '02437');" href="#AJAX"> <span class="sfon">(대법원규칙 등의 제ㆍ개정절차 등에 관한 규칙) </span> </a> <a class="nun" onclick="javascript:arView('ar12744179','<대법원규칙 제2437호,  2012. 12. 27.>');return false;" href="#AJAX"> <img id="ar12744179MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2437호,  2012. 12. 27.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2013년 1월 1일부터 시행한다. &lt;단서 생략&gt;</p>
+       <div id="ar12744179">
+        <p class="pty3_dep1"><span class="bl">제2조(다른 규칙의 개정)</span> ① 생략</p>
+        <p class="pty3_dep2"> ② 민사소송 등 전자문서 이용 등에 관한 규칙 일부를 다음과 같이 개정한다.</p>
+        <p class="pty3_dep2"> 제43조제3항 중 “대법원 홈페이지”를 “법원 홈페이지”로 한다.</p>
+        <p class="pty3_dep2"> ③부터 ⑦까지 생략</p>
+       </div> 
+      </div> 
+      <a name="J12744181" id="J12744181"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744181','<대법원규칙 제2441호,  2012. 12. 27.>'); return false;" href="#AJAX"> <img id="ar12744181btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2441호,  2012. 12. 27.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744181" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2441호,  2012. 12. 27.>체크박스 " value="12744181" /> <a class="nun" onclick="javascript:arView('ar12744181','<대법원규칙 제2441호,  2012. 12. 27.>'); return false;" href="#AJAX"> <label for="chk12744181"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2441호, 2012. 12. 27.&gt;</span> </a> <a class="nun" onclick="javascript:fncArLawPop('재판기록 열람ㆍ복사 규칙', '20121227', '02441');" href="#AJAX"> <span class="sfon">(재판기록 열람ㆍ복사 규칙) </span> </a> <a class="nun" onclick="javascript:arView('ar12744181','<대법원규칙 제2441호,  2012. 12. 27.>');return false;" href="#AJAX"> <img id="ar12744181MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2441호,  2012. 12. 27.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2013년 1월 1일부터 시행한다.</p>
+       <div id="ar12744181">
+        <p class="pty3_dep1"><span class="bl">제2조(다른 규칙의 개정)</span> ① 생략</p>
+        <p class="pty3_dep2"> ② 민사소송 등에서의 전자문서 이용 등에 관한 규칙 일부를 다음과 같이 개정한다.</p>
+        <p class="pty3_dep2"> 제39조제3항 중“「재판기록 열람ㆍ등사 규칙」”을 “「재판기록 열람ㆍ복사 규칙」”으로 한다.</p>
+        <p class="pty3_dep2"> ③ 및 ④ 생략</p>
+        <p class="pty3_dep1"><span class="bl">제3조</span> 생략</p>
+       </div> 
+      </div> 
+      <a name="J12744183" id="J12744183"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744183','<대법원규칙 제2444호, 2013. 1. 8.>'); return false;" href="#AJAX"> <img id="ar12744183btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2444호, 2013. 1. 8.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744183" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2444호, 2013. 1. 8.>체크박스 " value="12744183" /> <a class="nun" onclick="javascript:arView('ar12744183','<대법원규칙 제2444호, 2013. 1. 8.>'); return false;" href="#AJAX"> <label for="chk12744183"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2444호, 2013. 1. 8.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744183','<대법원규칙 제2444호, 2013. 1. 8.>');return false;" href="#AJAX"> <img id="ar12744183MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2444호, 2013. 1. 8.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2013년 1월 21일부터 시행한다.</p>
+       <div id="ar12744183">
+        <p class="pty3_dep1"><span class="bl">제2조(적용례)</span> ① 이 규칙은 「가사소송법」(제63조, 제6편에 따른 사건 제외) 및 「행정소송법」의 적용을 받는 사건에 관하여는 이 규칙 시행 후 제1심에 최초로 접수되는 사건부터 적용한다. 다만, 병합 사건 중 일부가 이 규칙 시행 당시 계속 중인 사건 및 이 규칙 시행 이전에 접수된 사건에 대한 재심 또는 준재심사건은 그러하지 아니하다.</p>
+        <p class="pty3_dep2"> ② 재판장등은 제1항에 해당하지 아니하는 사건의 경우에도 제19조 제1항에 따른 전자기록화를 명할 수 있다.</p>
+        <p class="pty3_dep2"> ③ 제4조 및 제11조의 개정규정은 이 규칙 시행 당시 법원에 계속 중인 사건에도 적용한다. 다만, 종전의 규정에 따라 생긴 효력에는 영향을 미치지 아니한다.</p>
+       </div> 
+      </div> 
+      <a name="J12744185" id="J12744185"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744185','<대법원규칙 제2478호, 2013. 6. 27.>'); return false;" href="#AJAX"> <img id="ar12744185btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2478호, 2013. 6. 27.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744185" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2478호, 2013. 6. 27.>체크박스 " value="12744185" /> <a class="nun" onclick="javascript:arView('ar12744185','<대법원규칙 제2478호, 2013. 6. 27.>'); return false;" href="#AJAX"> <label for="chk12744185"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2478호, 2013. 6. 27.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744185','<대법원규칙 제2478호, 2013. 6. 27.>');return false;" href="#AJAX"> <img id="ar12744185MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2478호, 2013. 6. 27.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2013년 7월 1일부터 시행한다.</p>
+       <div id="ar12744185">
+        <p class="pty3_dep1"><span class="bl">제2조(계속 중인 사건에 관한 경과조치)</span> 이 규칙은 특별한 규정이 없으면 이 규칙 시행 당시 법원에 계속 중인 사건에도 적용한다. 다만, 종전의 규정에 따라 생긴 효력에는 영향을 미치지 아니한다.</p>
+        <p class="pty3_dep1"><span class="bl">제3조(적용례)</span> ① 이 규칙은 「민사소송법」 제2편제4장, 제6편에 따른 사건, 「가사소송법」 제3편에 따른 사건 중 2013년 7월 1일부터 시행되는 제도에 관한 사건에 관하여 해당 절차에 관한 법 적용시기 이후 최초로 접수되는 제1심 사건부터 적용하고, 「민사집행법」 제4편과 「가사소송법」 제63조에 따른 보전처분 신청사건과 그에 부수하는 보전처분 이의ㆍ취소 신청사건, 제소명령 신청사건, 담보에 관한 신청사건, 등기 또는 등록의 기입을 촉탁하거나 재판서 정본을 송달하는 방법으로 집행하는 보전처분의 집행취소 신청사건 및 선박가압류에 따른 감수ㆍ보존처분 신청사건에 관하여 해당 절차에 관한 법 적용시기 이후 최초로 접수되는 보전처분 신청사건부터 적용한다. 다만, 그 사건이 해당 절차에 관한 법 적용 당시 법원에 계속 중인 사건에 병합된 경우 또는 해당 절차에 관한 법 적용 전에 접수된 사건에 대한 재심 또는 준재심 사건인 경우에는 그러하지 아니하다. <span class="sfon">&lt;개정 2014. 4. 3.&gt;</span></p>
+        <p class="pty3_dep2"> ② 제29조제4항의 개정규정은 법 제3조제1호ㆍ제2호의 법률에 따른 절차에는 2013. 11. 4.부터 적용한다.</p>
+        <p class="pty3_dep2"> ③ 재판장등은 이 규칙이 적용되지 아니하는 사건의 경우에도 제19조제1항에 따라 전자기록화를 명할 수 있다.</p>
+       </div> 
+      </div> 
+      <a name="J12744187" id="J12744187"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744187','<대법원규칙 제2527호, 2014. 4. 3.>'); return false;" href="#AJAX"> <img id="ar12744187btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2527호, 2014. 4. 3.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744187" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2527호, 2014. 4. 3.>체크박스 " value="12744187" /> <a class="nun" onclick="javascript:arView('ar12744187','<대법원규칙 제2527호, 2014. 4. 3.>'); return false;" href="#AJAX"> <label for="chk12744187"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2527호, 2014. 4. 3.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744187','<대법원규칙 제2527호, 2014. 4. 3.>');return false;" href="#AJAX"> <img id="ar12744187MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2527호, 2014. 4. 3.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 공포한 날부터 시행한다. 다만, 제3조제1호의2, 제10호의4, 제4조제1항제5호, 제4조제2항, 제25조제1항제3호의4, 제38조, 제38조의2, 제39조제2항의 개정규정은 2014년 4월 28일부터 시행한다.</p>
+       <div id="ar12744187">
+        <p class="pty3_dep1"><span class="bl">제2조(계속 중인 사건에 관한 경과조치)</span> 이 규칙은 특별한 규정이 없으면 이 규칙 시행 당시 법원에 계속 중인 사건에도 적용한다. 다만, 종전의 규정에 따라 생긴 효력에는 영향을 미치지 아니한다.</p>
+        <p class="pty3_dep1"><span class="bl">제3조(적용례)</span> ① 이 규칙은 「채무자 회생 및 파산에 관한 법률」에 따른 사건에 관하여는 법 적용시기 이후 최초로 접수되는 제1심 사건부터 적용한다. 다만, 그 사건이 법 적용 당시 법원에 계속 중인 사건에 병합된 경우 또는 같은 개정규정 시행 전 접수된 사건에 대한 준재심 사건인 경우에는 적용하지 아니한다.</p>
+        <p class="pty3_dep2"> ② 재판장등은 제1항에 따라 이 규칙이 적용되지 아니하는 사건에 관하여도 전자기록화를 명할 수 있다.</p>
+       </div> 
+      </div> 
+      <a name="J12744189" id="J12744189"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744189','<대법원규칙 제2568호, 2014. 11. 27.>'); return false;" href="#AJAX"> <img id="ar12744189btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2568호, 2014. 11. 27.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744189" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2568호, 2014. 11. 27.>체크박스 " value="12744189" /> <a class="nun" onclick="javascript:arView('ar12744189','<대법원규칙 제2568호, 2014. 11. 27.>'); return false;" href="#AJAX"> <label for="chk12744189"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2568호, 2014. 11. 27.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744189','<대법원규칙 제2568호, 2014. 11. 27.>');return false;" href="#AJAX"> <img id="ar12744189MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2568호, 2014. 11. 27.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2014년 12월 1일부터 시행한다. 다만, 제3조, 제4조제1항, 제4조제2항, 제11조제6항, 제19조, 제25조, 제38조, 제44조에 관한 규정은 2015. 3. 23.부터 시행한다.</p>
+       <div id="ar12744189">
+        <p class="pty3_dep1"><span class="bl">제2조(계속 중인 사건에 관한 경과조치)</span> 이 규칙은 특별한 규정이 없으면 이 규칙 시행 당시 법원에 계속 중인 사건에도 적용한다. 다만, 종전의 규정에 따라 생긴 효력에는 영향을 미치지 아니한다.</p>
+        <p class="pty3_dep1"><span class="bl">제3조(적용례)</span> ①이 규칙은 「민사집행법」 제2편제2장(단, 제4절제2관에 따라 집행관이 집행하는 사건 제외), 제3장 및 제3편에 따라 진행하는 각종 신청사건이나 비송사건에 관하여는 2015. 3. 23.부터 접수되는 사건(항고심, 재항고심 제외)부터 적용한다. 다만, 그 사건이 법 적용 당시 법원에 계속 중인 사건에 병합되거나 민사집행법 제87조제1항에 따라 이미 경매개시결정을 한 절차에 따라 경매하여야 하는 경우, 같은 개정규정 시행 전 접수된 사건에 대한 준재심 사건인 경우에는 적용하지 아니한다. </p>
+        <p class="pty3_dep2"> ② 재판장등은 이 규칙이 적용되지 아니하는 사건의 경우에도 제19조제1항에 따라 전자기록화를 명할 수 있다.</p>
+        <p class="pty3_dep1"><span class="bl">제4조(다른 규칙의 폐지 등)</span> ① 「독촉절차에서의 전자문서 이용 등에 관한 규칙」은 폐지한다.</p>
+        <p class="pty3_dep2"> ② 이 규칙 시행 전에 「독촉절차에서의 전자문서 이용 등에 관한 규칙」에 따라 신청한 지급명령에 관하여는 종전의 「독촉절차에서의 전자문서 이용 등에 관한 규칙」에 따른다.</p>
+       </div> 
+      </div> 
+      <a name="J12744191" id="J12744191"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744191','<대법원규칙 제2713호, 2017. 2. 2.>'); return false;" href="#AJAX"> <img id="ar12744191btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2713호, 2017. 2. 2.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744191" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2713호, 2017. 2. 2.>체크박스 " value="12744191" /> <a class="nun" onclick="javascript:arView('ar12744191','<대법원규칙 제2713호, 2017. 2. 2.>'); return false;" href="#AJAX"> <label for="chk12744191"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2713호, 2017. 2. 2.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744191','<대법원규칙 제2713호, 2017. 2. 2.>');return false;" href="#AJAX"> <img id="ar12744191MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2713호, 2017. 2. 2.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2017년 4월 1일부터 시행한다.</p>
+       <div id="ar12744191">
+        <p class="pty3_dep1"><span class="bl">제2조(계속사건에 관한 경과조치)</span> 이 규칙은 이 규칙 시행 당시에 법원에 계속 중인 사건에도 적용한다.</p>
+       </div> 
+      </div> 
+      <a name="J12744193" id="J12744193"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744193','<대법원규칙 제2747호, 2017. 6. 29.>'); return false;" href="#AJAX"> <img id="ar12744193btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2747호, 2017. 6. 29.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744193" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2747호, 2017. 6. 29.>체크박스 " value="12744193" /> <a class="nun" onclick="javascript:arView('ar12744193','<대법원규칙 제2747호, 2017. 6. 29.>'); return false;" href="#AJAX"> <label for="chk12744193"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2747호, 2017. 6. 29.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744193','<대법원규칙 제2747호, 2017. 6. 29.>');return false;" href="#AJAX"> <img id="ar12744193MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2747호, 2017. 6. 29.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2018년 1월 1일부터 시행한다.</p>
+       <div id="ar12744193">
+        <p class="pty3_dep1"><span class="bl">제2조(계속사건에 관한 적용례)</span> 이 규칙은 이 규칙 시행 당시에 법원에 계속 중인 사건에도 적용한다.</p>
+       </div> 
+      </div> 
+      <a name="J12744195" id="J12744195"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744195','<대법원규칙 제2920호, 2020. 11. 26.>'); return false;" href="#AJAX"> <img id="ar12744195btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2920호, 2020. 11. 26.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744195" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2920호, 2020. 11. 26.>체크박스 " value="12744195" /> <a class="nun" onclick="javascript:arView('ar12744195','<대법원규칙 제2920호, 2020. 11. 26.>'); return false;" href="#AJAX"> <label for="chk12744195"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2920호, 2020. 11. 26.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744195','<대법원규칙 제2920호, 2020. 11. 26.>');return false;" href="#AJAX"> <img id="ar12744195MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제2920호, 2020. 11. 26.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2020년 12월 10일부터 시행한다.</p>
+       <div id="ar12744195">
+        <p class="pty3_dep1"><span class="bl">제2조(적용례)</span> 이 규칙은 이 규칙 시행 당시 법원에 계속 중인 사건에 대하여도 적용한다.</p>
+       </div> 
+      </div> 
+      <a name="J12744197" id="J12744197"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <img id="ar12744197btn" style="vertical-align: middle;" alt="부칙<대법원규칙 제2980호,  2021. 5. 27.>조문목록 없음" src="/LSW/images/button/btn_dot.gif" /> <input name="arInf" id="chk12744197" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제2980호,  2021. 5. 27.>체크박스 " value="12744197" /> <a class="nun" onclick="javascript:arView('ar12744197','<대법원규칙 제2980호,  2021. 5. 27.>'); return false;" href="#AJAX"> <label for="chk12744197"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제2980호, 2021. 5. 27.&gt;</span> </a> </p> 
+       <p class="pty3_dep1">이 규칙은 2021년 6월 10일부터 시행한다.</p> 
+      </div> 
+      <a name="J12744199" id="J12744199"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <img id="ar12744199btn" style="vertical-align: middle;" alt="부칙<대법원규칙 제3105호,  2023. 8. 31.>조문목록 없음" src="/LSW/images/button/btn_dot.gif" /> <input name="arInf" id="chk12744199" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제3105호,  2023. 8. 31.>체크박스 " value="12744199" /> <a class="nun" onclick="javascript:arView('ar12744199','<대법원규칙 제3105호,  2023. 8. 31.>'); return false;" href="#AJAX"> <label for="chk12744199"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제3105호, 2023. 8. 31.&gt;</span> </a> </p> 
+       <p class="pty3_dep1">이 규칙은 2023년 10월 19일부터 시행한다.</p> 
+      </div> 
+      <a name="J12744201" id="J12744201"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744201','<대법원규칙 제3154호,  2024. 6. 26.>'); return false;" href="#AJAX"> <img id="ar12744201btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제3154호,  2024. 6. 26.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744201" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제3154호,  2024. 6. 26.>체크박스 " value="12744201" /> <a class="nun" onclick="javascript:arView('ar12744201','<대법원규칙 제3154호,  2024. 6. 26.>'); return false;" href="#AJAX"> <label for="chk12744201"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제3154호, 2024. 6. 26.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744201','<대법원규칙 제3154호,  2024. 6. 26.>');return false;" href="#AJAX"> <img id="ar12744201MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제3154호,  2024. 6. 26.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 공포한 날부터 시행한다.</p>
+       <div id="ar12744201">
+        <p class="pty3_dep1"><span class="bl">제2조(법률 제19581호 민사소송 등에서의 전자문서 이용 등에 관한 법률 일부개정법률의 시행일)</span> 법률 제19581호 민사소송 등에서의 전자문서 이용 등에 관한 법률 일부개정법률 부칙 제1조 단서에 따라 같은 법률은 2025년 2월 3일부터 시행한다. </p>
+        <p class="pty3_dep1"><span class="sfon">[전문개정 2024. 12. 31.]</span></p>
+       </div> 
+      </div> 
+      <a name="J12744203" id="J12744203"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <img id="ar12744203btn" style="vertical-align: middle;" alt="부칙<대법원규칙 제3181호,  2024. 12. 31.>조문목록 없음" src="/LSW/images/button/btn_dot.gif" /> <input name="arInf" id="chk12744203" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제3181호,  2024. 12. 31.>체크박스 " value="12744203" /> <a class="nun" onclick="javascript:arView('ar12744203','<대법원규칙 제3181호,  2024. 12. 31.>'); return false;" href="#AJAX"> <label for="chk12744203"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제3181호, 2024. 12. 31.&gt;</span> </a> </p> 
+       <p class="pty3_dep1">이 규칙은 2025년 2월 3일부터 시행한다.</p> 
+      </div> 
+      <a name="J12744205" id="J12744205"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12744205','<대법원규칙 제3264호,  2026. 6. 25.>'); return false;" href="#AJAX"> <img id="ar12744205btn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제3264호,  2026. 6. 25.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12744205" style="vertical-align: middle;" type="checkbox" alt="부칙 <대법원규칙 제3264호,  2026. 6. 25.>체크박스 " value="12744205" /> <a class="nun" onclick="javascript:arView('ar12744205','<대법원규칙 제3264호,  2026. 6. 25.>'); return false;" href="#AJAX"> <label for="chk12744205"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;대법원규칙 제3264호, 2026. 6. 25.&gt;</span> </a> <a class="nun" onclick="javascript:arView('ar12744205','<대법원규칙 제3264호,  2026. 6. 25.>');return false;" href="#AJAX"> <img id="ar12744205MrBtn" style="vertical-align: middle;" alt="부칙 <대법원규칙 제3264호,  2026. 6. 25.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 규칙은 2026년 8월 1일부터 시행한다.</p>
+       <div id="ar12744205">
+        <p class="pty3_dep1"><span class="bl">제2조(적용례)</span> 이 규칙은 이 규칙 시행 당시 법원에 계속 중인 사건에 대하여도 적용한다.</p>
+       </div> 
+      </div> 
+     </div> 
+     <!-- 부칙 영역 끝 --> 
+     <!-- 별표 서식 시작 --> 
+     <input type="hidden" id="bylLnkDpYn" value="0" /> 
+     <br /> 
+     <a name="byl"></a> 
+     <ul class="pconfile pb30 pcf_sec01" style="padding: 0px 0px 0px 50px; font-size: 1.1em;"> 
+      <li style="position: relative;"> <span class="pcf_cover "> <a name="J18205533" id="J18205533"></a> <a class="blu" onclick="javascript:bylInfoDiv('18205533');" href="#AJAX"> <img id="by18205533btn" style="margin-left: -13px;" alt="별표" src="/LSW/images/button/btn_coop.gif" /> </a> <a class="blu" onclick="javascript:bylInfoDiv('18205533');" href="#AJAX"> [별표 1] 전자기록의 열람 등에 따른 수수료 </a> <a href="flDownload.do?gubun=&amp;flSeq=165945145&amp;bylClsCd=110201" target="_blank"> <img alt="HWP파일 다운로드" src="/LSW/images/button/btn_han_16.png" /> </a> <a href="flDownload.do?gubun=&amp;flSeq=165945147&amp;bylClsCd=110201" target="_blank"> <img alt="PDF파일 다운로드" src="/LSW/images/button/btn_pdf.gif" /> </a> <a href="flDownload.do?gubun=&amp;flSeq=166181705&amp;bylClsCd=110201" target="_blank"> <img alt="점자파일 다운로드" src="/LSW/images/button/btn_brf.gif" /> </a> <a href="javascript:;" onclick="fileLayer('0');"> <img alt="법령별표 한글주소" src="/LSW/images/button/btn_link.gif" id="imgPos0" /> </a> </span> 
+       <div class="d_cont_bx" id="byl18205533" style="display: none;"> 
+       </div> 
+       <div class="d_cont_bx" id="svByl18205533" name="165945147" style="display: none; overflow: auto; width: 926px; height: 470px;"> 
+       </div> 
+       <!-- 별표 서식 레이어 팝업 시작--> 
+       <div class="byl_pop" id="fileSaveLayer0" style="padding: 7px; width: 500px; height: auto; position: absolute; overflow: visible; display: none; border: 2px solid #3082d0; background: white; border-radius: 10px; z-index: 1;"> 
+        <ul class="pconfile pb30 pcf_sec01" style="padding: 0px 0px 0px 50px; font-size: 1.1em;"> 
+         <li> 
+          <div> 
+           <a href="flDownload.do?gubun=&amp;flSeq=165945145&amp;bylClsCd=110201" target="_blank"> <img alt="HWP파일 다운로드" src="/LSW/images/button/btn_han_25.png" style="float: left; margin-right: 10px; margin-top: -3px;" /> </a> 
+           <div> 
+            <a href="flDownload.do?gubun=&amp;flSeq=165945145&amp;bylClsCd=110201" target="_blank"> 
+             <div id="hwptext0" value="[별표 1] 전자기록의 열람 등에 따른 수수료" style="float: left;">
+               [별표 1] 전자기록의 열람 등에 따른 수수료 
+             </div> 
+             <div style="float: left;">
+              .hwp
+             </div> </a> 
+           </div> 
+          </div> </li> 
+         <hr style="border: solid 0.1px Gainsboro; display: block; margin-top: 23px;" /> 
+         <li> 
+          <div> 
+           <a href="flDownload.do?gubun=&amp;flExt=hwpx&amp;flSeq=165945145&amp;bylClsCd=110201" target="_blank"> <img alt="HWP파일 다운로드" src="/LSW/images/button/btn_han_25.png" style="float: left; margin-right: 10px; margin-top: -3px;" /> </a> 
+           <div> 
+            <a href="flDownload.do?gubun=&amp;flExt=hwpx&amp;flSeq=165945145&amp;bylClsCd=110201" target="_blank"> 
+             <div id="hwpxtext0" value="[별표 1] 전자기록의 열람 등에 따른 수수료" style="float: left;">
+               [별표 1] 전자기록의 열람 등에 따른 수수료 
+             </div> 
+             <div style="float: left;">
+              .hwpx
+             </div> </a> 
+           </div> 
+          </div> </li> 
+         <hr style="border: solid 0.1px Gainsboro; display: block; margin-top: 23px;" /> 
+         <li> 
+          <div> 
+           <a href="flDownload.do?gubun=&amp;flSeq=165945147&amp;bylClsCd=110201" target="_blank"> <img alt="PDF파일 다운로드" src="/LSW/images/button/btn_pdf_25.png" style="float: left; margin-right: 10px; margin-top: -3px;" /> </a> 
+           <div> 
+            <a href="flDownload.do?gubun=&amp;flSeq=165945147&amp;bylClsCd=110201" target="_blank"> 
+             <div id="pdftext0" value="[별표 1] 전자기록의 열람 등에 따른 수수료" style="float: left;">
+               [별표 1] 전자기록의 열람 등에 따른 수수료 
+             </div> 
+             <div style="float: left;">
+              .pdf
+             </div> </a> 
+           </div> 
+          </div> </li> 
+         <hr style="border: solid 0.1px Gainsboro; display: block; margin-top: 23px;" /> 
+         <li> <p style="margin-bottom: 3px;">        아래 <img alt="법령별표 한글주소" src="/LSW/images/button/btn_link.gif" style="margin-top: 1px;" />을 눌러 주소를 복사하세요 </p> 
+          <div> 
+           <a href="javascript:;" onclick="copyToClipBoard(0);"> <img alt="법령별표 한글주소" src="/LSW/images/button/btn_link_25.png" style="float: left; margin-right: 10px; margin-top: 10px;" /> </a> 
+           <div> 
+            <label for="textarea"> <textarea class="bylKoAddr" id="textarea0" style="width: 415px; height: 35px; border-color: #c2c0c0; padding: 8px; resize: none;" readonly="">
+												https://www.law.go.kr/법령별표서식/(민사소송 등에서의 전자문서 이용 등에 관한 규칙,20260801,별표1)
+											</textarea> </label> 
+           </div> 
+          </div> </li> 
+         <div style="float: right; margin-top: -10px;"> 
+          <button type="button" onclick="delLayer('0');" style="width: 60px; height: 33px; color: white; 
+									background: #1c76c3; margin-right: 14px; margin-top: 10px; border-radius: 5px;"> 닫힘 </button> 
+         </div> 
+        </ul> 
+       </div> 
+       <!-- 별표 서식 레이어 팝업 끝--> </li> 
+      <li style="position: relative;"> <span class="pcf_cover "> <a name="J18205535" id="J18205535"></a> <a class="blu" onclick="javascript:bylInfoDiv('18205535');" href="#AJAX"> <img id="by18205535btn" style="margin-left: -13px;" alt="별표" src="/LSW/images/button/btn_coop.gif" /> </a> <a class="blu" onclick="javascript:bylInfoDiv('18205535');" href="#AJAX"> [별표 2] 절차별 전자소송의 적용시기 </a> <a href="flDownload.do?gubun=&amp;flSeq=165945151&amp;bylClsCd=110201" target="_blank"> <img alt="HWP파일 다운로드" src="/LSW/images/button/btn_han_16.png" /> </a> <a href="flDownload.do?gubun=&amp;flSeq=165945153&amp;bylClsCd=110201" target="_blank"> <img alt="PDF파일 다운로드" src="/LSW/images/button/btn_pdf.gif" /> </a> <a href="flDownload.do?gubun=&amp;flSeq=166181707&amp;bylClsCd=110201" target="_blank"> <img alt="점자파일 다운로드" src="/LSW/images/button/btn_brf.gif" /> </a> <a href="javascript:;" onclick="fileLayer('1');"> <img alt="법령별표 한글주소" src="/LSW/images/button/btn_link.gif" id="imgPos1" /> </a> </span> 
+       <div class="d_cont_bx" id="byl18205535" style="display: none;"> 
+       </div> 
+       <div class="d_cont_bx" id="svByl18205535" name="165945153" style="display: none; overflow: auto; width: 926px; height: 470px;"> 
+       </div> 
+       <!-- 별표 서식 레이어 팝업 시작--> 
+       <div class="byl_pop" id="fileSaveLayer1" style="padding: 7px; width: 500px; height: auto; position: absolute; overflow: visible; display: none; border: 2px solid #3082d0; background: white; border-radius: 10px; z-index: 1;"> 
+        <ul class="pconfile pb30 pcf_sec01" style="padding: 0px 0px 0px 50px; font-size: 1.1em;"> 
+         <li> 
+          <div> 
+           <a href="flDownload.do?gubun=&amp;flSeq=165945151&amp;bylClsCd=110201" target="_blank"> <img alt="HWP파일 다운로드" src="/LSW/images/button/btn_han_25.png" style="float: left; margin-right: 10px; margin-top: -3px;" /> </a> 
+           <div> 
+            <a href="flDownload.do?gubun=&amp;flSeq=165945151&amp;bylClsCd=110201" target="_blank"> 
+             <div id="hwptext1" value="[별표 2] 절차별 전자소송의 적용시기" style="float: left;">
+               [별표 2] 절차별 전자소송의 적용시기 
+             </div> 
+             <div style="float: left;">
+              .hwp
+             </div> </a> 
+           </div> 
+          </div> </li> 
+         <hr style="border: solid 0.1px Gainsboro; display: block; margin-top: 23px;" /> 
+         <li> 
+          <div> 
+           <a href="flDownload.do?gubun=&amp;flExt=hwpx&amp;flSeq=165945151&amp;bylClsCd=110201" target="_blank"> <img alt="HWP파일 다운로드" src="/LSW/images/button/btn_han_25.png" style="float: left; margin-right: 10px; margin-top: -3px;" /> </a> 
+           <div> 
+            <a href="flDownload.do?gubun=&amp;flExt=hwpx&amp;flSeq=165945151&amp;bylClsCd=110201" target="_blank"> 
+             <div id="hwpxtext1" value="[별표 2] 절차별 전자소송의 적용시기" style="float: left;">
+               [별표 2] 절차별 전자소송의 적용시기 
+             </div> 
+             <div style="float: left;">
+              .hwpx
+             </div> </a> 
+           </div> 
+          </div> </li> 
+         <hr style="border: solid 0.1px Gainsboro; display: block; margin-top: 23px;" /> 
+         <li> 
+          <div> 
+           <a href="flDownload.do?gubun=&amp;flSeq=165945153&amp;bylClsCd=110201" target="_blank"> <img alt="PDF파일 다운로드" src="/LSW/images/button/btn_pdf_25.png" style="float: left; margin-right: 10px; margin-top: -3px;" /> </a> 
+           <div> 
+            <a href="flDownload.do?gubun=&amp;flSeq=165945153&amp;bylClsCd=110201" target="_blank"> 
+             <div id="pdftext1" value="[별표 2] 절차별 전자소송의 적용시기" style="float: left;">
+               [별표 2] 절차별 전자소송의 적용시기 
+             </div> 
+             <div style="float: left;">
+              .pdf
+             </div> </a> 
+           </div> 
+          </div> </li> 
+         <hr style="border: solid 0.1px Gainsboro; display: block; margin-top: 23px;" /> 
+         <li> <p style="margin-bottom: 3px;">        아래 <img alt="법령별표 한글주소" src="/LSW/images/button/btn_link.gif" style="margin-top: 1px;" />을 눌러 주소를 복사하세요 </p> 
+          <div> 
+           <a href="javascript:;" onclick="copyToClipBoard(1);"> <img alt="법령별표 한글주소" src="/LSW/images/button/btn_link_25.png" style="float: left; margin-right: 10px; margin-top: 10px;" /> </a> 
+           <div> 
+            <label for="textarea"> <textarea class="bylKoAddr" id="textarea1" style="width: 415px; height: 35px; border-color: #c2c0c0; padding: 8px; resize: none;" readonly="">
+												https://www.law.go.kr/법령별표서식/(민사소송 등에서의 전자문서 이용 등에 관한 규칙,20260801,별표2)
+											</textarea> </label> 
+           </div> 
+          </div> </li> 
+         <div style="float: right; margin-top: -10px;"> 
+          <button type="button" onclick="delLayer('1');" style="width: 60px; height: 33px; color: white; 
+									background: #1c76c3; margin-right: 14px; margin-top: 10px; border-radius: 5px;"> 닫힘 </button> 
+         </div> 
+        </ul> 
+       </div> 
+       <!-- 별표 서식 레이어 팝업 끝--> </li> 
+     </ul> 
+     <br /> 
+     <!-- 별표 서식 끝 --> 
+    </div> 
+   </div> 
+  </div> 
+ </body>
+</html>

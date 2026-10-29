@@ -1,0 +1,623 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SSGO10LM02(사건검색 메인 인증서로 검색 인증) 화면 XML
+
+    ============ ============ ==========================
+    Date        Author Description
+    ============ ============ ==========================
+    2022.05.12. 최연구 [NELS]최초 생성
+    2025.05.22. 김윤수 [25A-SSG-0004] 홈페이지사건검색 메인화면 안내문구 오타 수정
+    2025.11.13. 김윤수 [25A-SSG-0023] 웹접근성 심사 결과에 따른 조치
+    2026.03.01. 김윤수 [26A-SSG-0004] 대전대구광주회생법원 개원에 따른 개선
+    ============ ============ ==========================
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:w2="http://www.inswave.com/websquare"
+	xmlns:xf="http://www.w3.org/2002/xforms">
+	<head meta_screenName="(외부)_나의 사건검색_인증서로 검색" meta_vertical_guides="399" meta_horizontal_guides="">
+		<w2:type>DEFAULT</w2:type>
+		<w2:buildDate />
+		<xf:model>
+			<xf:instance>
+				<data xmlns="" />
+			</xf:instance>
+            <w2:dataCollection baseNode="map">
+                <w2:dataMap baseNode="map" id="dma_search">
+                    <w2:keyInfo>
+                        <w2:key id="isNtcLst" name="공지사항존재여부" dataType="text"></w2:key>
+                    </w2:keyInfo>
+                    <w2:data use="false"></w2:data>         
+                </w2:dataMap>            
+                <w2:dataMap baseNode="map" id="dma_lgnUser">
+                    <w2:keyInfo>
+                        <w2:key id="btprtRrno" name="주민번호" dataType="text"></w2:key>
+                        <w2:key id="signedData" name="서명값" dataType="text"></w2:key>
+                        <w2:key id="envData" name="VID값" dataType="text"></w2:key>
+                    </w2:keyInfo>
+                </w2:dataMap>	
+               <w2:dataList baseNode="list" repeatNode="map" id="dlt_ntcList" saveRemovedData="true">
+                    <w2:columnInfo>
+                        <w2:column id="ntcCtt" name="공지사항내용" dataType="text"></w2:column>
+                    </w2:columnInfo>
+                </w2:dataList>                 			
+			</w2:dataCollection>
+			<w2:workflowCollection>
+			</w2:workflowCollection>
+            <xf:submission id="sbm_costLgnMyCs" ref="data:json,dma_search" target='data:json,{"id":"dlt_ntcList","key":"data.dlt_ntcList"}' action="/ssgo/ssgo10l/searchCostLgnMyCs.on" method="post" mediatype="application/json" encoding="UTF-8"
+                instance="" replace="" errorHandler="" customHandler="" mode="asynchronous" processMsg="로딩중입니다." ev:submit="" ev:submitdone="scwin.sbm_costLgnMyCs_submitdone"
+                ev:submiterror="" abortTrigger="">
+            </xf:submission>
+            <xf:submission id="sbm_pblcCertfVrfc" ref='data:json,dma_lgnUser' target='' action="/ssgo/ssgo10l/handlePblcCertfVrfc.on" method="post" mediatype="application/json" encoding="UTF-8"
+                instance="" replace="" errorHandler="" customHandler="" mode="asynchronous" processMsg="로딩중입니다." ev:submit="" ev:submitdone="scwin.sbm_pblcCertfVrfc_submitdone"
+                ev:submiterror="scwin.sbm_pblcCertfVrfc_submiterror" abortTrigger="">
+            </xf:submission>            
+            			
+		</xf:model>
+		<script type="javascript" src="/ssgo/cm/AnySignPlus/anySign4PCInterface.js"></script>
+		<script type="text/javascript" lazy="false"><![CDATA[/**
+ * 전역 변수
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.svrcertLoadYn = 'N';
+scwin.title = '인증서로 검색';
+
+
+/**
+ * 화면 pageload 이벤트
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.onpageload = function() {
+
+    ssgo.setDocumentTitle(scwin.title);
+
+    //공지사항
+    tit_ntc.hide();
+    grd_ntcLst.hide();
+
+    // anySign plugin 체크
+    scwin.ufn_loadAnySignPluginCheck( function(){  
+        
+        // 세션스토리지에 공지사항 내용이 존재하면 DB조회 안함.
+        var storage = ssgo.STORAGE.NTC_INFO;
+        if(!scutilo.isEmpty(ssgo.getSessionStorage(storage.ID, storage.KIND.ntcInfo))) {
+            dma_search.set("isNtcLst", "Y");   // 공지사항 세션스토리지 존재여부
+        }
+        // 로그인 정보 조회 submission 실행
+        com.executeSubmission(sbm_costLgnMyCs);
+    });
+
+    // 3. 각 검색영역별 enter event add
+    ssgo.setEnterKeyEventOfGrpObj(grp_rrno, scwin.btnAuthChk_onclick, "input secret" );
+
+};
+
+/**
+ * 화면 pageunload 이벤트
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.onpageunload = function() {
+};
+
+
+/**
+ *********************************************************************************************************
+ * Submission Event Handler
+ *********************************************************************************************************
+ */
+/**
+ * ID 로그인 정보 조회 submission done 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.01.20.   최연구       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbm_costLgnMyCs_submitdone = function(res) {
+    var dma_idLgn = res.responseJSON.data.dma_idLgn;
+    scwin.isLocal = dma_idLgn.isLocal;
+    
+    // SSO로그인 여부
+    var isSso = dma_idLgn.isSso;
+    if(isSso == "Y") {
+        var param = {
+                     "initYn" : "Y", 
+                     "isSso" : isSso,
+                     "ssoUserNm" : dma_idLgn.ssoUserNm,
+                     };
+        com.win.moveUrl(ssgo.getCtxtPathUrl(ssgo.getProperties("clt.ssgo.mycs.lst")), param);
+        return false;
+    }
+
+    // 서버 인증서
+    scwin.svrcert = dma_idLgn.svrcert;
+    if(!scutilo.isEmpty(scwin.svrcert)) {
+        scwin.svrcertLoadYn = 'Y';
+    }
+    
+    // 주민번호입력란 비활성화
+    ibx_btprtRrno1.focus();
+
+    //세션스토리지에 공지사항 내용이 존재하면 DB조회 안함.
+    var storage = ssgo.STORAGE.NTC_INFO;
+    var ntcList = ssgo.getSessionStorage(storage.ID, storage.KIND.ntcInfo);
+    if(!scutilo.isEmpty(ntcList)) {
+        dlt_ntcList.removeAll();
+        dlt_ntcList.setJSON(JSON.parse(ntcList));
+    } else {
+        if(dlt_ntcList.getRowCount() > 0) {
+            ssgo.removeSessionStorageSection(storage.ID);
+            ssgo.setSessionStorage(storage.ID, storage.KIND.ntcInfo, JSON.stringify(dlt_ntcList.getAllJSON()));
+        }
+    }
+    
+    //공지사항 영역제어
+    if(dlt_ntcList.getRowCount() > 0) {
+        tit_ntc.show("");
+        grd_ntcLst.show("");
+    } 
+    
+
+};
+
+/**
+ * 인증서검증 submission done 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.01.20.   최연구       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.sbm_pblcCertfVrfc_submitdone = function(e) {
+
+    var resultData = e.responseJSON;
+    try {
+        if (resultData.status == 200) {
+            var param = {initYn : "Y"};
+            com.win.moveUrl(ssgo.getCtxtPathUrl(ssgo.getProperties("clt.ssgo.mycs.lst")), param);
+        }
+    } catch (ex) {
+        scutilo.showMsg(scglblo.MSG.INFO, scutilo.getMsg(ssgomsg.SSGO.W_0104), function () { //W_0104 : 서버 통신 도중 오류가 발생하였습니다. 잠시후 다시 시도해주시기 바랍니다.
+        });
+    }
+};
+
+
+/**
+ * 인증서검증 submission error 이벤트
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.sbm_pblcCertfVrfc_submiterror = function(e) {
+    ssgo.printSubmiterror(e);
+};
+
+/**
+ *********************************************************************************************************
+ * Event Handler
+ *********************************************************************************************************
+ */
+
+scwin.btnAuthChk_onclick = function(e) {
+
+    // if(scwin.isLocal == "Y") {
+    //     // 주민번호
+    //     var btprtRrno = ibx_btprtRrno1.getValue() + ibx_btprtRrno2.getValue();
+    //     dma_lgnUser.set("btprtRrno", btprtRrno);
+    //     com.executeSubmission(sbm_pblcCertfVrfc);
+    //     return false;
+    // }
+    
+    // 정합성 체크
+    if(!scwin.vfn_validateCsSrch()) {
+        return false;
+    }
+
+    if(scwin.svrcertLoadYn == 'N') {
+        scutilo.showMsg(scglblo.MSG.INFO, "인증서 서버 설정이 준비되지 않았습니다.\n몇초후 다시 시도 해주시기 바랍니다.", function() {
+            
+            var focusTime = setInterval(function() {
+
+                ibx_btprtRrno1.focus();
+                clearTimeout(focusTime);
+            }, 100);
+        });
+        return false;
+    }
+
+    if(scutilo.isEmpty(scwin.svrcert)) {
+        scutilo.showMsg(scglblo.MSG.INFO, "인증서 서버 설정이 되어 있지 않습니다.", function() {
+            
+            var focusTime = setInterval(function() {
+
+                ibx_btprtRrno1.focus();
+                clearTimeout(focusTime);
+            }, 100);
+        });
+        return false;        
+    }
+    else {
+        // 서버에서 전달해주는 서버 인증서 정보가 javascript 선언부까지 들어가있어서 eval 사용
+        eval(scwin.svrcert);
+
+        // 서버에서 전달받은 값이 빈값이면
+        if(scutilo.isEmpty(svrcert)) {
+            svrcert = '';
+            svrcert += '-----BEGIN CERTIFICATE-----\n';
+            svrcert += '-----END CERTIFICATE-----\n';
+            svrcert += '';
+        }
+        var btprtRrno = ibx_btprtRrno1.getValue() + ibx_btprtRrno2.getValue();
+        var flg = true;
+        var signed_data, envValue;
+
+        // clearCache를 하지 않으면 캐쉬의 값을 사용하므로
+        // 인증서 선택창이 뜨지 않는다.
+        //ClearCache();
+        console.log("@@@ scwin.btn_certfLgn_onclick Sign_without_vid_web-->", Sign_without_vid_web);
+        console.log("@@@ scwin.btn_certfLgn_onclick svrcert-->", svrcert);
+        
+        // 인증서 서명
+        Sign_without_vid_web(4194304 , 
+                            'login', 
+                            svrcert , 
+                            btprtRrno , 
+                            function(signedData) {
+                                send_vid_info(function(envValue){
+                                    console.log("@@@ scwin.btn_certfLgn_onclick signedData-->", signedData);
+                                    console.log("@@@ scwin.btn_certfLgn_onclick envValue-->", envValue);
+                                    // 서명값
+                                    dma_lgnUser.set("signedData", signedData);
+                                    // VID값
+                                    dma_lgnUser.set("envData", envValue);
+                                    // 주민번호
+                                    dma_lgnUser.set("btprtRrno", btprtRrno);
+
+                                    com.executeSubmission(sbm_pblcCertfVrfc);
+                                });
+                            },
+                            scwin.aErrorCallback);
+        return true;
+    }
+};
+
+/**
+ * 인증서 실패 callback
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.01.20.   최연구       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.aErrorCallback = function(aResult) {
+    console.log("@@@ aErrorCallback arguments-->", arguments);
+    var aError = aResult.msg + "[Error Code=" + aResult.code + "]";
+    scutilo.showMsg(scglblo.MSG.INFO, "Sign_without_vid_web error!!!\n" + aError, function () {
+    });
+
+    ClearCache();
+
+    if (aResult.code != -1201 && aResult.code != 128) {
+        //XecureWebError();
+        flg = false;
+        // return false;
+    } else
+        flg = false;
+        // return false;
+
+        focus();
+        return false;
+}
+
+/**
+ * 플러그인 설치 확인 에러 이벤트용 함수
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.01.20.   최연구       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btnAnysignDownLoad_onclick = function(e) {
+    ssgo.sendPostForm(ssgo.getCtxtPathUrl("/installPlugin.on"), $p.parent().scwin.topParam);
+};
+
+/**
+ * 지원OS확인하기 클릭 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.01.20.   최연구       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.btnOsIdnty_onclick = function(e) {
+
+    requires("uiplugin.popup");
+
+    var data = {};
+    var options = {
+        "id" : "osIdntyPopup",
+        "type" : "window",
+        "width" : "1200px",
+        "height" : "810px",
+        "popupName" : "지원 가능한 브라우저 및 OS 확인",
+        "menubar" : false,
+        "modal" : false,
+        "resizable": true
+    };
+
+    $p.openPopup(ssgo.getCtxtPathUrl("/ui/ssgo10l/SSGO10LP03.xml"), options, data);
+
+};
+
+/**
+ *********************************************************************************************************
+ * Validate 
+ *********************************************************************************************************
+ */
+
+/**
+ * 사건검색 검색조건 정합성 체크
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.vfn_validateCsSrch = function() {
+
+    var btprtRrno1  = ibx_btprtRrno1.getValue();
+    var btprtRrno2  = ibx_btprtRrno2.getValue();
+
+    if(scutilo.isEmpty(btprtRrno1) || btprtRrno1.length != 6) {
+        scutilo.showMsg(scglblo.MSG.INFO, scutilo.getMsg(ssgomsg.SSGO.I_0001, "주민번호를"), function() {   //I_0001: "주민번호를 입력하십시오."
+            
+            var focusTime = setInterval(function() {
+
+                ibx_btprtRrno1.focus();
+                clearTimeout(focusTime);
+            }, 100);
+        });
+        return false; 
+    }
+
+    if(scutilo.isEmpty(btprtRrno2) || btprtRrno2.length != 7) {
+        scutilo.showMsg(scglblo.MSG.INFO, scutilo.getMsg(ssgomsg.SSGO.I_0001, "주민번호를"), function() {   //I_0001: "주민번호를 입력하십시오."
+            
+            var focusTime = setInterval(function() {
+
+                ibx_btprtRrno2.focus();
+                clearTimeout(focusTime);
+            }, 100);
+        });
+        return false; 
+    }
+
+    return true;
+}
+
+
+/**
+ *********************************************************************************************************
+ * User Function
+ *********************************************************************************************************
+ */
+
+    
+/**
+ * anySign plugin 체크 
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.01.20.   최연구       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_loadAnySignPluginCheck = function(callbackFunc) {
+    var flg = true;
+    do {
+        // 프로세스바 노출
+        WebSquare.layer.showProcessMessage("anySign 파일 로드중입니다.");
+        
+        AnySignLoad.init( function() {
+            
+            // 설치 여부 검증 처리                 
+            AnySign.mAnySignShowImg.showImg = false;
+            AnySign.StartAnySign(true);
+
+
+            setTimeout(function(){
+                AnySign4PC_installCheck( function(r){
+                    console.log('anySign: ',r);                    
+                    if(r === 'ANYSIGN4PC_NORMAL'){
+                        callbackFunc();
+                    }else{
+                        // 플러그인 설치 확인 에러 처리
+                        scwin.ufn_chkInstlPluginError();
+                    }
+                    // 프로세스바 숨김
+                    WebSquare.layer.hideProcessMessage();                     
+                });
+            },500);
+        });
+    } while (!flg) {
+    }
+}; 
+
+/**
+ * 플러그인 설치 확인 에러 이벤트용 함수
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.01.20.   최연구       [NELS]최초 생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_chkInstlPluginError = function() {
+
+    scutilo.showMsg(scglblo.MSG.INFO, scutilo.getMsg(ssgomsg.SSGO.I_0104), function() { //I_0104: "설치가 필요한 프로그램이 있습니다.\n설치페이지로 이동합니다."
+        location.href = ssgo.getCtxtPathUrl("/installPlugin.on");
+    });
+    
+    return false;
+}
+]]></script>
+		<style type="text/css"><![CDATA[
+			
+		 ]]></style>
+	</head>
+	<body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+		<w2:textbox class="ac" escape="false" id="" label="" style="height:10px;"></w2:textbox>
+
+		<!-- 탭을 링크처리함(추후변경가능함) 
+			<xf:group id="" >
+			<w2:wframe id="imsi" src="/ssgo/ui/common/ssgo_header.xml?index=1" class=""></w2:wframe>
+			</xf:group>
+		-->
+
+		<xf:group class="info_list tybg3 " id="" style="">
+			<xf:group id="" style="" tagname="ul">
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt" escape="false" id="" label='대법원은 법원재판사무 처리규칙 제5조의2에 의하여 주민등록번호를 처리하고 있습니다.' style=""></w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt" escape="false" id="" label="주민등록번호는 사건검색 서비스를 제공하기 위한 본인 확인용으로만 이용하며, 별도의 DB에 저장되지는 않습니다."
+						style="">
+					</w2:span>
+				</xf:group>
+			</xf:group>
+		</xf:group>
+		<xf:group adaptive="" adaptiveThreshold="" class="w2tb ct_tbl mt20" id="" style="" tagname="table">
+			<w2:attributes>
+				<w2:summary></w2:summary>
+			</w2:attributes>
+			<xf:group tagname="caption">납부정보</xf:group>
+			<xf:group tagname="colgroup">
+				<xf:group style="width:20%;" tagname="col"></xf:group>
+				<xf:group style="" tagname="col"></xf:group>
+			</xf:group>
+			<xf:group style="" tagname="tr">
+				<xf:group class="w2tb_th " id="thr9" style="" tagname="th">
+					<w2:attributes>
+						<w2:scope>row</w2:scope>
+						<w2:colspan>1</w2:colspan>
+						<w2:rowspan>1</w2:rowspan>
+					</w2:attributes>
+					<w2:span class="" escape="true" id="" label="주민등록번호" style=""></w2:span>
+				</xf:group>
+				<xf:group class="w2tb_td" headers="thr9" style="" tagname="td">
+					<xf:group class="inp_juminNum_box dsInb " id="grp_rrno" style="">
+						<xf:input class="inp w105px" dataType="number" id="ibx_btprtRrno1" maxlength="6" minlength="" style=""
+							title="주민번호앞자리" nextTabID="ibx_btprtRrno2" maxByteLength="6" autoFocus="true">
+						</xf:input>
+						<w2:span class="txt_unit" id="" label="-" style="padding:0 6px;"></w2:span>
+						<xf:secret class="inp w105px" id="ibx_btprtRrno2" maxlength="7" style="" title="주민번호뒷자리"></xf:secret>
+						<xf:trigger class="btn_fcm ty1" id="btnAuthChk" style="margin-left:8px;" type="button"
+							ev:onclick="scwin.btnAuthChk_onclick" tooltip="" title="인증서 확인">
+							<xf:label><![CDATA[인증서 확인]]></xf:label>
+						</xf:trigger>
+
+					</xf:group>
+				</xf:group>
+			</xf:group>
+		</xf:group>
+		<xf:group class="info_list tybg3 " id="" style="">
+			<xf:group id="" style="" tagname="ul">
+				<xf:group class="list" id="" style="" tagname="li"></xf:group>
+			</xf:group>
+		</xf:group>
+
+		<xf:group class="info_list tybg2 bgIc" id="" style="">
+			<w2:span class="tit " id="" label="이용안내" style=""></w2:span>
+			<xf:group id="" style="" tagname="ul" class="pb20">
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt" id="" label="본 사이트에서 제공되는 사건정보는 각급법원의 사건정보 입력사항 및 진행사항에 따라 사건정보와 일치하지 않을 수 있습니다." style=""></w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt " id="" label="본 사이트에서 제공된 사건정보는 법적인 효력이 없으므로 참고자료로만 활용하시고, 정확한 사건정보는 해당 법원에 문의하시기 바랍니다."
+						style="">
+					</w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt " id="" label="본 게시물은 대법원 홈페이지의 동의 없이 링크하거나, 상업적인 용도 또는 다량 저장, 재가공 등 자료수신 목적으로 사용할 수 없습니다." style=""></w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt " id="" label="다른 사람의 주민등록번호를 부정사용할 경우는 주민등록법 제37조에 의하여 처벌받을 수 있습니다." style="">
+					</w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt " id=""
+						label="법원행정처장은 사건검색 서비스 제공에 사용되는 설비에 장애가 발생하거나, 그 밖에 부득이한 사정이 있을 경우 사건검색 서비스의 전부 &lt;br/&gt;또는 일부를 일시적으로 정지할 수 있습니다." style=""
+						escape="false">
+					</w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt " escape="false" id="" label="사건검색 홈페이지에서 제공하는 정보로 인해 발생하는 문제에 대해서 법원은 책임을 지지 않습니다." style="">
+					</w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt " escape="false" id="" label="인증서는 실지명의 확인이 가능한 인증서로, 공동인증서(구 공인인증서)와 금융인증서를 사용할 수 있습니다.&lt;br/&gt;" style=""></w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt pr10" escape="false" id="" label="지원 가능한 브라우저" style=""></w2:span>
+					<xf:trigger class="btn_infcm link" id="btnOsIdnty" style="" type="button" ev:onclick="scwin.btnOsIdnty_onclick" title="지원 가능한 브라우저 및 OS확인 화면 새창열기" tooltip="">
+						<xf:label><![CDATA[[확인하기]]]></xf:label>
+					</xf:trigger>
+				</xf:group>
+			</xf:group>
+			<w2:span class="tit " id="" label="※ 인증서 프로그램 수동설치" style=""></w2:span>
+			<xf:group class="pb20" id="" style="" tagname="ul">
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt" id="" label="인증서 프로그램을 수동으로 설치하시려면 아래 [다운로드] 버튼을 눌러 설치화면으로 이동하여 설치하시기 바랍니다." style=""></w2:span>
+				</xf:group>
+				<xf:group class="list" id="" style="" tagname="li">
+					<w2:span class="txt " id="" label="설치화면에서 수동설치가 완료되면 돌아가기 버튼을 누르시기 바랍니다." style=""></w2:span>
+					<xf:trigger class="btn_fcm ty1" id="btnAnysignDownLoad" style="margin-left:8px;" type="button"
+						ev:onclick="scwin.btnAnysignDownLoad_onclick" tooltip="" title="인증서프로그램 다운로드화면 열기">
+						<xf:label><![CDATA[다운로드]]></xf:label>
+					</xf:trigger>
+				</xf:group>
+			</xf:group>
+		</xf:group>
+
+
+		<w2:span class="con_stit ic pt10" id="tit_ntc" label="공지사항" style=""></w2:span>
+		<w2:gridView adaptive="" adaptiveThreshold="" autoFit="none" autoFitMinWidth="" captionTitle="공지사항 목록" class="grid"
+			contextMenu="" dataList="data:dlt_ntcList" ev:oncellclick="scwin.grd_rcntDxdyLst_oncellclick" id="grd_ntcLst"
+			noResultMessage="조회된 내용이 없습니다." readOnly="true" style="height:83px;" visibleRowNum="all" titleFormatter="ssgo.setGrdTitle">
+			<w2:caption id="caption1" style="" value="this is a grid caption."></w2:caption>
+			<w2:header id="header1" style="">
+				<w2:row id="row1" style="">
+					<w2:column displayMode="label" id="column19" inputType="text" value="공지내용" width="30"></w2:column>
+				</w2:row>
+			</w2:header>
+			<w2:gBody id="gBody1" style="">
+				<w2:row id="row2" style="">
+					<w2:column displayMode="label" excelCellType="" id="ntcCtt" inputType="text" style="" width="30" textAlign="left"></w2:column>
+				</w2:row>
+			</w2:gBody>
+		</w2:gridView>
+	</body>
+</html>

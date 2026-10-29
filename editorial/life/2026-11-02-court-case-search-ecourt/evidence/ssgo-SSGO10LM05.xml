@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+     <head meta_screenName="사법정보공개포털용  나의사건검색 메인" meta_vertical_guides="399" meta_horizontal_guides="">
+    	<w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+            <xf:instance>
+                <data xmlns=""/>
+            </xf:instance>
+            <w2:dataCollection baseNode="map">
+                <!-- captcha정보 -->
+                <w2:dataMap baseNode="map" id="dma_captchaInf">
+                    <w2:keyInfo>
+                        <w2:key id="image" name="캡챠이미지정보" dataType="text"></w2:key>
+                        <w2:key id="audio" name="캡챠오디오정보" dataType="text"></w2:key>
+                        <w2:key id="answer" name="캡챠answer" dataType="text"></w2:key>
+                    </w2:keyInfo>
+                </w2:dataMap>
+            </w2:dataCollection>
+            <w2:workflowCollection>
+            </w2:workflowCollection>
+            <xf:submission id="sbm_captcha" ref="" 
+                target='data:json,[{"id":"dma_captchaInf","key":"data.dma_captchaInf"}]'
+                action="/ssgo/ssgo10l/getCaptchaInf.on" method="post" mediatype="application/json" encoding="UTF-8" instance="" replace=""
+                errorHandler="" customHandler="" mode="asynchronous" ev:submit="scwin.sbm_captcha_submit" ev:submitdone="scwin.sbm_captcha_submitdone"
+                ev:submiterror="scwin.sbm_captcha_submiterror" abortTrigger="">
+            </xf:submission>
+        </xf:model>
+         <script type="text/javascript" lazy="false"><![CDATA[/**
+ * 최상단(opener, parent 포함) 기준 함수
+ */
+scwin.isMain = function() {
+    return true;
+};
+
+/**
+ * 전역 변수
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.param   = {};  // 파라메터
+
+
+scwin.onpageload = function() {
+    ibx_answer.focus();
+    
+    // 4분마다 캡챠문자 갱신
+    com.util.setInterval(
+        function() {
+            btn_reloadCaptcha.trigger("onclick");
+        },
+        { delay : 1000*60*4, key : "loginTimeout" }
+    );
+        
+    scwin.param = ssgo.getParameter();
+
+    // captcha정보 로드
+    com.executeSubmission(sbm_captcha);    
+};
+
+scwin.onpageunload = function() {
+};
+
+
+/**
+ *********************************************************************************************************
+ * Submission Event Handler
+ *********************************************************************************************************
+ */
+/**
+ * 캡챠정보 조회 submission done 이벤트
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.sbm_captcha_submitdone = function(e) {
+   
+    const captcha = document.querySelector(".form");
+    
+    const image = dma_captchaInf.get("image");
+
+    const binary = ssgo.fixBinary(atob(image));
+    const blob = new Blob([binary], { type: 'image/png' });
+
+    const url = URL.createObjectURL(blob);     
+    
+    const img = captcha.querySelector("img");
+    img.setAttribute('src', url);
+}
+
+/**
+ * 캡챠정보 조회 submission error 이벤트
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.sbm_captcha_submiterror = function(e) {
+    ssgo.printSubmiterror(e);
+};
+
+/**
+ *********************************************************************************************************
+ * Event Handler
+ *********************************************************************************************************
+ */
+/**
+ * 검색버튼 클릭 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.btn_srchCs_onclick = function(e) {
+    var param = scwin.param;
+
+    // 정합성 체크
+    if(!scwin.vfn_validateCsSrch()) {
+        return false;
+    }
+
+    // 캡차정보 셋팅   
+    param.captchaAnswer = ibx_answer.getValue();
+    param.encCaptchaAnswer = dma_captchaInf.get("answer");
+    param.callDomain = "selfDomain";
+    
+    //TODO : 연계팝업 함로로 호출해야함.
+    window.open("" ,"csSrchDetail", "toolbar=no, width=1100, height=800, directories=no, status=no, scrollorbars=no, resizable=no"); 
+    ssgo.sendPostForm(ssgo.getCtxtPathUrl("/srchCsDetail.on"), param, "csSrchDetail"); 
+
+    // 검색후 메인으로 이동
+    //com.movePage("/ssgo/srchMyCsForPsp.on");
+};
+
+/**
+ * 자동입력방지(캡챠) 이미지 리로딩
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.btn_reloadCaptcha_onclick = function(e) {
+    com.executeSubmission(sbm_captcha);
+};
+
+/**
+ * 캡챠 음성듣기
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.btn_voiceListen_onclick = function(e) {
+    if(!scutilo.isEmpty(dma_captchaInf) && dma_captchaInf.get("audio")){
+        const binary = ssgo.fixBinary(atob(dma_captchaInf.get("audio")));
+        const blob = new Blob([binary], { type: 'audio/wave' });
+        const url = URL.createObjectURL(blob);
+        new Audio(url).play();
+    }    
+};
+
+scwin.btn_before_onclick = function(e) {
+    // 메인으로 이동
+    //com.movePage("/ssgo/srchMyCsForPsp.on");
+    ssgo.sendPostForm(ssgo.getCtxtPathUrl("/srchMyCsForPsp.on"), {});
+};
+
+
+/**
+ *********************************************************************************************************
+ * Validate 
+ *********************************************************************************************************
+ */
+/**
+ * 사건검색 검색조건 정합성 체크
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.vfn_validateCsSrch = function() {
+    var param  = scwin.param;
+    var answer = ibx_answer.getValue();
+
+    if(scutilo.isEmpty(param.cortCd)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0009, "법원 정보가"));
+        return false;
+    }
+
+    if(scutilo.isEmpty(param.csDvsCd)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0009, "사건구분 정보가"));
+        return false;
+    }
+
+    if(scutilo.isEmpty(param.csSerial)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0009, "사건일련번호 정보가"));
+        return false;
+    }
+
+    var  anum=/(^\d+$)|(^\d+\.\d+$)/  
+    if(!anum.test(param.csSerial)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0003, "사건일련번호는"));
+        return false;
+    }
+
+    // [사건검색]홈페이지 사건검색 금칙어 처리
+    btprNm = param.btprtNm.replace(/\s/g, '');
+    if(btprNm === "당사자명필수입력" || btprNm.length < 2 ) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0002, "당사자명을 2자이상"));
+        return false;
+    }
+
+    var filter_word = /[$\\\\#\%\^\&\*\+\_\`\~\=\|\,\'\"\-\:\;\％\/]/;  //특수문자를 배열
+    if (btprNm.search(filter_word)>=0) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0004, "당사자명에"));
+        return false;
+    }
+
+    // 대법원 홈페이지 사건검색에서 금칙어를 사용 할 수 없도록 처리
+    var psBanWordList = ssgo.getProperties("clt.ssgo.ban.word.list");
+    var lines = psBanWordList.split(",");
+
+    // 홈페이지 사건검색 금칙어 처리
+    if( psBanWordList.indexOf(btprNm)>=0 ) {
+        // 금칙어 추가 및 메세지 처리
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0005, btprNm, btprNm));
+        return false;
+    }
+
+    answer = answer.replace(/\s/g, '');
+    if ( answer.length != 6 ) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0001, "자동입력 방지 문자 6자를"));
+        ibx_answer.focus();
+        return false;
+    }    
+    
+    // 캡챠암호화 문자체크
+    var encAnswer = dma_captchaInf.get("answer");
+    if(scutilo.isEmpty(encAnswer)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.E_0007, "캡챠 랜더링"));
+        return false;
+    }
+
+    return true;
+}
+
+
+/**
+ *********************************************************************************************************
+ * User Function
+ *********************************************************************************************************
+ */
+
+
+/**
+ * 사건검색 Iframe의 부모객체에 값을 전달한다.
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_ssgoPostMsg = function(msg) {
+    
+    if(!scutilo.isEmpty(msg)) {
+        try{
+            window.parent.postMessage({ othrDmnMsg : msg }, ssgo.getProperties("clt.ssgo.ecf.domain"));
+        }catch (e) {
+            console.log("허용된 도메인이 아닙니다.");
+        }
+    }
+
+};]]></script>
+	<style type="text/css"><![CDATA[
+			
+		 ]]></style>
+    </head>
+     <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+
+     	<xf:group class="search_box m_sech_box " id="" style="width:400px;">
+     		<xf:group class="form_list" id="" style="" tagname="ul">
+     			
+     			<xf:group class="item" id="" style="height:60px" tagname="li">
+     				<xf:group class="form" id="" style="">
+     					<xf:image class="logo mr10" id="img_captcha" src="" style=""></xf:image>
+     					<xf:trigger class="btn_fcm ty1 " id="btn_reloadCaptcha" style="" type="button" ev:onclick="scwin.btn_reloadCaptcha_onclick" title="자동입력방지문자 새로고침">
+     						<xf:label><![CDATA[새로고침]]></xf:label>
+     					</xf:trigger>
+     					<xf:trigger class="btn_fcm ty1 " id="btn_voiceListen" style="" type="button" ev:onclick="scwin.btn_voiceListen_onclick" title="자동입력방지문자 음성듣기">
+     						<xf:label><![CDATA[음성듣기]]></xf:label>
+     					</xf:trigger>
+     				</xf:group>
+     			</xf:group><xf:group class="item" id="" style="" tagname="li">
+     				<xf:group class="form" id="" style="">
+     					<xf:group class="inp_searchbox dsInb" id="" style="">
+     						<xf:input class="inp w200px mr10" id="ibx_answer" placeholder="자동입력 방지문자를 입력 하십시오" style="" dataType="number" maxlength="6" title="자동입력방지문자"></xf:input>
+     						<xf:trigger class="btn_fcm btn_icT_fcmSearch" id="btn_srchCs" style="" type="button" ev:onclick="scwin.btn_srchCs_onclick" title="자동입력방지문자 확인">
+     							<xf:label><![CDATA[확인]]></xf:label>
+     						</xf:trigger>
+     						<xf:trigger class="btn_fcm" id="btn_before" style="" type="button" ev:onclick="scwin.btn_before_onclick" title="이전화면">
+     							<xf:label><![CDATA[이전화면]]></xf:label>
+     						</xf:trigger>
+     					</xf:group>
+     				</xf:group>
+     			</xf:group>
+     		</xf:group>
+     	</xf:group>
+     </body>
+</html>

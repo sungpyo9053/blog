@@ -1,0 +1,726 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+     <head meta_screenName="사법정보공개포털용  나의사건검색 메인" meta_vertical_guides="399" meta_horizontal_guides="">
+    	<w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+            <xf:instance>
+                <data xmlns=""/>
+            </xf:instance>
+            <w2:dataCollection baseNode="map">
+                <w2:dataMap baseNode="map" id="dma_search">
+                	<w2:keyInfo>
+                		<w2:key id="cortCd" name="법원코드" dataType="text"></w2:key>
+                		<w2:key id="cdScope" name="코드조회구분" dataType="text"></w2:key>
+                		<w2:key id="csNoHistLst" name="사건번호검색이력" dataType="text"></w2:key>
+                	</w2:keyInfo>
+                	<w2:data use="false"></w2:data>
+                </w2:dataMap>
+                <w2:dataList baseNode="list" repeatNode="map" id="dlt_cortCd" saveRemovedData="true">
+                    <w2:columnInfo>
+                        <w2:column id="code" name="code" dataType="text"></w2:column>
+                        <w2:column id="codeNm" name="codeNm" dataType="text"></w2:column>
+                    </w2:columnInfo>
+                </w2:dataList>
+                <w2:dataList baseNode="list" repeatNode="map" id="dlt_dynamic_cortCd" saveRemovedData="true">
+                    <w2:columnInfo>
+                        <w2:column id="code" name="code" dataType="text"></w2:column>
+                        <w2:column id="codeNm" name="codeNm" dataType="text"></w2:column>
+                    </w2:columnInfo>
+                </w2:dataList>              
+                <w2:dataList baseNode="list" repeatNode="map" id="dlt_csDvsCd" saveRemovedData="true">
+                    <w2:columnInfo>
+                        <w2:column id="csDvsCd" name="csDvsCd" dataType="text"></w2:column>
+                        <w2:column id="codeNm" name="codeNm" dataType="text"></w2:column>
+                        <w2:column id="comTaskTypCd" name="comTaskTypCd" dataType="text"></w2:column>
+                    </w2:columnInfo>
+                </w2:dataList>
+                <w2:dataList baseNode="list" repeatNode="map" id="dlt_dynamic_csDvsCd" saveRemovedData="true">
+                    <w2:columnInfo>
+                        <w2:column id="csDvsCd" name="csDvsCd" dataType="text"></w2:column>
+                        <w2:column id="codeNm" name="codeNm" dataType="text"></w2:column>
+                        <w2:column id="comTaskTypCd" name="comTaskTypCd" dataType="text"></w2:column>
+                    </w2:columnInfo>
+                </w2:dataList>              
+                <w2:dataList baseNode="list" repeatNode="map" id="dlt_csYr" saveRemovedData="true">
+                    <w2:columnInfo>
+                        <w2:column id="code" name="code" dataType="text"></w2:column>
+                        <w2:column id="codeNm" name="codeNm" dataType="text"></w2:column>
+                    </w2:columnInfo>
+                </w2:dataList>
+            </w2:dataCollection>
+            <w2:workflowCollection>
+            </w2:workflowCollection>
+            <xf:submission id="sbm_search" ref="data:json,dma_search" target='data:json,[{"id":"dlt_cortCd","key":"data.dlt_cortCd"},{"id":"dlt_csDvsCd","key":"data.dlt_csDvsCd"}]'
+                action="/ssgo/ssgo10l/selectHmpgMain.on" method="post" mediatype="application/json" encoding="UTF-8" instance="" replace=""
+                errorHandler="" customHandler="" mode="asynchronous"  ev:submit="" ev:submitdone="scwin.sbm_search_submitdone"
+                ev:submiterror="scwin.sbm_search_submiterror" abortTrigger="">
+            </xf:submission>            
+            
+        </xf:model>
+        <script type="text/javascript" src="/ssgo/cm/js/biz/ssgocbx.js" scopeExternal="true"></script>
+        <script type="text/javascript" lazy="false"><![CDATA[/**
+ * 최상단(opener, parent 포함) 기준 함수
+ */
+scwin.isMain = function() {
+    return true;
+};
+
+/**
+ * 전역 변수
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.codeSeper   = '------';  // 코드간 구분자
+scwin.sbm_search_target = 'data:json,{"id":"dlt_csDvsCd","key":"data.dlt_csDvsCd"}';
+scwin.cortCd = ssgo.getIntgStorage(ssgo.STORAGE.SGM_COND.ID, ssgo.STORAGE.SGM_COND.KIND.cortCd);
+        
+scwin.onpageload = function() {
+    // 사건번호직접입력 숨김
+    ibx_fullCsNo.hide();
+    //ibx_csSerial.focus();
+
+    // 1. 화면 로드시 기본정보(코드등) 조회 submission
+    scwin.sbm_selectCodeInfo();
+};
+
+scwin.onpageunload = function() {
+};
+
+
+/**
+ *********************************************************************************************************
+ * Submission Event Handler
+ *********************************************************************************************************
+ */
+/**
+ * SSGO(메모리) 관련 코드조회
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.sbm_selectCodeInfo = function() {
+    
+    dma_search.set("cortCd", scwin.cortCd);
+    dma_search.set("cdScope", "ALL");   // 법원,사건구분 둘다 조회함
+
+    var csNoHistLst = "";
+    var dt_csHist = scwin.ufn_getStorageCsHistLst();
+    if(!scutilo.isEmpty(dt_csHist)) {
+        for(let i = 0; i < dt_csHist.length; i++) {
+            csNoHistLst += dt_csHist[i].csYear + dt_csHist[i].csDvsCd + scutilo.getLPadding(dt_csHist[i].csSerial, 7, "0");
+            if((i+1) != dt_csHist.length) {
+                csNoHistLst += ",";
+            }
+        }
+        dma_search.set("csNoHistLst", csNoHistLst);
+    }
+    
+    com.executeSubmission(sbm_search);
+};
+
+/**
+ * 코드 조회 submission done 이벤트
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.sbm_search_submitdone = function(e) {
+    
+    // 화면최로드시에만 법원코드를 셋팅한다.
+    if(sbm_search.target !== scwin.sbm_search_target) {
+        // 1. 법원코드 셋팅 ---------------------------------
+        sbx_cortCd.setEventPause(null, true);   // event lock
+        
+        dlt_dynamic_cortCd.removeAll();
+
+        // 사건검색 코드관리(메모리) 사용 안할때
+        if(ssgo.getProperties("clt.ssgo.memcd.use.yn") == "N") {
+            // js법원정보 셋팅
+            ssgocbx.setCortCd(sbx_cortCd);
+        } else {
+            // 메모리 법원정보 셋팅
+            dlt_dynamic_cortCd.setJSON(dlt_cortCd.getAllJSON());
+        }
+        
+        sbx_cortCd.setEventPause(null, false);  // event unlock
+        
+        // 2. 년도코드 셋팅 ---------------------------------
+        var csYrdArr = [];
+        var ymd      = $p.getCurrentServerDate("yyyyMM");
+        var nowYr    = ymd.substring(0,4);
+        for(var i = nowYr; i >= 1985; i--) {
+            csYrdArr.push({"code" : i, "codeNm" : i});
+        }
+        csYrdArr.push({"code" : 1969, "codeNm" : 1969});    // 1969년 추가
+        
+        dlt_csYr.removeAll();
+        dlt_csYr.setJSON(csYrdArr);
+        sbx_csYr.setValue(ymd.substring(0,4));   // 현재 사건년도 선택      
+        
+        // 3. 사건구분 셋팅 ----------------------------------
+        sbx_csDvsCd.setEventPause(null, true);
+        dlt_dynamic_csDvsCd.removeAll();
+
+        // 사건검색 코드관리(메모리) 사용 안할때
+        if(ssgo.getProperties("clt.ssgo.memcd.use.yn") == "N") {
+            // js사건구분정보 셋팅
+            ssgocbx.setCsDvsCd(sbx_csDvsCd, (scutilo.isEmpty(scwin.cortCd))? dlt_dynamic_cortCd.getCellData(0, "code") : scwin.cortCd );
+        } else {
+            // 메모리 사건구분정보 셋팅
+            dlt_dynamic_csDvsCd.setJSON(dlt_csDvsCd.getAllJSON());
+        }
+        
+        sbx_csDvsCd.setEventPause(null, false);
+        
+        // localStorage에서 검색조건 조회
+        scwin.ufn_changeStorageInputStatus('get');     
+
+    } else {
+        
+        // 사건구분 셋팅 ----------------------------------
+        sbx_csDvsCd.setEventPause(null, true);
+        dlt_dynamic_csDvsCd.removeAll();
+        dlt_dynamic_csDvsCd.setJSON(dlt_csDvsCd.getAllJSON());
+        sbx_csDvsCd.setEventPause(null, false);
+        
+        // 사건번호입력모드 trigger
+        if(cbx_chkSanoInputMode.getValue() === "Y") {
+            cbx_chkSanoInputMode.trigger("onchange");
+        }
+
+        // 사건구분 값 없을때 default 첫번째 elemnet선택
+        if(scutilo.isEmpty(sbx_csDvsCd.getValue())){
+            sbx_csDvsCd.setSelectedIndex(0);
+        }
+    }
+    
+};    
+
+/**
+ * 코드 조회 submission error 이벤트
+ *
+ * ============ ============ ==========================
+ *  Date         Author       Description
+ * ============ ============ ==========================
+ * 2022.05.10.   최연구       [NELS]최초생성
+ * ============ ============ ==========================
+ */
+scwin.sbm_search_submiterror = function(e) {
+    ssgo.printSubmiterror(e);
+};
+
+/**
+ *********************************************************************************************************
+ * Event Handler
+ *********************************************************************************************************
+ */
+
+/**
+ * 사건번호입력모드 클릭 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.cbx_chkSanoInputMode_onchange = function(info) {
+
+    if( cbx_chkSanoInputMode.getValue() === "Y" ) {
+        ibx_fullCsNo.setValue("");
+        ibx_fullCsNo.show("");
+        sbx_csYr.hide();
+        sbx_csDvsCd.hide();
+        ibx_csSerial.hide();
+        ibx_fullCsNo.focus();
+    } else {
+        ibx_fullCsNo.hide();
+        sbx_csYr.show("");
+        sbx_csDvsCd.show("");
+        ibx_csSerial.show("");
+        ibx_csSerial.focus();
+    }
+};
+
+/**
+ * 검색버튼 클릭 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.btn_srchCs_onclick = function(e) {
+    
+    // 정합성 체크
+    if(!scwin.vfn_validateCsSrch()) {
+        return false;
+    }
+
+	var param = {
+        cortCd        : sbx_cortCd.getValue(),      // 법원코드
+        csYear        : sbx_csYr.getValue(),        // 사건년도
+        csDvsCd       : sbx_csDvsCd.getValue(),     // 사건구분
+        csSerial      : ibx_csSerial.getValue(),    // 사건시리얼번호
+	    btprtNm       : ibx_btprNm.getValue(),      // 당사자명
+        fullCsNo      : ibx_fullCsNo.getValue(),    // 사건번호(FULL)        
+        comTaskTypCd : dlt_dynamic_csDvsCd.getCellData(sbx_csDvsCd.getSelectedIndex(), "comTaskTypCd"), // 재판사무업무유형코드 
+        step          : "N",                        // 다음스텝        
+	};
+
+    //화면이동 submit
+    ssgo.sendPostForm(ssgo.getCtxtPathUrl("/srchMyCsForPsp.on"), param);   
+};
+
+/**
+ * 법원코드 onchange 이벤트
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.sbx_cortCd_onchange = function(info) {
+    // 사건검색 코드관리(메모리) 사용 안할때
+    if(ssgo.getProperties("clt.ssgo.memcd.use.yn") == "N") {
+        
+        // js사건구분정보 셋팅
+        dlt_dynamic_csDvsCd.removeAll();
+        ssgocbx.setCsDvsCd(sbx_csDvsCd, sbx_cortCd.getValue());
+        
+        // 사건번호입력모드 trigger
+        if(cbx_chkSanoInputMode.getValue() === "Y") {
+            cbx_chkSanoInputMode.trigger("onchange");
+        }
+
+        // 사건구분 값 없을때 default 첫번째 elemnet선택
+        if(scutilo.isEmpty(sbx_csDvsCd.getValue())){
+            sbx_csDvsCd.setSelectedIndex(0);
+        }
+
+    } else {
+        dma_search.set("cortCd", sbx_cortCd.getValue());
+
+        sbm_search.target = scwin.sbm_search_target;
+        com.executeSubmission(sbm_search);
+
+    }
+};
+
+
+/**
+ * 입력예시 팝업 호출
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.txt_inputExample_onclick = function(e) {
+    requires("uiplugin.popup");
+
+    var data = {};
+    var options = {
+        "id" : "inputExamplePop",
+        "type" : "window",
+        "width" : "450px",
+        "height" : "330px",
+        "popupName" : "사건검색 입력방법 예시",
+        "menubar" : false,
+        "modal" : false,
+        "resizable": true
+    };
+    
+    $p.openPopup(ssgo.getCtxtPathUrl("/ui/ssgo10l/SSGO10LP02.xml"), options, data);
+};
+
+scwin.chkSanoInputMode_oncheckboxclick = function(index, checked, value) {
+    if(checked) {
+        tbFullSano.show("");
+        selYear.hide();
+        selBuho.hide();
+        tbSano.hide();
+    } else {
+        tbFullSano.hide();
+        selYear.show("");
+        selBuho.show("");
+        tbSano.show("");
+    }
+};
+
+
+/**
+ *********************************************************************************************************
+ * Validate 
+ *********************************************************************************************************
+ */
+/**
+ * 사건검색 검색조건 정합성 체크
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.vfn_validateCsSrch = function() {
+
+    // 사건번호 입력모드 정합성체크
+    if(cbx_chkSanoInputMode.getValue() === "Y" && !scwin.ufn_textToSbxCsNo()) return false;
+    
+    var csSerial  = ibx_csSerial.getValue();
+    var btprNm    = ibx_btprNm.getValue();
+
+    if( sbx_cortCd.getValue().indexOf("A") === 0 ) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0002, "법원을"));
+        sbx_cortCd.focus();
+        return false;
+    }
+
+    if( sbx_csDvsCd.getValue().indexOf("A") === 0 ) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0002, "사건구분을"));
+        sbx_csDvsCd.focus();
+        return false;
+    }
+
+    csSerial = csSerial.replace(/^\s*|\s*$/g, '');
+    ibx_csSerial.setValue(csSerial);
+
+    if(scutilo.isEmpty(csSerial)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0001, "사건일련번호를"));
+        ibx_csSerial.focus();
+        return false;
+    }
+
+    // [사건검색]홈페이지 사건검색 금칙어 처리
+    btprNm = btprNm.replace(/\s/g, '');
+    if(btprNm === "당사자명필수입력" || btprNm.length < 2 ) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0002, "당사자명을 2자이상"));
+        ibx_btprNm.focus();
+        return false;
+    }
+    ibx_btprNm.setValue(btprNm);
+
+
+    var  anum=/(^\d+$)|(^\d+\.\d+$)/  
+
+    if(!anum.test(csSerial)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0003, "사건일련번호는"));
+        ibx_csSerial.setValue("");
+        ibx_csSerial.focus();
+        return false;
+    }
+
+    var filter_word = /[$\\\\#\%\^\&\*\+\_\`\~\=\|\,\'\"\-\:\;\％\/]/;  //특수문자를 배열
+    if (btprNm.search(filter_word)>=0) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0004, "당사자명에"));
+        ibx_btprNm.setValue("");
+        ibx_btprNm.focus();
+        return false;
+    }
+
+    // 대법원 홈페이지 사건검색에서 금칙어를 사용 할 수 없도록 처리
+    var psBanWordList = ssgo.getProperties("clt.ssgo.ban.word.list");
+    var lines = psBanWordList.split(",");
+
+    // 홈페이지 사건검색 금칙어 처리
+    if( psBanWordList.indexOf(btprNm)>=0 ) {
+        // 금칙어 추가 및 메세지 처리
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0005, btprNm, btprNm));
+        ibx_btprNm.focus();
+        return false;        
+    }
+
+    return true;
+}
+
+
+
+/**
+ *********************************************************************************************************
+ * User Function
+ *********************************************************************************************************
+ */
+
+/**
+ * 사건번호(입력모드) 검증 
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_textToSbxCsNo = function() {
+    var pos = 0;
+    var year = "";
+    var csDvs = "";
+    var saSerial = "";
+    var tmpStr = ""
+    var iscsDvsCd = false;
+    var saNo = ibx_fullCsNo.getValue();
+
+    if(scutilo.isEmpty(saNo)) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0001, "사건번호를"));
+        ibx_fullCsNo.focus();
+        return false;
+    }
+
+    saNo = saNo.replace(/\s/g, '');
+
+    for (let i=0;i< saNo.length ; i++ ) {
+        if (saNo.charAt(i) < "0" || saNo.charAt(i) > "9") {
+            pos = i;
+            break;
+        }
+    }
+
+    // 년도체크
+    year  = scwin.ufn_getYear(saNo.substr(0, pos));
+    if (year.length !== 4) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0006, "년도를"));
+        return false;
+    }
+    sbx_csYr.setValue(year);
+    
+    // 사건구분 체크
+    tmpStr = saNo.substr(pos,saNo.length);
+    for (let i=0;i< tmpStr.length ; i++ ) {
+        if (tmpStr.charAt(i) >= "0" && tmpStr.charAt(i) <= "9") {
+            pos = i;
+            break;
+        }
+    }
+    csDvs = tmpStr.substr(0,pos);
+    
+    for(let i = 0; i < dlt_dynamic_csDvsCd.getRowCount(); i++) {
+       if(csDvs === dlt_dynamic_csDvsCd.getCellData(i, dlt_dynamic_csDvsCd.cellIdList[1])) {
+           sbx_csDvsCd.setSelectedIndex(i);
+           iscsDvsCd = true;
+           break;
+       }
+    }
+
+    if( !iscsDvsCd ) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0006, "사건구분을"));
+        return false;
+    }
+
+    // 사건일련번호 체크
+    saSerial = tmpStr.substr(pos, tmpStr.length);
+    if (scutilo.isEmpty(saSerial) || saSerial.length > 7) {
+        scwin.ufn_ssgoPostMsg(scutilo.getMsg(ssgomsg.SSGO.I_0006, "사건번호를"));
+        return false;
+    }
+    ibx_csSerial.setValue(saSerial);
+
+    return true;    
+}
+
+/**
+ * 년도 조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_getYear = function(year) {
+    var iYear = 0;
+    year = year.replace(/\s/g, '');
+
+    if (year.length !== 2 && year.length !== 4) {
+        return "";
+    }
+
+    for (let i=0; i< year.length ; i++ ) {
+        if ( year.charAt(i) < "0" || year.charAt(i) > "9" ) {
+            return "";
+        }
+    }
+    iYear = parseInt(year, 10);
+
+    if (year.length === 2) {
+        if(iYear >= 50) {
+            iYear = iYear + 1900;
+        } else {
+            iYear = iYear + 2000;
+        }
+    }
+
+    var ymd    = $p.getCurrentServerDate("yyyyMM");
+    var nowYr  = ymd.substring(0,4);
+    
+    if(iYear > nowYr) {
+        return "";
+    } else {
+        return iYear.toString();
+    }
+}
+
+/**
+ * 로컬스토리지에 화면의 검색조건(필터)의 값(상태)를 조회 및 저장
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_changeStorageInputStatus = function(type) {
+    var storage  = ssgo.STORAGE;
+    var condId   = storage.SGM_COND.ID;
+    var condKind = storage.SGM_COND.KIND;
+    
+    if(type === "get") {
+
+        // 법원
+        if(!scutilo.isEmpty(com.storage.get(condId, condKind.cortCd))) {
+            sbx_cortCd.setEventPause(null, true);
+            sbx_cortCd.setValue(ssgo.decode(com.storage.get(condId, condKind.cortCd)));
+            sbx_cortCd.setEventPause(null, false);
+        }
+        // 년도
+        if(!scutilo.isEmpty(com.storage.get(condId, condKind.csYr))) {
+            sbx_csYr.setValue(ssgo.decode(com.storage.get(condId, condKind.csYr)));
+        }
+        // 사건구분
+        if(!scutilo.isEmpty(com.storage.get(condId, condKind.csDvsCd))) {
+            sbx_csDvsCd.setValue(ssgo.decode(com.storage.get(condId, condKind.csDvsCd)));
+        }
+    }
+}
+
+/**
+ * 사건검색 Iframe의 부모객체에 값을 전달한다.
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_ssgoPostMsg = function(msg) {
+    
+    if(!scutilo.isEmpty(msg)) {
+        try{
+            window.parent.postMessage({ othrDmnMsg : msg }, ssgo.getProperties("clt.ssgo.ecf.domain"));
+        }catch (e) {
+            console.log("허용된 도메인이 아닙니다.");
+        }
+    }
+
+
+};
+
+/**
+ * 로컬스토리지의 사건검색 이력조회
+ *
+ * ============= ============ ==========================
+ *  Date          Author       Description
+ * ============= ============ ==========================
+ *  2022.06.24.   최연구       [NELS]최초생성
+ * ============= ============ ==========================
+ */
+scwin.ufn_getStorageCsHistLst = function() {
+
+    var storage  = ssgo.STORAGE;
+    var condId   = storage.SGM_COND.ID;
+    var condKind = storage.SGM_COND.KIND;
+    
+    var jsonCsHist = ssgo.decode(com.storage.get(storage.SGM_HIST.ID, storage.SGM_HIST.KIND.mainCsHist));
+    var dt_csHist = scutilo.isEmpty(jsonCsHist) ? "" : JSON.parse(jsonCsHist);
+
+    return dt_csHist;
+}
+]]></script>
+	<style type="text/css"><![CDATA[
+			
+		 ]]></style>
+    </head>
+     <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload">
+
+     	<xf:group style="width:378px" id="" class="SSGO10LM04 pspmain_box"><xf:group class="search_box" id="" style="">
+     		<xf:group class="form_list" id="" style="" tagname="ul">
+     			<xf:group class="item" id="" style="" tagname="li">
+     				<xf:group class="form" id="" style="">
+     					<w2:span class="tit txt_point" id="span2" label="법원선택" style=""></w2:span>
+     					<xf:select1 allOption="" appearance="minimal" chooseOption="" class="sel w175px mr10" direction="auto" disabled="false" disabledClass="" displayMode="label" id="sbx_cortCd" ref="" renderType="select" selectedData="true" style="" submenuSize="auto" textAlign="" title="법원 선택" ev:onchange="scwin.sbx_cortCd_onchange">
+     						<xf:choices>
+     							<xf:itemset nodeset="data:dlt_dynamic_cortCd">
+     								<xf:label ref="codeNm"></xf:label>
+     								<xf:value ref="code"></xf:value>
+     							</xf:itemset>
+     						</xf:choices>
+     					</xf:select1>
+     					<w2:span class="fc_red txt_underline" id="txt_inputExample" label="입력방법예시" style="cursor:pointer;" ev:onclick="scwin.txt_inputExample_onclick" title="입력방법예시 새 창">
+     					</w2:span>
+     					<xf:select appearance="full" class="chk  pl50 ml35 mt5" cols="" disabled="" id="cbx_chkSanoInputMode" ref="" renderType="checkboxgroup" rows="" selectedindex="" style="" ev:onlabelclick="scwin.cbx_chkSanoInputMode_onchange" ev:onchange="scwin.cbx_chkSanoInputMode_onchange" title="사건구분입력모드 체크">
+     						<xf:choices>
+     							<xf:item>
+     								<xf:label><![CDATA[사건구분입력모드]]></xf:label>
+     								<xf:value><![CDATA[Y]]></xf:value>
+     							</xf:item>
+     						</xf:choices>
+     					</xf:select>
+     				</xf:group>
+     			</xf:group>
+     			<xf:group class="item" id="" style="" tagname="li">
+     				<xf:group class="form" id="" style="">
+     					<w2:span class="tit txt_point" id="" label="사건번호" style=""></w2:span>
+     					<xf:group class="inp_caseNum dsInb" id="" style="">
+     						<xf:select1 allOption="" appearance="minimal" chooseOption="" class="sel w70px mr10" direction="auto" disabled="false" disabledClass="" displayMode="label" id="sbx_csYr" ref="" renderType="select" selectedData="true" style="" submenuSize="auto" textAlign="" title="년도 선택">
+     							<xf:choices>
+     								<xf:itemset nodeset="data:dlt_csYr">
+     									<xf:label ref="codeNm"></xf:label>
+     									<xf:value ref="code"></xf:value>
+     								</xf:itemset>
+     							</xf:choices>
+     						</xf:select1>
+     						<xf:select1 allOption="" appearance="minimal" chooseOption="" class="sel w70px mr10" direction="auto" disabled="false" disabledClass="" displayMode="label" id="sbx_csDvsCd" ref="" renderType="select" selectedData="true" style="" submenuSize="auto" textAlign="" title="사건구분 선택">
+     							<xf:choices>
+     								<xf:itemset nodeset="data:dlt_dynamic_csDvsCd">
+     									<xf:label ref="codeNm"></xf:label>
+     									<xf:value ref="csDvsCd"></xf:value>
+     								</xf:itemset>
+     							</xf:choices>
+     						</xf:select1>
+     						<xf:input class="inp w100px" dataType="number" id="ibx_csSerial" minlength="" style="" maxlength="7" title="사건일련번호"></xf:input>
+     						<xf:input class="inp w260px" id="ibx_fullCsNo" initValue="" style="" placeholder="입력예:17가단10" maxlength="14" title="사건번호">
+     						</xf:input>
+     					</xf:group>
+     				</xf:group>
+     			</xf:group>
+     			<xf:group class="item" id="" style="" tagname="li">
+     				<xf:group class="form" id="" style="">
+     					<w2:span class="tit txt_point" id="" label="당사자명" style=""></w2:span>
+     					<xf:group class="inp_searchbox dsInb" id="" style="">
+     						<xf:input class="inp" id="ibx_btprNm" placeholder="당사자명을 입력하세요." style="width:178px; margin-right:6px" maxlength="40" title="당사자명"></xf:input>
+     						<xf:trigger class="btn_fcm btn_icT_fcmSearch" id="btn_srchCs" style="" type="button" ev:onclick="scwin.btn_srchCs_onclick" title="사건검색">
+     							<xf:label><![CDATA[검색]]></xf:label>
+     						</xf:trigger>
+     					</xf:group>
+     				</xf:group>
+     			</xf:group>
+     		</xf:group>
+     	</xf:group></xf:group>
+     	
+     </body>
+</html>
