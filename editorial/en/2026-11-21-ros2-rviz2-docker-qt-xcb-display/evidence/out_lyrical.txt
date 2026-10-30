@@ -1,0 +1,730 @@
+=== distro=lyrical image=osrf/ros:lyrical-desktop date=2026-10-30T07:04:30Z
+/dev/root        77G   27G   50G  36% /
+[uptime]  16:04:30 up 93 days, 20:00,  1 user,  load average: 0.18, 0.24, 0.40
+docker.io/osrf/ros:lyrical-desktop
+osrf/ros@sha256:cd0f24da968e3a7e8d0ef76b8d3684483235c86f5ab6a69ca2d4c9d7368a71f7 created=2026-09-10T00:55:37.074010867Z
+--- versions in plain image
+libgl1 1.7.0-3
+libgl1-mesa-dri 26.0.8-1ubuntu0.3
+libglvnd0 1.7.0-3
+libglx-mesa0 26.0.8-1ubuntu0.3
+libqt5core5a 
+libqt5core5t64 5.15.18+dfsg-1ubuntu1
+libqt6core6 
+libqt6core6t64 6.10.2+dfsg-7
+mesa-libgallium 26.0.8-1ubuntu0.3
+ros-lyrical-rqt-gui 1.10.6-1resolute.20260812.022147
+ros-lyrical-rviz-ogre-vendor 15.2.5-1resolute.20260728.210151
+ros-lyrical-rviz2 15.2.5-1resolute.20260812.080038
+dri: apple_dri.so armada-drm_dri.so asahi_dri.so crocus_dri.so d3d12_dri.so d3d12_drv_video.so exynos_dri.so gm12u320_dri.so hdlcd_dri.so hx8357d_dri.so i915_dri.so ili9163_dri.so ili9225_dri.so ili9341_dri.so ili9486_dri.so imx-dcss_dri.so imx-drm_dri.so imx-lcdif_dri.so ingenic-drm_dri.so iris_dri.so k
+libQt6Core.so.6
+--- build tools image
+[uptime]  16:05:51 up 93 days, 20:02,  1 user,  load average: 2.54, 1.00, 0.66
+Setting up libxxf86dga1:amd64 (2:1.1.5-1build2);Setting up libunwind8:amd64 (1.8.3-0ubuntu1);Setting up libfontenc1:amd64 (1:1.1.8-1build2);Setting up mesa-utils-bin:amd64 (9.0.0-2build1);Setting up libxkbfile1:amd64 (1:1.1.0-1build5);Setting up libxfont2:amd64 (1:2.0.6-2ubuntu0.2);Setting up libxmuu1:amd64 (2:1.1.3-4);Setting up x11-xkb-utils (7.7+9build1);Setting up x11-xserver-utils (7.7+11build1);Setting up mesa-utils (9.0.0-2build1);Setting up xauth (1:1.1.2-1.1build1);Setting up x11-utils (7.7+7build1);Setting up xserver-common (2:21.1.22-1ubuntu1.3);Setting up xvfb (2:21.1.22-1ubuntu1.3);
+
+libgl1-mesa-dri 26.0.8-1ubuntu0.3
+mesa-utils 9.0.0-2build1
+xvfb 2:21.1.22-1ubuntu1.3
+
+===== (1) no DISPLAY, no X server
+[uptime]  16:07:51 up 93 days, 20:04,  1 user,  load average: 1.36, 1.04, 0.72
+
+### CASE 1a-rviz2-no-display
++ docker run  osrf/ros:lyrical-desktop :: echo DISPLAY=[${DISPLAY:-}]; timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+DISPLAY=[]
+qt.qpa.xcb: could not connect to display 
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+container_exit=134
+[uptime]  16:08:09 up 93 days, 20:04,  1 user,  load average: 1.04, 0.99, 0.71
+
+### CASE 1b-rqt-no-display
++ docker run  osrf/ros:lyrical-desktop :: timeout -k 5 30 rqt; e=$?; echo "rqt exit=$e"; exit $e
+[t=18s] processes: 
+could not connect to display 
+From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+
+rqt exit=1
+container_exit=1
+[uptime]  16:08:28 up 93 days, 20:04,  1 user,  load average: 0.74, 0.93, 0.69
+
+### CASE 1c-rviz2-no-display-QT_DEBUG_PLUGINS
++ docker run -e QT_DEBUG_PLUGINS=1 osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+qt.core.plugin.factoryloader: checking directory path "/usr/lib/x86_64-linux-gnu/qt6/plugins/platforms" ...
+qt.core.plugin.factoryloader: looking at "libqvkkhrdisplay.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqvkkhrdisplay.so, metadata=
+{
+    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
+    "MetaData": {
+        "Keys": [
+            "vkkhrdisplay"
+        ]
+    },
+    "archlevel": 1,
+    "className": "QVkKhrDisplayIntegrationPlugin",
+    "debug": false,
+    "version": 395776
+}
+
+
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("vkkhrdisplay")
+qt.core.plugin.factoryloader: looking at "libqeglfs.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqeglfs.so, metadata=
+{
+    "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
+    "MetaData": {
+        "Keys": [
+            "eglfs"
+        ]
+    },
+    "archlevel": 1,
+    "className": "QEglFSIntegrationPlugin",
+    "debug": false,
+    "version": 395776
+}
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("eglfs")
+qt.core.plugin.factoryloader: looking at "libqminimalegl.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqminimalegl.so, metadata=
+            "minimalegl"
+    "className": "QMinimalEglIntegrationPlugin",
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("minimalegl")
+qt.core.plugin.factoryloader: looking at "libqoffscreen.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqoffscreen.so, metadata=
+            "offscreen"
+    "className": "QOffscreenIntegrationPlugin",
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("offscreen")
+qt.core.plugin.factoryloader: looking at "libqvnc.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqvnc.so, metadata=
+            "vnc"
+    "className": "QVncIntegrationPlugin",
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("vnc")
+qt.core.plugin.factoryloader: looking at "libqlinuxfb.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqlinuxfb.so, metadata=
+            "linuxfb"
+    "className": "QLinuxFbIntegrationPlugin",
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("linuxfb")
+qt.core.plugin.factoryloader: looking at "libqwayland.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqwayland.so, metadata=
+            "wayland",
+            "wayland-egl",
+            "wayland-brcm"
+    "className": "QWaylandIntegrationPlugin",
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("wayland", "wayland-egl", "wayland-brcm")
+qt.core.plugin.factoryloader: looking at "libqxcb.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqxcb.so, metadata=
+            "xcb"
+    "className": "QXcbIntegrationPlugin",
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("xcb")
+qt.core.plugin.factoryloader: looking at "libqminimal.so"
+qt.core.plugin.loader: Found metadata in lib /usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqminimal.so, metadata=
+            "minimal"
+    "className": "QMinimalIntegrationPlugin",
+qt.core.plugin.factoryloader: Got keys from plugin meta data QList("minimal")
+qt.core.plugin.factoryloader: checking directory path "/opt/ros/lyrical/bin/platforms" ...
+qt.core.library: "/usr/lib/x86_64-linux-gnu/qt6/plugins/platforms/libqxcb.so" loaded library
+qt.qpa.xcb: could not connect to display 
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (20x total) 
+    (9x total)         "Keys": [
+    (9x total)     "version": 395776
+    (9x total)         ]
+    (9x total)     "archlevel": 1,
+    (9x total)     "debug": false,
+    (9x total)     },
+    (9x total)     "IID": "org.qt-project.Qt.QPA.QPlatformIntegrationFactoryInterface.5.3",
+    (9x total)     "MetaData": {
+    (9x total) {
+    (9x total) }
+container_exit=134
+
+===== X server with cookie auth (-auth /auth/host)
+[xserver] Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp -auth /auth/host  (running: true)
+rvz-x/unix:99  MIT-MAGIC-COOKIE-1  <cookie>
+#ffff#72767a2d78#:99  MIT-MAGIC-COOKIE-1  <cookie>
+drwxrwxrwt 2 root   root   4096 Oct 30 16:08 .
+drwxrwxr-x 4 ubuntu ubuntu 4096 Oct 30 15:16 ..
+srwxrwxrwx 1 root   root      0 Oct 30 16:08 X99
+
+===== (2) DISPLAY set, socket not mounted
+[uptime]  16:08:50 up 93 days, 20:05,  1 user,  load average: 0.68, 0.90, 0.69
+
+### CASE 2a-display-no-socket
++ docker run -e DISPLAY=:99 osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+container_exit=134
+[uptime]  16:09:09 up 93 days, 20:05,  1 user,  load average: 0.49, 0.84, 0.67
+
+### CASE 2b-display-wrong-number
++ docker run -e DISPLAY=:0 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+qt.qpa.xcb: could not connect to display :0
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+rviz2 exit=134
+container_exit=134
+
+===== (3) socket mounted, permission
+[uptime]  16:09:27 up 93 days, 20:05,  1 user,  load average: 0.35, 0.78, 0.66
+
+### CASE 3a-socket-no-cookie
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+Authorization required, but no authorization protocol specified
+
+qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (3x total) 
+container_exit=134
+[uptime]  16:09:46 up 93 days, 20:06,  1 user,  load average: 0.27, 0.74, 0.65
+
+### CASE 3b-socket-cookie-hostname-entry
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/host osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+Authorization required, but no authorization protocol specified
+
+qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (3x total) 
+container_exit=134
+[uptime]  16:10:04 up 93 days, 20:06,  1 user,  load average: 0.26, 0.71, 0.64
+
+### CASE 3c-cookie-hostname-entry-same-hostname
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/host --hostname rvz-x osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344205.832917483] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344207.226517743] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344207.226589792] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344207.308007865] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344235.661227254] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[uptime]  16:10:36 up 93 days, 20:06,  1 user,  load average: 0.21, 0.66, 0.62
+
+### CASE 3d-socket-cookie-wildcard
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344237.429335822] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344238.571100826] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344238.571162857] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344238.606911306] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344267.277945669] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[xhost] non-network local connections being added to access control list
+[xhost state seen by the next connection] access control enabled, only authorized clients can connect 
+[uptime]  16:11:07 up 93 days, 20:07,  1 user,  load average: 0.22, 0.61, 0.61
+
+### CASE 3e-socket-no-cookie-xhost-local
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+Authorization required, but no authorization protocol specified
+
+qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (3x total) 
+container_exit=134
+[uptime]  16:11:26 up 93 days, 20:07,  1 user,  load average: 0.17, 0.58, 0.60
+
+### CASE 3f-rqt-xhost-local
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rqt; e=$?; echo "rqt exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+Authorization required, but no authorization protocol specified
+
+could not connect to display :99
+From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+rqt exit=1
+    (3x total) 
+container_exit=1
+[xhost] non-network local connections being removed from access control list
+[xhost] localuser:root being added to access control list
+[uptime]  16:11:44 up 93 days, 20:08,  1 user,  load average: 0.18, 0.56, 0.59
+
+### CASE 3h-socket-no-cookie-xhost-si-localuser-root
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+Authorization required, but no authorization protocol specified
+
+qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (3x total) 
+container_exit=134
+[xhost] localuser:root being removed from access control list
+[xhost] access control disabled, clients can connect from any host
+[xhost state seen by the next connection] access control enabled, only authorized clients can connect 
+[uptime]  16:12:03 up 93 days, 20:08,  1 user,  load average: 0.13, 0.52, 0.58
+
+### CASE 3i-socket-no-cookie-xhost-plus
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+Authorization required, but no authorization protocol specified
+
+qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+rviz2 exit=134
+    (3x total) 
+container_exit=134
+[xhost] access control enabled, only authorized clients can connect
+
+===== (6) network / ipc flags (cookie wildcard; socket mounted unless noted)
+[uptime]  16:12:22 up 93 days, 20:08,  1 user,  load average: 0.10, 0.50, 0.57
+
+### CASE 6a-network-none
++ docker run --network none -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344343.086195842] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344344.236323638] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344344.236392820] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344344.295132313] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344373.008757471] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[uptime]  16:12:53 up 93 days, 20:09,  1 user,  load average: 0.10, 0.46, 0.55
+
+### CASE 6b-network-host
++ docker run --network host -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344374.228118052] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344375.365650994] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344375.365717385] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344375.401619127] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344404.168758681] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[uptime]  16:13:24 up 93 days, 20:09,  1 user,  load average: 0.18, 0.44, 0.54
+
+### CASE 6c-no-socket-netns-of-xserver
++ docker run --network container:rvz-x -e DISPLAY=:99 -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344405.262969798] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344406.402462859] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344406.402526819] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344406.438830503] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344435.192660996] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[uptime]  16:13:55 up 93 days, 20:10,  1 user,  load average: 0.23, 0.43, 0.53
+
+### CASE 6d-ipc-of-xserver
++ docker run --ipc container:rvz-x -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200055 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200013 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344436.379489922] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344437.517506344] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344437.517567244] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344437.553117132] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344466.319031523] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[uptime]  16:14:26 up 93 days, 20:10,  1 user,  load average: 0.27, 0.42, 0.53
+
+### CASE 6e-QT_X11_NO_MITSHM
++ docker run -e QT_X11_NO_MITSHM=1 -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344467.646176368] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344468.784739964] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344468.784805858] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344468.821105965] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344497.571805353] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+
+===== (5) software GL
+[uptime]  16:14:57 up 93 days, 20:11,  1 user,  load average: 0.37, 0.43, 0.53
+
+### CASE 5a-glxinfo
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild rvz-tools:lyrical :: glxinfo -B 2>&1 | head -16
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+name of display: :99
+display: :99  screen: 0
+direct rendering: Yes
+Extended renderer info (GLX_MESA_query_renderer):
+    Vendor: Mesa (0xffffffff)
+    Device: llvmpipe (LLVM 21.1.8, 256 bits) (0xffffffff)
+    Version: 26.0.8
+    Accelerated: no
+    Video memory: 3832MB
+    Unified memory: yes
+    Preferred profile: core (0x1)
+    Max core profile version: 4.5
+    Max compat profile version: 4.5
+    Max GLES1 profile version: 1.1
+    Max GLES[23] profile version: 3.2
+Memory info (GL_ATI_meminfo):
+container_exit=0
+[uptime]  16:15:16 up 93 days, 20:11,  1 user,  load average: 0.29, 0.41, 0.52
+
+### CASE 5b-glxinfo-LIBGL_ALWAYS_SOFTWARE
++ docker run -e LIBGL_ALWAYS_SOFTWARE=1 -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild rvz-tools:lyrical :: glxinfo -B 2>&1 | grep -E 'renderer|direct|version string'
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+direct rendering: Yes
+Extended renderer info (GLX_MESA_query_renderer):
+OpenGL renderer string: llvmpipe (LLVM 21.1.8, 256 bits)
+OpenGL core profile version string: 4.5 (Core Profile) Mesa 26.0.8-1ubuntu0.3
+OpenGL core profile shading language version string: 4.50
+OpenGL version string: 4.5 (Compatibility Profile) Mesa 26.0.8-1ubuntu0.3
+OpenGL shading language version string: 4.50
+OpenGL ES profile version string: OpenGL ES 3.2 Mesa 26.0.8-1ubuntu0.3
+OpenGL ES profile shading language version string: OpenGL ES GLSL ES 3.20
+container_exit=0
+[uptime]  16:15:34 up 93 days, 20:11,  1 user,  load average: 0.58, 0.48, 0.54
+
+### CASE 5c-rviz2-LIBGL_ALWAYS_SOFTWARE
++ docker run -e LIBGL_ALWAYS_SOFTWARE=1 -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344535.923113126] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344537.063398644] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344537.063466311] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344537.099441189] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344565.864737572] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[uptime]  16:16:06 up 93 days, 20:12,  1 user,  load average: 0.35, 0.43, 0.52
+
+### CASE 5d-rviz2-no-mesa-dri
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: echo removed: $(dpkg-query -W -f="\${Package} " libgl1-mesa-dri mesa-libgallium 2>/dev/null); dpkg --purge --force-depends libgl1-mesa-dri mesa-libgallium >/dev/null 2>&1; echo dri now: $(ls /usr/lib/x86_64-linux-gnu/dri/ 2>/dev/null | wc -l) files; timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+removed: libgl1-mesa-dri mesa-libgallium
+dri now: 0 files
+[ERROR] [1793344570.157994953] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+Unable to create glx visual
+[ERROR] [1793344571.188508587] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344571.188807777] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344571.201062558] [rviz2]: Unable to create the rendering window after 100 tries
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to create the rendering window after 100 tries
+rviz2 exit=134
+bash: line 1:    42 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (100x total) [ERROR] [T] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or sc
+container_exit=134
+[uptime]  16:16:24 up 93 days, 20:12,  1 user,  load average: 0.31, 0.42, 0.52
+
+### CASE 5e-rviz2-no-mesa-dri-LIBGL_ALWAYS_SOFTWARE
++ docker run -e LIBGL_ALWAYS_SOFTWARE=1 -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: echo removed: $(dpkg-query -W -f="\${Package} " libgl1-mesa-dri mesa-libgallium 2>/dev/null); dpkg --purge --force-depends libgl1-mesa-dri mesa-libgallium >/dev/null 2>&1; echo dri now: $(ls /usr/lib/x86_64-linux-gnu/dri/ 2>/dev/null | wc -l) files; timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+removed: libgl1-mesa-dri mesa-libgallium
+dri now: 0 files
+[ERROR] [1793344586.647048482] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+Unable to create glx visual
+[ERROR] [1793344587.676854522] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344587.677088657] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344587.684958557] [rviz2]: Unable to create the rendering window after 100 tries
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to create the rendering window after 100 tries
+rviz2 exit=134
+bash: line 1:    42 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (100x total) [ERROR] [T] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or sc
+container_exit=134
+[uptime]  16:16:43 up 93 days, 20:13,  1 user,  load average: 0.22, 0.39, 0.51
+
+### CASE 5f-rviz2-no-libglx-mesa0
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: echo removed: $(dpkg-query -W -f="\${Package} " libglx-mesa0 2>/dev/null); dpkg --purge --force-depends libglx-mesa0 >/dev/null 2>&1; timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+removed: libglx-mesa0
+[ERROR] [1793344605.388405551] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+Unable to create glx visual
+[ERROR] [1793344606.413819981] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344606.414060430] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344606.425201735] [rviz2]: Unable to create the rendering window after 100 tries
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to create the rendering window after 100 tries
+rviz2 exit=134
+bash: line 1:    25 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (100x total) [ERROR] [T] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or sc
+container_exit=134
+[uptime]  16:17:01 up 93 days, 20:13,  1 user,  load average: 0.17, 0.37, 0.50
+
+### CASE 5g-rqt-no-mesa-dri
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x1/x11:/tmp/.X11-unix -v /tmp/en-rvz/x1/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: echo removed: $(dpkg-query -W -f="\${Package} " libgl1-mesa-dri mesa-libgallium 2>/dev/null); dpkg --purge --force-depends libgl1-mesa-dri mesa-libgallium >/dev/null 2>&1; echo dri now: $(ls /usr/lib/x86_64-linux-gnu/dri/ 2>/dev/null | wc -l) files; timeout -k 5 30 rqt; e=$?; echo "rqt exit=$e"; exit $e
+[t=18s] processes: rqt 
+[t=18s] windows on rvz-x :99: 0x200009 "rqt": ()  1x1+0+0  +0+0|0x200007 "Default - rqt": ("rqt" "rqt")  600x450+100+100  +100+100|0x200005 "Qt Selection Owner for rqt": ()  3x3+0+0  +0+0|
+removed: libgl1-mesa-dri mesa-libgallium
+dri now: 0 files
+[INFO] [1793344653.779483704] [rclcpp]: signal_handler(signum=15)
+rqt exit=137
+container_exit=137
+
+===== X server without GLX extension
+[xserver] Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp -auth /auth/host -extension GLX  (running: true)
+rvz-x/unix:99  MIT-MAGIC-COOKIE-1  <cookie>
+#ffff#72767a2d78#:99  MIT-MAGIC-COOKIE-1  <cookie>
+drwxrwxrwt 2 root   root   4096 Oct 30 16:17 .
+drwxrwxr-x 4 ubuntu ubuntu 4096 Oct 30 15:25 ..
+srwxrwxrwx 1 root   root      0 Oct 30 16:17 X99
+[xdpyinfo GLX] 0
+[uptime]  16:17:43 up 93 days, 20:14,  1 user,  load average: 0.16, 0.35, 0.48
+
+### CASE 5h-rviz2-server-no-GLX
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x2/x11:/tmp/.X11-unix -v /tmp/en-rvz/x2/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+[ERROR] [1793344664.749420719] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+Unable to create glx visual
+[ERROR] [1793344665.812026853] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344665.812229448] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or screen) in GLXWindow::create at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXWindow.cpp (line 246)
+[ERROR] [1793344665.824159089] [rviz2]: Unable to create the rendering window after 100 tries
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to create the rendering window after 100 tries
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (100x total) [ERROR] [T] [rviz2]: rviz::RenderSystem: error creating render window: RenderingAPIException: Invalid parentWindowHandle (wrong server or sc
+container_exit=134
+[uptime]  16:18:02 up 93 days, 20:14,  1 user,  load average: 0.20, 0.34, 0.48
+
+### CASE 5i-rqt-server-no-GLX
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x2/x11:/tmp/.X11-unix -v /tmp/en-rvz/x2/auth:/auth:ro -e XAUTHORITY=/auth/wild osrf/ros:lyrical-desktop :: timeout -k 5 30 rqt; e=$?; echo "rqt exit=$e"; exit $e
+[t=18s] processes: rqt 
+[t=18s] windows on rvz-x :99: 0x200009 "rqt": ()  1x1+0+0  +0+0|0x200007 "Default - rqt": ("rqt" "rqt")  600x450+100+100  +100+100|0x200005 "Qt Selection Owner for rqt": ()  3x3+0+0  +0+0|
+[INFO] [1793344713.534516522] [rclcpp]: signal_handler(signum=15)
+rqt exit=137
+container_exit=137
+
+===== X server with no -auth (like a bare 'Xvfb :99')
+[xserver] Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp   (running: true)
+rvz-x/unix:99  MIT-MAGIC-COOKIE-1  <cookie>
+#ffff#72767a2d78#:99  MIT-MAGIC-COOKIE-1  <cookie>
+drwxrwxrwt 2 root   root   4096 Oct 30 16:18 .
+drwxrwxr-x 4 ubuntu ubuntu 4096 Oct 30 15:26 ..
+srwxrwxrwx 1 root   root      0 Oct 30 16:18 X99
+[uptime]  16:18:43 up 93 days, 20:15,  1 user,  load average: 0.10, 0.30, 0.45
+
+### CASE 3g-noauth-server-no-cookie
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x3/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344724.247695379] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344725.387725546] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344725.387784914] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344725.442673547] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344754.180493361] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+
+===== X server with cookie auth and -noreset (server keeps xhost changes after the last client disconnects)
+[xserver] Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp -auth /auth/host -noreset  (running: true)
+rvz-x/unix:99  MIT-MAGIC-COOKIE-1  <cookie>
+#ffff#72767a2d78#:99  MIT-MAGIC-COOKIE-1  <cookie>
+drwxrwxrwt 2 root   root   4096 Oct 30 16:19 .
+drwxrwxr-x 4 ubuntu ubuntu 4096 Oct 30 16:00 ..
+srwxrwxrwx 1 root   root      0 Oct 30 16:19 X99
+[xhost] non-network local connections being added to access control list
+[xhost state seen by the next connection] access control enabled, only authorized clients can connect LOCAL: 
+[uptime]  16:19:19 up 93 days, 20:15,  1 user,  load average: 0.05, 0.26, 0.44
+
+### CASE 3j-noreset-no-cookie-xhost-local
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x4/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344760.274223767] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344761.421469002] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344761.421529891] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344761.482284862] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344790.125751358] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[uptime]  16:19:50 up 93 days, 20:16,  1 user,  load average: 0.03, 0.24, 0.42
+
+### CASE 3k-noreset-rqt-xhost-local
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x4/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rqt; e=$?; echo "rqt exit=$e"; exit $e
+[t=18s] processes: rqt 
+[t=18s] windows on rvz-x :99: 0x200009 "rqt": ()  1x1+0+0  +0+0|0x200007 "Default - rqt": ("rqt" "rqt")  600x450+100+100  +100+100|0x200005 "Qt Selection Owner for rqt": ()  3x3+0+0  +0+0|
+[INFO] [1793344821.332656101] [rclcpp]: signal_handler(signum=15)
+rqt exit=137
+container_exit=137
+[xhost] non-network local connections being removed from access control list
+[xhost] localuser:root being added to access control list
+[uptime]  16:20:26 up 93 days, 20:16,  1 user,  load average: 0.07, 0.22, 0.41
+
+### CASE 3l-noreset-no-cookie-xhost-si-localuser-root
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x4/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: rviz2 
+[t=18s] windows on rvz-x :99: 0x200054 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60|0x200012 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118|0x200009 "rviz2": ()  1x1+0+0  +0+0|
+[ERROR] [1793344827.882703992] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344829.030341904] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344829.030409628] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344829.070679446] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344857.807043827] [rclcpp]: signal_handler(signum=15)
+rviz2 exit=124
+container_exit=124
+[xhost] localuser:root being removed from access control list
+[uptime]  16:20:58 up 93 days, 20:17,  1 user,  load average: 0.26, 0.26, 0.42
+
+### CASE 3m-noreset-no-cookie-after-xhost-removed
++ docker run -e DISPLAY=:99 -v /tmp/en-rvz/x4/x11:/tmp/.X11-unix osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[t=18s] windows on rvz-x :99: 
+Authorization required, but no authorization protocol specified
+
+qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+    (3x total) 
+container_exit=134
+[xvfb-run defaults] SERVERNUM=99 AUTHFILE= XVFBARGS="-screen 0 1280x1024x24" 
+
+===== (4) no external X server: offscreen and xvfb-run
+[uptime]  16:21:17 up 93 days, 20:17,  1 user,  load average: 1.30, 0.47, 0.48
+
+### CASE 4a-QT_QPA_PLATFORM-offscreen
++ docker run -e QT_QPA_PLATFORM=offscreen osrf/ros:lyrical-desktop :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+[ERROR] [1793344878.478208326] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+Unable to open display: 
+terminate called after throwing an instance of 'Ogre::RenderingAPIException'
+  what():  RenderingAPIException: Couldn`t open X display  in GLXGLSupport::getGLDisplay at ./.obj-x86_64-linux-gnu/ogre_vendor-prefix/src/ogre_vendor/RenderSystems/GLSupport/src/GLX/OgreGLXGLSupport.cpp (line 481)
+rviz2 exit=134
+bash: line 1:    22 Aborted                    (core dumped) timeout -k 5 30 rviz2
+container_exit=134
+[uptime]  16:21:35 up 93 days, 20:17,  1 user,  load average: 1.02, 0.45, 0.47
+
+### CASE 4b-rqt-offscreen
++ docker run -e QT_QPA_PLATFORM=offscreen osrf/ros:lyrical-desktop :: timeout -k 5 30 rqt; e=$?; echo "rqt exit=$e"; exit $e
+[t=18s] processes: rqt 
+This plugin does not support propagateSizeHints()
+[INFO] [1793344926.823493215] [rclcpp]: signal_handler(signum=15)
+rqt exit=137
+container_exit=137
+[uptime]  16:22:12 up 93 days, 20:18,  1 user,  load average: 0.61, 0.41, 0.46
+
+### CASE 4c-xvfb-run-default-screen
++ docker run  rvz-tools:lyrical :: timeout -k 5 30 xvfb-run -a rviz2; e=$?; echo "xvfb-run exit=$e"; exit $e
+[t=18s] processes: Xvfb rviz2 
+[t=18s] window in own xvfb-run :99: 0x200055 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60
+[t=18s] window in own xvfb-run :99: 0x200013 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118
+[ERROR] [1793344933.030509800] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344934.166683234] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344934.166749730] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344934.202920058] [rviz2]: Stereo is NOT SUPPORTED
+The X11 connection broke (error 1). Did the X11 server die?
+[INFO] [1793344962.887734340] [rclcpp]: signal_handler(signum=15)
+The X11 connection broke: I/O error (code 1)
+XIO:  fatal IO error 22 (Invalid argument) on X server ":99"
+      after 4541 requests (4541 known processed) with 0 events remaining.
+QThreadStorage: entry 1 destroyed before end of thread 0x5a93330cecd0
+QThreadStorage: entry 0 destroyed before end of thread 0x5a93330cecd0
+xvfb-run exit=124
+container_exit=124
+[uptime]  16:22:43 up 93 days, 20:19,  1 user,  load average: 0.50, 0.41, 0.45
+
+### CASE 4d-xvfb-run-24bit
++ docker run  rvz-tools:lyrical :: timeout -k 5 30 xvfb-run -a -s '-screen 0 1280x1024x24' rviz2; e=$?; echo "xvfb-run exit=$e"; exit $e
+[t=18s] processes: Xvfb rviz2 
+[t=18s] window in own xvfb-run :99: 0x200055 "RViz": ("rviz2" "rviz2")  1200x846+60+60  +60+60
+[t=18s] window in own xvfb-run :99: 0x200013 "rviz2": ("rviz2" "rviz2")  543x694+364+58  +424+118
+[ERROR] [1793344964.152443695] [rviz2]: Could not open file: /root/.rviz2/persistent_settings
+[INFO] [1793344965.289432942] [rviz2]: Stereo is NOT SUPPORTED
+[INFO] [1793344965.289491530] [rviz2]: OpenGl version: 4.5 (GLSL 4.5)
+[INFO] [1793344965.325226367] [rviz2]: Stereo is NOT SUPPORTED
+The X11 connection broke (error 1). Did the X11 server die?
+[INFO] [1793344994.018936541] [rclcpp]: signal_handler(signum=15)
+The X11 connection broke: I/O error (code 1)
+XIO:  fatal IO error 22 (Invalid argument) on X server ":99"
+      after 4541 requests (4541 known processed) with 0 events remaining.
+QThreadStorage: entry 1 destroyed before end of thread 0x583170e82cd0
+QThreadStorage: entry 0 destroyed before end of thread 0x583170e82cd0
+xvfb-run exit=124
+container_exit=124
+[uptime]  16:23:14 up 93 days, 20:19,  1 user,  load average: 0.42, 0.40, 0.45
+
+### CASE 4e-rviz2-in-tools-image-no-display
++ docker run  rvz-tools:lyrical :: timeout -k 5 30 rviz2; e=$?; echo "rviz2 exit=$e"; exit $e
+[t=18s] processes: 
+qt.qpa.xcb: could not connect to display 
+qt.qpa.plugin: From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: vkkhrdisplay, eglfs, minimalegl, offscreen, vnc, linuxfb, wayland-brcm, wayland-egl, wayland, xcb, minimal.
+
+rviz2 exit=134
+bash: line 1:    21 Aborted                    (core dumped) timeout -k 5 30 rviz2
+container_exit=134
+
+=== done lyrical 2026-10-30T07:23:32Z
+no rvz- containers

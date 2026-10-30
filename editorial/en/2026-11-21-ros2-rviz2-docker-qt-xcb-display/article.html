@@ -1,0 +1,164 @@
+<pre><code>qt.qpa.xcb: could not connect to display :99
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: eglfs, linuxfb, minimal, minimalegl, offscreen, vnc, xcb.
+
+Aborted</code></pre>
+
+<p>That is rviz2 in a ROS 2 Docker container. The process aborts with exit code 134. rqt prints almost the same text (<code>could not connect to display :99</code>) and exits with code 1. Once the display problem is fixed, the next wall is usually OpenGL: <code>Failed to create an OpenGL context</code>, <code>Unable to create glx visual</code> or <code>Invalid parentWindowHandle (wrong server or screen)</code>, repeated 100 times, then <code>Unable to create the rendering window after 100 tries</code>.</p>
+
+<p>Short answer: Qt has nothing to do with it, and reinstalling won't help. The container can't reach an X server it is allowed to use. Three things must line up: <code>DISPLAY</code> must name the right display, the X socket directory must be mounted into the container, and the container must pass the X server's access check. The setup that worked on Humble, Jazzy and Lyrical gave the container a cookie file whose entry isn't tied to a hostname:</p>
+
+<pre><code>XAUTH=/tmp/.docker.xauth
+touch $XAUTH
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
+docker run --rm -it \
+  -e DISPLAY=$DISPLAY \
+  -e XAUTHORITY=$XAUTH \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v $XAUTH:$XAUTH:ro \
+  osrf/ros:jazzy-desktop rviz2</code></pre>
+
+<p>No <code>--network</code>, <code>--ipc</code>, <code>--privileged</code> or <code>QT_X11_NO_MITSHM</code> flag was needed. If you are on a headless machine with no X server at all, run rviz2 under <code>xvfb-run</code> instead. <code>QT_QPA_PLATFORM=offscreen</code> doesn't work for rviz2.</p>
+
+<h2>Find your error</h2>
+
+<p>Look for the first line that differs from the block above. Every row behaved the same on Humble, Jazzy and Lyrical unless the row says otherwise.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>What was wrong in my run</th></tr></thead>
+<tbody>
+<tr><td><code>could not connect to display</code> followed by nothing (empty name)</td><td><code>DISPLAY</code> not set in the container</td></tr>
+<tr><td><code>could not connect to display :99</code> with no other line before it</td><td><code>DISPLAY</code> set, but <code>/tmp/.X11-unix</code> not mounted, or <code>DISPLAY</code> pointing at a display number with no socket (<code>:0</code> when the server is <code>:99</code>)</td></tr>
+<tr><td><code>Authorization required, but no authorization protocol specified</code>, then <code>could not connect to display :99</code></td><td>Socket reachable, but the X server rejected the client: no cookie, a cookie entry for a different hostname, or an <code>xhost</code> rule that the server had already dropped</td></tr>
+<tr><td><code>libGL error: MESA-LOADER: failed to open swrast</code>, then <code>Failed to create an OpenGL context. BadValue (integer parameter out of range for operation)</code></td><td>Humble only: Mesa DRI drivers (<code>libgl1-mesa-dri</code>) missing in the container</td></tr>
+<tr><td><code>Unable to create glx visual</code>, then <code>RenderingAPIException: Invalid parentWindowHandle (wrong server or screen)</code></td><td>No usable GLX: the X server had no GLX extension, <code>libglx-mesa0</code> was missing, or (Jazzy and Lyrical) the Mesa drivers were missing</td></tr>
+<tr><td><code>Unable to open display:</code> then <code>RenderingAPIException: Couldn`t open X display in GLXGLSupport::getGLDisplay</code></td><td><code>QT_QPA_PLATFORM=offscreen</code>. Qt started, Ogre still needed an X display</td></tr>
+<tr><td><code>From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.</code></td><td>Lyrical only. It printed this on every display failure. The same image ran rviz2 fine once the display was reachable, so the hint was misleading in my runs</td></tr>
+</tbody>
+</table>
+
+<p>Every OpenGL failure ended the same way: the error pair repeated 100 times, then <code>terminate called after throwing an instance of 'std::runtime_error'</code>, <code>what(): Unable to create the rendering window after 100 tries</code>, and exit code 134.</p>
+
+<h2>What I ran</h2>
+
+<p>The test machine is a headless Linux server with 2 vCPUs. It has no monitor and no X server, so I ran Xvfb in its own container (<code>rvz-x</code>) as a stand-in for the X server on a desktop. Its socket directory was bind-mounted from the host into the rviz2 containers as <code>/tmp/.X11-unix</code>, the same way you would mount a desktop's socket. The paths and permission checks are the same as on a desktop, but this is not a real desktop. A real session has a window manager and other clients connected all the time, and that matters for <code>xhost</code> (see below). I also had no GPU, so every working run used Mesa's llvmpipe software renderer.</p>
+
+<p>The images were <code>osrf/ros:humble-desktop</code>, <code>osrf/ros:jazzy-desktop</code> and <code>osrf/ros:lyrical-desktop</code>, run one distro at a time. The rviz2 and rqt containers used the plain image. For the X server, <code>glxinfo</code> and <code>xvfb-run</code>, I made a second image from the same base with <code>xvfb xauth x11-utils x11-xserver-utils mesa-utils</code> added. Each GUI run was <code>timeout -k 5 30 rviz2</code>, so exit code 124 means rviz2 was still running after 30 seconds. For every 124 I also checked from the X server side that the window existed. <code>xwininfo</code> listed <code>"RViz"</code> at 1200x846, and rviz2 had logged <code>OpenGl version: 4.5 (GLSL 4.5)</code>.</p>
+
+<table>
+<thead><tr><th>Case</th><th>rviz2 exit</th><th>rqt exit</th></tr></thead>
+<tbody>
+<tr><td>No <code>DISPLAY</code></td><td>134 (abort)</td><td>1</td></tr>
+<tr><td><code>DISPLAY=:99</code>, socket not mounted</td><td>134</td><td>Not tested</td></tr>
+<tr><td><code>DISPLAY=:0</code>, socket for <code>:99</code> mounted</td><td>134</td><td>Not tested</td></tr>
+<tr><td>Socket mounted, server uses a cookie, client has none</td><td>134</td><td>Not tested</td></tr>
+<tr><td>Cookie file with a hostname entry, client has another hostname</td><td>134</td><td>Not tested</td></tr>
+<tr><td>Same file, client started with <code>--hostname</code> equal to the entry</td><td>124 (running)</td><td>Not tested</td></tr>
+<tr><td>Cookie file with a wildcard (<code>ffff</code>) entry</td><td>124</td><td>Not tested</td></tr>
+<tr><td><code>xhost +local:</code>, <code>+si:localuser:root</code> or <code>xhost +</code> on a plain Xvfb</td><td>134</td><td>1</td></tr>
+<tr><td>Same <code>xhost</code> rules, Xvfb started with <code>-noreset</code></td><td>124</td><td>still running at 30 s</td></tr>
+<tr><td>Xvfb started without <code>-auth</code>, client has no cookie</td><td>124</td><td>Not tested</td></tr>
+<tr><td><code>QT_QPA_PLATFORM=offscreen</code>, no X server</td><td>134</td><td>still running at 30 s</td></tr>
+<tr><td><code>xvfb-run -a rviz2</code> inside the container</td><td>124</td><td>Not tested</td></tr>
+<tr><td>Mesa DRI removed, or <code>libglx-mesa0</code> removed, or server without GLX</td><td>134</td><td>still running at 30 s</td></tr>
+</tbody>
+</table>
+
+<p>"Still running at 30 s" means rqt didn't exit on SIGTERM and was killed 5 seconds later (exit 137), with its window on the X server.</p>
+
+<h2>Cause 1: no display or no socket</h2>
+
+<p>Without <code>DISPLAY</code>, the message ends with a blank: <code>could not connect to display </code>. With <code>DISPLAY=:99</code> but no socket mount, it names the display: <code>could not connect to display :99</code>. Setting <code>DISPLAY=:0</code> while only the <code>:99</code> socket was mounted gave <code>could not connect to display :0</code>. All three are the same failure. Qt looked for <code>/tmp/.X11-unix/X&lt;n&gt;</code> inside the container and found nothing it could connect to.</p>
+
+<p>The "Reinstalling the application may fix this problem" line is generic Qt text. The xcb plugin was present in every image. <code>QT_DEBUG_PLUGINS=1</code> listed it in <code>/usr/lib/x86_64-linux-gnu/qt5/plugins/platforms</code> on Humble and Jazzy, and rviz2 loaded it as soon as a display was reachable. Inside the container, <code>echo $DISPLAY</code> should match the host, and <code>ls /tmp/.X11-unix</code> should show a socket with that number.</p>
+
+<h2>Cause 2: Authorization required</h2>
+
+<p>The first line, <code>Authorization required, but no authorization protocol specified</code>, comes from the X client library, not from Qt. It means the socket worked and the server said no. A desktop X server normally requires a cookie, the same as my Xvfb with <code>-auth</code>. A container started with only <code>-e DISPLAY</code> and <code>-v /tmp/.X11-unix</code> has no cookie, so it fails here.</p>
+
+<p>Just copying a cookie isn't enough. A normal <code>xauth</code> entry is tied to a hostname. I created the entry inside the X server container (hostname <code>rvz-x</code>), and <code>xauth list</code> showed <code>rvz-x/unix:99</code>. Mounted into an rviz2 container with a random hostname, that file gave the same <code>Authorization required</code> error. The same file worked when I started the client with <code>--hostname rvz-x</code>. The robust fix is the <code>sed -e 's/^..../ffff/'</code> step from the short answer, which rewrites the entry's address family to "wild" so it matches any hostname. With that file, rviz2 started on all three distros with the default bridge network.</p>
+
+<h3>Why xhost +local: didn't work on Xvfb</h3>
+
+<p>Most answers say to run <code>xhost +local:</code> on the host. On my plain Xvfb, <code>xhost +local:</code>, <code>xhost +si:localuser:root</code> and even <code>xhost +</code> all printed success, and rviz2 still got <code>Authorization required</code>. The output shows why. The next connection after <code>xhost +</code> reported <code>access control enabled, only authorized clients can connect</code>. The X server resets when its last client disconnects, and the reset throws away the <code>xhost</code> change. <code>xhost</code> was the only client, so the rule was gone before rviz2 connected.</p>
+
+<p>Started with <code>-noreset</code>, the same Xvfb kept the rule (<code>LOCAL:</code> in the list). Then <code>xhost +local:</code> and <code>xhost +si:localuser:root</code> each let rviz2 and rqt start without a cookie. After <code>xhost -si:localuser:root</code>, rviz2 failed again. On a desktop session the window manager stays connected, so the server doesn't reset and <code>xhost +local:</code> should stick. I didn't test that on a real desktop. If you script Xvfb yourself and use <code>xhost</code>, add <code>-noreset</code>. An Xvfb started without <code>-auth</code> accepted clients with no cookie at all.</p>
+
+<h2>Cause 3: OpenGL after the window opens</h2>
+
+<p>Once Qt connects, rviz2 creates an Ogre render window through GLX, and that is where the second group of errors comes from. The desktop images include Mesa. Through Xvfb, <code>glxinfo -B</code> reported <code>llvmpipe</code> with <code>Accelerated: no</code> and OpenGL 4.5 on all three. To get the errors from the forum threads, I removed parts of the GL stack inside the container before starting rviz2.</p>
+
+<ul>
+<li><strong>Mesa DRI drivers removed</strong> (<code>dpkg --purge --force-depends libgl1-mesa-dri</code>, plus <code>mesa-libgallium</code> on Jazzy and Lyrical). On Humble: <code>libGL error: MESA-LOADER: failed to open swrast: /usr/lib/dri/swrast_dri.so: cannot open shared object file</code>, <code>Unable to create glx context</code>, then <code>Failed to create an OpenGL context. BadValue (integer parameter out of range for operation)</code> and <code>Unable to create a suitable GLXContext</code>, 100 times each. On Jazzy and Lyrical there was no libGL error. They printed <code>qt.glx: qglx_findConfig: Failed to finding matching FBConfig</code>, <code>Unable to create glx visual</code> and 100 copies of <code>Invalid parentWindowHandle (wrong server or screen)</code>.</li>
+<li><strong><code>libglx-mesa0</code> removed</strong>: <code>Unable to create glx visual</code> and <code>Invalid parentWindowHandle</code> on all three.</li>
+<li><strong>X server without GLX</strong> (<code>Xvfb ... -extension GLX</code>): the same <code>Unable to create glx visual</code> and <code>Invalid parentWindowHandle</code> on all three. The client had a full Mesa install, so the server side alone produced the error.</li>
+</ul>
+
+<p>rqt started normally in all three cases. Plain Qt widgets don't need GLX, so "rqt works but rviz2 doesn't" points at GL, not at the display setup.</p>
+
+<h3>LIBGL_ALWAYS_SOFTWARE=1 changed nothing here</h3>
+
+<p>With Mesa present, <code>LIBGL_ALWAYS_SOFTWARE=1</code> gave the same llvmpipe renderer and the same working rviz2. With Mesa removed, it gave exactly the same errors as without it. It tells Mesa to pick its software driver. It can't help when Mesa's drivers aren't installed, and it can't fix a server that has no GLX. Not tested: a GPU, or a host with NVIDIA's GLX, where forcing software rendering is the usual workaround.</p>
+
+<h2>Headless: offscreen fails, xvfb-run works</h2>
+
+<p><code>QT_QPA_PLATFORM=offscreen</code> got Qt past the xcb error. rviz2 then printed <code>Unable to open display:</code> and aborted with <code>terminate called after throwing an instance of 'Ogre::RenderingAPIException'</code>, <code>what(): RenderingAPIException: Couldn`t open X display in GLXGLSupport::getGLDisplay</code>, exit 134. Ogre's GL render system opens its own X connection, so a Qt-only offscreen mode doesn't help. rqt did run under <code>offscreen</code>. It printed <code>This plugin does not support propagateSizeHints()</code> and stayed up.</p>
+
+<p><code>xvfb-run -a rviz2</code> inside the container worked on all three distros once the <code>xvfb</code> package was installed. It isn't in the desktop images. The <code>xvfb-run</code> script in all three images defaults to <code>XVFBARGS="-screen 0 1280x1024x24"</code>, so I didn't need to pass <code>-s</code>. Passing <code>-s '-screen 0 1280x1024x24'</code> by hand made no difference. On Humble and Jazzy, stopping it printed <code>X connection to :99 broken (explicit kill or server shutdown).</code>, which only means the server went away.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Result in my runs</th><th>Trade-off</th></tr></thead>
+<tbody>
+<tr><td><code>-e DISPLAY</code>, socket mount, wildcard cookie file with <code>XAUTHORITY</code></td><td>Worked on all three</td><td>Two extra lines on the host. Only containers that get the file can connect</td></tr>
+<tr><td>Same, cookie file not converted to wildcard</td><td>Failed unless the container hostname matched the entry</td><td>Breaks silently when the hostname changes</td></tr>
+<tr><td><code>xhost +local:</code> or <code>+si:localuser:root</code></td><td>Worked only when the server didn't reset (<code>-noreset</code> in my test)</td><td><code>+local:</code> lets any local process use your display</td></tr>
+<tr><td><code>xhost +</code></td><td>Same reset problem. Not needed once a narrower rule works</td><td>Turns off access control entirely</td></tr>
+<tr><td><code>xvfb-run</code> in the container</td><td>Worked on all three</td><td>No visible window. Needs <code>xvfb</code> installed. Fine for CI or screenshots</td></tr>
+<tr><td><code>QT_QPA_PLATFORM=offscreen</code></td><td>rviz2 aborted on all three</td><td>Works for rqt only</td></tr>
+</tbody>
+</table>
+
+<p>I also checked the flags people add out of habit. With the socket mounted and a valid cookie, rviz2 started the same way with the default bridge network, <code>--network none</code> and <code>--network host</code>. It also started with and without sharing the X server's IPC namespace, and with and without <code>QT_X11_NO_MITSHM=1</code>. No MIT-SHM errors appeared in any run. One more result: with no socket mount at all, <code>--network container:rvz-x</code> (the X server's network namespace) also worked. Linux X clients can reach the server through an abstract socket, and that socket lives in the network namespace. That suggests <code>--network host</code> can reach a desktop's X server even without the <code>/tmp/.X11-unix</code> mount. I didn't test it against a real host X server, so mount the socket anyway. For ROS traffic between containers on <code>--network host</code>, see the other posts on <a href="https://huntlab.app/en/">huntlab.app</a>.</p>
+
+<h2>Version notes</h2>
+
+<p>Humble and Jazzy rviz2 use Qt 5 (5.15.3 and 5.15.13). Lyrical's <code>librviz_common</code> links <code>libQt6Core.so.6</code> (Qt 6.10.2). That's why only Lyrical adds the <code>xcb-cursor0</code> hint to every display failure. Lyrical also logged <code>Could not open file: /root/.rviz2/persistent_settings</code> as an ERROR on every start, including the working ones, so you can ignore it. The OpenGL failures differed by Mesa version. Humble (Mesa 23.2.1) printed the libGL swrast error and <code>Failed to create an OpenGL context. BadValue</code> when the DRI drivers were missing. Jazzy (Mesa 25.2.8) and Lyrical (Mesa 26.0.8) printed <code>Invalid parentWindowHandle</code> for the same change. Ogre's source path in the messages is <code>ogre-v1.12.1</code> on Humble and <code>ogre_vendor</code> on Jazzy and Lyrical, which matters if you search for the full line.</p>
+
+<h2>Not tested</h2>
+
+<p>A real X11 desktop, Wayland or XWayland, NVIDIA or any GPU passthrough (<code>--gpus</code>, <code>--device /dev/dri</code>), macOS with XQuartz, WSLg, rocker, VNC or noVNC images, rootless Docker, a non-root user inside the container, Foxy, Iron and Rolling. Every working run used llvmpipe software rendering, so I have no frame rate numbers.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "qt.qpa.xcb: could not connect to display" mean in Docker?</h3>
+<p>Qt inside the container couldn't open an X connection. In my runs it meant one of three things: <code>DISPLAY</code> was unset (the message ends in a blank), <code>/tmp/.X11-unix</code> wasn't mounted, or <code>DISPLAY</code> named a display with no socket. Reinstalling Qt doesn't help, because the xcb plugin was present every time.</p>
+
+<h3>How do I fix "Authorization required, but no authorization protocol specified"?</h3>
+<p>Give the container a cookie it can use. Run <code>xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge -</code> on the host, mount that file, and set <code>XAUTHORITY</code> to it. An unconverted cookie failed whenever the container hostname differed from the entry.</p>
+
+<h3>Why doesn't xhost +local: fix it?</h3>
+<p>On my plain Xvfb the rule disappeared as soon as <code>xhost</code> disconnected, because the server reset when its last client left. The next connection saw access control enabled with no local rule. With <code>Xvfb -noreset</code>, <code>xhost +local:</code> worked. A desktop session normally keeps clients connected, so it doesn't reset like that.</p>
+
+<h3>Can I run rviz2 with QT_QPA_PLATFORM=offscreen?</h3>
+<p>Not in my runs. Qt started, then Ogre aborted with <code>Couldn`t open X display in GLXGLSupport::getGLDisplay</code> on Humble, Jazzy and Lyrical. <code>xvfb-run -a rviz2</code> worked on all three after installing the <code>xvfb</code> package.</p>
+
+<h3>What causes "Failed to create an OpenGL context" or "Invalid parentWindowHandle" in rviz2?</h3>
+<p>No usable GLX. On Humble, missing Mesa DRI drivers gave <code>Failed to create an OpenGL context. BadValue</code>. On Jazzy and Lyrical the same change gave <code>Invalid parentWindowHandle</code>, as did a missing <code>libglx-mesa0</code> or an X server without GLX on all three. <code>LIBGL_ALWAYS_SOFTWARE=1</code> didn't change any of these.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does qt.qpa.xcb: could not connect to display mean in Docker?", "acceptedAnswer": {"@type": "Answer", "text": "Qt inside the container couldn't open an X connection. In my runs it meant one of three things: DISPLAY was unset (the message ends in a blank), /tmp/.X11-unix wasn't mounted, or DISPLAY named a display with no socket. Reinstalling Qt doesn't help, because the xcb plugin was present every time."}},
+{"@type": "Question", "name": "How do I fix Authorization required, but no authorization protocol specified?", "acceptedAnswer": {"@type": "Answer", "text": "Give the container a cookie it can use. Run xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f /tmp/.docker.xauth nmerge - on the host, mount that file, and set XAUTHORITY to it. An unconverted cookie failed whenever the container hostname differed from the entry."}},
+{"@type": "Question", "name": "Why doesn't xhost +local: fix it?", "acceptedAnswer": {"@type": "Answer", "text": "On my plain Xvfb the rule disappeared as soon as xhost disconnected, because the server reset when its last client left. The next connection saw access control enabled with no local rule. With Xvfb -noreset, xhost +local: worked. A desktop session normally keeps clients connected, so it doesn't reset like that."}},
+{"@type": "Question", "name": "Can I run rviz2 with QT_QPA_PLATFORM=offscreen?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my runs. Qt started, then Ogre aborted with Couldn`t open X display in GLXGLSupport::getGLDisplay on Humble, Jazzy and Lyrical. xvfb-run -a rviz2 worked on all three after installing the xvfb package."}},
+{"@type": "Question", "name": "What causes Failed to create an OpenGL context or Invalid parentWindowHandle in rviz2?", "acceptedAnswer": {"@type": "Answer", "text": "No usable GLX. On Humble, missing Mesa DRI drivers gave Failed to create an OpenGL context. BadValue. On Jazzy and Lyrical the same change gave Invalid parentWindowHandle, as did a missing libglx-mesa0 or an X server without GLX on all three. LIBGL_ALWAYS_SOFTWARE=1 didn't change any of these."}}
+]}
+</script>
+
+<p>Measured on 2026-10-30 with <code>osrf/ros:humble-desktop</code> (<code>sha256:fb07245b3218...</code>, rviz2 11.2.28, Qt 5.15.3, Mesa 23.2.1), <code>osrf/ros:jazzy-desktop</code> (<code>sha256:2f520187e843...</code>, rviz2 14.1.22, Qt 5.15.13, Mesa 25.2.8) and <code>osrf/ros:lyrical-desktop</code> (<code>sha256:cd0f24da968e...</code>, rviz2 15.2.5, Qt 6.10.2, Mesa 26.0.8), Docker on a headless x86_64 Linux server, with Xvfb 21.1 in a separate container as the X server. Full digests and package versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-21-ros2-rviz2-docker-qt-xcb-display/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/110925">qt.qpa.xcb: could not connect to display :1</a>, <a href="https://robotics.stackexchange.com/questions/88607">ROS2: rviz in docker container</a>, <a href="https://robotics.stackexchange.com/questions/25093">how to run ROS2 RIVZ in docker on macos</a>, <a href="https://robotics.stackexchange.com/questions/112330">rviz2 error on ROS2 jazzy</a>, <a href="https://github.com/ros2/rviz/issues/672">RenderingAPIException causes rviz2 to crash after 100 tries</a>.</p>
