@@ -40,7 +40,7 @@ add_executable(cpp_lc src/lc.cpp)
 target_link_libraries(cpp_lc rclcpp_lifecycle::rclcpp_lifecycle)
 install(TARGETS talker_comp ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(TARGETS cpp_talker cpp_twice cpp_lc DESTINATION lib/${PROJECT_NAME})
-install(PROGRAMS py_node.py py_twice.py py_act.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS py_node.py py_twice.py py_two.py py_act.py DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 ament_package()
 X
@@ -166,6 +166,21 @@ try:
 except Exception:
     pass
 X
+cat > py_two.py <<'X'
+#!/usr/bin/env python3
+# one process, two nodes with DIFFERENT names (n_one, n_two)
+import sys, rclpy
+from rclpy.node import Node
+from rclpy.executors import SingleThreadedExecutor
+rclpy.init(args=sys.argv)
+a = Node('n_one'); b = Node('n_two')
+print(f'NAMES {a.get_fully_qualified_name()} {b.get_fully_qualified_name()}', flush=True)
+e = SingleThreadedExecutor(); e.add_node(a); e.add_node(b)
+try:
+    e.spin()
+except Exception:
+    pass
+X
 cat > py_act.py <<'X'
 #!/usr/bin/env python3
 import sys, rclpy
@@ -191,6 +206,14 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([Node(package='dupn', executable='py_node.py', name='dup_node', output='screen')])
+X
+cat > launch/same2.launch.py <<'X'
+from launch import LaunchDescription
+from launch_ros.actions import Node
+def generate_launch_description():
+    return LaunchDescription([
+        Node(package='dupn', executable='py_node.py', name='dup_node', parameters=[{'tag': 's1'}], output='screen'),
+        Node(package='dupn', executable='py_node.py', name='dup_node', parameters=[{'tag': 's2'}], output='screen')])
 X
 cat > launch/override.launch.py <<'X'
 from launch import LaunchDescription
@@ -236,7 +259,7 @@ L=/logs; mkdir -p $L
 cli() { echo "\$ $*"; timeout 30 "$@" >/tmp/o 2>/tmp/e; rc=$?; sed 's/^/  out| /' /tmp/o; sed 's/^/  err| /' /tmp/e; echo "  rc=$rc"; }
 # same, but only print a one-line summary (used in repeat loops)
 q() { timeout 30 "$@" >/tmp/o 2>/tmp/e; echo "rc=$? $(tr '\n' ' ' </tmp/o | cut -c1-160) ERR:$(grep -c 'share an exact name' /tmp/e)"; }
-bg() { local name=$1; shift; "$@" >$L/$name.log 2>&1 & echo $! >$L/$name.pid; }
+bg() { local name=$1; shift; "$@" >$L/$name.log 2>&1 & echo $! >$L/$name.pid; disown; }
 stopall() { for f in $L/*.pid; do [ -f "$f" ] && kill -INT $(cat $f) 2>/dev/null; done; sleep 2;
   for f in $L/*.pid; do [ -f "$f" ] && kill -9 $(cat $f) 2>/dev/null; rm -f $f; done
   pkill -9 -f /ws/install 2>/dev/null; pkill -9 -f component_container 2>/dev/null; pkill -9 -f 'ros2 launch' 2>/dev/null; sleep 1; ros2 daemon stop >/dev/null 2>&1; }
@@ -244,8 +267,8 @@ showlog() { for f in "$@"; do echo "  [log $f]"; grep -vE '^\s*$' $L/$f.log | he
 section() { echo; echo "############ $*"; echo "uptime: $(uptime)"; }
 
 section "0. where the warning text lives"
-grep -rn "share an exact name" /opt/ros/$ROS_DISTRO/lib/python3*/site-packages/ 2>/dev/null | sed "s#/opt/ros/$ROS_DISTRO/lib/##"
-echo "binary libs containing the text:"; grep -rl "share an exact name" /opt/ros/$ROS_DISTRO/lib/*.so 2>/dev/null || echo "  none"
+grep -rnI --include=*.py -e "share an exact name" -e "nodes in the graph with the exact name" -e "nodes with the name" /opt/ros/$ROS_DISTRO 2>/dev/null | sed "s#/opt/ros/$ROS_DISTRO/##" | cut -c1-220
+echo "binary libs containing 'share an exact name':"; grep -rl "share an exact name" /opt/ros/$ROS_DISTRO/lib/*.so 2>/dev/null || echo "  none"
 
 section "1. single node baseline"
 bg a ros2 run dupn py_node.py --ros-args -p tag:=A; sleep 5
@@ -257,7 +280,9 @@ bg a ros2 run dupn py_node.py --ros-args -p tag:=A
 bg b ros2 run dupn py_node.py --ros-args -p tag:=B; sleep 6
 cli ros2 node list
 cli ros2 node info /dup_node
+cli ros2 node list -c
 cli ros2 param list /dup_node
+cli ros2 param list
 cli ros2 param get /dup_node tag
 cli ros2 param dump /dup_node
 cli ros2 topic list
@@ -311,6 +336,12 @@ cli ros2 node list
 showlog l1 l2
 stopall
 
+section "5b. cause: one launch file with two Node(name='dup_node')"
+bg s2 ros2 launch dupn same2.launch.py; sleep 8
+cli ros2 node list
+showlog s2
+stopall
+
 section "6. cause: launch name= override renames cpp_talker to dup_node, plus ros2 run py_node (default dup_node)"
 bg ov ros2 launch dupn override.launch.py
 bg pr ros2 run dupn py_node.py --ros-args -p tag:=run_py; sleep 8
@@ -341,6 +372,16 @@ section "9. cause: same name twice in one process (rclpy)"
 bg pt ros2 run dupn py_twice.py; sleep 6
 cli ros2 node list
 showlog pt
+stopall
+
+section "9b. cause: -r __node:=renamed on a process that holds two differently named nodes"
+bg pw ros2 run dupn py_two.py; sleep 6
+cli ros2 node list
+showlog pw
+stopall
+bg pw ros2 run dupn py_two.py --ros-args -r __node:=renamed; sleep 6
+cli ros2 node list
+showlog pw
 stopall
 
 section "10. fix: -r __node:=dup_node_b on the second instance"
@@ -382,5 +423,5 @@ import inspect, rclpy.node
 print(' '.join(inspect.signature(rclpy.node.Node.__init__).parameters))
 X
 echo "grep unique/duplicate in rcl, rclcpp, rclpy node headers/sources:"
-grep -rniE "unique|duplicate" $D/include/rcl/rcl/node.h $D/include/rcl/rcl/node_options.h $D/include/rclcpp/rclcpp/node_options.hpp $D/include/rclcpp/rclcpp/node.hpp $D/lib/python3*/site-packages/rclpy/node.py 2>/dev/null | sed "s#$D/##" | head -20
+grep -rniE "unique|duplicate" $D/include/rcl/rcl/node.h $D/include/rcl/rcl/node_options.h $D/include/rclcpp/rclcpp/node_options.hpp $D/include/rclcpp/rclcpp/node.hpp $(python3 -c "import rclpy.node; print(rclpy.node.__file__)") 2>/dev/null | sed "s#$D/##" | head -20
 echo "=== done"
