@@ -1,0 +1,195 @@
+<pre><code>$ ros2 topic echo /x
+WARNING: topic [/x] does not appear to be published yet
+Could not determine the type for the passed topic</code></pre>
+
+<p>Short answer: <code>ros2 topic echo</code> without a type looks the type up once, about one second after it starts. If it finds no publisher by then, it prints this error and exits with code 1. It doesn't wait. When I passed the type myself, echo waited and printed the first message as soon as a publisher showed up:</p>
+
+<pre><code>ros2 topic echo /x std_msgs/msg/String</code></pre>
+
+<p>With the publisher starting 3 seconds after echo, the first message arrived at 3.82 s on Humble and 3.89 s on Jazzy and Lyrical. This worked with and without the daemon. If echo with an explicit type still prints nothing, the two processes can't discover each other. In my runs that meant a different <code>ROS_DOMAIN_ID</code>, <code>ROS_LOCALHOST_ONLY</code> or <code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code> across containers. The rest of this post goes through each cause with the exact output, the exit code and the time each command took.</p>
+
+<h2>Find your error</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Most likely cause (measured)</th></tr></thead>
+<tbody>
+<tr><td><code>Could not determine the type for the passed topic</code> after about 1 s, exit 1</td><td>No publisher yet, publisher in another domain or another discovery range, or the daemon hasn't seen it yet</td></tr>
+<tr><td>Same error, but <code>--no-daemon</code> works</td><td>The ros2 daemon missed the publisher (started just before, or the daemon started after it on Jazzy and Lyrical)</td></tr>
+<tr><td><code>The message type 'tec_msgs/msg/Num' is invalid</code>, exit 1</td><td>Custom message package not sourced in the echo shell</td></tr>
+<tr><td><code>The passed message type is invalid</code>, exit 1</td><td>Same, with the type passed on the command line</td></tr>
+<tr><td>No output at all, echo keeps running</td><td>Type passed explicitly, but no publisher is reachable</td></tr>
+<tr><td><code>ros2 topic info</code>: <code>Unknown topic '/x'</code>, exit 1</td><td>No publisher seen</td></tr>
+<tr><td><code>ros2 topic hz</code>: only the WARNING line, keeps running</td><td>No publisher yet. hz waits, unlike echo</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-30 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host, one distro after another. The publisher was always <code>ros2 topic pub -r 2 /x std_msgs/msg/String "{data: hi}"</code>, so 2 messages per second. In each container I also installed <code>rmw_cyclonedds_cpp</code> next to the default Fast DDS and built a one-message package, <code>tec_msgs/msg/Num</code>. Causes 1 to 6 ran inside one container. Cause 7 used two containers on one Docker bridge network.</p>
+
+<p>Each command ran under <code>timeout</code> with an 8 to 12 second limit. A script recorded each output line with the seconds since start, the exit code and the time to the first message. Exit 1 means echo gave up on its own. Exit 124 (Humble, Jazzy) or 137 (Lyrical) means it was still running when the timeout stopped it, which is what you want from echo. Before each case the script stopped all publishers and the daemon, unless the case was about the daemon.</p>
+
+<h2>Cause 1: the publisher isn't running yet</h2>
+
+<p>With no publisher, echo printed the warning and the error and exited with code 1. It made no difference whether I used the daemon:</p>
+
+<table>
+<thead><tr><th>Case</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>echo /x</code>, no publisher</td><td>exit 1 after 1.00 s</td><td>exit 1 after 1.15 s</td><td>exit 1 after 1.12 s</td></tr>
+<tr><td><code>echo --no-daemon /x</code>, no publisher</td><td>exit 1 after 0.97 s</td><td>exit 1 after 1.05 s</td><td>exit 1 after 1.07 s</td></tr>
+<tr><td><code>echo /x</code>, publisher starts 3 s later</td><td>exit 1 after 1.03 s</td><td>exit 1 after 1.07 s</td><td>exit 1 after 1.08 s</td></tr>
+<tr><td><code>echo --no-daemon /x</code>, publisher starts 3 s later</td><td>exit 1 after 0.97 s</td><td>exit 1 after 1.06 s</td><td>exit 1 after 1.22 s</td></tr>
+<tr><td><code>echo --no-daemon /x</code>, publisher started 0.5 s before</td><td>first message 0.84 s</td><td>first message 1.40 s</td><td>first message 1.39 s</td></tr>
+</tbody>
+</table>
+
+<p>So echo doesn't wait for a publisher that starts later, even by a few seconds. If you start echo and the publisher at the same time, as a launch file or two terminals often do, echo can lose that race. Start echo after the publisher, or pass the type (cause 6).</p>
+
+<p>The two other commands from the same package behave differently. <code>ros2 topic info /x</code> with no publisher printed <code>Unknown topic '/x'</code> and exited with 1 after about 1 s. <code>ros2 topic hz /x</code> printed the same WARNING line and then kept waiting. When the publisher started 3 s later, hz printed its first <code>average rate: 2.000</code> at 5.86 s on Humble, 5.93 s on Jazzy and 5.00 s on Lyrical. hz doesn't print "Could not determine the type" here. It waits.</p>
+
+<h2>Cause 2: the daemon is behind</h2>
+
+<p>Without <code>--no-daemon</code>, echo asks the ros2 daemon which topics exist. The daemon is a background process that runs discovery all the time. I expected a stale daemon after changing environment variables in the same shell. That turned out to be the smaller problem. The daemon simply not having seen a new publisher yet caused more failures.</p>
+
+<p><strong>Changing ROS_DOMAIN_ID</strong> doesn't leave a stale daemon. After <code>export ROS_DOMAIN_ID=7</code>, <code>ros2 daemon status</code> said <code>The daemon is not running</code>, because each domain gets its own daemon. Echo started a new one and received data on all three distros.</p>
+
+<p><strong>Changing RMW_IMPLEMENTATION</strong> to <code>rmw_cyclonedds_cpp</code> while a Fast DDS daemon was running didn't break anything either. The old daemon listed the Cyclone publisher's <code>/x</code>, and echo received data on all three distros, before and after <code>ros2 daemon stop</code>.</p>
+
+<p><strong>Setting ROS_LOCALHOST_ONLY=1</strong> after the daemon started broke echo on Humble: exit 1 after 0.34 s. In the same shell, <code>ros2 daemon stop</code> fixed it, and the next echo received its first message at 0.85 s. <code>--no-daemon</code> also worked. On Jazzy the old daemon still found the publisher. Lyrical ignores the variable (see Version notes).</p>
+
+<p><strong>A publisher that started just before echo</strong> failed on every distro when the daemon was already running. The publisher had started 0.5 s earlier, and echo exited with 1 after 0.34 s (Humble), 0.42 s (Jazzy) and 0.67 s (Lyrical). The same setup with <code>--no-daemon</code> received data on all three.</p>
+
+<p><strong>A daemon that starts after the publisher</strong> is flaky on Jazzy and Lyrical. I let the publisher run for 5 s, stopped the daemon and ran echo, which starts a new daemon. Then I ran echo a second time right away. I did this five times per distro:</p>
+
+<table>
+<thead><tr><th>Case (publisher running 5 s)</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>First echo, daemon started by this call</td><td>5 of 5 received</td><td>2 of 5 received</td><td>2 of 5 received</td></tr>
+<tr><td>Second echo, daemon already running</td><td>5 of 5 received</td><td>2 of 5 received</td><td>2 of 5 received</td></tr>
+<tr><td>Daemon started 3 s before the publisher</td><td>3 of 3 received</td><td>3 of 3 received</td><td>3 of 3 received</td></tr>
+<tr><td><code>ros2 topic info</code>, daemon started by this call</td><td>3 of 3 found the type</td><td>3 of 3 found the type</td><td>3 of 3 found the type</td></tr>
+</tbody>
+</table>
+
+<p>The failures printed the usual two lines and exited with 1. On Jazzy and Lyrical, running echo a second time wasn't a reliable fix. What did work every time was <code>--no-daemon</code>, or a daemon that was already running before the publisher started. If you work in fresh containers, where every first ros2 command starts a new daemon, this is likely the cause. In my two-container runs on Jazzy and Lyrical, plain echo against a default publisher failed and <code>--no-daemon</code> worked.</p>
+
+<pre><code>ros2 daemon stop          # then retry; or skip the daemon entirely:
+ros2 topic echo --no-daemon /x</code></pre>
+
+<h2>Cause 3: a different ROS_DOMAIN_ID</h2>
+
+<p>With the publisher on domain 1 and echo on domain 2, echo printed the error and exited with 1 after 0.99 s (Humble), 1.09 s (Jazzy) and 1.08 s (Lyrical). Passing the type didn't help: <code>ros2 topic echo /x std_msgs/msg/String</code> printed nothing and was still running after 10 s on all three. That silence tells you discovery is the problem, not the type. On domain 1, echo worked on Humble and Jazzy. On Lyrical that control run failed the same way as cause 2, because it had just started a new daemon for domain 1. Check <code>echo $ROS_DOMAIN_ID</code> in both shells. An unset variable means domain 0.</p>
+
+<h2>Cause 4: the custom message package isn't sourced</h2>
+
+<p>The publisher shell had sourced <code>/ws/install/setup.bash</code>. The echo shell hadn't. This produces a different error, as long as echo can see the publisher:</p>
+
+<pre><code>$ ros2 topic echo /c
+The message type 'tec_msgs/msg/Num' is invalid
+
+$ ros2 topic echo /c tec_msgs/msg/Num
+The passed message type is invalid</code></pre>
+
+<p>Both exited with code 1 on all three distros. <code>ros2 topic hz /c</code> printed the same <code>is invalid</code> line and exited with 1. <code>ros2 topic info /c</code> and <code>ros2 topic list -t</code> worked and showed <code>tec_msgs/msg/Num</code>, because they only need the type's name, not its definition. After sourcing the workspace, echo printed <code>num: 1</code> at 1.03 s (Humble), 1.22 s (Jazzy) and 1.59 s (Lyrical).</p>
+
+<p>There's one trap on Jazzy and Lyrical. When echo had to start a new daemon, the unsourced shell printed <code>Could not determine the type for the passed topic</code> instead, because the cause 2 problem hit first. With <code>--no-daemon</code> or a daemon already running, the same shell gave the <code>is invalid</code> message. If <code>ros2 topic list -t</code> shows a type from your own package, source that workspace before you look anywhere else.</p>
+
+<h2>Cause 5: different RMW implementations</h2>
+
+<p>I ran each pairing with <code>--no-daemon</code> to keep the daemon out of it. A Cyclone DDS publisher with a Fast DDS echo worked on the first try on every distro. A Fast DDS publisher with a Cyclone DDS echo failed on the first try on all three: exit 1 after 0.87 s (Humble), 0.95 s (Jazzy) and 0.96 s (Lyrical). An identical second run right after it received data at 0.83 s, 0.91 s and 0.91 s. With the type passed, Cyclone echo received from the Fast DDS publisher on the first try, at 1.46 s, 1.94 s and 1.68 s. <code>ros2 topic list --no-daemon --spin-time 5</code> on the Cyclone side listed <code>/x</code>.</p>
+
+<p>So the two implementations did talk to each other for <code>std_msgs/msg/String</code>. The only failure was the first type lookup in one direction. I didn't find out why. Passing the type avoids it, and so does using the same <code>RMW_IMPLEMENTATION</code> on both sides, which also worked in my control run.</p>
+
+<h2>Cause 6: passing the type explicitly</h2>
+
+<p>With the type on the command line, echo doesn't need to look it up, so it doesn't exit. It creates the subscription and waits:</p>
+
+<table>
+<thead><tr><th>Case</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>echo /x std_msgs/msg/String</code>, publisher 3 s later</td><td>first message 3.82 s</td><td>3.89 s</td><td>3.89 s</td></tr>
+<tr><td>Same with <code>--no-daemon</code></td><td>3.82 s</td><td>3.90 s</td><td>3.89 s</td></tr>
+<tr><td>Type passed, no publisher ever</td><td>no output, still running at 8 s</td><td>same</td><td>same</td></tr>
+</tbody>
+</table>
+
+<p>This is the fix to use in scripts and launch-time debugging. The cost is that a wrong setup is silent. You get no output instead of an error, so pair it with <code>ros2 topic info -v /x</code> from the same shell if nothing appears.</p>
+
+<h2>Cause 7: discovery settings across containers</h2>
+
+<p>Here the publisher and echo ran in two containers on the same Docker bridge network. Every result below is from <code>--no-daemon</code>, to keep cause 2 out of it:</p>
+
+<table>
+<thead><tr><th>Publisher env</th><th>Echo env</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>default</td><td>default</td><td>received, 0.84 s</td><td>received, 1.22 s</td><td>received, 1.01 s</td></tr>
+<tr><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>default</td><td>error, exit 1</td><td>error, exit 1</td><td>received, 1.48 s</td></tr>
+<tr><td><code>ROS_LOCALHOST_ONLY=1</code></td><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>error, exit 1</td><td>error, exit 1</td><td>received, 0.99 s</td></tr>
+<tr><td><code>ROS_LOCALHOST_ONLY=1</code></td><td>default, type passed</td><td>no output, still running</td><td>no output, still running</td><td>received, 1.04 s</td></tr>
+<tr><td><code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code></td><td>default</td><td>received, 0.84 s</td><td>error, exit 1</td><td>error, exit 1</td></tr>
+<tr><td>default</td><td><code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code></td><td>received, 0.85 s</td><td>error, exit 1</td><td>error, exit 1</td></tr>
+<tr><td><code>SUBNET</code></td><td><code>SUBNET</code></td><td>received, 0.84 s</td><td>received, 1.09 s</td><td>received, 0.98 s</td></tr>
+</tbody>
+</table>
+
+<p>Localhost-only on either side blocks discovery between containers, even when both sides set it. Each container has its own loopback, so "localhost" isn't shared. The error exits came after about 1 s, as in cause 1. Humble doesn't read <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code>, and Lyrical doesn't read <code>ROS_LOCALHOST_ONLY</code>, so the same environment file gives different results depending on the distro. For containers on one network, unset both or use <code>SUBNET</code>. I covered the range values in more detail in <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">nodes that can't see each other and ROS_AUTOMATIC_DISCOVERY_RANGE</a>.</p>
+
+<h2>Quick decision table</h2>
+
+<table>
+<thead><tr><th>Check</th><th>If yes</th></tr></thead>
+<tbody>
+<tr><td>Does <code>ros2 topic echo --no-daemon /x</code> work, but plain echo doesn't?</td><td>Cause 2. Use <code>--no-daemon</code>, or run <code>ros2 daemon stop</code> and retry</td></tr>
+<tr><td>Did the publisher start after echo, or at the same time?</td><td>Cause 1. Pass the type, or start echo later</td></tr>
+<tr><td>Does the error say <code>is invalid</code>?</td><td>Cause 4. Source the workspace with the message package</td></tr>
+<tr><td>Does echo with the type print nothing?</td><td>Causes 3 or 7. Compare <code>ROS_DOMAIN_ID</code>, <code>ROS_LOCALHOST_ONLY</code>, <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code></td></tr>
+<tr><td>Are the two sides on different <code>RMW_IMPLEMENTATION</code> values?</td><td>Cause 5. Retry, pass the type, or use the same RMW</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The error text, the WARNING line and exit code 1 were identical on Humble (ros2cli 0.18.20), Jazzy (0.32.13) and Lyrical (0.40.9). With no publisher in the same container, echo gave up after 0.97 to 1.22 s on all three. The differences:</p>
+
+<ul>
+<li>A daemon started after the publisher missed it in 3 of 5 tries on Jazzy and Lyrical and never on Humble.</li>
+<li>Jazzy honors <code>ROS_LOCALHOST_ONLY=1</code> and prints <code>ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.</code> Lyrical printed nothing and ignored it.</li>
+<li>Humble ignored <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code>.</li>
+<li>When the timeout stopped a running echo, the exit code was 124 on Humble and Jazzy and 137 on Lyrical.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Real multi-machine networks, Wi-Fi, <code>ROS_STATIC_PEERS</code>, Fast DDS discovery server, Zenoh (<code>rmw_zenoh</code>), Connext, <code>CYCLONEDDS_URI</code> or Fast DDS XML profiles, message types other than <code>std_msgs/msg/String</code> across RMWs, services and actions, <code>ros2 topic echo --spin-time</code>, and Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 topic echo say "Could not determine the type for the passed topic"?</h3>
+<p>It found no publisher for the topic within about one second, so it couldn't look up the type, and it exited with code 1. In my runs the publisher was either not running yet, on another domain or discovery range, or not yet seen by the ros2 daemon.</p>
+
+<h3>Does ros2 topic echo wait for the publisher?</h3>
+<p>Not without a type. With a publisher starting 3 s later it exited after about 1 s on Humble, Jazzy and Lyrical. With the type passed, as in <code>ros2 topic echo /x std_msgs/msg/String</code>, it waited and printed the first message at 3.82 to 3.90 s.</p>
+
+<h3>Does ros2 daemon stop fix it?</h3>
+<p>Sometimes. It fixed the case where <code>ROS_LOCALHOST_ONLY</code> was set after the daemon started on Humble. On Jazzy and Lyrical a freshly started daemon missed a running publisher in 3 of 5 tries, so <code>--no-daemon</code> was more reliable than restarting the daemon.</p>
+
+<h3>Why does echo say the message type is invalid?</h3>
+<p>The echo shell hasn't sourced the workspace that holds the message package. echo printed <code>The message type 'tec_msgs/msg/Num' is invalid</code>, while <code>ros2 topic list -t</code> still showed the type. Source <code>install/setup.bash</code> of that workspace in the echo shell.</p>
+
+<h3>Can ros2 topic echo use Cyclone DDS while the publisher uses Fast DDS?</h3>
+<p>Yes, data flowed both ways in my runs. A Cyclone echo against a Fast DDS publisher failed its first type lookup on all three distros and worked on the next try or with the type passed.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 topic echo say Could not determine the type for the passed topic?", "acceptedAnswer": {"@type": "Answer", "text": "It found no publisher for the topic within about one second, so it couldn't look up the type, and it exited with code 1. In my runs the publisher was either not running yet, on another domain or discovery range, or not yet seen by the ros2 daemon."}},
+{"@type": "Question", "name": "Does ros2 topic echo wait for the publisher?", "acceptedAnswer": {"@type": "Answer", "text": "Not without a type. With a publisher starting 3 s later it exited after about 1 s on Humble, Jazzy and Lyrical. With the type passed, as in ros2 topic echo /x std_msgs/msg/String, it waited and printed the first message at 3.82 to 3.90 s."}},
+{"@type": "Question", "name": "Does ros2 daemon stop fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Sometimes. It fixed the case where ROS_LOCALHOST_ONLY was set after the daemon started on Humble. On Jazzy and Lyrical a freshly started daemon missed a running publisher in 3 of 5 tries, so --no-daemon was more reliable than restarting the daemon."}},
+{"@type": "Question", "name": "Why does echo say the message type is invalid?", "acceptedAnswer": {"@type": "Answer", "text": "The echo shell hasn't sourced the workspace that holds the message package. echo printed The message type tec_msgs/msg/Num is invalid, while ros2 topic list -t still showed the type. Source install/setup.bash of that workspace in the echo shell."}},
+{"@type": "Question", "name": "Can ros2 topic echo use Cyclone DDS while the publisher uses Fast DDS?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, data flowed both ways in my runs. A Cyclone echo against a Fast DDS publisher failed its first type lookup on all three distros and worked on the next try or with the type passed."}}
+]}
+</script>
+
+<p>Measured on 2026-10-30 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10 with Fast DDS 2.6.12, rmw_cyclonedds_cpp 1.3.5 with Cyclone DDS 0.10.5), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4 with Fast DDS 2.14.7, rmw_cyclonedds_cpp 2.2.4 with Cyclone DDS 0.10.5) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10 with Fast DDS 3.6.2, rmw_cyclonedds_cpp 4.1.5 with Cyclone DDS 11.0.1). The default RMW was Fast DDS on all three. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-18-ros2-topic-echo-could-not-determine-type/evidence">evidence folder</a>. Questions this answers: <a href="https://answers.ros.org/question/413956/">ros2 topic echo chatter: topic does not appear to be published yet, Could not determine the type for the passed topic</a>, <a href="https://answers.ros.org/question/351854/">Could not determine the type for the passed topic</a>, <a href="https://answers.ros.org/question/338994/">ros2 topic can only echo certain topics (multiple machine)</a>, <a href="https://github.com/ros2/rmw_connext/issues/324">ros2 topic commands can't always determine the type</a>, <a href="https://community.husarion.com/t/ros-2-tutorials-dockerized-approach-topics-not-showing-locally/2014">Dockerized approach, topics not showing locally</a>.</p>

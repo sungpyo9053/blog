@@ -1,0 +1,691 @@
+docker.io/library/ros:humble-ros-base
+ 09:46:30 up 93 days, 13:42,  2 users,  load average: 0.19, 0.22, 0.12
+=== distro=humble
+cyclonedds installed
+ros-humble-cyclonedds 0.10.5-2jammy.20260226.013234
+ros-humble-fastrtps 2.6.12-1jammy.20260723.233918
+ros-humble-rmw-cyclonedds-cpp 1.3.5-1jammy.20260907.205235
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-rmw-fastrtps-shared-cpp 6.2.10-1jammy.20260907.205244
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-ros2topic 0.18.20-1jammy.20260907.215610
+default rmw: rmw_fastrtps_cpp
+
+##### 1 publisher not running / started later
+--- 1a no publisher, daemon
+$ ros2 topic echo /x
+  0.84 WARNING: topic [/x] does not appear to be published yet
+  0.84 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=1.00
+--- 1b no publisher, --no-daemon
+$ ros2 topic echo --no-daemon /x
+  0.82 WARNING: topic [/x] does not appear to be published yet
+  0.82 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.97
+--- 1c hz, no publisher
+$ ros2 topic hz /x
+  0.81 WARNING: topic [/x] does not appear to be published yet
+first_data=none
+exit=124 elapsed=10.16
+--- 1d info, no publisher
+$ ros2 topic info /x
+  0.83 Unknown topic '/x'
+first_data=none
+exit=1 elapsed=1.00
+--- 1e publisher starts 3 s later, daemon
+$ ros2 topic echo /x
+  0.84 WARNING: topic [/x] does not appear to be published yet
+  0.84 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=1.03
+--- 1f publisher starts 3 s later, --no-daemon
+$ ros2 topic echo --no-daemon /x
+  0.81 WARNING: topic [/x] does not appear to be published yet
+  0.82 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.97
+--- 1g hz, publisher starts 3 s later
+$ ros2 topic hz /x
+  0.81 WARNING: topic [/x] does not appear to be published yet
+  5.86 average rate: 2.000
+  5.86 	min: 0.500s max: 0.500s std dev: 0.00014s window: 3
+  7.36 average rate: 2.000
+  7.36 	min: 0.500s max: 0.500s std dev: 0.00011s window: 6
+  8.86 average rate: 2.000
+       ... 5 more lines
+first_data=none
+exit=124 elapsed=12.16
+--- 1h publisher started 0.5 s before, daemon cold (just stopped)
+$ ros2 topic echo /x
+  0.86 data: hi
+  0.86 ---
+  1.35 data: hi
+  1.35 ---
+  1.85 data: hi
+  1.85 ---
+       ... 32 more lines
+first_data=0.86
+exit=124 elapsed=10.20
+The daemon has been started
+--- 1i publisher started 0.5 s before, daemon warm
+$ ros2 topic echo /x
+  0.29 WARNING: topic [/x] does not appear to be published yet
+  0.29 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.34
+--- 1j publisher started 0.5 s before, --no-daemon
+$ ros2 topic echo --no-daemon /x
+  0.84 data: hi
+  0.84 ---
+  1.32 data: hi
+  1.32 ---
+  1.82 data: hi
+  1.82 ---
+       ... 32 more lines
+first_data=0.84
+exit=124 elapsed=10.17
+--- 1k publisher running 5 s (baseline), daemon
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.26 data: hi
+  1.26 ---
+  1.76 data: hi
+  1.76 ---
+       ... 32 more lines
+first_data=0.85
+exit=124 elapsed=10.18
+--- 1l info, publisher running 5 s
+$ ros2 topic info /x
+  0.84 Type: std_msgs/msg/String
+  0.84 Publisher count: 1
+  0.84 Subscription count: 0
+first_data=none
+exit=0 elapsed=1.00
+
+##### 2 stale daemon after changing env in the same shell
+The daemon has been started
+The daemon is running
+The daemon is not running
+--- 2a ROS_DOMAIN_ID changed 0->7 after daemon start
+$ ros2 topic echo /x
+  1.19 data: hi
+  1.19 ---
+  1.52 data: hi
+  1.52 ---
+  2.02 data: hi
+  2.02 ---
+       ... 30 more lines
+first_data=1.19
+exit=124 elapsed=10.18
+The daemon has been started
+--- 2b RMW changed to cyclonedds after daemon (fastrtps) start
+$ ros2 topic echo /x
+  0.83 data: hi
+  0.83 ---
+  1.31 data: hi
+  1.31 ---
+  1.81 data: hi
+  1.81 ---
+       ... 32 more lines
+first_data=0.83
+exit=124 elapsed=10.28
+--- 2b ros2 topic list via old daemon
+$ ros2 topic list
+  0.30 /parameter_events
+  0.30 /rosout
+  0.30 /x
+first_data=none
+exit=0 elapsed=0.35
+The daemon has been stopped
+--- 2c same, after ros2 daemon stop
+$ ros2 topic echo /x
+  0.83 data: hi
+  0.83 ---
+  1.30 data: hi
+  1.30 ---
+  1.80 data: hi
+  1.80 ---
+       ... 32 more lines
+first_data=0.83
+exit=124 elapsed=10.30
+The daemon has been started
+--- 2d ROS_LOCALHOST_ONLY=1 set after daemon start
+$ ros2 topic echo /x
+  0.29 WARNING: topic [/x] does not appear to be published yet
+  0.29 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.34
+The daemon has been stopped
+--- 2e same shell, after ros2 daemon stop
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.13 data: hi
+  1.13 ---
+  1.63 data: hi
+  1.63 ---
+       ... 32 more lines
+first_data=0.85
+exit=124 elapsed=10.19
+--- 2f same shell, --no-daemon
+$ ros2 topic echo --no-daemon /x
+  0.84 data: hi
+  0.84 ---
+  0.92 data: hi
+  0.92 ---
+  1.42 data: hi
+  1.42 ---
+       ... 34 more lines
+first_data=0.84
+exit=124 elapsed=10.16
+
+##### 3 different ROS_DOMAIN_ID
+--- 3a pub domain 1, echo domain 2
+$ ros2 topic echo /x
+  0.83 WARNING: topic [/x] does not appear to be published yet
+  0.83 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.99
+--- 3b pub domain 1, echo domain 2, explicit type
+$ ros2 topic echo /x std_msgs/msg/String
+first_data=none
+exit=124 elapsed=10.17
+--- 3c echo domain 1 (control)
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.26 data: hi
+  1.26 ---
+  1.76 data: hi
+  1.76 ---
+       ... 32 more lines
+first_data=0.85
+exit=124 elapsed=10.19
+
+##### 4 custom message package not sourced in the echo shell
+tec_msgs built
+--- 4a unsourced echo /c
+$ ros2 topic echo /c
+  0.84 The message type 'tec_msgs/msg/Num' is invalid
+first_data=none
+exit=1 elapsed=1.01
+--- 4b unsourced echo /c tec_msgs/msg/Num
+$ ros2 topic echo /c tec_msgs/msg/Num
+  0.29 The passed message type is invalid
+first_data=none
+exit=1 elapsed=0.34
+--- 4c unsourced hz /c
+$ ros2 topic hz /c
+  0.82 The message type 'tec_msgs/msg/Num' is invalid
+first_data=none
+exit=1 elapsed=0.98
+--- 4d unsourced info /c
+$ ros2 topic info /c
+  0.29 Type: tec_msgs/msg/Num
+  0.29 Publisher count: 1
+  0.29 Subscription count: 0
+first_data=none
+exit=0 elapsed=0.34
+--- 4e unsourced topic list -t
+$ ros2 topic list -t
+  0.29 /c [tec_msgs/msg/Num]
+  0.29 /parameter_events [rcl_interfaces/msg/ParameterEvent]
+  0.29 /rosout [rcl_interfaces/msg/Log]
+first_data=none
+exit=0 elapsed=0.34
+--- 4f sourced echo /c (control)
+$ bash -c source /ws/install/setup.bash; exec ros2 topic echo /c
+  1.03 num: 1
+  1.03 ---
+  1.40 num: 1
+  1.40 ---
+  1.90 num: 1
+  1.90 ---
+       ... 32 more lines
+first_data=1.03
+exit=124 elapsed=10.16
+
+##### 5 different RMW between publisher and echo (--no-daemon)
+--- 5a pub fastrtps, echo cyclonedds
+$ ros2 topic echo --no-daemon /x
+  0.80 WARNING: topic [/x] does not appear to be published yet
+  0.81 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.87
+--- 5a2 repeat
+$ ros2 topic echo --no-daemon /x
+  0.83 data: hi
+  0.83 ---
+  0.93 data: hi
+  0.93 ---
+  1.43 data: hi
+  1.43 ---
+       ... 34 more lines
+first_data=0.83
+exit=124 elapsed=10.27
+--- 5a3 cyclonedds topic list --spin-time 5
+$ ros2 topic list --no-daemon --spin-time 5
+  5.60 /parameter_events
+  5.60 /rosout
+  5.60 /x
+first_data=none
+exit=0 elapsed=5.66
+--- 5a4 pub fastrtps, echo cyclonedds, explicit type
+$ ros2 topic echo --no-daemon /x std_msgs/msg/String
+  1.46 data: hi
+  1.46 ---
+  1.96 data: hi
+  1.96 ---
+  2.46 data: hi
+  2.46 ---
+       ... 30 more lines
+first_data=1.46
+exit=124 elapsed=10.27
+--- 5b pub cyclonedds, echo fastrtps
+$ ros2 topic echo --no-daemon /x
+  0.83 data: hi
+  0.83 ---
+  1.30 data: hi
+  1.30 ---
+  1.80 data: hi
+  1.80 ---
+       ... 32 more lines
+first_data=0.83
+exit=124 elapsed=10.16
+--- 5c both cyclonedds (control)
+$ ros2 topic echo --no-daemon /x
+  0.81 data: hi
+  0.81 ---
+  1.31 data: hi
+  1.31 ---
+  1.81 data: hi
+  1.81 ---
+       ... 32 more lines
+first_data=0.81
+exit=124 elapsed=10.26
+
+##### 6 explicit type, publisher appears later
+--- 6a echo /x std_msgs/msg/String, pub 3 s later, daemon
+$ ros2 topic echo /x std_msgs/msg/String
+  3.82 data: hi
+  3.82 ---
+  4.32 data: hi
+  4.32 ---
+  4.82 data: hi
+  4.82 ---
+       ... 28 more lines
+first_data=3.82
+exit=124 elapsed=12.18
+--- 6b same, --no-daemon
+$ ros2 topic echo --no-daemon /x std_msgs/msg/String
+  3.82 data: hi
+  3.82 ---
+  4.32 data: hi
+  4.32 ---
+  4.82 data: hi
+  4.82 ---
+       ... 28 more lines
+first_data=3.82
+exit=124 elapsed=12.17
+--- 6c explicit type, no publisher ever
+$ ros2 topic echo /x std_msgs/msg/String
+first_data=none
+exit=124 elapsed=8.19
+=== done
+ 09:52:35 up 93 days, 13:48,  1 user,  load average: 0.13, 0.26, 0.17
+=== CASE7 both-default | publisher env:  | echo env: 
+--- echo /x 
+$ ros2 topic echo /x
+  0.99 data: hi
+  0.99 ---
+  1.15 data: hi
+  1.15 ---
+  1.65 data: hi
+  1.65 ---
+       ... 40 more lines
+first_data=0.99
+exit=124 elapsed=12.19
+--- echo --no-daemon /x 
+$ ros2 topic echo --no-daemon /x
+  0.84 data: hi
+  0.84 ---
+  0.95 data: hi
+  0.95 ---
+  1.45 data: hi
+  1.45 ---
+       ... 42 more lines
+first_data=0.84
+exit=124 elapsed=12.17
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+publishing #2: std_msgs.msg.String(data='hi')
+
+ 09:53:05 up 93 days, 13:49,  1 user,  load average: 0.08, 0.23, 0.16
+=== CASE7 pub-localhost-only | publisher env: -e ROS_LOCALHOST_ONLY=1 | echo env: 
+--- echo /x 
+$ ros2 topic echo /x
+  0.95 WARNING: topic [/x] does not appear to be published yet
+  0.95 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=1.11
+--- echo --no-daemon /x 
+$ ros2 topic echo --no-daemon /x
+  0.81 WARNING: topic [/x] does not appear to be published yet
+  0.82 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.97
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+publishing #2: std_msgs.msg.String(data='hi')
+
+ 09:53:14 up 93 days, 13:49,  1 user,  load average: 0.15, 0.24, 0.17
+=== CASE7 both-localhost-only | publisher env: -e ROS_LOCALHOST_ONLY=1 | echo env: -e ROS_LOCALHOST_ONLY=1
+--- echo /x 
+$ ros2 topic echo /x
+  0.94 WARNING: topic [/x] does not appear to be published yet
+  0.94 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=1.10
+--- echo --no-daemon /x 
+$ ros2 topic echo --no-daemon /x
+  0.82 WARNING: topic [/x] does not appear to be published yet
+  0.82 Could not determine the type for the passed topic
+first_data=none
+exit=1 elapsed=0.98
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+publishing #2: std_msgs.msg.String(data='hi')
+
+ 09:53:22 up 93 days, 13:49,  1 user,  load average: 0.14, 0.23, 0.17
+=== CASE7 pub-localhost-only-explicit-type | publisher env: -e ROS_LOCALHOST_ONLY=1 | echo env: 
+--- echo /x std_msgs/msg/String
+$ ros2 topic echo /x std_msgs/msg/String
+first_data=none
+exit=124 elapsed=12.19
+--- echo --no-daemon /x std_msgs/msg/String
+$ ros2 topic echo --no-daemon /x std_msgs/msg/String
+first_data=none
+exit=124 elapsed=12.16
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+publishing #2: std_msgs.msg.String(data='hi')
+
+ 09:53:53 up 93 days, 13:50,  1 user,  load average: 0.84, 0.39, 0.22
+=== CASE7 pub-range-LOCALHOST | publisher env: -e ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST | echo env: 
+--- echo /x 
+$ ros2 topic echo /x
+  0.99 data: hi
+  0.99 ---
+  1.16 data: hi
+  1.16 ---
+  1.66 data: hi
+  1.66 ---
+       ... 40 more lines
+first_data=0.99
+exit=124 elapsed=12.19
+--- echo --no-daemon /x 
+$ ros2 topic echo --no-daemon /x
+  0.84 data: hi
+  0.84 ---
+  0.95 data: hi
+  0.95 ---
+  1.45 data: hi
+  1.45 ---
+       ... 42 more lines
+first_data=0.84
+exit=124 elapsed=12.17
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+publishing #2: std_msgs.msg.String(data='hi')
+
+ 09:54:23 up 93 days, 13:50,  1 user,  load average: 0.51, 0.35, 0.21
+=== CASE7 echo-range-LOCALHOST | publisher env:  | echo env: -e ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+--- echo /x 
+$ ros2 topic echo /x
+  0.99 data: hi
+  0.99 ---
+  1.16 data: hi
+  1.16 ---
+  1.66 data: hi
+  1.66 ---
+       ... 40 more lines
+first_data=0.99
+exit=124 elapsed=12.19
+--- echo --no-daemon /x 
+$ ros2 topic echo --no-daemon /x
+  0.83 data: hi
+  0.83 ---
+  0.96 data: hi
+  0.96 ---
+  1.46 data: hi
+  1.46 ---
+       ... 42 more lines
+first_data=0.83
+exit=124 elapsed=12.17
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+publishing #2: std_msgs.msg.String(data='hi')
+
+ 09:54:54 up 93 days, 13:51,  1 user,  load average: 0.31, 0.31, 0.20
+=== CASE7 both-range-SUBNET | publisher env: -e ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET | echo env: -e ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+--- echo /x 
+$ ros2 topic echo /x
+  1.05 data: hi
+  1.05 ---
+  1.14 data: hi
+  1.14 ---
+  1.64 data: hi
+  1.64 ---
+       ... 40 more lines
+first_data=1.05
+exit=124 elapsed=12.19
+--- echo --no-daemon /x 
+$ ros2 topic echo --no-daemon /x
+  0.84 data: hi
+  0.84 ---
+  0.93 data: hi
+  0.93 ---
+  1.43 data: hi
+  1.43 ---
+       ... 42 more lines
+first_data=0.84
+exit=124 elapsed=12.17
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+publishing #2: std_msgs.msg.String(data='hi')
+
+ 10:17:46 up 93 days, 14:14,  1 user,  load average: 0.04, 0.14, 0.20
+=== EXTRA distro=humble
+##### 8 cold daemon: publisher running 5 s, daemon stopped, echo auto-starts it (x5), then echo again
+--- 8a.1 cold daemon, first echo
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  0.87 data: hi
+  0.87 ---
+  1.37 data: hi
+  1.37 ---
+       ... 26 more lines
+first_data=0.85
+exit=124 elapsed=8.19
+--- 8b.1 second echo right after (daemon now running)
+$ ros2 topic echo /x
+  0.86 data: hi
+  0.86 ---
+  1.16 data: hi
+  1.16 ---
+  1.66 data: hi
+  1.66 ---
+       ... 24 more lines
+first_data=0.86
+exit=124 elapsed=8.19
+--- 8a.2 cold daemon, first echo
+$ ros2 topic echo /x
+  0.86 data: hi
+  0.86 ---
+  1.31 data: hi
+  1.31 ---
+  1.82 data: hi
+  1.82 ---
+       ... 24 more lines
+first_data=0.86
+exit=124 elapsed=8.19
+--- 8b.2 second echo right after (daemon now running)
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.11 data: hi
+  1.11 ---
+  1.61 data: hi
+  1.61 ---
+       ... 24 more lines
+first_data=0.85
+exit=124 elapsed=8.19
+--- 8a.3 cold daemon, first echo
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.31 data: hi
+  1.31 ---
+  1.81 data: hi
+  1.81 ---
+       ... 24 more lines
+first_data=0.85
+exit=124 elapsed=8.19
+--- 8b.3 second echo right after (daemon now running)
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.11 data: hi
+  1.11 ---
+  1.61 data: hi
+  1.61 ---
+       ... 24 more lines
+first_data=0.85
+exit=124 elapsed=8.18
+--- 8a.4 cold daemon, first echo
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  0.87 data: hi
+  0.87 ---
+  1.37 data: hi
+  1.37 ---
+       ... 26 more lines
+first_data=0.85
+exit=124 elapsed=8.19
+--- 8b.4 second echo right after (daemon now running)
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.16 data: hi
+  1.16 ---
+  1.66 data: hi
+  1.66 ---
+       ... 24 more lines
+first_data=0.85
+exit=124 elapsed=8.19
+--- 8a.5 cold daemon, first echo
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.31 data: hi
+  1.31 ---
+  1.81 data: hi
+  1.81 ---
+       ... 24 more lines
+first_data=0.85
+exit=124 elapsed=8.19
+--- 8b.5 second echo right after (daemon now running)
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.11 data: hi
+  1.11 ---
+  1.61 data: hi
+  1.61 ---
+       ... 24 more lines
+first_data=0.85
+exit=124 elapsed=8.19
+--- 8c.1 warm daemon (started 3 s before publisher), publisher running 5 s
+$ ros2 topic echo /x
+  0.85 data: hi
+  0.85 ---
+  1.31 data: hi
+  1.31 ---
+  1.81 data: hi
+  1.81 ---
+       ... 24 more lines
+first_data=0.85
+exit=124 elapsed=8.17
+--- 8c.2 warm daemon (started 3 s before publisher), publisher running 5 s
+$ ros2 topic echo /x
+  0.84 data: hi
+  0.84 ---
+  1.32 data: hi
+  1.32 ---
+  1.82 data: hi
+  1.82 ---
+       ... 24 more lines
+first_data=0.84
+exit=124 elapsed=8.16
+--- 8c.3 warm daemon (started 3 s before publisher), publisher running 5 s
+$ ros2 topic echo /x
+  0.86 data: hi
+  0.86 ---
+  1.31 data: hi
+  1.31 ---
+  1.81 data: hi
+  1.81 ---
+       ... 24 more lines
+first_data=0.86
+exit=124 elapsed=8.16
+--- 8d.1 cold daemon, ros2 topic info
+$ ros2 topic info /x
+  0.83 Type: std_msgs/msg/String
+  0.83 Publisher count: 1
+  0.83 Subscription count: 0
+first_data=none
+exit=0 elapsed=0.99
+--- 8d.2 cold daemon, ros2 topic info
+$ ros2 topic info /x
+  0.83 Type: std_msgs/msg/String
+  0.83 Publisher count: 1
+  0.83 Subscription count: 0
+first_data=none
+exit=0 elapsed=1.03
+--- 8d.3 cold daemon, ros2 topic info
+$ ros2 topic info /x
+  0.83 Type: std_msgs/msg/String
+  0.83 Publisher count: 1
+  0.83 Subscription count: 0
+first_data=none
+exit=0 elapsed=0.99
+##### 4x custom message unsourced, --no-daemon
+tec_msgs built
+--- 4x1 unsourced echo --no-daemon /c
+$ ros2 topic echo --no-daemon /c
+  0.81 The message type 'tec_msgs/msg/Num' is invalid
+first_data=none
+exit=1 elapsed=0.97
+--- 4x2 unsourced echo /c (daemon auto-started by this call)
+$ ros2 topic echo /c
+  0.83 The message type 'tec_msgs/msg/Num' is invalid
+first_data=none
+exit=1 elapsed=0.99
+--- 4x3 unsourced echo /c (daemon already running)
+$ ros2 topic echo /c
+  0.29 The message type 'tec_msgs/msg/Num' is invalid
+first_data=none
+exit=1 elapsed=0.35
+=== extra done
