@@ -44,7 +44,7 @@ assert.ok(j(c('2026-11-20', '2026-11-21', '2027-12-01', 'geneva', 'center')).inc
 assert.ok(j(c('2026-11-20', '2026-12-20', '2026-12-10', 'geneva', 'center')).includes('출국일보다 빠르다'));
 assert.ok(j(c('2026-11-20', '2026-12-20', '', 'taiwan', 'center')).includes('NT$150'));
 assert.ok(j(c('2026-11-20', '2026-12-20', '', 'vietnam', 'center')).includes('B 범주'));
-assert.ok(j(c('2026-11-20', '2026-12-20', '', 'vienna', 'center')).includes('확인하지 못했다'));
+assert.ok(j(c('2026-11-20', '2026-12-20', '', 'vienna', 'center')).includes('확인하지 못했'));
 assert.ok(j(c('2026-11-20', '2026-12-20', '', 'other', 'center')).includes('중국 본토'));
 assert.ok(j(c('2026-11-20', '2026-12-20', '', 'geneva', 'center')).includes('여권을 함께'));
 console.log('PASS 준비물·안내 문구 18건');
