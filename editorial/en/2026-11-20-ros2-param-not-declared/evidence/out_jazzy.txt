@@ -1,0 +1,749 @@
+=== distro=jazzy
+ros-jazzy-launch-ros 0.26.13-1noble.20260920.233704
+ros-jazzy-rcl 9.2.11-1noble.20260911.104031
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-ros2param 0.32.13-1noble.20261006.034648
+
+########## py_node.py MODE=plain  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=5
+[INFO] [T] [param_node]: GET declared_ro has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET declared_dyn has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_cli
+[INFO] [T] [param_node]: GET undeclared_yaml has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_yaml
+[INFO] [T] [param_node]: GET undeclared_launch has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_launch
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro start_type_description_service use_sim_time
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  start_type_description_service
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Setting parameter failed: Invalid access to undeclared parameter(s): []
+exit=0
+$ ros2 param set /param_node declared_int hello
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.STRING'
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.DOUBLE'
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: Trying to set a read-only parameter: declared_ro.
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Parameter not set
+exit=1
+$ ros2 param get /param_node undeclared_cli
+Parameter not set
+exit=1
+$ ros2 param get /param_node undeclared_yaml
+Parameter not set
+exit=1
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  start_type_description_service
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+[WARN] [T] [param_node]: Failed to set parameter: Invalid access to undeclared parameter(s): []
+[WARN] [T] [param_node]: Failed to get parameters: Invalid access to undeclared parameter(s): not_declared
+[WARN] [T] [param_node]: Failed to get parameters: Invalid access to undeclared parameter(s): undeclared_cli
+[WARN] [T] [param_node]: Failed to get parameters: Invalid access to undeclared parameter(s): undeclared_yaml
+
+########## py_node.py MODE=allow  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE allow
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=5
+[INFO] [T] [param_node]: GET declared_ro has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET declared_dyn has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=False type=NOT_SET value=None
+[INFO] [T] [param_node]: GET undeclared_yaml has=False type=NOT_SET value=None
+[INFO] [T] [param_node]: GET undeclared_launch has=False type=NOT_SET value=None
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro start_type_description_service use_sim_time
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  start_type_description_service
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int hello
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.STRING'
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.DOUBLE'
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: Trying to set a read-only parameter: declared_ro.
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_cli
+Parameter not set.
+exit=0
+$ ros2 param get /param_node undeclared_yaml
+Parameter not set.
+exit=0
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  not_declared
+  start_type_description_service
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+
+########## py_node.py MODE=auto  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE auto
+[INFO] [T] [param_node]: DECLARE declared_int EXC ParameterAlreadyDeclaredException: Parameter(s) already declared: ['declared_int']
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=5
+[INFO] [T] [param_node]: GET declared_ro has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET declared_dyn has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_yaml has=True type=INTEGER value=2
+[INFO] [T] [param_node]: GET undeclared_launch has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_launch
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro start_type_description_service undeclared_cli undeclared_yaml use_sim_time
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Setting parameter failed: Invalid access to undeclared parameter(s): []
+exit=0
+$ ros2 param set /param_node declared_int hello
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.STRING'
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.DOUBLE'
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: Trying to set a read-only parameter: declared_ro.
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Parameter not set
+exit=1
+$ ros2 param get /param_node undeclared_cli
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_yaml
+Integer value is: 2
+exit=0
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+  declared_dyn
+  declared_int
+  declared_ro
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+[WARN] [T] [param_node]: Failed to set parameter: Invalid access to undeclared parameter(s): []
+[WARN] [T] [param_node]: Failed to get parameters: Invalid access to undeclared parameter(s): not_declared
+
+########## py_node.py MODE=both  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE both
+[INFO] [T] [param_node]: DECLARE declared_int EXC ParameterAlreadyDeclaredException: Parameter(s) already declared: ['declared_int']
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=5
+[INFO] [T] [param_node]: GET declared_ro has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET declared_dyn has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_yaml has=True type=INTEGER value=2
+[INFO] [T] [param_node]: GET undeclared_launch has=False type=NOT_SET value=None
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro start_type_description_service undeclared_cli undeclared_yaml use_sim_time
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int hello
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.STRING'
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.DOUBLE'
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: Trying to set a read-only parameter: declared_ro.
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_cli
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_yaml
+Integer value is: 2
+exit=0
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  not_declared
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+
+########## py_node.py YAML key / typo cases (MODE=plain, ONESHOT)
+----- all.yaml
+/**:
+  ros__parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=5
+[INFO] [T] [param_node]: GET undeclared_yaml has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_yaml
+exit=0
+----- exact.yaml
+/param_node:
+  ros__parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=5
+[INFO] [T] [param_node]: GET undeclared_yaml has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_yaml
+exit=0
+----- wrong_name.yaml
+/params_node:
+  ros__parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_yaml has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_yaml
+exit=0
+----- typo_ros_parameters.yaml
+/param_node:
+  ros_parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[ERROR] [T] [rcl]: Failed to parse global arguments
+Traceback (most recent call last):
+  File "/ws/install/pnode/lib/pnode/py_node.py", line 5, in <module>
+    rclpy.init()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 88, in init
+    context.init(args, domain_id=domain_id)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/context.py", line 99, in init
+    self.__context = _rclpy.Context(
+                     ^^^^^^^^^^^^^^^
+rclpy._rclpy_pybind11.RCLError: failed to initialize rcl: Couldn't parse params file: '--params-file /y/typo_ros_parameters.yaml'. Error: Cannot have a value before ros__parameters at line 3, at ./src/parse.c:800, at ./src/rcl/arguments.c:415
+[ros2run]: Process exited with failure 1
+exit=1
+----- typo_ros_parameter.yaml
+/param_node:
+  ros__parameter:
+    declared_int: 5
+    undeclared_yaml: 2
+[ERROR] [T] [rcl]: Failed to parse global arguments
+Traceback (most recent call last):
+  File "/ws/install/pnode/lib/pnode/py_node.py", line 5, in <module>
+    rclpy.init()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 88, in init
+    context.init(args, domain_id=domain_id)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/context.py", line 99, in init
+    self.__context = _rclpy.Context(
+                     ^^^^^^^^^^^^^^^
+rclpy._rclpy_pybind11.RCLError: failed to initialize rcl: Couldn't parse params file: '--params-file /y/typo_ros_parameter.yaml'. Error: Cannot have a value before ros__parameters at line 3, at ./src/parse.c:800, at ./src/rcl/arguments.c:415
+[ros2run]: Process exited with failure 1
+exit=1
+
+########## py_node.py -p undeclared only, plain, ONESHOT (any warning?)
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=9
+[INFO] [T] [param_node]: GET declared_ro has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET declared_dyn has=True type=INTEGER value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_cli
+[INFO] [T] [param_node]: GET undeclared_yaml has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_yaml
+[INFO] [T] [param_node]: GET undeclared_launch has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_launch
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro start_type_description_service use_sim_time
+exit=0
+
+########## py_node.py launch file parameters=[{'declared_int': 7, 'undeclared_launch': 3}], plain
+[INFO] [py_node.py-1]: process started with pid N[1412]
+[py_node.py-1] [INFO] [T] [param_node]: MODE plain
+[py_node.py-1] [INFO] [T] [param_node]: DECLARE declared_int ok
+[py_node.py-1] [INFO] [T] [param_node]: DECLARE declared_ro ok
+[py_node.py-1] [INFO] [T] [param_node]: DECLARE declared_dyn ok
+[py_node.py-1] [INFO] [T] [param_node]: GET declared_int has=True type=INTEGER value=7
+[py_node.py-1] [INFO] [T] [param_node]: GET declared_ro has=True type=INTEGER value=1
+[py_node.py-1] [INFO] [T] [param_node]: GET declared_dyn has=True type=INTEGER value=1
+[py_node.py-1] [INFO] [T] [param_node]: GET undeclared_cli has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_cli
+[py_node.py-1] [INFO] [T] [param_node]: GET undeclared_yaml has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_yaml
+[py_node.py-1] [INFO] [T] [param_node]: GET undeclared_launch has=False EXC ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_launch
+[py_node.py-1] [INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro start_type_description_service use_sim_time
+[INFO] [py_node.py-1]: process has finished cleanly [pid N]
+exit=0
+
+########## cpp_node MODE=plain  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=5
+[INFO] [T] [param_node]: GET declared_ro has=1 type=integer value=1
+[INFO] [T] [param_node]: GET declared_dyn has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_cli
+[INFO] [T] [param_node]: GET undeclared_yaml has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_yaml
+[INFO] [T] [param_node]: GET undeclared_launch has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_launch
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro qos_overrides./parameter_events.publisher.depth qos_overrides./parameter_events.publisher.durability qos_overrides./parameter_events.publisher.history qos_overrides./parameter_events.publisher.reliability start_type_description_service use_sim_time 
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  use_sim_time
+  declared_dyn
+  declared_int
+  declared_ro
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Setting parameter failed: parameter 'not_declared' cannot be set because it was not declared
+exit=0
+$ ros2 param set /param_node declared_int hello
+Setting parameter failed: Wrong parameter type, parameter {declared_int} is of type {integer}, setting it to {string} is not allowed.
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Setting parameter failed: Wrong parameter type, parameter {declared_int} is of type {integer}, setting it to {double} is not allowed.
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: parameter 'declared_ro' cannot be set because it is read-only
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Parameter not set
+exit=1
+$ ros2 param get /param_node undeclared_cli
+Parameter not set
+exit=1
+$ ros2 param get /param_node undeclared_yaml
+Parameter not set
+exit=1
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+[WARN] [T] [rclcpp]: Failed to set parameter: parameter 'not_declared' cannot be set because it was not declared
+[WARN] [T] [rclcpp]: Failed to get parameters: not_declared
+[WARN] [T] [rclcpp]: Failed to get parameters: undeclared_cli
+[WARN] [T] [rclcpp]: Failed to get parameters: undeclared_yaml
+
+########## cpp_node MODE=allow  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE allow
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=5
+[INFO] [T] [param_node]: GET declared_ro has=1 type=integer value=1
+[INFO] [T] [param_node]: GET declared_dyn has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=0 type=not set value=not set
+[INFO] [T] [param_node]: GET undeclared_yaml has=0 type=not set value=not set
+[INFO] [T] [param_node]: GET undeclared_launch has=0 type=not set value=not set
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro qos_overrides./parameter_events.publisher.depth qos_overrides./parameter_events.publisher.durability qos_overrides./parameter_events.publisher.history qos_overrides./parameter_events.publisher.reliability start_type_description_service use_sim_time 
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int hello
+Setting parameter failed: Wrong parameter type, parameter {declared_int} is of type {integer}, setting it to {string} is not allowed.
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Setting parameter failed: Wrong parameter type, parameter {declared_int} is of type {integer}, setting it to {double} is not allowed.
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: parameter 'declared_ro' cannot be set because it is read-only
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_cli
+Parameter not set.
+exit=0
+$ ros2 param get /param_node undeclared_yaml
+Parameter not set.
+exit=0
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  not_declared
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+
+########## cpp_node MODE=auto  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE auto
+[INFO] [T] [param_node]: DECLARE declared_int EXC rclcpp::exceptions::ParameterAlreadyDeclaredException: parameter 'declared_int' has already been declared
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=5
+[INFO] [T] [param_node]: GET declared_ro has=1 type=integer value=1
+[INFO] [T] [param_node]: GET declared_dyn has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_yaml has=1 type=integer value=2
+[INFO] [T] [param_node]: GET undeclared_launch has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_launch
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro qos_overrides./parameter_events.publisher.depth qos_overrides./parameter_events.publisher.durability qos_overrides./parameter_events.publisher.history qos_overrides./parameter_events.publisher.reliability start_type_description_service undeclared_cli undeclared_yaml use_sim_time 
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Setting parameter failed: parameter 'not_declared' cannot be set because it was not declared
+exit=0
+$ ros2 param set /param_node declared_int hello
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: parameter 'declared_ro' cannot be set because it is read-only
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Parameter not set
+exit=1
+$ ros2 param get /param_node undeclared_cli
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_yaml
+Integer value is: 2
+exit=0
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+[WARN] [T] [rclcpp]: Failed to set parameter: parameter 'not_declared' cannot be set because it was not declared
+[WARN] [T] [rclcpp]: Failed to get parameters: not_declared
+
+########## cpp_node MODE=both  (--ros-args -p undeclared_cli:=1 --params-file all.yaml)
+--- node startup log
+[INFO] [T] [param_node]: MODE both
+[INFO] [T] [param_node]: DECLARE declared_int EXC rclcpp::exceptions::ParameterAlreadyDeclaredException: parameter 'declared_int' has already been declared
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=5
+[INFO] [T] [param_node]: GET declared_ro has=1 type=integer value=1
+[INFO] [T] [param_node]: GET declared_dyn has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_yaml has=1 type=integer value=2
+[INFO] [T] [param_node]: GET undeclared_launch has=0 type=not set value=not set
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro qos_overrides./parameter_events.publisher.depth qos_overrides./parameter_events.publisher.durability qos_overrides./parameter_events.publisher.history qos_overrides./parameter_events.publisher.reliability start_type_description_service undeclared_cli undeclared_yaml use_sim_time 
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+$ ros2 param set /param_node not_declared 1
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int hello
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int 2.0
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_int 3
+Set parameter successful
+exit=0
+$ ros2 param set /param_node declared_ro 2
+Setting parameter failed: parameter 'declared_ro' cannot be set because it is read-only
+exit=0
+$ ros2 param set /param_node declared_dyn hello
+Set parameter successful
+exit=0
+$ ros2 param get /param_node not_declared
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_cli
+Integer value is: 1
+exit=0
+$ ros2 param get /param_node undeclared_yaml
+Integer value is: 2
+exit=0
+$ ros2 param get /param_node declared_dyn
+String value is: hello
+exit=0
+$ ros2 param list /param_node
+  declared_dyn
+  declared_int
+  declared_ro
+  not_declared
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+  declared_dyn
+  declared_int
+  declared_ro
+  not_declared
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  undeclared_cli
+  undeclared_yaml
+  use_sim_time
+exit=0
+--- node log after shutdown (new lines only)
+
+########## cpp_node YAML key / typo cases (MODE=plain, ONESHOT)
+----- all.yaml
+/**:
+  ros__parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=5
+[INFO] [T] [param_node]: GET undeclared_yaml has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_yaml
+exit=0
+----- exact.yaml
+/param_node:
+  ros__parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=5
+[INFO] [T] [param_node]: GET undeclared_yaml has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_yaml
+exit=0
+----- wrong_name.yaml
+/params_node:
+  ros__parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_yaml has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_yaml
+exit=0
+----- typo_ros_parameters.yaml
+/param_node:
+  ros_parameters:
+    declared_int: 5
+    undeclared_yaml: 2
+[ERROR] [T] [rcl]: Failed to parse global arguments
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'
+  what():  failed to initialize rcl: Couldn't parse params file: '--params-file /y/typo_ros_parameters.yaml'. Error: Cannot have a value before ros__parameters at line 3, at ./src/parse.c:800, at ./src/rcl/arguments.c:415
+[ros2run]: Aborted
+exit=250
+----- typo_ros_parameter.yaml
+/param_node:
+  ros__parameter:
+    declared_int: 5
+    undeclared_yaml: 2
+[ERROR] [T] [rcl]: Failed to parse global arguments
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'
+  what():  failed to initialize rcl: Couldn't parse params file: '--params-file /y/typo_ros_parameter.yaml'. Error: Cannot have a value before ros__parameters at line 3, at ./src/parse.c:800, at ./src/rcl/arguments.c:415
+[ros2run]: Aborted
+exit=250
+
+########## cpp_node -p undeclared only, plain, ONESHOT (any warning?)
+[INFO] [T] [param_node]: MODE plain
+[INFO] [T] [param_node]: DECLARE declared_int ok
+[INFO] [T] [param_node]: DECLARE declared_ro ok
+[INFO] [T] [param_node]: DECLARE declared_dyn ok
+[INFO] [T] [param_node]: GET declared_int has=1 type=integer value=9
+[INFO] [T] [param_node]: GET declared_ro has=1 type=integer value=1
+[INFO] [T] [param_node]: GET declared_dyn has=1 type=integer value=1
+[INFO] [T] [param_node]: GET undeclared_cli has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_cli
+[INFO] [T] [param_node]: GET undeclared_yaml has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_yaml
+[INFO] [T] [param_node]: GET undeclared_launch has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_launch
+[INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro qos_overrides./parameter_events.publisher.depth qos_overrides./parameter_events.publisher.durability qos_overrides./parameter_events.publisher.history qos_overrides./parameter_events.publisher.reliability start_type_description_service use_sim_time 
+exit=0
+
+########## cpp_node launch file parameters=[{'declared_int': 7, 'undeclared_launch': 3}], plain
+[INFO] [proc]: process started with pid N[2650]
+[proc] [INFO] [T] [param_node]: MODE plain
+[proc] [INFO] [T] [param_node]: DECLARE declared_int ok
+[proc] [INFO] [T] [param_node]: DECLARE declared_ro ok
+[proc] [INFO] [T] [param_node]: DECLARE declared_dyn ok
+[proc] [INFO] [T] [param_node]: GET declared_int has=1 type=integer value=7
+[proc] [INFO] [T] [param_node]: GET declared_ro has=1 type=integer value=1
+[proc] [INFO] [T] [param_node]: GET declared_dyn has=1 type=integer value=1
+[proc] [INFO] [T] [param_node]: GET undeclared_cli has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_cli
+[proc] [INFO] [T] [param_node]: GET undeclared_yaml has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_yaml
+[proc] [INFO] [T] [param_node]: GET undeclared_launch has=0 EXC rclcpp::exceptions::ParameterNotDeclaredException: undeclared_launch
+[proc] [INFO] [T] [param_node]: LIST declared_dyn declared_int declared_ro qos_overrides./parameter_events.publisher.depth qos_overrides./parameter_events.publisher.durability qos_overrides./parameter_events.publisher.history qos_overrides./parameter_events.publisher.reliability start_type_description_service use_sim_time 
+[INFO] [proc]: process has finished cleanly [pid N]
+exit=0
+=== done jazzy

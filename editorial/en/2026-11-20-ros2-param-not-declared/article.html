@@ -1,0 +1,203 @@
+<p>You ran <code>ros2 param set</code> on a running C++ node and got this:</p>
+
+<pre><code>$ ros2 param set /param_node not_declared 1
+Setting parameter failed: parameter 'not_declared' cannot be set because it was not declared</code></pre>
+
+<p>A Python node prints a different line for the same mistake. On Humble it's <code>Setting parameter failed: ('Invalid access to undeclared parameter(s)', [])</code>, and on Jazzy and Lyrical it's <code>Setting parameter failed: Invalid access to undeclared parameter(s): []</code>. Inside the node, <code>get_parameter()</code> on a name that was never declared raises <code>ParameterNotDeclaredException</code> in both rclpy and rclcpp.</p>
+
+<p>Short answer: a ROS 2 node only accepts parameters it has declared. Declare the parameter in the node before you set or read it, and give it a default of the type you want:</p>
+
+<pre><code class="language-python"># rclpy
+self.declare_parameter('my_param', 1)
+value = self.get_parameter('my_param').value</code></pre>
+
+<pre><code class="language-cpp">// rclcpp
+this-&gt;declare_parameter("my_param", 1);
+auto value = this-&gt;get_parameter("my_param").as_int();</code></pre>
+
+<p>This also explains parameters that seem to vanish. A value for an undeclared name passed with <code>-p</code>, in a <code>--params-file</code>, or in a launch file's <code>parameters=[...]</code> produced no error and no warning in my runs. The node started normally, the name was missing from <code>ros2 param list</code>, and <code>get_parameter()</code> threw. If your YAML values are ignored but the file parses, check that the node declares those names.</p>
+
+<p>One more thing to know before you script around this: <code>ros2 param set</code> exited with code 0 every time it failed. Check the printed text, not <code>$?</code>.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every row below comes from the same two nodes (one rclpy, one rclcpp) on Humble, Jazzy and Lyrical. Where the text differs between distros, the row says so.</p>
+
+<table>
+<thead><tr><th>What you did</th><th>rclcpp node</th><th>rclpy node</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 param set</code> on an undeclared name</td><td><code>Setting parameter failed: parameter 'not_declared' cannot be set because it was not declared</code></td><td>Humble: <code>Setting parameter failed: ('Invalid access to undeclared parameter(s)', [])</code><br>Jazzy, Lyrical: <code>Setting parameter failed: Invalid access to undeclared parameter(s): []</code></td></tr>
+<tr><td><code>ros2 param set</code> a string on an integer parameter</td><td><code>Setting parameter failed: Wrong parameter type, parameter {declared_int} is of type {integer}, setting it to {string} is not allowed.</code></td><td>Humble, Jazzy: <code>Setting parameter failed: Wrong parameter type, expected 'Type.INTEGER' got 'Type.STRING'</code><br>Lyrical: <code>Setting parameter failed: Wrong parameter type, expected '2' got '4'</code></td></tr>
+<tr><td><code>ros2 param set</code> <code>2.0</code> on an integer parameter</td><td>same as above, <code>setting it to {double}</code></td><td>Humble, Jazzy: <code>got 'Type.DOUBLE'</code><br>Lyrical: <code>expected '2' got '3'</code></td></tr>
+<tr><td><code>ros2 param set</code> on a <code>read_only</code> parameter</td><td><code>Setting parameter failed: parameter 'declared_ro' cannot be set because it is read-only</code></td><td><code>Setting parameter failed: Trying to set a read-only parameter: declared_ro.</code></td></tr>
+<tr><td><code>ros2 param get</code> on an undeclared name</td><td colspan="2">Humble, Jazzy: <code>Parameter not set</code>, exit 1<br>Lyrical: <code>Parameter(s) 'not_declared' not available on node</code>, exit 1</td></tr>
+<tr><td><code>get_parameter()</code> in code on an undeclared name</td><td><code>rclcpp::exceptions::ParameterNotDeclaredException</code>, message is just the name</td><td>Humble: <code>ParameterNotDeclaredException: ('Invalid access to undeclared parameter(s)', 'undeclared_cli')</code><br>Jazzy, Lyrical: <code>ParameterNotDeclaredException: Invalid access to undeclared parameter(s): undeclared_cli</code></td></tr>
+<tr><td><code>declare_parameter()</code> on a name that was already auto-declared</td><td><code>rclcpp::exceptions::ParameterAlreadyDeclaredException: parameter 'declared_int' has already been declared</code></td><td>Humble: <code>ParameterAlreadyDeclaredException: ('Parameter(s) already declared', ['declared_int'])</code><br>Jazzy, Lyrical: <code>Parameter(s) already declared: ['declared_int']</code></td></tr>
+</tbody>
+</table>
+
+<p>In Lyrical's rclpy messages the types are numbers. They are the <code>ParameterType</code> constants: 2 is integer, 3 is double, 4 is string.</p>
+
+<p>Every failed <code>ros2 param set</code> in the table exited with code 0. The node also logged a warning each time. The C++ node logged <code>[WARN] [rclcpp]: Failed to set parameter: parameter 'not_declared' cannot be set because it was not declared</code>, and the Python node logged the same text as the CLI under its own logger name, <code>[WARN] [param_node]: Failed to set parameter: ...</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro after another. One package held two nodes, a Python script and a C++ executable, both named <code>param_node</code>. Each node declares three integer parameters, all with default <code>1</code>:</p>
+
+<ul>
+<li><code>declared_int</code>, a plain declaration</li>
+<li><code>declared_ro</code>, declared with <code>ParameterDescriptor(read_only=True)</code></li>
+<li><code>declared_dyn</code>, declared with <code>ParameterDescriptor(dynamic_typing=True)</code></li>
+</ul>
+
+<p>Then the node calls <code>has_parameter()</code> and <code>get_parameter()</code> on those three plus three names it never declares (<code>undeclared_cli</code>, <code>undeclared_yaml</code>, <code>undeclared_launch</code>), and logs its own parameter list. An environment variable picks the node options: plain, <code>allow_undeclared_parameters=True</code>, <code>automatically_declare_parameters_from_overrides=True</code>, or both. In rclpy these are <code>Node()</code> keyword arguments. In rclcpp they are <code>rclcpp::NodeOptions().allow_undeclared_parameters(true)</code> and <code>.automatically_declare_parameters_from_overrides(true)</code>.</p>
+
+<p>For each of the 4 option sets and both languages, I started the node with:</p>
+
+<pre><code>ros2 run pnode py_node.py --ros-args -p undeclared_cli:=1 --params-file all.yaml</code></pre>
+
+<p>where <code>all.yaml</code> is:</p>
+
+<pre><code class="language-yaml">/**:
+  ros__parameters:
+    declared_int: 5
+    undeclared_yaml: 2</code></pre>
+
+<p>While the node was running I called <code>ros2 param list</code>, then <code>ros2 param set</code> with an undeclared name, a string and a double on <code>declared_int</code>, a valid integer, a write to the read-only parameter and a string on the dynamic one, then <code>ros2 param get</code> on four names, then <code>ros2 param list</code> again. Separately I started the plain node with five YAML files that differ only in the top-level key or the <code>ros__parameters</code> spelling, once with <code>-p</code> only, and once from a launch file with <code>parameters=[{'declared_int': 7, 'undeclared_launch': 3}]</code>.</p>
+
+<p>The behavior was the same on all three distros. Only message wording changed, as shown in the table above.</p>
+
+<h2>Undeclared overrides are dropped without a word</h2>
+
+<p>With default node options, the node took the values for names it declared and ignored the rest:</p>
+
+<table>
+<thead><tr><th>Source</th><th>Declared name</th><th>Undeclared name</th></tr></thead>
+<tbody>
+<tr><td><code>--params-file</code>, key <code>/**:</code></td><td><code>declared_int</code> = 5 (default was 1)</td><td><code>undeclared_yaml</code>: not in the list, <code>get_parameter</code> throws</td></tr>
+<tr><td><code>-p name:=value</code></td><td><code>-p declared_int:=9</code> gave 9</td><td><code>undeclared_cli</code>: not in the list, <code>get_parameter</code> throws</td></tr>
+<tr><td>Launch file <code>parameters=[{...}]</code></td><td><code>declared_int</code> = 7</td><td><code>undeclared_launch</code>: not in the list, <code>get_parameter</code> throws</td></tr>
+</tbody>
+</table>
+
+<p>In none of these cases did the node, <code>ros2 run</code> or <code>ros2 launch</code> print a warning about the extra names. The launch output showed <code>process has finished cleanly</code>. From the outside the node looks fine. The value just isn't there.</p>
+
+<p>This is the usual cause behind "my YAML file is found but the parameter isn't loaded". The <a href="https://robotics.stackexchange.com/questions/99640">question on Robotics Stack Exchange</a> with that title has a node that calls <code>get_parameter('variable')</code> without any <code>declare_parameter</code> call. Its YAML key is also <code>mqtt_node</code> while the node is created as <code>mqtt_class</code>, which is a second, separate problem (see below).</p>
+
+<h2>The YAML key must match, and typos in ros__parameters fail loudly</h2>
+
+<p>I started the plain node with five files. Each file sets <code>declared_int: 5</code> and <code>undeclared_yaml: 2</code>.</p>
+
+<table>
+<thead><tr><th>Top of the file</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>/**:</code> then <code>ros__parameters:</code></td><td><code>declared_int</code> = 5</td></tr>
+<tr><td><code>/param_node:</code> then <code>ros__parameters:</code></td><td><code>declared_int</code> = 5</td></tr>
+<tr><td><code>/params_node:</code> (wrong name) then <code>ros__parameters:</code></td><td>no error, exit 0, <code>declared_int</code> = 1 (the default)</td></tr>
+<tr><td><code>/param_node:</code> then <code>ros_parameters:</code> (one underscore)</td><td>node fails to start</td></tr>
+<tr><td><code>/param_node:</code> then <code>ros__parameter:</code> (no s)</td><td>node fails to start</td></tr>
+</tbody>
+</table>
+
+<p><code>undeclared_yaml</code> was never applied, whatever the key. The two typos stopped the node before any code ran:</p>
+
+<pre><code>[ERROR] [rcl]: Failed to parse global arguments
+rclpy._rclpy_pybind11.RCLError: failed to initialize rcl: Couldn't parse params file: '--params-file /y/typo_ros_parameters.yaml'. Error: Cannot have a value before ros__parameters at line 3, at ./src/parse.c:787, at ./src/rcl/arguments.c:406</code></pre>
+
+<p>The Python node exited with code 1. The C++ node threw <code>rclcpp::exceptions::RCLInvalidROSArgsError</code> with the same text, <code>ros2 run</code> printed <code>[ros2run]: Aborted</code>, and the exit code was 250. So a misspelled <code>ros__parameters</code> is not a silent failure. A wrong node name is. For a key that doesn't match, check the name passed to <code>Node(...)</code> (or the <code>name=</code> in your launch file), not the executable or package name. If you aren't sure, <code>/**:</code> matches every node.</p>
+
+<h2>The fix options compared</h2>
+
+<p>Here is what each option changed, with the same command line and the same YAML file. "List" is the output of <code>ros2 param list /param_node</code>. Every list also had <code>use_sim_time</code>. On Jazzy and Lyrical it had <code>start_type_description_service</code>, and the C++ node also had four <code>qos_overrides./parameter_events.publisher.*</code> entries. I've left those out.</p>
+
+<table>
+<thead><tr><th></th><th>Default options</th><th><code>allow_undeclared_parameters</code></th><th><code>automatically_declare_parameters_from_overrides</code></th><th>Both</th></tr></thead>
+<tbody>
+<tr><td>List at startup</td><td>3 declared</td><td>3 declared</td><td>3 declared + <code>undeclared_cli</code>, <code>undeclared_yaml</code></td><td>3 declared + <code>undeclared_cli</code>, <code>undeclared_yaml</code></td></tr>
+<tr><td><code>get_parameter('undeclared_yaml')</code> in code</td><td>throws <code>ParameterNotDeclaredException</code></td><td>returns type NOT_SET (no value)</td><td>returns 2</td><td>returns 2</td></tr>
+<tr><td><code>ros2 param get undeclared_yaml</code></td><td><code>Parameter not set</code>, exit 1 (Lyrical: <code>not available on node</code>)</td><td><code>Parameter not set.</code>, exit 0</td><td><code>Integer value is: 2</code></td><td><code>Integer value is: 2</code></td></tr>
+<tr><td><code>ros2 param set not_declared 1</code></td><td>fails</td><td><code>Set parameter successful</code>, name added to the list</td><td>fails with the same error</td><td><code>Set parameter successful</code></td></tr>
+<tr><td>Your own <code>declare_parameter('declared_int', 1)</code></td><td>works</td><td>works</td><td>throws <code>ParameterAlreadyDeclaredException</code></td><td>throws <code>ParameterAlreadyDeclaredException</code></td></tr>
+</tbody>
+</table>
+
+<p>Read the table by row, because each option fixes a different thing.</p>
+
+<h3>declare_parameter</h3>
+
+<p>This is the standard fix and the only one that keeps type checks and defaults. Declared names got their values from YAML, <code>-p</code> and launch files in every run, and <code>ros2 param set</code> on them worked when the type matched. The parameter shows up in <code>ros2 param list</code> as soon as the node has declared it.</p>
+
+<h3>allow_undeclared_parameters=True</h3>
+
+<p>It only changes what happens at runtime. <code>ros2 param set</code> on a new name succeeded, and <code>ros2 param get</code> then returned <code>Integer value is: 1</code>. But it did not pick up undeclared names from the YAML file or <code>-p</code>. <code>get_parameter('undeclared_yaml')</code> came back with type NOT_SET, not 2, and the name never appeared in the list. <code>ros2 param get</code> printed <code>Parameter not set.</code>, with a period, and exited 0, which differs from the default node's exit 1. If you turned this on to make a YAML value appear and it still doesn't, this is why.</p>
+
+<p><a href="https://github.com/ros2/rclcpp/issues/851">rclcpp issue #851</a> shows the exact error from <code>ros2 param set /parameter_blackboard foo 1</code>, on a node that was supposed to allow undeclared parameters. That was a 2019 source build, and the thread points to a fix in ros2/demos. On Humble, Jazzy and Lyrical the option did let <code>ros2 param set</code> create new names in both languages.</p>
+
+<h3>automatically_declare_parameters_from_overrides=True</h3>
+
+<p>This one does the opposite. Every name present in the YAML file or on the command line was declared at startup with the given value, and it showed up in <code>ros2 param list</code>. Setting a brand-new name at runtime still failed with the same "not declared" error. The catch is that your own <code>declare_parameter()</code> for a name that is also in the file now throws <code>ParameterAlreadyDeclaredException</code>. In my nodes that was <code>declared_int</code>. <code>declared_ro</code> and <code>declared_dyn</code> weren't in the file and declared fine. In a real node that exception ends the constructor unless you catch it, or check <code>has_parameter()</code> first.</p>
+
+<p>The launch-file value <code>undeclared_launch</code> was not tested with this option. I only ran the launch case with default options.</p>
+
+<h3>Both together</h3>
+
+<p>Everything that either option allows worked: overrides were declared, and new names could be set at runtime. It has the same <code>ParameterAlreadyDeclaredException</code> problem. The rclpy question <a href="https://robotics.stackexchange.com/questions/92260">ros2 rclpy list parameters from node</a> uses this combination.</p>
+
+<h3>Auto-declared parameters lost type checking in C++</h3>
+
+<p>One difference between the languages showed up only with <code>automatically_declare_parameters_from_overrides</code>. In the C++ node, <code>declared_int</code> had been auto-declared from the YAML value 5. After that, <code>ros2 param set /param_node declared_int hello</code> and <code>ros2 param set /param_node declared_int 2.0</code> both printed <code>Set parameter successful</code>. The Python node, with the same option and the same file, still rejected both with <code>Wrong parameter type</code>. This happened on all three distros. If you rely on type checks for a C++ parameter, declare it yourself rather than letting the override declare it.</p>
+
+<h2>read_only and dynamic_typing</h2>
+
+<p>A parameter declared with <code>read_only=True</code> got its startup value normally. Writing it with <code>ros2 param set</code> failed with <code>parameter 'declared_ro' cannot be set because it is read-only</code> (C++) or <code>Trying to set a read-only parameter: declared_ro.</code> (Python). That held under every node option, including the C++ auto-declare case above.</p>
+
+<p>A parameter declared with <code>dynamic_typing=True</code> and an integer default accepted <code>ros2 param set /param_node declared_dyn hello</code>, and <code>ros2 param get</code> afterwards printed <code>String value is: hello</code>. Use it when one parameter really needs to hold more than one type. For a plain number, the fix is to pass the right type (<code>3</code>, not <code>3.0</code> or <code>"3"</code>). A <code>2.0</code> on an integer parameter failed with <code>Wrong parameter type</code> just like a string did.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The rclcpp messages were the same on Humble, Jazzy and Lyrical.</li>
+<li>rclpy on Humble prints exceptions as Python tuples, <code>('Invalid access to undeclared parameter(s)', [])</code>. Jazzy and Lyrical print <code>Invalid access to undeclared parameter(s): []</code>. Search for <code>Invalid access to undeclared parameter</code> and you'll match both.</li>
+<li>Lyrical's rclpy prints the wrong-type error with type numbers: <code>expected '2' got '4'</code>.</li>
+<li>Lyrical's <code>ros2 param get</code> on an undeclared name prints <code>Parameter(s) 'not_declared' not available on node</code> instead of <code>Parameter not set</code>. Both exit 1.</li>
+<li>Jazzy and Lyrical add <code>start_type_description_service</code> to every node's parameter list.</li>
+<li>The parse error for a misspelled <code>ros__parameters</code> points at <code>parse.c:787</code> on Humble, <code>parse.c:800</code> on Jazzy and <code>parse.c:1117</code> on Lyrical. Drop the line numbers when you search.</li>
+<li>On Jazzy, 3 of 16 <code>ros2 param list</code> calls printed the whole list twice. Humble and Lyrical never did it. I didn't look into it further. If you see duplicated entries, don't read them as two parameters.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Composable nodes and component containers, <code>ros2 param load</code> and <code>ros2 param dump</code>, the launch file case with <code>allow_undeclared_parameters</code> or auto-declare, namespaced nodes, parameter callbacks (<code>add_on_set_parameters_callback</code>), <code>ros2_control</code> controllers, non-default RMW, and Foxy, Iron and Rolling. The <a href="https://robotics.stackexchange.com/questions/107521">controller question</a> about parameters only known at runtime is about ros2_control's own node options, which I didn't test.</p>
+
+<p>If the node does not start at all and prints "Cannot have a value before ros__parameters", the YAML file itself is malformed; that case and the other params-file parse errors are measured in <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">Failed to parse global arguments: Cannot have a value before ros__parameters</a>.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "cannot be set because it was not declared" mean?</h3>
+<p>The C++ node you sent <code>ros2 param set</code> to never declared that parameter, so it refused the value. Add <code>declare_parameter("name", default)</code> in the node, rebuild, and set it again. A Python node gives the same refusal as <code>Invalid access to undeclared parameter(s)</code>.</p>
+
+<h3>Why do I get ParameterNotDeclaredException even though the YAML file loads?</h3>
+<p>Loading the file doesn't declare anything. In my runs a YAML value for an undeclared name was dropped without a warning, and <code>get_parameter</code> threw. Call <code>declare_parameter</code> before <code>get_parameter</code>, and the YAML value replaces the default.</p>
+
+<h3>Does allow_undeclared_parameters load values from my params file?</h3>
+<p>No. It let <code>ros2 param set</code> create new names at runtime, but undeclared names from <code>--params-file</code> and <code>-p</code> still came back as NOT_SET. To have file values declared for you, use <code>automatically_declare_parameters_from_overrides=True</code>.</p>
+
+<h3>Why does declare_parameter throw ParameterAlreadyDeclaredException?</h3>
+<p>The node was created with <code>automatically_declare_parameters_from_overrides=True</code>, and the name was in the params file or on the command line, so it was already declared at startup. Check <code>has_parameter()</code> first, or drop the option and declare everything yourself.</p>
+
+<h3>Does ros2 param set return a non-zero exit code when it fails?</h3>
+<p>Not in my runs. Every failure (undeclared name, wrong type, read-only) exited 0 on Humble, Jazzy and Lyrical. Scripts should check for <code>Set parameter successful</code> in the output. <code>ros2 param get</code> on an undeclared name did exit 1.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does cannot be set because it was not declared mean?", "acceptedAnswer": {"@type": "Answer", "text": "The C++ node you sent ros2 param set to never declared that parameter, so it refused the value. Add declare_parameter(name, default) in the node, rebuild, and set it again. A Python node gives the same refusal as Invalid access to undeclared parameter(s)."}},
+{"@type": "Question", "name": "Why do I get ParameterNotDeclaredException even though the YAML file loads?", "acceptedAnswer": {"@type": "Answer", "text": "Loading the file does not declare anything. In my runs a YAML value for an undeclared name was dropped without a warning, and get_parameter threw. Call declare_parameter before get_parameter, and the YAML value replaces the default."}},
+{"@type": "Question", "name": "Does allow_undeclared_parameters load values from my params file?", "acceptedAnswer": {"@type": "Answer", "text": "No. It let ros2 param set create new names at runtime, but undeclared names from --params-file and -p still came back as NOT_SET. To have file values declared for you, use automatically_declare_parameters_from_overrides=True."}},
+{"@type": "Question", "name": "Why does declare_parameter throw ParameterAlreadyDeclaredException?", "acceptedAnswer": {"@type": "Answer", "text": "The node was created with automatically_declare_parameters_from_overrides=True, and the name was in the params file or on the command line, so it was already declared at startup. Check has_parameter() first, or drop the option and declare everything yourself."}},
+{"@type": "Question", "name": "Does ros2 param set return a non-zero exit code when it fails?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my runs. Every failure (undeclared name, wrong type, read-only) exited 0 on Humble, Jazzy and Lyrical. Scripts should check for Set parameter successful in the output. ros2 param get on an undeclared name did exit 1."}}
+]}
+</script>
+
+<p>Measured on 2026-10-30 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2param 0.18.20, rcl 5.3.13), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2param 0.32.13, rcl 9.2.11) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2param 0.40.9, rcl 10.4.5), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-20-ros2-param-not-declared/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/rclcpp/issues/851">parameter_blackboard node parameter cannot be set because it was not declared</a>, <a href="https://robotics.stackexchange.com/questions/99640">Cannot retrieve parameters from YAML file (even if the file is found)</a>, <a href="https://robotics.stackexchange.com/questions/99840">use parameters from python launch file in node</a>, <a href="https://robotics.stackexchange.com/questions/92260">ros2 rclpy list parameters from node</a>, <a href="https://robotics.stackexchange.com/questions/107521">How to declare parameter that are only known at runtime</a>.</p>
