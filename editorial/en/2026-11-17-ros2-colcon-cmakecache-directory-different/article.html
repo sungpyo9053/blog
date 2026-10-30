@@ -1,0 +1,179 @@
+<pre><code>CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+Specify --help for usage, or press the help button on the CMake GUI.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+---
+Failed   &lt;&lt;&lt; cpkg_a [0.07s, exited with code 2]
+Aborted  &lt;&lt;&lt; cpkg_b [0.06s]</code></pre>
+
+<p>Short answer: the <code>build/</code> folder remembers the absolute path it was created at. Each <code>build/&lt;pkg&gt;/CMakeCache.txt</code> stores the old source, build and install paths. When the workspace sits at a new path, CMake refuses to reuse that cache. This happens after you <code>mv</code> the workspace, or when a container mounts it somewhere else. The fix that worked in every case I measured, on Humble, Jazzy and Lyrical, is to delete the generated folders and build again from the workspace root:</p>
+
+<pre><code>cd /ws_b                      # the new location
+rm -rf build install log
+colcon build</code></pre>
+
+<p>If you don't use <code>--symlink-install</code>, <code>colcon build --cmake-clean-cache</code> also worked and keeps <code>install/</code>. It took the same time as the full clean. Two fixes that look right did not work. <code>--cmake-clean-first</code> failed with the same error. Deleting <code>build/</code> for only one package left every other CMake package broken.</p>
+
+<h2>Find your case</h2>
+
+<p>Every row below behaved the same on all three distros. The workspace had two <code>ament_cmake</code> packages (<code>cpkg_a</code>, <code>cpkg_b</code>) and one <code>ament_python</code> package (<code>ppkg</code>). It was first built at <code>/ws_a</code>.</p>
+
+<table>
+<thead><tr><th>What you did</th><th>What <code>colcon build</code> did</th></tr></thead>
+<tbody>
+<tr><td><code>mv /ws_a /ws_b</code>, then build in <code>/ws_b</code></td><td>Error above, exit code 2, <code>Summary: 0 packages finished</code></td></tr>
+<tr><td>Same, run a second time</td><td>Same error. It doesn't fix itself.</td></tr>
+<tr><td>Same host folder bind-mounted at <code>/ws_a</code> in one container, then at <code>/ws_b</code> in another</td><td>Same error, exit code 2. Mounting it back at <code>/ws_a</code> built fine.</td></tr>
+<tr><td>Named Docker volume mounted at <code>/ws_a</code>, then at <code>/ws_b</code></td><td>Same error, exit code 2</td></tr>
+<tr><td><code>cp -r /ws_a /ws_c</code>, original still there, build in <code>/ws_c</code></td><td>The error text is printed for each CMake package, but the exit code is 0 and all 3 packages finish. The copy still builds from <code>/ws_a</code>. See below.</td></tr>
+<tr><td>Same copy after <code>rm -rf /ws_a</code></td><td>Error above, exit code 2</td></tr>
+<tr><td>After <code>mv</code>, <code>colcon build --packages-select ppkg</code> (Python only)</td><td>Exit code 0, <code>ppkg</code> builds</td></tr>
+<tr><td>After <code>mv</code> with <code>--symlink-install</code>, <code>--packages-select ppkg</code></td><td>Exit code 1, <code>error: [Errno 17] File exists: '/ws_b/build/ppkg/resource/ppkg' -&gt; '/ws_b/install/ppkg/share/ament_index/resource_index/packages/ppkg'</code></td></tr>
+</tbody>
+</table>
+
+<p>The second line, <code>The source directory "/ws_a/src/cpkg_a" does not exist</code>, appears only when the old path is gone. It's the clearest sign that this is a moved workspace and not a broken <code>CMakeLists.txt</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host, one distro at a time. The two C++ packages are a plain <code>hello</code> executable with no dependencies besides <code>ament_cmake</code>. The Python package has one console script. Here is the sequence in each container:</p>
+
+<ol>
+<li>Build at <code>/ws_a</code>, run <code>ros2 run cpkg_a hello</code> and <code>ros2 run ppkg hello</code>, and save a tar of the built workspace.</li>
+<li><code>mv /ws_a /ws_b</code>. Source the old and new <code>setup.bash</code>, run both nodes, then build.</li>
+<li><code>cp -r /ws_a /ws_c</code>. Build the copy, edit the copy's source, build again, and run all four <code>hello</code> binaries.</li>
+<li>For each fix, untar the built <code>/ws_a</code>, move it to <code>/ws_b</code>, apply the fix and time it. Then run a plain <code>colcon build</code> and both nodes.</li>
+<li>Repeat steps 1 and 2 with <code>--symlink-install</code>.</li>
+<li>On the host, mount one folder at <code>/ws_a</code> and build, then mount it at <code>/ws_b</code> in a new container and build. Repeat with a named volume.</li>
+</ol>
+
+<p>colcon ran with its defaults, so two packages built in parallel on 2 cores.</p>
+
+<h2>Why it fails: the cache stores absolute paths</h2>
+
+<p>Here is the relevant part of <code>build/cpkg_a/CMakeCache.txt</code> after the workspace was copied to <code>/ws_c</code>:</p>
+
+<pre><code>CMAKE_INSTALL_PREFIX:PATH=/ws_a/install/cpkg_a
+cpkg_a_BINARY_DIR:STATIC=/ws_a/build/cpkg_a
+cpkg_a_SOURCE_DIR:STATIC=/ws_a/src/cpkg_a
+CMAKE_CACHEFILE_DIR:INTERNAL=/ws_a/build/cpkg_a
+CMAKE_HOME_DIRECTORY:INTERNAL=/ws_a/src/cpkg_a</code></pre>
+
+<p>Every path points at the original location. colcon calls <code>make</code> in <code>build/cpkg_a</code>. The generated Makefile first runs <code>cmake_check_build_system</code>, and CMake compares <code>CMAKE_CACHEFILE_DIR</code> with the folder the cache is in. They differ, so it prints the error. When the old source folder no longer exists, it also prints "source directory does not exist" and stops with code 2.</p>
+
+<p>Containers hit the same check. A bind mount and a named volume both keep the files and change the path. The cache doesn't care which happened. If you build on the host at <code>/home/you/ws</code> and then inside a container at <code>/workspaces/ws</code>, you get the same mismatch. I didn't build on a host for this test. The <a href="https://forums.developer.nvidia.com/t/isaac-manipulator-pick-and-place-is-not-available-in-the-docker-container-for-isaac-ros/332441">Isaac ROS report</a> below shows that exact pair of paths.</p>
+
+<h2>colcon stops after the first failure</h2>
+
+<p>With default options, the first CMake package to fail ends the build. In most runs the other CMake package was marked <code>Aborted</code>. The Python package was never started, and the summary said <code>0 packages finished</code>. In a few runs both CMake packages reached CMake before the abort and both were listed as failed. Which package fails first varies between runs. That's a timing detail of the parallel build. Don't read anything into the package name in the first error.</p>
+
+<p>With <code>--continue-on-error</code>, colcon built <code>ppkg</code> and listed <code>2 packages failed: cpkg_a cpkg_b</code>, exit code 2. That's a quick way to see every affected package at once. Every CMake package with an old <code>build/</code> folder failed.</p>
+
+<h2>ament_python packages are not affected (without symlink install)</h2>
+
+<p>Python packages don't use <code>CMakeCache.txt</code>. After the move, <code>colcon build --packages-select ppkg</code> finished with exit code 0 on all three distros. In a full build, they only fail because colcon aborts them after a CMake package fails.</p>
+
+<p><code>--symlink-install</code> is different. <code>install/ppkg/lib/python3.X/site-packages/ppkg.egg-link</code> held <code>/ws_a/build/ppkg</code>, and the install tree had symlinks into <code>/ws_a/build</code>. After the move, the Python-only build failed with <code>[Errno 17] File exists</code> for the ament index resource file.</p>
+
+<h2>The copy that "works" and builds the wrong thing</h2>
+
+<p>The <code>cp -r</code> case is the dangerous one. With <code>/ws_a</code> still on disk, <code>colcon build</code> in <code>/ws_c</code> printed the <code>CMakeCache.txt directory ... is different</code> line for each CMake package. It still returned exit code 0 with <code>Summary: 3 packages finished</code>. colcon shows it as stderr output, so it's easy to miss.</p>
+
+<p>Then I changed the message in <code>/ws_c/src/cpkg_a/src/hello.cpp</code> and built <code>/ws_c</code> again. Exit code 0 again. All four binaries still printed the old text: <code>/ws_c/install</code>, <code>/ws_a/install</code>, <code>/ws_c/build</code> and <code>/ws_a/build</code>. The edit in the copy never reached a binary, because the copied cache still points at <code>/ws_a/src</code>. The cache also still names <code>/ws_a/install/cpkg_a</code> as the install prefix. I didn't check which files <code>make install</code> overwrote under <code>/ws_a</code>. Once I deleted <code>/ws_a</code>, the copy failed like the moved workspace, with exit code 2. The original <code>/ws_a</code> kept building normally.</p>
+
+<p>So if you copied a workspace, or cloned a repo that has a <code>build/</code> folder committed, delete <code>build</code> and <code>install</code> in the copy even if the build passes.</p>
+
+<h2>Sourcing and ros2 run after a move</h2>
+
+<p>Running is less fragile than building. In a fresh shell after <code>mv</code>:</p>
+
+<ul>
+<li><code>source /ws_a/install/setup.bash</code>, the old path, gave <code>bash: line 1: /ws_a/install/setup.bash: No such file or directory</code> and return code 1. Nothing was added to the environment. If your <code>~/.bashrc</code> sources the old path, update it. <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">This post covers which setup.bash to source</a>.</li>
+<li><code>source /ws_b/install/setup.bash</code>, the new path, worked without <code>--symlink-install</code>. <code>ros2 run cpkg_a hello</code> and <code>ros2 run ppkg hello</code> both ran, and <code>ros2 pkg prefix cpkg_a</code> printed <code>/ws_b/install/cpkg_a</code>. That held even though 9 files under <code>install/</code> still mentioned <code>/ws_a</code> (11 on Lyrical).</li>
+<li>With <code>--symlink-install</code>, <code>install/</code> held 28 symlinks into <code>/ws_a</code> (30 on Lyrical), and all of them broke after the move. Sourcing <code>/ws_b/install/setup.bash</code> printed <code>not found: "/ws_b/install/cpkg_a/share/cpkg_a/local_setup.bash"</code> and the same line for <code>cpkg_b</code>. <code>AMENT_PREFIX_PATH</code> held only <code>/ws_b/install/ppkg</code>. Both <code>ros2 run cpkg_a hello</code> and <code>ros2 run ppkg hello</code> failed with <code>Package 'cpkg_a' not found</code> or <code>Package 'ppkg' not found</code>, exit code 1.</li>
+</ul>
+
+<p>So a moved workspace without <code>--symlink-install</code> can still be run, but it can't be rebuilt. A moved workspace with <code>--symlink-install</code> can't be run either. After <code>rm -rf build install log</code> and a new <code>--symlink-install</code> build, the broken links dropped to 0 and both nodes ran.</p>
+
+<h2>Which fixes worked, and what they cost</h2>
+
+<p>Each fix started from the same built workspace moved from <code>/ws_a</code> to <code>/ws_b</code>, without symlink install. "Next build" is a plain <code>colcon build</code> right after the fix. Times are wall-clock seconds for the whole command on this tiny workspace (Humble / Jazzy / Lyrical).</p>
+
+<table>
+<thead><tr><th>Fix</th><th>Result</th><th>Time (s)</th><th>Next build</th></tr></thead>
+<tbody>
+<tr><td><code>rm -rf build install log &amp;&amp; colcon build</code></td><td>exit 0, 3 finished</td><td>3.2 / 3.8 / 4.1</td><td>exit 0</td></tr>
+<tr><td><code>rm -rf build &amp;&amp; colcon build</code> (keep install)</td><td>exit 0, 3 finished</td><td>3.2 / 3.8 / 4.0</td><td>exit 0</td></tr>
+<tr><td><code>colcon build --cmake-clean-cache</code></td><td>exit 0, 3 finished</td><td>3.1 / 3.8 / 4.1</td><td>exit 0</td></tr>
+<tr><td><code>rm -rf build/cpkg_a build/cpkg_b &amp;&amp; colcon build</code> (every CMake package)</td><td>exit 0, 3 finished</td><td>3.2 / 3.8 / 4.7</td><td>exit 0</td></tr>
+<tr><td><code>colcon build --cmake-clean-first</code></td><td>exit 2, same error</td><td>0.7 / 0.7 / 0.8</td><td>exit 2</td></tr>
+<tr><td><code>rm -rf build/cpkg_a &amp;&amp; colcon build</code> (one package only)</td><td>exit 2, now <code>cpkg_b</code> fails</td><td>1.3 / 1.5 / 1.6</td><td>exit 2</td></tr>
+<tr><td><code>rm -rf build/cpkg_a &amp;&amp; colcon build --packages-select cpkg_a</code></td><td>exit 0, 1 finished</td><td>1.5 / 1.6 / 1.8</td><td>exit 2 (<code>cpkg_b</code>)</td></tr>
+<tr><td><code>colcon build --packages-select cpkg_a --cmake-clean-cache</code></td><td>exit 0, 1 finished</td><td>1.5 / 1.9 / 1.8</td><td>exit 2 (<code>cpkg_b</code>)</td></tr>
+</tbody>
+</table>
+
+<p><code>--cmake-clean-first</code> runs the clean target before the build. That still goes through the old Makefile, and in my run it stopped on the same cache error. <code>--cmake-clean-cache</code> deletes <code>CMakeCache.txt</code> before CMake runs, so CMake configures from scratch at the new path. The <code>--packages-select</code> fixes work for the selected package only. Every other CMake package still has an old cache and fails on the next full build. They're fine if you only ever need that one package. Otherwise you'll be back here on the next full build.</p>
+
+<p>Doing only part of the cleanup didn't save any time on this workspace. Deleting just <code>build/</code> took as long as deleting <code>build</code>, <code>install</code> and <code>log</code>. On this workspace, keeping <code>install/</code> saved no measurable time.</p>
+
+<h2>Clean vs incremental rebuild cost</h2>
+
+<p>The fix is a clean build, so it's worth knowing what that costs compared with the build you would have run anyway. On the same workspace, without moving it:</p>
+
+<table>
+<thead><tr><th>Build at the original path</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Clean build</td><td>3.0 s</td><td>4.2 s</td><td>3.9 s</td></tr>
+<tr><td>No-op rebuild (nothing changed)</td><td>1.5 s</td><td>2.5 s</td><td>1.9 s</td></tr>
+<tr><td>Rebuild after touching one <code>.cpp</code></td><td>1.6 s</td><td>1.9 s</td><td>1.9 s</td></tr>
+<tr><td>Clean build with <code>--symlink-install</code></td><td>3.6 s</td><td>4.7 s</td><td>4.5 s</td></tr>
+</tbody>
+</table>
+
+<p>On this workspace a clean build cost about 2 seconds more than an incremental one. These packages are deliberately tiny, with one source file and no dependencies. On a real workspace the gap is your full build time. I didn't measure a large workspace, so I can't give you a number for one. The ratio here tells you nothing about how long your own clean build will take. The way to save that time is to avoid moving a built workspace. Build at the path where you'll use it, and in containers mount the workspace at the same path every time.</p>
+
+<h2>Version notes</h2>
+
+<p>The error text, exit codes and fix results were identical on Humble (CMake 3.22.1), Jazzy (CMake 3.28.3) and Lyrical (CMake 4.2.3). All three images had colcon-core 0.21.3 and colcon-cmake 0.2.30. The differences:</p>
+
+<ul>
+<li>On Lyrical the copied-workspace build also printed <code>CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required): Compatibility with CMake &lt; 3.10 will be removed from a future version of CMake.</code> for the test packages, which use <code>cmake_minimum_required(VERSION 3.8)</code>. It's unrelated to the path error.</li>
+<li>Lyrical's install tree had 11 files mentioning the old path (9 on the others) and 30 symlinks with <code>--symlink-install</code> (28 on the others).</li>
+<li>The Python <code>egg-link</code> sat under <code>python3.10</code>, <code>python3.12</code> and <code>python3.14</code> respectively. The content was the same.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Building on the host and then in a container (I only changed container paths), Windows and macOS, Ninja instead of Make, colcon <code>--merge-install</code>, <code>--cmake-clean-cache</code> combined with <code>--symlink-install</code>, packages with real dependencies such as <code>rclcpp</code>, large workspaces, editing <code>CMakeCache.txt</code> by hand, catkin and ROS 1, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "The current CMakeCache.txt directory is different than the directory where CMakeCache.txt was created" mean?</h3>
+<p>The <code>build/</code> folder was created at another absolute path, and its <code>CMakeCache.txt</code> still names that path. It shows up after you move or rename a workspace, or mount it at a different path in Docker. It also shows up after copying, though then the build can still pass. The fix is to delete <code>build</code>, <code>install</code> and <code>log</code> and build again.</p>
+
+<h3>Does colcon build --cmake-clean-cache fix it?</h3>
+<p>Yes, in my run without <code>--symlink-install</code>. It finished all packages with exit code 0 on Humble, Jazzy and Lyrical, and took about as long as a full clean build. <code>--cmake-clean-first</code> did not fix it and failed with the same error.</p>
+
+<h3>Can I delete build/ for just one package?</h3>
+<p>Only if you delete it for every CMake package that was built at the old path. When I removed only <code>build/cpkg_a</code>, the next build failed on <code>cpkg_b</code>. <code>--packages-select</code> fixed the selected package only. The next full build still failed.</p>
+
+<h3>Do ament_python packages get this error?</h3>
+<p>No. They have no <code>CMakeCache.txt</code>, and a Python-only build after the move passed. They are aborted when a CMake package fails first. With <code>--symlink-install</code> the Python package failed on its own with <code>[Errno 17] File exists</code>.</p>
+
+<h3>Why does ros2 run say Package not found after I moved my workspace?</h3>
+<p>In my run that happened with <code>--symlink-install</code>. All the symlinks in <code>install/</code> pointed into the old path, so sourcing the new <code>setup.bash</code> skipped the C++ packages. The Python package wasn't found either. Without symlink install, sourcing the new path worked and both nodes ran. Sourcing the old path just failed with "No such file or directory".</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does The current CMakeCache.txt directory is different than the directory where CMakeCache.txt was created mean?", "acceptedAnswer": {"@type": "Answer", "text": "The build folder was created at another absolute path, and its CMakeCache.txt still names that path. It shows up after you move or rename a workspace, or mount it at a different path in Docker. It also shows up after copying, though then the build can still pass. The fix is to delete build, install and log and build again."}},
+{"@type": "Question", "name": "Does colcon build --cmake-clean-cache fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, in my run without --symlink-install. It finished all packages with exit code 0 on Humble, Jazzy and Lyrical, and took about as long as a full clean build. --cmake-clean-first did not fix it and failed with the same error."}},
+{"@type": "Question", "name": "Can I delete build/ for just one package?", "acceptedAnswer": {"@type": "Answer", "text": "Only if you delete it for every CMake package that was built at the old path. When I removed only build/cpkg_a, the next build failed on cpkg_b. --packages-select fixed the selected package only. The next full build still failed."}},
+{"@type": "Question", "name": "Do ament_python packages get this error?", "acceptedAnswer": {"@type": "Answer", "text": "No. They have no CMakeCache.txt, and a Python-only build after the move passed. They are aborted when a CMake package fails first. With --symlink-install the Python package failed on its own with [Errno 17] File exists."}},
+{"@type": "Question", "name": "Why does ros2 run say Package not found after I moved my workspace?", "acceptedAnswer": {"@type": "Answer", "text": "In my run that happened with --symlink-install. All the symlinks in install/ pointed into the old path, so sourcing the new setup.bash skipped the C++ packages. The Python package was not found either. Without symlink install, sourcing the new path worked and both nodes ran. Sourcing the old path just failed with No such file or directory."}}
+]}
+</script>
+
+<p>Measured on 2026-10-30 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, CMake 3.22.1, ament_cmake 1.3.14), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, CMake 3.28.3, ament_cmake 2.5.6) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, CMake 4.2.3, ament_cmake 2.8.8). All three had colcon-core 0.21.3, colcon-cmake 0.2.30 and colcon-ros 0.5.0. The host had 2 vCPUs, and the containers were capped at 1.5 CPUs. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-17-ros2-colcon-cmakecache-directory-different/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/42038/how-to-solve-rosmake-error-when-moving-package-directory">How to solve rosmake error when moving package directory?</a>, <a href="https://robotics.stackexchange.com/questions/29650/cleaning-up-when-moving-a-stack-package-to-a-different-directory-so-rosmake-won">Cleaning up when moving a stack/package to a different directory</a>, <a href="https://robotics.stackexchange.com/questions/93354/when-to-use-cmake-clean-configure">When to use CMake clean/configure?</a>, <a href="https://forums.developer.nvidia.com/t/isaac-manipulator-pick-and-place-is-not-available-in-the-docker-container-for-isaac-ros/332441">CMakeCache.txt directory mismatch in the Isaac ROS Docker container</a>, <a href="https://github.com/tiedyedguy/turtlesim_hunter/issues/1">turtlesim_hunter: cmake FAILED with a CMakeCache.txt from another user's path</a>.</p>

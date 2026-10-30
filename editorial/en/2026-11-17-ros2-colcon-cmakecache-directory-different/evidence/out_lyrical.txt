@@ -1,0 +1,501 @@
+ 08:56:42 up 93 days, 12:53,  2 users,  load average: 1.32, 0.87, 0.40
+docker.io/library/ros:lyrical-ros-base
+ 08:57:03 up 93 days, 12:53,  2 users,  load average: 1.89, 1.03, 0.46
+=== distro=lyrical nproc=2
+cmake version 4.2.3
+python3-colcon-cmake 0.2.30+upstream-1
+python3-colcon-core 0.21.3+upstream-1
+python3-colcon-python-setup-py 0.2.9-2
+python3-colcon-ros 0.5.0+upstream-1
+ros-lyrical-ament-cmake 2.8.8-1resolute.20260728.175713
+colcon_core 0.21.3
+colcon-cmake 0.2.30
+
+##### T1 clean build at /ws_a, no-op rebuild, then mv /ws_a /ws_b
+--- clean build /ws_a
+exit=0 time=3.9 s
+Finished <<< cpkg_b [2.13s]
+Finished <<< cpkg_a [2.16s]
+Finished <<< ppkg [1.26s]
+Summary: 3 packages finished [3.54s]
+--- no-op rebuild /ws_a (nothing changed)
+exit=0 time=1.9 s
+Finished <<< cpkg_a [0.19s]
+Finished <<< cpkg_b [0.21s]
+Finished <<< ppkg [1.23s]
+Summary: 3 packages finished [1.56s]
+--- rebuild /ws_a after touching cpkg_a/src/hello.cpp
+exit=0 time=1.9 s
+Finished <<< cpkg_b [0.22s]
+Finished <<< cpkg_a [0.57s]
+Finished <<< ppkg [1.26s]
+Summary: 3 packages finished [1.62s]
+--- source /ws_a/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_a/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_a/install/ppkg:/ws_a/install/cpkg_b:/ws_a/install/cpkg_a:/opt/ros/lyrical
+--- after mv, before rebuild: grep for /ws_a in install/ setup files
+/ws_b/install/ppkg/share/ppkg/package.sh
+/ws_b/install/setup.sh
+/ws_b/install/local_setup.sh
+/ws_b/install/cpkg_a/share/cpkg_a/local_setup.sh
+/ws_b/install/cpkg_a/share/cpkg_a/package.sh
+/ws_b/install/cpkg_b/share/cpkg_b/local_setup.sh
+/ws_b/install/cpkg_b/share/cpkg_b/package.sh
+count=11 files under install/ mention /ws_a
+--- source old path /ws_a/install/setup.bash (dir no longer exists)
+bash: line 1: /ws_a/install/setup.bash: No such file or directory
+source_rc=1
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- colcon build in /ws_b after mv
+exit=2 time=0.5 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Aborted  <<< cpkg_b [0.06s]
+Summary: 0 packages finished [0.22s]
+--- full CMake error block:
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+Specify --help for usage, or press the help button on the CMake GUI.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+---
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Aborted  <<< cpkg_b [0.06s]
+
+--- colcon log lines:
+Starting >>> cpkg_a
+Starting >>> cpkg_b
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Aborted  <<< cpkg_b [0.06s]
+Summary: 0 packages finished [0.22s]
+  2 packages had stderr output: cpkg_a cpkg_b
+--- second colcon build in /ws_b (does it repeat?)
+exit=2 time=0.5 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_b [0.06s, exited with code 2]
+Aborted  <<< cpkg_a [0.07s]
+Summary: 0 packages finished [0.22s]
+--- colcon build --packages-select ppkg (ament_python only) in /ws_b
+exit=0 time=1.7 s
+Finished <<< ppkg [1.23s]
+Summary: 1 package finished [1.37s]
+--- colcon build --continue-on-error in /ws_b
+exit=2 time=1.7 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_b [0.08s, exited with code 2]
+Finished <<< ppkg [1.22s]
+Summary: 1 package finished [1.43s]
+  2 packages failed: cpkg_a cpkg_b
+Starting >>> cpkg_a
+Starting >>> cpkg_b
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Starting >>> ppkg
+Failed   <<< cpkg_b [0.08s, exited with code 2]
+Finished <<< ppkg [1.22s]
+Summary: 1 package finished [1.43s]
+  2 packages failed: cpkg_a cpkg_b
+  2 packages had stderr output: cpkg_a cpkg_b
+
+##### T2 cp -r /ws_a /ws_c
+--- colcon build in /ws_c (copy)
+exit=0 time=2.8 s
+CMake Error: The current CMakeCache.txt directory /ws_c/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+Finished <<< cpkg_b [1.07s]
+CMake Error: The current CMakeCache.txt directory /ws_c/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+Finished <<< cpkg_a [1.11s]
+Finished <<< ppkg [1.23s]
+Summary: 3 packages finished [2.45s]
+CMake Error: The current CMakeCache.txt directory /ws_c/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+CMake Error: The current CMakeCache.txt directory /ws_c/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+--- where does the copy point? CMakeCache.txt in /ws_c:
+CMAKE_INSTALL_PREFIX:PATH=/ws_a/install/cpkg_a
+cpkg_a_BINARY_DIR:STATIC=/ws_a/build/cpkg_a
+cpkg_a_SOURCE_DIR:STATIC=/ws_a/src/cpkg_a
+CMAKE_CACHEFILE_DIR:INTERNAL=/ws_a/build/cpkg_a
+CMAKE_HOME_DIRECTORY:INTERNAL=/ws_a/src/cpkg_a
+--- edit the copy's source only, rebuild the copy, run both installs
+--- colcon build in /ws_c after editing /ws_c/src/cpkg_a
+exit=0 time=2.7 s
+CMake Error: The current CMakeCache.txt directory /ws_c/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+Finished <<< cpkg_a [0.95s]
+CMake Error: The current CMakeCache.txt directory /ws_c/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+Finished <<< cpkg_b [0.99s]
+Finished <<< ppkg [1.26s]
+Summary: 3 packages finished [2.35s]
+/ws_c/install hello: hello from cpkg_a
+/ws_a/install hello: hello from cpkg_a
+/ws_c/build hello:   hello from cpkg_a
+/ws_a/build hello:   hello from cpkg_a
+--- source /ws_c/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_c/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_c/install/ppkg:/ws_c/install/cpkg_b:/ws_c/install/cpkg_a:/opt/ros/lyrical
+--- delete /ws_a after copying, then build /ws_c again
+--- colcon build in /ws_c after rm -rf /ws_a
+exit=2 time=0.5 s
+CMake Error: The current CMakeCache.txt directory /ws_c/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_b [0.06s, exited with code 2]
+Aborted  <<< cpkg_a [0.07s]
+Summary: 0 packages finished [0.22s]
+--- colcon build in original /ws_a after copy
+exit=0 time=1.9 s
+Finished <<< cpkg_b [0.18s]
+Finished <<< cpkg_a [0.21s]
+Finished <<< ppkg [1.22s]
+Summary: 3 packages finished [1.55s]
+
+##### T3 fixes (each starts from the built /ws_a moved to /ws_b)
+--- FIX: rm -rf build install log
+cmd: rm -rf build install log && colcon build --event-handlers console_direct-
+exit=0 time=4.1 s
+Finished <<< cpkg_a [2.12s]
+Finished <<< cpkg_b [2.14s]
+Finished <<< ppkg [1.24s]
+Summary: 3 packages finished [3.50s]
+after fix, plain colcon build:
+---   follow-up build
+exit=0 time=1.8 s
+Finished <<< cpkg_a [0.19s]
+Finished <<< cpkg_b [0.20s]
+Finished <<< ppkg [1.23s]
+Summary: 3 packages finished [1.55s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- FIX: --cmake-clean-cache
+cmd: colcon build --event-handlers console_direct- --cmake-clean-cache
+exit=0 time=4.1 s
+Finished <<< cpkg_a [2.13s]
+Finished <<< cpkg_b [2.16s]
+Finished <<< ppkg [1.23s]
+Summary: 3 packages finished [3.51s]
+after fix, plain colcon build:
+---   follow-up build
+exit=0 time=1.9 s
+Finished <<< cpkg_a [0.19s]
+Finished <<< cpkg_b [0.21s]
+Finished <<< ppkg [1.23s]
+Summary: 3 packages finished [1.56s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- FIX: --cmake-clean-first
+cmd: colcon build --event-handlers console_direct- --cmake-clean-first
+exit=2 time=0.8 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+Failed   <<< cpkg_b [0.11s, exited with code 2]
+Aborted  <<< cpkg_a [0.12s]
+Summary: 0 packages finished [0.27s]
+after fix, plain colcon build:
+---   follow-up build
+exit=2 time=0.5 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Aborted  <<< cpkg_b [0.06s]
+Summary: 0 packages finished [0.22s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- FIX: rm -rf build only (keep install)
+cmd: rm -rf build && colcon build --event-handlers console_direct-
+exit=0 time=4.0 s
+Finished <<< cpkg_b [2.11s]
+Finished <<< cpkg_a [2.15s]
+Finished <<< ppkg [1.22s]
+Summary: 3 packages finished [3.48s]
+after fix, plain colcon build:
+---   follow-up build
+exit=0 time=1.9 s
+Finished <<< cpkg_b [0.19s]
+Finished <<< cpkg_a [0.22s]
+Finished <<< ppkg [1.24s]
+Summary: 3 packages finished [1.58s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- FIX: rm -rf build/cpkg_a only
+cmd: rm -rf build/cpkg_a && colcon build --event-handlers console_direct-
+exit=2 time=1.6 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+Failed   <<< cpkg_b [0.07s, exited with code 2]
+Aborted  <<< cpkg_a [0.92s]
+Summary: 0 packages finished [1.07s]
+after fix, plain colcon build:
+---   follow-up build
+exit=2 time=0.6 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_b [0.07s, exited with code 2]
+Aborted  <<< cpkg_a [0.20s]
+Summary: 0 packages finished [0.34s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- FIX: rm -rf build/cpkg_a build/cpkg_b
+cmd: rm -rf build/cpkg_a build/cpkg_b && colcon build --event-handlers console_direct-
+exit=0 time=4.7 s
+Finished <<< cpkg_b [2.46s]
+Finished <<< cpkg_a [2.50s]
+Finished <<< ppkg [1.24s]
+Summary: 3 packages finished [3.97s]
+after fix, plain colcon build:
+---   follow-up build
+exit=0 time=1.9 s
+Finished <<< cpkg_b [0.18s]
+Finished <<< cpkg_a [0.21s]
+Finished <<< ppkg [1.24s]
+Summary: 3 packages finished [1.56s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- FIX: rm -rf build/cpkg_a + --packages-select cpkg_a
+cmd: rm -rf build/cpkg_a && colcon build --event-handlers console_direct- --packages-select cpkg_a
+exit=0 time=1.8 s
+Finished <<< cpkg_a [1.15s]
+Summary: 1 package finished [1.28s]
+after fix, plain colcon build:
+---   follow-up build
+exit=2 time=0.6 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_b [0.07s, exited with code 2]
+Aborted  <<< cpkg_a [0.12s]
+Summary: 0 packages finished [0.26s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+--- FIX: --packages-select cpkg_a --cmake-clean-cache
+cmd: colcon build --event-handlers console_direct- --packages-select cpkg_a --cmake-clean-cache
+exit=0 time=1.8 s
+Finished <<< cpkg_a [1.11s]
+Summary: 1 package finished [1.25s]
+after fix, plain colcon build:
+---   follow-up build
+exit=2 time=0.6 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_b [0.08s, exited with code 2]
+Aborted  <<< cpkg_a [0.11s]
+Summary: 0 packages finished [0.26s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+
+##### T4 --symlink-install
+--- clean build /ws_a --symlink-install
+exit=0 time=4.5 s
+Finished <<< cpkg_a [2.46s]
+Finished <<< cpkg_b [2.48s]
+Finished <<< ppkg [1.60s]
+Summary: 3 packages finished [4.19s]
+--- symlinks in install/ pointing into /ws_a: 30
+install/ppkg/share/ppkg/package.xml -> /ws_a/build/ppkg/package.xml
+install/ppkg/share/ament_index/resource_index/packages/ppkg -> /ws_a/build/ppkg/resource/ppkg
+install/cpkg_a/share/cpkg_a/cmake/cpkg_aConfig.cmake -> /ws_a/build/cpkg_a/ament_cmake_core/cpkg_aConfig.cmake
+install/cpkg_a/share/cpkg_a/cmake/cpkg_aConfig-version.cmake -> /ws_a/build/cpkg_a/ament_cmake_core/cpkg_aConfig-version.cmake
+install/ppkg/lib/python3.14/site-packages/ppkg.egg-link: /ws_a/build/ppkg
+--- source /ws_a/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_a/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_a/install/ppkg:/ws_a/install/cpkg_b:/ws_a/install/cpkg_a:/opt/ros/lyrical
+--- after mv: broken symlinks in install/: 30
+install/ppkg/share/ppkg/package.xml -> /ws_a/build/ppkg/package.xml
+install/ppkg/share/ament_index/resource_index/packages/ppkg -> /ws_a/build/ppkg/resource/ppkg
+install/cpkg_a/share/cpkg_a/cmake/cpkg_aConfig.cmake -> /ws_a/build/cpkg_a/ament_cmake_core/cpkg_aConfig.cmake
+install/cpkg_a/share/cpkg_a/cmake/cpkg_aConfig-version.cmake -> /ws_a/build/cpkg_a/ament_cmake_core/cpkg_aConfig-version.cmake
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+Package 'cpkg_a' not found
+rc=1
+Package 'ppkg' not found
+rc=1
+prefix_cpkg_a=Package not found
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/opt/ros/lyrical
+not found: "/ws_b/install/cpkg_a/share/cpkg_a/local_setup.bash"
+not found: "/ws_b/install/cpkg_b/share/cpkg_b/local_setup.bash"
+--- colcon build --symlink-install in /ws_b after mv
+exit=2 time=0.5 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Aborted  <<< cpkg_b [0.06s]
+Summary: 0 packages finished [0.22s]
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+Specify --help for usage, or press the help button on the CMake GUI.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+--- colcon build --symlink-install --packages-select ppkg in /ws_b
+exit=1 time=2.0 s
+error: [Errno 17] File exists: '/ws_b/build/ppkg/resource/ppkg' -> '/ws_b/install/ppkg/share/ament_index/resource_index/packages/ppkg'
+Failed   <<< ppkg [1.56s, exited with code 1]
+Summary: 0 packages finished [1.71s]
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+Package 'cpkg_a' not found
+rc=1
+Package 'ppkg' not found
+rc=1
+prefix_cpkg_a=Package not found
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/opt/ros/lyrical
+not found: "/ws_b/install/cpkg_a/share/cpkg_a/local_setup.bash"
+not found: "/ws_b/install/cpkg_b/share/cpkg_b/local_setup.bash"
+--- fix: rm -rf build install log && --symlink-install
+--- rebuild
+exit=0 time=4.7 s
+Finished <<< cpkg_a [2.45s]
+Finished <<< cpkg_b [2.48s]
+Finished <<< ppkg [1.77s]
+Summary: 3 packages finished [4.37s]
+broken symlinks now: 0; links into /ws_a: 0
+--- source /ws_b/install/setup.bash then ros2 run (fresh shell)
+source_rc=0
+hello from cpkg_a
+rc=0
+hello from ppkg
+rc=0
+prefix_cpkg_a=/ws_b/install/cpkg_a
+AMENT_PREFIX_PATH=/ws_b/install/ppkg:/ws_b/install/cpkg_b:/ws_b/install/cpkg_a:/opt/ros/lyrical
+=== done
+
+##### T5 bind mount: same host dir mounted at /ws_a, then at /ws_b
+=== volbuild in /ws_a distro=lyrical
+--- colcon build in /ws_a
+exit=0 time=3.9 s
+Finished <<< cpkg_a [2.14s]
+Finished <<< cpkg_b [2.16s]
+Finished <<< ppkg [1.29s]
+Summary: 3 packages finished [3.57s]
+=== volbuild in /ws_b distro=lyrical
+--- colcon build in /ws_b
+exit=2 time=0.6 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_b [0.06s, exited with code 2]
+Aborted  <<< cpkg_a [0.07s]
+Summary: 0 packages finished [0.22s]
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_b/CMakeCache.txt is different than the directory /ws_a/build/cpkg_b where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_b" does not exist.
+Specify --help for usage, or press the help button on the CMake GUI.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+---
+Failed   <<< cpkg_b [0.06s, exited with code 2]
+Aborted  <<< cpkg_a [0.07s]
+
+=== volbuild in /ws_a distro=lyrical
+--- colcon build in /ws_a
+exit=0 time=1.9 s
+Finished <<< cpkg_a [0.19s]
+Finished <<< cpkg_b [0.21s]
+Finished <<< ppkg [1.30s]
+Summary: 3 packages finished [1.64s]
+
+##### T6 named volume cmc-vol-lyrical: mounted at /ws_a, then at /ws_b
+=== volbuild in /ws_a distro=lyrical
+--- colcon build in /ws_a
+exit=0 time=3.8 s
+Finished <<< cpkg_a [2.13s]
+Finished <<< cpkg_b [2.14s]
+Finished <<< ppkg [1.23s]
+Summary: 3 packages finished [3.50s]
+=== volbuild in /ws_b distro=lyrical
+--- colcon build in /ws_b
+exit=2 time=0.5 s
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Aborted  <<< cpkg_b [0.06s]
+Summary: 0 packages finished [0.22s]
+CMake Error: The current CMakeCache.txt directory /ws_b/build/cpkg_a/CMakeCache.txt is different than the directory /ws_a/build/cpkg_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+CMake Error: The source directory "/ws_a/src/cpkg_a" does not exist.
+Specify --help for usage, or press the help button on the CMake GUI.
+gmake: *** [Makefile:267: cmake_check_build_system] Error 1
+---
+Failed   <<< cpkg_a [0.07s, exited with code 2]
+Aborted  <<< cpkg_b [0.06s]
+
+ 08:58:52 up 93 days, 12:55,  2 users,  load average: 1.03, 1.01, 0.52
