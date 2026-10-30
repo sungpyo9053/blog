@@ -1,0 +1,813 @@
+=== distro=jazzy nproc=2
+cmake version 3.28.3
+dpkg-query: no packages found matching python3-colcon-installed-package-information
+python3-colcon-cmake 0.2.30+upstream-1
+python3-colcon-core 0.21.3+upstream-1
+python3-colcon-override-check 
+python3-colcon-package-selection 0.2.10-100
+python3-colcon-recursive-crawl 0.2.3-100
+python3-colcon-ros 0.5.0+upstream-1
+std_msgs in underlay: /opt/ros/jazzy
+
+##### T1 copied folder src/pkg_a_old with the same <name> (pkg_a)
+--- colcon build
+$ colcon build
+[0.501s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: 
+--- colcon build --packages-select pkg_b
+$ colcon build --packages-select pkg_b
+Starting >>> pkg_b
+Finished <<< pkg_b [0.54s]
+Summary: 1 package finished [0.69s]
+exit=0
+installed: pkg_b 
+--- colcon build --packages-ignore pkg_a
+$ colcon build --packages-ignore pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.09s]
+Summary: 1 package finished [0.24s]
+exit=0
+installed: pkg_b 
+--- colcon build --continue-on-error
+$ colcon build --continue-on-error
+[0.245s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: pkg_b 
+--- colcon test
+$ colcon test
+[0.336s] ERROR:colcon:colcon test: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: pkg_b 
+--- colcon list
+$ colcon list
+pkg_a	src/pkg_a	(ros.ament_cmake)
+pkg_a	src/pkg_a_old	(ros.ament_cmake)
+pkg_b	src/pkg_b	(ros.ament_cmake)
+exit=0
+installed: pkg_b 
+--- colcon list --paths-only
+$ colcon list --paths-only
+src/pkg_a
+src/pkg_a_old
+src/pkg_b
+exit=0
+installed: pkg_b 
+--- colcon list --names-only
+$ colcon list --names-only
+pkg_a
+pkg_a
+pkg_b
+exit=0
+installed: pkg_b 
+--- colcon info pkg_a
+$ colcon info pkg_a
+path: src/pkg_a_old
+  type: ros.ament_cmake
+  name: pkg_a
+  dependencies:
+    build: ament_cmake
+    run: 
+    test: 
+  metadata:
+    maintainers: ['a <dev@example.com>']
+    version: 0.0.0
+path: src/pkg_a
+  type: ros.ament_cmake
+  name: pkg_a
+  dependencies:
+    build: ament_cmake
+    run: 
+    test: 
+  metadata:
+    maintainers: ['a <dev@example.com>']
+    version: 0.0.0
+exit=0
+installed: pkg_b 
+--- three copies
+--- colcon build (pkg_a, pkg_a_old, pkg_a_backup)
+$ colcon build
+[0.248s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_backup
+  - src/pkg_a_old
+exit=1
+installed: pkg_b 
+--- rename <name> in the copy to pkg_a_old
+--- colcon build after renaming <name> only (CMake project() still pkg_a)
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_a_old
+--- stderr: pkg_a_old
+CMake Error at /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:53 (message):
+  ament_package_xml() package name 'pkg_a_old' in '/package.xml' does not
+  match current PROJECT_NAME 'pkg_a'.  You must call project() with the same
+  package name before.
+Call Stack (most recent call first):
+  /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_package.cmake:63 (ament_package_xml)
+  CMakeLists.txt:4 (ament_package)
+---
+Failed   <<< pkg_a_old [0.83s, exited with code 1]
+Aborted  <<< pkg_a [0.86s]
+Summary: 0 packages finished [1.02s]
+  1 package failed: pkg_a_old
+  1 package aborted: pkg_a
+  1 package had stderr output: pkg_a_old
+  1 package not processed
+exit=1
+installed: pkg_a_old 
+--- colcon build after renaming <name> and project()
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_a_old
+Finished <<< pkg_a_old [0.94s]
+Starting >>> pkg_b
+Finished <<< pkg_a [0.97s]
+Finished <<< pkg_b [0.50s]
+Summary: 3 packages finished [1.60s]
+exit=0
+installed: pkg_a pkg_a_old pkg_b 
+
+##### T2 nested / misplaced copies
+--- nested git-clone style src/some_repo/pkg_a + src/pkg_a
+$ colcon build
+[0.247s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/some_repo/pkg_a
+exit=1
+installed: 
+--- copy at workspace root /ws/pkg_a + /ws/src/pkg_a, build from /ws
+$ colcon build
+[0.246s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - pkg_a
+  - src/pkg_a
+exit=1
+installed: 
+--- same, build with --base-paths src
+$ colcon build --base-paths src
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.94s]
+Finished <<< pkg_a [0.96s]
+Summary: 2 packages finished [1.10s]
+exit=0
+installed: pkg_a pkg_b 
+--- copy in a hidden dir src/.hidden_backup/pkg_a
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.94s]
+Finished <<< pkg_b [0.95s]
+Summary: 2 packages finished [1.10s]
+exit=0
+installed: pkg_a pkg_b 
+--- nested clone with .git dir src/some_repo/.git + src/some_repo/pkg_a
+$ colcon build
+[0.250s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/some_repo/pkg_a
+exit=1
+installed: 
+--- ran colcon build inside src/ by mistake, then from /ws
+--- colcon build inside /ws/src
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.95s]
+Finished <<< pkg_b [0.96s]
+Summary: 2 packages finished [1.11s]
+exit=0
+installed: pkg_a pkg_b 
+COLCON_IGNORE files created inside src: src/install/COLCON_IGNORE src/build/COLCON_IGNORE src/log/COLCON_IGNORE 
+package.xml files under src/build src/install: src/install/pkg_a/share/pkg_a/package.xml src/install/pkg_b/share/pkg_b/package.xml 
+--- colcon build from /ws with src/build src/install src/log present
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.96s]
+Finished <<< pkg_b [0.96s]
+Summary: 2 packages finished [1.11s]
+exit=0
+installed: pkg_a pkg_b 
+--- same after deleting their COLCON_IGNORE files
+$ colcon build
+[0.265s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/install/pkg_a/share/pkg_a
+  - src/pkg_a
+- pkg_b:
+  - src/install/pkg_b/share/pkg_b
+  - src/pkg_b
+exit=1
+installed: pkg_a pkg_b 
+--- old install/ copied into src (cp -r install src/old_install)
+--- colcon build with src/old_install (has COLCON_IGNORE)
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.12s]
+Finished <<< pkg_a [0.14s]
+Summary: 2 packages finished [0.28s]
+exit=0
+installed: pkg_a pkg_b 
+--- same after rm src/old_install/COLCON_IGNORE
+$ colcon build
+[0.263s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/old_install/pkg_a/share/pkg_a
+  - src/pkg_a
+- pkg_b:
+  - src/old_install/pkg_b/share/pkg_b
+  - src/pkg_b
+exit=1
+installed: pkg_a pkg_b 
+
+##### T3 ignore marker files in the copy src/pkg_a_old
+--- marker src/pkg_a_old/COLCON_IGNORE
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.93s]
+Finished <<< pkg_b [0.94s]
+Summary: 2 packages finished [1.09s]
+exit=0
+installed: pkg_a pkg_b 
+--- marker src/pkg_a_old/AMENT_IGNORE
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.94s]
+Finished <<< pkg_b [0.95s]
+Summary: 2 packages finished [1.10s]
+exit=0
+installed: pkg_a pkg_b 
+--- marker src/pkg_a_old/CATKIN_IGNORE
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.94s]
+Finished <<< pkg_b [0.95s]
+Summary: 2 packages finished [1.10s]
+exit=0
+installed: pkg_a pkg_b 
+--- marker src/pkg_a_old/colcon_ignore
+$ colcon build
+[0.247s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: 
+--- marker src/pkg_a_old/.colcon_ignore
+$ colcon build
+[0.244s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: 
+--- marker src/pkg_a_old/IGNORE
+$ colcon build
+[0.246s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: 
+--- COLCON_IGNORE with content (not empty)
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.94s]
+Finished <<< pkg_a [0.96s]
+Summary: 2 packages finished [1.11s]
+exit=0
+installed: pkg_a pkg_b 
+--- marker in a parent folder
+--- src/backup/COLCON_IGNORE with src/backup/pkg_a inside
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.94s]
+Finished <<< pkg_b [0.95s]
+Summary: 2 packages finished [1.10s]
+exit=0
+installed: pkg_a pkg_b 
+--- src/backup/AMENT_IGNORE with src/backup/pkg_a inside
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.94s]
+Finished <<< pkg_a [0.96s]
+Summary: 2 packages finished [1.10s]
+exit=0
+installed: pkg_a pkg_b 
+--- src/backup/CATKIN_IGNORE with src/backup/pkg_a inside
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.95s]
+Finished <<< pkg_b [0.96s]
+Summary: 2 packages finished [1.11s]
+exit=0
+installed: pkg_a pkg_b 
+--- marker in the ORIGINAL instead: which copy gets built?
+--- COLCON_IGNORE in src/pkg_a, copy src/pkg_a_old prints marker
+$ colcon build --event-handlers console_direct+
+Starting >>> pkg_a
+Starting >>> pkg_b
+-- Found ament_cmake: 2.5.6 (/opt/ros/jazzy/share/ament_cmake/cmake)
+-- Found ament_cmake: 2.5.6 (/opt/ros/jazzy/share/ament_cmake/cmake)
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- BUILDING_FROM_OLD_COPY
+-- Configuring done (0.7s)
+-- Generating done (0.0s)
+-- Configuring done (0.8s)
+-- Build files have been written to: /ws/build/pkg_b
+-- Generating done (0.0s)
+-- Build files have been written to: /ws/build/pkg_a
+-- Install configuration: ""
+-- Installing: /ws/install/pkg_b/share/ament_index/resource_index/package_run_dependencies/pkg_b
+-- Installing: /ws/install/pkg_b/share/ament_index/resource_index/parent_prefix_path/pkg_b
+-- Installing: /ws/install/pkg_b/share/pkg_b/environment/ament_prefix_path.sh
+-- Installing: /ws/install/pkg_b/share/pkg_b/environment/ament_prefix_path.dsv
+-- Installing: /ws/install/pkg_b/share/pkg_b/environment/path.sh
+-- Installing: /ws/install/pkg_b/share/pkg_b/environment/path.dsv
+-- Installing: /ws/install/pkg_b/share/pkg_b/local_setup.bash
+-- Installing: /ws/install/pkg_b/share/pkg_b/local_setup.sh
+-- Installing: /ws/install/pkg_b/share/pkg_b/local_setup.zsh
+-- Installing: /ws/install/pkg_b/share/pkg_b/local_setup.dsv
+-- Installing: /ws/install/pkg_b/share/pkg_b/package.dsv
+-- Install configuration: ""
+-- Installing: /ws/install/pkg_a/share/ament_index/resource_index/package_run_dependencies/pkg_a
+-- Installing: /ws/install/pkg_b/share/ament_index/resource_index/packages/pkg_b
+-- Installing: /ws/install/pkg_b/share/pkg_b/cmake/pkg_bConfig.cmake
+-- Installing: /ws/install/pkg_b/share/pkg_b/cmake/pkg_bConfig-version.cmake
+-- Installing: /ws/install/pkg_b/share/pkg_b/package.xml
+-- Installing: /ws/install/pkg_a/share/ament_index/resource_index/parent_prefix_path/pkg_a
+-- Installing: /ws/install/pkg_a/share/pkg_a/environment/ament_prefix_path.sh
+-- Installing: /ws/install/pkg_a/share/pkg_a/environment/ament_prefix_path.dsv
+Finished <<< pkg_b [0.94s]
+-- Installing: /ws/install/pkg_a/share/pkg_a/environment/path.sh
+-- Installing: /ws/install/pkg_a/share/pkg_a/environment/path.dsv
+-- Installing: /ws/install/pkg_a/share/pkg_a/local_setup.bash
+-- Installing: /ws/install/pkg_a/share/pkg_a/local_setup.sh
+-- Installing: /ws/install/pkg_a/share/pkg_a/local_setup.zsh
+exit=0
+installed: pkg_a pkg_b 
+marker lines: 1
+
+##### T4 --base-paths / --paths / --packages-skip to pick one copy
+--- --base-paths src/pkg_a src/pkg_b
+$ colcon build --base-paths src/pkg_a src/pkg_b
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.94s]
+Finished <<< pkg_a [0.96s]
+Summary: 2 packages finished [1.10s]
+exit=0
+installed: pkg_a pkg_b 
+--- --paths src/pkg_a src/pkg_b
+$ colcon build --paths src/pkg_a src/pkg_b
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.92s]
+Finished <<< pkg_a [0.95s]
+Summary: 2 packages finished [1.09s]
+exit=0
+installed: pkg_a pkg_b 
+--- --paths 'src/pkg_*' (glob passed to colcon)
+$ colcon build --paths src/pkg_*
+[0.248s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - /ws/src/pkg_a
+  - /ws/src/pkg_a_old
+exit=1
+installed: 
+--- --packages-skip pkg_a
+$ colcon build --packages-skip pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.53s]
+Summary: 1 package finished [0.67s]
+exit=0
+installed: pkg_b 
+--- --packages-select pkg_a
+$ colcon build --packages-select pkg_a
+[0.248s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: 
+--- colcon list --base-paths src/pkg_a src/pkg_b
+$ colcon list --base-paths src/pkg_a src/pkg_b
+pkg_a	src/pkg_a	(ros.ament_cmake)
+pkg_b	src/pkg_b	(ros.ament_cmake)
+exit=0
+installed: 
+--- colcon list --paths src/pkg_a_old
+$ colcon list --paths src/pkg_a_old
+pkg_a	/ws/src/pkg_a_old	(ros.ament_cmake)
+exit=0
+installed: 
+--- colcon build --paths src/pkg_a src/pkg_b, then plain colcon build
+$ colcon build --paths src/pkg_a src/pkg_b
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.94s]
+Finished <<< pkg_a [0.97s]
+Summary: 2 packages finished [1.11s]
+exit=0
+installed: pkg_a pkg_b 
+--- plain colcon build afterwards
+$ colcon build
+[0.248s] ERROR:colcon:colcon build: Duplicate package names not supported:
+- pkg_a:
+  - src/pkg_a
+  - src/pkg_a_old
+exit=1
+installed: pkg_a pkg_b 
+
+##### T5 overlay package with the same name as an underlay package (std_msgs in /opt/ros), image as shipped
+colcon extensions with override in name: 
+--- colcon build (overlay std_msgs)
+$ colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.95s]
+Starting >>> std_msgs
+Finished <<< pkg_b [0.96s]
+Finished <<< std_msgs [0.51s]
+Summary: 3 packages finished [1.61s]
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --packages-select std_msgs
+$ colcon build --packages-select std_msgs
+Starting >>> std_msgs
+Finished <<< std_msgs [0.10s]
+Summary: 1 package finished [0.24s]
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --allow-overriding std_msgs
+$ colcon build --allow-overriding std_msgs
+usage: colcon [-h] [--log-base LOG_BASE] [--log-level LOG_LEVEL]
+              {build,extension-points,extensions,graph,info,list,metadata,mixin,test,test-result,version-check}
+              ...
+colcon: error: unrecognized arguments: --allow-overriding std_msgs
+exit=2
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --allow-overriding (no name)
+$ colcon build --allow-overriding
+usage: colcon [-h] [--log-base LOG_BASE] [--log-level LOG_LEVEL]
+              {build,extension-points,extensions,graph,info,list,metadata,mixin,test,test-result,version-check}
+              ...
+colcon: error: unrecognized arguments: --allow-overriding
+exit=2
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --allow-overriding pkg_a (wrong name)
+$ colcon build --allow-overriding pkg_a
+usage: colcon [-h] [--log-base LOG_BASE] [--log-level LOG_LEVEL]
+              {build,extension-points,extensions,graph,info,list,metadata,mixin,test,test-result,version-check}
+              ...
+colcon: error: unrecognized arguments: --allow-overriding pkg_a
+exit=2
+installed: pkg_a pkg_b std_msgs 
+--- colcon list (overlay std_msgs)
+$ colcon list
+pkg_a	src/pkg_a	(ros.ament_cmake)
+pkg_b	src/pkg_b	(ros.ament_cmake)
+std_msgs	src/std_msgs	(ros.ament_cmake)
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- source the overlay's own install, then build again (same terminal)
+--- build after sourcing own install/setup.bash
+$ bash -c source install/setup.bash; colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.13s]
+Finished <<< pkg_b [0.14s]
+Summary: 2 packages finished [0.30s]
+exit=0
+installed: pkg_a pkg_b 
+--- second overlay /ws_b built on top of /ws (pkg_a in both)
+--- ws_b build with /ws sourced (pkg_a also in /ws/install)
+$ bash -c source /ws/install/setup.bash; colcon build
+Starting >>> pkg_a
+Finished <<< pkg_a [0.51s]
+Summary: 1 package finished [0.65s]
+exit=0
+installed: pkg_a 
+--- ws_b build with /ws sourced + --allow-overriding pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build --allow-overriding pkg_a
+usage: colcon [-h] [--log-base LOG_BASE] [--log-level LOG_LEVEL]
+              {build,extension-points,extensions,graph,info,list,metadata,mixin,test,test-result,version-check}
+              ...
+colcon: error: unrecognized arguments: --allow-overriding pkg_a
+exit=2
+installed: pkg_a 
+--- ros2 pkg prefix pkg_a after sourcing /ws then /ws_b
+$ bash -c source /ws/install/setup.bash; source install/setup.bash; ros2 pkg prefix pkg_a
+/ws_b/install/pkg_a
+exit=0
+installed: pkg_a 
+--- same two cases with --merge-install workspaces
+--- build --merge-install after sourcing own merged install/setup.bash
+$ bash -c source install/setup.bash; colcon build --merge-install
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.13s]
+Finished <<< pkg_a [0.16s]
+Summary: 2 packages finished [0.30s]
+exit=0
+installed: share 
+--- ws_b build with merged /ws sourced (pkg_a also in /ws/install)
+$ bash -c source /ws/install/setup.bash; colcon build
+Starting >>> pkg_a
+Finished <<< pkg_a [0.51s]
+Summary: 1 package finished [0.65s]
+exit=0
+installed: pkg_a 
+--- ws_b same + --allow-overriding pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build --allow-overriding pkg_a
+usage: colcon [-h] [--log-base LOG_BASE] [--log-level LOG_LEVEL]
+              {build,extension-points,extensions,graph,info,list,metadata,mixin,test,test-result,version-check}
+              ...
+colcon: error: unrecognized arguments: --allow-overriding pkg_a
+exit=2
+installed: pkg_a 
+--- underlay /ws where pkg_c exec_depends on pkg_a (pkg_a no longer a leaf), overlay /ws_b overrides pkg_a
+COLCON_IGNORE
+_local_setup_util_ps1.py
+_local_setup_util_sh.py
+local_setup.bash
+local_setup.ps1
+local_setup.sh
+local_setup.zsh
+pkg_a
+pkg_b
+pkg_c
+setup.bash
+setup.ps1
+setup.sh
+setup.zsh
+--- ws_b build, /ws sourced, pkg_c in /ws depends on pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build
+Starting >>> pkg_a
+Finished <<< pkg_a [0.51s]
+Summary: 1 package finished [0.65s]
+exit=0
+installed: pkg_a 
+--- ws_b same + --allow-overriding pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build --allow-overriding pkg_a
+usage: colcon [-h] [--log-base LOG_BASE] [--log-level LOG_LEVEL]
+              {build,extension-points,extensions,graph,info,list,metadata,mixin,test,test-result,version-check}
+              ...
+colcon: error: unrecognized arguments: --allow-overriding pkg_a
+exit=2
+installed: pkg_a 
+
+##### T6 same tests after apt-get install python3-colcon-override-check
+apt-cache depends python3-colcon-common-extensions:
+  Depends: <python3:any>
+  Depends: python3-colcon-argcomplete
+  Depends: python3-colcon-bash
+  Depends: python3-colcon-cd
+  Depends: python3-colcon-cmake
+  Depends: python3-colcon-core
+  Depends: python3-colcon-defaults
+  Depends: python3-colcon-devtools
+  Depends: python3-colcon-library-path
+  Depends: python3-colcon-metadata
+  Depends: python3-colcon-notification
+  Depends: python3-colcon-output
+  Depends: python3-colcon-package-information
+  Depends: python3-colcon-package-selection
+  Depends: python3-colcon-parallel-executor
+  Depends: python3-colcon-powershell
+  Depends: python3-colcon-python-setup-py
+  Depends: python3-colcon-recursive-crawl
+  Depends: python3-colcon-ros
+  Depends: python3-colcon-test-result
+  Depends: python3-colcon-zsh
+  Recommends: python3-colcon-override-check
+apt install exit=0
+Setting up python3-colcon-installed-package-information (0.2.1-100) ...
+Setting up python3-colcon-override-check (0.0.1-100) ...
+python3-colcon-installed-package-information 0.2.1-100
+python3-colcon-override-check 0.0.1-100
+colcon extensions with override in name:   override_check: Check for potential problems when overriding installed packages 
+--- colcon build (overlay std_msgs)
+$ colcon build
+[0.289s] WARNING:colcon.colcon_core.package_selection:Some selected packages are already built in one or more underlay workspaces:
+	'std_msgs' is in: /opt/ros/jazzy
+If a package in a merged underlay workspace is overridden and it installs headers, then all packages in the overlay must sort their include directories by workspace order. Failure to do so may result in build failures or undefined behavior at run time.
+If the overridden package is used by another package in any underlay, then the overriding package in the overlay must be API and ABI compatible or undefined behavior at run time may occur.
+If you understand the risks and want to override a package anyways, add the following to the command line:
+	--allow-overriding std_msgs
+This may be promoted to an error in a future release of colcon-override-check.
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.95s]
+Starting >>> std_msgs
+Finished <<< pkg_b [0.96s]
+Finished <<< std_msgs [0.50s]
+Summary: 3 packages finished [1.64s]
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --packages-select std_msgs
+$ colcon build --packages-select std_msgs
+[0.284s] WARNING:colcon.colcon_core.package_selection:Some selected packages are already built in one or more underlay workspaces:
+	'std_msgs' is in: /opt/ros/jazzy
+If a package in a merged underlay workspace is overridden and it installs headers, then all packages in the overlay must sort their include directories by workspace order. Failure to do so may result in build failures or undefined behavior at run time.
+If the overridden package is used by another package in any underlay, then the overriding package in the overlay must be API and ABI compatible or undefined behavior at run time may occur.
+If you understand the risks and want to override a package anyways, add the following to the command line:
+	--allow-overriding std_msgs
+This may be promoted to an error in a future release of colcon-override-check.
+Starting >>> std_msgs
+Finished <<< std_msgs [0.10s]
+Summary: 1 package finished [0.28s]
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --allow-overriding std_msgs
+$ colcon build --allow-overriding std_msgs
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.12s]
+Finished <<< pkg_a [0.14s]
+Starting >>> std_msgs
+Finished <<< std_msgs [0.08s]
+Summary: 3 packages finished [0.41s]
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --allow-overriding (no name)
+$ colcon build --allow-overriding
+usage: colcon build [-h] [--build-base BUILD_BASE]
+                    [--install-base INSTALL_BASE] [--merge-install]
+                    [--symlink-install] [--test-result-base TEST_RESULT_BASE]
+                    [--continue-on-error] [--executor {parallel,sequential}]
+                    [--parallel-workers NUMBER]
+                    [--event-handlers [name1+ [name2- ...]]]
+                    [--ignore-user-meta] [--metas [PATH ...]]
+                    [--base-paths [PATH ...]]
+                    [--packages-ignore [PKG_NAME ...]]
+                    [--packages-ignore-regex [PATTERN ...]]
+                    [--paths [PATH ...]] [--packages-up-to [PKG_NAME ...]]
+                    [--packages-up-to-regex [PATTERN ...]]
+                    [--packages-above [PKG_NAME ...]]
+                    [--packages-above-and-dependencies [PKG_NAME ...]]
+                    [--packages-above-depth DEPTH [PKG_NAME ...]]
+                    [--packages-select-by-dep [PKG_NAME ...]]
+                    [--packages-skip-by-dep [PKG_NAME ...]]
+                    [--packages-skip-up-to [PKG_NAME ...]]
+                    [--packages-select-build-failed | --packages-skip-build-finished | --packages-select-test-failures | --packages-skip-test-passed]
+                    [--packages-select [PKG_NAME ...]]
+                    [--packages-skip [PKG_NAME ...]]
+                    [--packages-select-regex [PATTERN ...]]
+                    [--packages-skip-regex [PATTERN ...]]
+                    [--packages-start PKG_NAME] [--packages-end PKG_NAME]
+                    [--allow-overriding PKG_NAME [PKG_NAME ...]]
+                    [--cmake-args [* ...]] [--cmake-target CMAKE_TARGET]
+                    [--cmake-target-skip-unavailable] [--cmake-clean-cache]
+                    [--cmake-clean-first] [--cmake-force-configure]
+                    [--ament-cmake-args [* ...]] [--catkin-cmake-args [* ...]]
+                    [--catkin-skip-building-tests] [--mixin-files [FILE ...]]
+                    [--mixin [mixin1 [mixin2 ...]]]
+colcon build: error: argument --allow-overriding: expected at least one argument
+exit=2
+installed: pkg_a pkg_b std_msgs 
+--- colcon build --allow-overriding pkg_a (wrong name)
+$ colcon build --allow-overriding pkg_a
+[0.292s] WARNING:colcon.colcon_core.package_selection:Some selected packages are already built in one or more underlay workspaces:
+	'std_msgs' is in: /opt/ros/jazzy
+If a package in a merged underlay workspace is overridden and it installs headers, then all packages in the overlay must sort their include directories by workspace order. Failure to do so may result in build failures or undefined behavior at run time.
+If the overridden package is used by another package in any underlay, then the overriding package in the overlay must be API and ABI compatible or undefined behavior at run time may occur.
+If you understand the risks and want to override a package anyways, add the following to the command line:
+	--allow-overriding std_msgs
+This may be promoted to an error in a future release of colcon-override-check.
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_a [0.14s]
+Starting >>> std_msgs
+Finished <<< pkg_b [0.15s]
+Finished <<< std_msgs [0.09s]
+Summary: 3 packages finished [0.43s]
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- colcon list (overlay std_msgs)
+$ colcon list
+pkg_a	src/pkg_a	(ros.ament_cmake)
+pkg_b	src/pkg_b	(ros.ament_cmake)
+std_msgs	src/std_msgs	(ros.ament_cmake)
+exit=0
+installed: pkg_a pkg_b std_msgs 
+--- source the overlay's own install, then build again (same terminal)
+--- build after sourcing own install/setup.bash
+$ bash -c source install/setup.bash; colcon build
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.12s]
+Finished <<< pkg_a [0.14s]
+Summary: 2 packages finished [0.33s]
+exit=0
+installed: pkg_a pkg_b 
+--- second overlay /ws_b built on top of /ws (pkg_a in both)
+--- ws_b build with /ws sourced (pkg_a also in /ws/install)
+$ bash -c source /ws/install/setup.bash; colcon build
+Starting >>> pkg_a
+Finished <<< pkg_a [0.52s]
+Summary: 1 package finished [0.70s]
+exit=0
+installed: pkg_a 
+--- ws_b build with /ws sourced + --allow-overriding pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build --allow-overriding pkg_a
+Starting >>> pkg_a
+Finished <<< pkg_a [0.10s]
+Summary: 1 package finished [0.28s]
+exit=0
+installed: pkg_a 
+--- ros2 pkg prefix pkg_a after sourcing /ws then /ws_b
+$ bash -c source /ws/install/setup.bash; source install/setup.bash; ros2 pkg prefix pkg_a
+/ws_b/install/pkg_a
+exit=0
+installed: pkg_a 
+--- same two cases with --merge-install workspaces
+--- build --merge-install after sourcing own merged install/setup.bash
+$ bash -c source install/setup.bash; colcon build --merge-install
+Starting >>> pkg_a
+Starting >>> pkg_b
+Finished <<< pkg_b [0.13s]
+Finished <<< pkg_a [0.15s]
+Summary: 2 packages finished [0.33s]
+exit=0
+installed: share 
+--- ws_b build with merged /ws sourced (pkg_a also in /ws/install)
+$ bash -c source /ws/install/setup.bash; colcon build
+Starting >>> pkg_a
+Finished <<< pkg_a [0.51s]
+Summary: 1 package finished [0.69s]
+exit=0
+installed: pkg_a 
+--- ws_b same + --allow-overriding pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build --allow-overriding pkg_a
+Starting >>> pkg_a
+Finished <<< pkg_a [0.10s]
+Summary: 1 package finished [0.28s]
+exit=0
+installed: pkg_a 
+--- underlay /ws where pkg_c exec_depends on pkg_a (pkg_a no longer a leaf), overlay /ws_b overrides pkg_a
+COLCON_IGNORE
+_local_setup_util_ps1.py
+_local_setup_util_sh.py
+local_setup.bash
+local_setup.ps1
+local_setup.sh
+local_setup.zsh
+pkg_a
+pkg_b
+pkg_c
+setup.bash
+setup.ps1
+setup.sh
+setup.zsh
+--- ws_b build, /ws sourced, pkg_c in /ws depends on pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build
+[0.287s] WARNING:colcon.colcon_core.package_selection:Some selected packages are already built in one or more underlay workspaces:
+	'pkg_a' is in: /ws/install/pkg_a
+If a package in a merged underlay workspace is overridden and it installs headers, then all packages in the overlay must sort their include directories by workspace order. Failure to do so may result in build failures or undefined behavior at run time.
+If the overridden package is used by another package in any underlay, then the overriding package in the overlay must be API and ABI compatible or undefined behavior at run time may occur.
+If you understand the risks and want to override a package anyways, add the following to the command line:
+	--allow-overriding pkg_a
+This may be promoted to an error in a future release of colcon-override-check.
+Starting >>> pkg_a
+Finished <<< pkg_a [0.52s]
+Summary: 1 package finished [0.70s]
+exit=0
+installed: pkg_a 
+--- ws_b same + --allow-overriding pkg_a
+$ bash -c source /ws/install/setup.bash; colcon build --allow-overriding pkg_a
+Starting >>> pkg_a
+Finished <<< pkg_a [0.10s]
+Summary: 1 package finished [0.28s]
+exit=0
+installed: pkg_a 
+--- override_check.py source: leaf-package filter
+136-
+137:        # Of those, Ignore overrides which are (effectively) leaf packages
+138-        overriding_names.intersection_update(
+139-            name for name, deps in reverse_dependencies.items()
+140-            if deps)
+=== done
