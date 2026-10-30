@@ -19,3 +19,6 @@ add_filter(
     },
     9
 );
+
+// Publishing runs do_enclose(), which HEADs every link in the post; links to still-scheduled posts log 404s. No post here carries media enclosures.
+add_filter( 'enclosure_links', '__return_empty_array' );
