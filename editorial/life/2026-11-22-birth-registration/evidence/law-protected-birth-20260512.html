@@ -1,0 +1,573 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko" xml:lang="ko">
+ <head></head>
+ <body>
+  <input type="hidden" id="lsNm" name="lsNm" value="위기 임신 및 보호출산 지원과 아동 보호에 관한 특별법" /> 
+  <input type="hidden" id="lsId" name="lsId" value="014531" /> 
+  <input type="hidden" id="lsiSeq" name="lsiSeq" value="279721" /> 
+  <input type="hidden" id="ancYd" name="ancYd" value="20251111" /> 
+  <input type="hidden" id="efYd" name="efYd" value="20260512" /> 
+  <input type="hidden" id="ancNo" name="ancNo" value="21108" /> 
+  <input type="hidden" id="lsBdyChrCls" name="lsBdyChrCls" value="010202" /> 
+  <input type="hidden" id="lumIsConOrdin" value="" /> 
+  <input type="hidden" id="nwYnValue" value="Y" /> 
+  <input type="hidden" id="hstLnkDpYn" value="0" /> 
+  <style>
+.byl_pop ul li {
+	padding: 7px;
+	margin-left: 10px;
+}
+</style> 
+  <script type="text/javascript">
+$(document).ready(function(){
+	customResizePop(); // 본문 리사이즈
+	initEDotXPress('\uC704\uAE30 \uC784\uC2E0 \uBC0F \uBCF4\uD638\uCD9C\uC0B0 \uC9C0\uC6D0\uACFC \uC544\uB3D9 \uBCF4\uD638\uC5D0 \uAD00\uD55C \uD2B9\uBCC4\uBC95');
+});
+
+function customResizePop() {
+		// 본문 버튼 높이 만큼 제공한다. 13은 패딩값
+		var $contentHeight = $("#center").height() - ($('.body_top_area').height() + 13);
+		var $conTopHeight = $('#conTop').height() + 35;
+
+		var bdyValue = lsVO.bdyUpdValue.updateContentNm || 'lsBdy';
+		
+        //lsInfoP 가 열릴 때 본문은 무조건 조회 하기 때문에 조건문 밖에 위치 하도록 변경.
+		$('#viewwrapCenter').css('overflow-y', 'hidden');
+        $('#bodyContentTOP > #viewwrapCenter').height($contentHeight);
+        $('#conScroll').height($('#viewwrapCenter').height() - $conTopHeight);
+        
+        if (bdyValue == 'lsBdy') {
+			/* 본문에서는 법령명 고정 때문에 hidden 처리*/
+			$('#viewwrapCenter').css('overflow-y', 'hidden');
+			$('#bodyContentTOP > #viewwrapCenter').height($contentHeight);
+			if($('#viewwrapCenter2').height() != null || $('#viewwrapCenter2').height() == 0){
+				$('#bodyContentTOP > #viewwrapCenter2').height($contentHeight);
+				$('#conScroll').height($('#viewwrapCenter2').height() - $conTopHeight);
+				$('#viewwrapCenter2').css('overflow', 'hidden');
+			}
+			$('#bodyContent').css('width', 'inherit');
+		} else if (bdyValue == 'lsPtnThdCmp') {
+			lspttnThdCmpResize();
+		} else if (bdyValue == 'lumThdCmp') {
+			thdCmpNewScPResize();
+		} else if (bdyValue == 'lumThdCmpSc') {
+
+		} else if (bdyValue == 'thdCmpNew') {
+
+		} else if (bdyValue == 'lsOldAndNew') {				
+			// 신구법은 이전 이후 버튼 높이까지 마이너스 한다. 
+			$('#bodySideContent > #oldAndNewDiv').height(($contentHeight + $('#tmpWidth').height()-114));
+		} else if (bdyValue == 'lsRvsDocInfoR') {
+
+			$('#bodySideContent > #viewwrapCenter').height($contentHeight);
+			$('#conScroll').height($('#viewwrapCenter').height() - $conTopHeight);
+			$('#conTop').height($('.cont_top').height());
+			$('#rvsConScroll').height($('#viewwrapCenter').height() - $('#rvsConTop').height());
+			
+		} else {
+			$('#bodySideContent > #viewwrapCenter').height($contentHeight);
+		}
+}
+
+function fileLayer(temp){
+	var tempStr = $("#hwptext"+temp).attr("value");
+	if(tempStr.length > 32){
+ 		$("#hwptext"+temp).css("width", "80%").css("text-overflow", "ellipsis").css("overflow","hidden").css("white-space","nowrap");
+ 		$("#hwpxtext"+temp).css("width", "80%").css("text-overflow", "ellipsis").css("overflow","hidden").css("white-space","nowrap");
+ 		$("#pdftext"+temp).css("width", "80%").css("text-overflow", "ellipsis").css("overflow","hidden").css("white-space","nowrap");
+ 	}
+
+ 	$(".byl_pop").css("display","none");
+
+ 	//레이어높이값
+ 	var height = $("#fileSaveLayer"+temp).height();
+ 	//본문 제일 하단 위치값 
+	var pagePos = document.querySelector('#center');
+	pagePos = pagePos.getBoundingClientRect().bottom;
+	//레이어버튼위치값
+	var layPos =document.querySelector('#imgPos'+temp);
+	layPos = layPos.getBoundingClientRect().bottom;
+	var lay_pop = $('#fileSaveLayer'+temp);
+	var pos = $('#imgPos'+temp).position();
+	
+	if(pagePos > height+layPos){ //레이어가 잘리지 않을 때 
+		lay_pop.css('top', (pos.top)+25 + 'px');
+		lay_pop.css('left', '250px')
+	}else{ //레이어가 잘릴 때
+		lay_pop.css('top', ((pos.top)-height)+ 'px');
+		lay_pop.css('left', (pos.left)+25+'px');
+	}
+	document.getElementById("fileSaveLayer"+temp).style.display="block";
+}
+
+function copyToClipBoard(temp2){
+	var content = document.getElementById('textarea'+temp2);
+	content.select();
+	document.execCommand('copy');
+	alert("주소가 클립보드에 저장되었습니다.");
+	content.setSelectionRange(0,0);
+}
+
+function delLayer(temp){
+	document.getElementById("fileSaveLayer"+temp).style.display="none";
+}
+
+</script> 
+  <div id="contentBody" class="scr_ctrl"> 
+   <div id="sideCenter" class="cont_area"> 
+    <ul class="cont_icon"> 
+     <li><a><img alt="판" src="/LSW/images/button/btn_jostmdico.gif" />판례</a></li> 
+     <li><a><img alt="연" src="/LSW/images/button/btn_year3.gif" />연혁</a></li> 
+     <li><a><img alt="행" src="/LSW/images/button/btn_entrust3_2.gif" />위임행정규칙</a></li> 
+     <li><a><img alt="규" src="/LSW/images/button/btn_entrust4_2.gif" />규제</a></li> 
+     <li><a><img alt="한" src="/LSW/images/button/btn_oneviewIcon.gif" />한눈보기</a></li> 
+    </ul> 
+    <!-- 연혁법령 안내문구 --> 
+    <!-- 법령명 --> 
+    <div id="conTop" class="cont_top"> 
+     <a id="top"></a> 
+     <!-- 국민신문고 연결배너 출력 --> 
+     <h2> 위기 임신 및 보호출산 지원과 아동 보호에 관한 특별법 <span>( 약칭: 위기임신보호출산법 )</span> </h2> 
+     <div class="ct_sub"> 
+      <span>[시행 2026. 5. 12.] [법률 제21108호, 2025. 11. 11., 타법개정]</span> 
+     </div> 
+    </div> 
+    <!-- 소관부처 --> 
+    <div id="conScroll" class="scr_area" style="overflow-y: auto;"> 
+     <div class="cont_subtit"> 
+      <p> <a title="팝업으로 이동" onclick="javascript:cptOfiPop('https://www.mohw.go.kr/react/index.jsp'); return false;" href="#AJAX" target="_blank"> <span title="https://www.mohw.go.kr/react/index.jsp" style="cursor: pointer;">보건복지부</span> (<span title="" style="cursor: pointer;">아동정책과</span>), 044-202-3424, 3426 </a> </p> 
+     </div> 
+     <!-- 조문정보 --> 
+     <a name="pjuk:95234863" id="pjuk:95234863"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="000100" data-joseq="95234863">         제1장 총칙 </p> 
+     </div> 
+     <a name="J1:0" id="J1:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0001', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="1:0:000100:95234865" /> <span class="bl"><label for="Y000100"> 제1조(목적) </label> </span> 이 법은 경제적ㆍ심리적ㆍ신체적 사유 등으로 인하여 출산 및 양육에 어려움을 겪고 있는 임산부의 안전한 출산을 지원하고 그 태아 및 자녀인 아동의 안전한 양육환경을 보장함으로써 생모 및 생부와 그 자녀의 복리 증진에 이바지함을 목적으로 한다. </p> 
+      </div> 
+     </div> 
+     <a name="J2:0" id="J2:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0002', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="2:0:000200:95234867" /> <span class="bl"><label for="Y000200"> 제2조(정의) </label> </span> 이 법에서 사용하는 용어의 뜻은 다음과 같다. </p>
+       <p class="pty1_de2_1"> </p> 
+       <p class="pty1_de2h">1. “위기임산부”란 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088437','ALLJO','');" href="javascript:;">「모자보건법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088425','JO','');" href="javascript:;">제2조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088439','JO','');" href="javascript:;">제1호</a>에 따른 임신 중 여성(이하 “위기임부”라 한다) 및 분만 후 6개월 미만인 여성(이하 “위기산부”라 한다)으로서 경제적ㆍ심리적ㆍ신체적 사유 등으로 인하여 출산 및 양육에 어려움을 겪고 있는 여성을 말한다. </p> 
+       <p class="pty1_de2h">2. “상담기관”이란 위기임산부에게 출산 및 양육과 자녀인 아동 보호를 위한 각종 지원에 관한 정보 및 상담을 제공하고 필요한 서비스를 연계 및 지원하기 위하여 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088415','JO','');" href="javascript:;">제6조</a>에 따라 지정된 기관을 말한다. </p> 
+       <p class="pty1_de2h">3. “비식별화”란 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088411','JO','');" href="javascript:;">제9조</a> 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088447','JO','');" href="javascript:;">제14조</a>에 따른 신청을 한 위기임산부의 개인정보에 대하여 관리번호 부여 후 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088429','ALLJO','');" href="javascript:;">「개인정보 보호법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088409','JO','');" href="javascript:;">제2조</a>에 따른 가명처리를 하는 것을 말한다. </p> 
+       <p class="pty1_de2h">4. “보호출산”이란 위기임부가 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088405','JO','');" href="javascript:;">제7조</a>에 따른 상담을 모두 마치고 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088413','JO','');" href="javascript:;">제9조</a>에 따른 신청을 한 후 비식별화를 하고 출산하는 것을 말한다. </p> 
+       <p class="pty1_de2h">5. “출생증서”란 보호출산으로 태어나거나 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088419','JO','');" href="javascript:;">제14조</a>에 따라 보호된 아동의 출생 당시의 정보 및 생모ㆍ생부의 정보로서 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088449','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088427','JO','');" href="javascript:;">제1항</a>에 따라 작성된 기록을 말한다. </p> 
+       <p class="pty1_de2h">6. “보호자”란 다음 각 목의 어느 하나에 해당하는 사람을 말한다. </p> 
+       <p class="pty1_de3">가. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088421','ALLJO','');" href="javascript:;">「민법」</a>에 따른 친권자 및 후견인 <span class="sfon"></span></p> 
+       <p class="pty1_de3">나. 가목의 보호자가 없는 경우 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088407','ALLJO','');" href="javascript:;">「민법」</a>에 따른 부양의무자로서 사실상 해당 임산부를 보호하는 사람 <span class="sfon"></span></p> 
+       <p class="pty1_de3">다. 가목 및 나목의 보호자가 없는 경우 사실상 해당 아동을 보호ㆍ양육하는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088403','ALLJO','');" href="javascript:;">「아동복지법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088441','JO','');" href="javascript:;">제52조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088443','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088445','JO','');" href="javascript:;">제1호</a>, <a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088417','JO','');" href="javascript:;">제2호</a> 또는 제4호에 따른 시설의 장 또는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088431','ALLJO','');" href="javascript:;">같은 법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088423','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088433','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088435','JO','');" href="javascript:;">제3호</a>에 따라 아동을 보호ㆍ양육하는 가정위탁보호자 중 지방자치단체의 장이 보호자로 지명하는 사람(가목에 따른 후견인을 선임하기 전까지로 한정한다) <span class="sfon"></span></p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J3:0" id="J3:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0003', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="3:0:000300:95234869" /> <span class="bl"><label for="Y000300"> 제3조(국가와 지방자치단체의 책무) </label> </span> ① 국가와 지방자치단체는 위기임산부를 지원하고 그 자녀인 아동의 안전하고 건강한 성장을 위하여 필요한 조치와 지원을 하여야 한다. 이 경우 직접 자녀인 아동을 양육할 수 있도록 하기 위한 지원을 우선으로 한다. </p>
+       <p class="pty1_de2_1">② 국가와 지방자치단체는 임신 및 출산으로 인하여 어려움을 겪고 있는 위기임산부와 자녀인 아동의 권익과 복지 증진을 위한 시책을 강구하여야 한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J4:0" id="J4:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0004', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="4:0:000400:95234871" /> <span class="bl"><label for="Y000400"> 제4조(실태조사 등) </label> </span> ① 보건복지부장관은 위기임산부 지원 및 그 자녀의 보호를 위한 정책수립에 활용하기 위하여 3년마다 위기임산부와 그 자녀에 대한 실태조사를 실시하고 그 결과를 공표하여야 한다. 이 경우 보건복지부장관은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188983');" href="javascript:;">보건복지부령</a>으로 정하는 바에 따라 청소년 위기임산부 등에 대한 실태조사를 함께 실시할 수 있다. </p>
+       <p class="pty1_de2_1">② 보건복지부장관은 제1항에 따른 실태조사를 위하여 관계 중앙행정기관의 장, 지방자치단체의 장, <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088451','ALLJO','');" href="javascript:;">「공공기관의 운영에 관한 법률」</a>에 따른 공공기관의 장, 그 밖에 관련 시설ㆍ법인ㆍ단체의 장에게 필요한 자료의 제출 등 협조를 요청할 수 있다. 이 경우 자료의 제출을 요청받은 관계 중앙행정기관의 장 등은 정당한 사유가 없으면 이에 협조하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 제1항에 따른 실태조사의 대상 및 방법, 그 밖에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188985');" href="javascript:;">보건복지부령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J5:0" id="J5:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0005', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000500" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="5:0:000500:95234873" /> <span class="bl"><label for="Y000500"> 제5조(다른 법률과의 관계) </label> </span> 보호출산 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088453','JO','');" href="javascript:;">제14조</a>에 따른 출산 후 아동 보호 등에 관하여 이 법에서 정한 사항에 대하여는 다른 법률에 우선하여 적용한다. </p> 
+      </div> 
+     </div> 
+     <a name="pjuk:95234875" id="pjuk:95234875"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="000600" data-joseq="95234875">         제2장 위기임산부에 대한 상담 등 </p> 
+     </div> 
+     <a name="J6:0" id="J6:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0006', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a href="javascript:;" onclick="javascript:openCtlInfoList('279721', '014531', '0006', '00');return false;" style="text-decoration: none;" title="관련규정 팝업으로 이동"> <img src="images/button/btn_entrust4_2.gif" alt="관련규제버튼" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000600" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="6:0:000600:95234877" /> <span class="bl"><label for="Y000600"> 제6조(상담기관의 지정ㆍ운영) </label> </span> ① 보건복지부장관은 위기임산부 지원 및 그 자녀인 아동의 보호를 위한 다음 각 호의 업무를 수행하기 위하여 중앙상담지원기관을 지정할 수 있다. </p>
+       <p class="pty1_de2h">1. 위기임산부의 출산ㆍ양육 지원 및 그 아동의 보호를 위한 상담 절차ㆍ내용의 개발ㆍ보급 </p> 
+       <p class="pty1_de2h">2. 제2항에 따라 지정된 지역상담기관(이하 “지역상담기관”이라 한다) 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088459','ALLJO','');" href="javascript:;">「의료법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088467','JO','');" href="javascript:;">제3조</a>에 따른 의료기관(이하 “의료기관”이라 한다) 종사자에 대한 위기임산부 출산ㆍ양육 지원 및 그 아동 보호를 위한 정책에 관한 교육 </p> 
+       <p class="pty1_de2h">3. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088463','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템 관리ㆍ운영 </p> 
+       <p class="pty1_de2h">4. 위기임산부 온라인ㆍ모바일 상담 </p> 
+       <p class="pty1_de2h">5. 지역상담기관 관리ㆍ업무지원 및 협력체계 구축 </p> 
+       <p class="pty1_de2h">6. 그 밖에 위기임산부 지원과 그 자녀인 아동의 보호를 위하여 필요한 사항으로서 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188987');" href="javascript:;">보건복지부령</a>으로 정하는 업무 </p> 
+       <p class="pty1_de2_1">② 보건복지부장관과 특별시장ㆍ광역시장ㆍ특별자치시장ㆍ도지사ㆍ특별자치도지사(이하 “시ㆍ도지사”라 한다)는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088465','ALLJO','');" href="javascript:;">「지역보건법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088469','JO','');" href="javascript:;">제10조</a>에 따른 보건소, <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088461','ALLJO','');" href="javascript:;">「지방의료원의 설립 및 운영에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088457','JO','');" href="javascript:;">제2조</a>에 따른 지방의료원이나 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188989');" href="javascript:;">대통령령</a>으로 정하는 자격을 갖춘 단체 또는 기관을 지역상담기관으로 지정할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 지역상담기관은 다음 각 호의 업무를 수행한다. </p> 
+       <p class="pty1_de2h">1. 위기임산부의 출산 및 양육 지원을 위한 상담ㆍ정보 제공 및 필요한 서비스 연계 </p> 
+       <p class="pty1_de2h">2. 아동 보호에 관한 상담ㆍ정보 제공 및 보호조치 연계 </p> 
+       <p class="pty1_de2h">3. 보호출산에 관한 상담ㆍ정보 제공 및 지원 </p> 
+       <p class="pty1_de2h">4. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088455','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템 입력과 기록관리 </p> 
+       <p class="pty1_de2h">5. 위기임산부 상담 전화 운영 </p> 
+       <p class="pty1_de2h">6. 그 밖에 위기임산부의 출산ㆍ양육 지원 및 그 아동의 보호를 위하여 필요한 사항으로서 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188991');" href="javascript:;">보건복지부령</a>으로 정하는 업무 </p> 
+       <p class="pty1_de2_1">④ 제1항 및 제2항에 따라 지정된 중앙상담지원기관 및 지역상담기관의 시설기준, 종사자 자격기준, 온라인ㆍ모바일 상담, 상담전화 운영, 지정절차 및 운영 등에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188993');" href="javascript:;">보건복지부령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J7:0" id="J7:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0007', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000700" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="7:0:000700:95234879" /> <span class="bl"><label for="Y000700"> 제7조(위기 임신ㆍ출산 등에 대한 상담) </label> </span> ① 출산ㆍ양육 및 아동 보호에 관한 상담 및 지원이 필요한 위기임산부는 언제든지 지역상담기관에 상담을 요청할 수 있다. </p>
+       <p class="pty1_de2_1">② 지역상담기관은 제1항에 따라 상담을 요청한 위기임산부에게 자녀인 아동을 직접 양육할 수 있도록 다음 각 호에 대하여 충분한 상담과 안내를 제공하여야 하며 가능한 서비스를 연계할 수 있다. </p> 
+       <p class="pty1_de2h">1. 자녀인 아동을 양육할 경우 지원받을 수 있는 다음 각 목의 사회보장급여 및 지원 사항 </p> 
+       <p class="pty1_de3">가. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088517','ALLJO','');" href="javascript:;">「국민기초생활 보장법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088479','JO','');" href="javascript:;">제7조</a> 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088523','JO','');" href="javascript:;">제27조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088493','JO','');" href="javascript:;">제2항</a>에 따른 급여 <span class="sfon"></span></p> 
+       <p class="pty1_de3">나. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088507','ALLJO','');" href="javascript:;">「한부모가족지원법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088509','JO','');" href="javascript:;">제12조</a>에 따른 복지 급여, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088473','JO','');" href="javascript:;">제13조</a>에 따른 복지 자금의 대여, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088505','JO','');" href="javascript:;">제14조</a>에 따른 직업능력개발훈련, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088501','JO','');" href="javascript:;">제14조의2</a>에 따른 고용지원 연계, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088489','JO','');" href="javascript:;">제17조</a>에 따른 가족지원서비스, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088487','JO','');" href="javascript:;">제17조의6</a>에 따른 건강관리 등 지원, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088533','JO','');" href="javascript:;">제18조</a>에 따른 국민주택의 분양 및 임대 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088495','JO','');" href="javascript:;">제19조</a>에 따른 시설 이용 <span class="sfon"></span></p> 
+       <p class="pty1_de3">다. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088483','ALLJO','');" href="javascript:;">「국민건강보험법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088521','JO','');" href="javascript:;">제44조</a> 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088529','ALLJO','');" href="javascript:;">같은 법 시행령</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088531','JO','');" href="javascript:;">제19조</a>에 따른 의료 지원, <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088519','ALLJO','');" href="javascript:;">같은 법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088491','JO','');" href="javascript:;">제50조</a> 및 같은 법 시행령 제23조에 따른 임신ㆍ출산 진료비 <span class="sfon"></span></p> 
+       <p class="pty1_de3">라. <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088513','ALLJO','');" href="javascript:;">「모자보건법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088475','JO','');" href="javascript:;">제9조</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088525','JO','');" href="javascript:;">제10조</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088481','JO','');" href="javascript:;">제10조의4</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088477','JO','');" href="javascript:;">제10조의5</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088499','JO','');" href="javascript:;">제14조</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088503','JO','');" href="javascript:;">제15조의17</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088471','JO','');" href="javascript:;">제15조의18</a>에 따른 모성 및 영유아 건강 증진을 위한 사항 <span class="sfon"></span></p> 
+       <p class="pty1_de3">마. 그 밖에 관련 법령에 따라 임산부에게 제공되는 각종 지원 사항 <span class="sfon"></span></p> 
+       <p class="pty1_de2h">2. 자녀의 인지청구 및 양육비 청구를 위한 소송 대리 등 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088515','ALLJO','');" href="javascript:;">「양육비 이행확보 및 지원에 관한 법률」</a>에 따라 시행 중인 양육비 이행 확보를 위한 관련 지원 사항 </p> 
+       <p class="pty1_de2h">3. 양육 및 친권의 포기가 아동에게 미치는 영향 </p> 
+       <p class="pty1_de2h">4. 그 밖에 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188995');" href="javascript:;">보건복지부령</a>으로 정하는 사항 </p> 
+       <p class="pty1_de2_1">③ 지역상담기관의 장은 제2항에 따른 상담에도 불구하고 보호출산 및 그 자녀인 아동 보호를 희망하는 위기임산부에게 다음 각 호의 사항에 대하여 상담을 제공하여야 한다. </p> 
+       <p class="pty1_de2h">1. 보호출산의 절차와 법적 효력 </p> 
+       <p class="pty1_de2h">2. 자녀의 생모와 생부를 알 권리의 의미와 그것이 자녀의 발달에 미치는 영향 및 그 밖의 자녀의 권리 </p> 
+       <p class="pty1_de2h">3. 자에 대한 인지 및 양육 등 생부의 권리 </p> 
+       <p class="pty1_de2h">4. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088511','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088497','JO','');" href="javascript:;">제1항</a>에 따른 숙려기간 </p> 
+       <p class="pty1_de2h">5.<a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088485','ALLJO','');" href="javascript:;">「아동복지법」</a>에 따른 아동 보호 절차 </p> 
+       <p class="pty1_de2h">6. 친권을 회복할 수 있는 기간 및 절차 </p> 
+       <p class="pty1_de2h">7. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088527','JO','');" href="javascript:;">제17조</a>에 따른 출생증서 공개 청구 요건 및 절차 </p> 
+       <p class="pty1_de2h">8. 그 밖에 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188997');" href="javascript:;">보건복지부령</a>으로 정하는 사항 </p> 
+       <p class="pty1_de2_1">④ 제2항 및 제3항에 따른 상담의 방법ㆍ절차 및 그 밖에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('188999');" href="javascript:;">보건복지부령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J8:0" id="J8:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0008', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000800" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="8:0:000800:95234881" /> <span class="bl"><label for="Y000800"> 제8조(위기임산부에 대한 산전ㆍ산후 보호 및 지원) </label> </span> ① 지역상담기관의 장은 산전ㆍ산후 보호를 위하여 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088535','JO','');" href="javascript:;">제7조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088549','JO','');" href="javascript:;">제1항</a>에 따라 상담을 요청한 위기임산부가 원하는 경우 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088539','ALLJO','');" href="javascript:;">「한부모가족지원법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088541','JO','');" href="javascript:;">제19조</a>에 따른 한부모가족복지시설(이하 “한부모가족복지시설”이라 한다) 또는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088537','ALLJO','');" href="javascript:;">「사회복지사업법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088545','JO','');" href="javascript:;">제2조</a>에 따른 사회복지시설(이하 “사회복지시설”이라 한다)을 설치ㆍ운영하는 자에게 입소를 요청할 수 있다. </p>
+       <p class="pty1_de2_1">② 제1항에 따른 요청을 받은 한부모가족복지시설 또는 사회복지시설의 장은 특별한 사유가 없으면 위기임산부의 보호시설 입소에 협조하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 지역상담기관의 장은 출산 후 가정에서 산후조리를 하고자 하는 위기임산부에게 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088547','ALLJO','');" href="javascript:;">「모자보건법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088543','JO','');" href="javascript:;">제15조의18</a>에 따라 국가 또는 지방자치단체가 지원하는 산후조리도우미의 이용을 연계할 수 있다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:95234883" id="pjuk:95234883"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="000900" data-joseq="95234883">         제3장 보호출산 </p> 
+     </div> 
+     <a name="J9:0" id="J9:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0009', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y000900" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="9:0:000900:95234885" /> <span class="bl"><label for="Y000900"> 제9조(보호출산 신청) </label> </span> ① <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088557','JO','');" href="javascript:;">제7조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088583','JO','');" href="javascript:;">제2항</a> 및 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088577','JO','');" href="javascript:;">제3항</a>에 따른 상담을 받은 위기임부로서 보호출산을 원하는 사람은 그 상담을 받은 지역상담기관의 장에게 스스로의 의사결정에 따라 보호출산을 신청할 수 있다. 이 경우 신청 방법과 절차 등에 관하여 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189001');" href="javascript:;">보건복지부령</a>으로 정한다. </p>
+       <p class="pty1_de2_1">② 제1항에도 불구하고 위기임부가 의사를 결정할 능력이 충분하지 아니한 경우에는 그 보호자가 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189003');" href="javascript:;">대통령령</a>으로 정하는 바에 따라 제1항에 따른 신청을 할 수 있다. 이 경우 보호자의 신청은 위기임부의 신청으로 보며 보호자는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088569','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088571','JO','');" href="javascript:;">제1항</a>에 따른 통지, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088581','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088575','JO','');" href="javascript:;">제5항</a>에 따른 통보, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088551','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088559','JO','');" href="javascript:;">제1항</a>에 따른 아동의 인도 또는 인도 요청, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088563','JO','');" href="javascript:;">제13조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088553','JO','');" href="javascript:;">제1항</a>에 따른 신청 철회, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088567','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088555','JO','');" href="javascript:;">제1항</a>에 따른 출생증서 작성(이 경우 임산부 본인에 대한 정보를 기록한다) 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088573','JO','');" href="javascript:;">제17조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088579','JO','');" href="javascript:;">제2항</a>의 동의를 할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 지역상담기관의 장은 제1항 또는 제2항에 따라 보호출산을 신청한 위기임부(이하 본 장에서 “신청인”이라 한다)에 대하여 비식별화가 이루어질 수 있도록 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088565','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템에 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189005');" href="javascript:;">대통령령</a>으로 정하는 바에 따라 관련 정보를 입력한다. 이 경우 지역상담기관의 장은 비식별화된 정보를 신청인에게 통지하여야 한다. </p> 
+       <p class="pty1_de2_1">④ 보건복지부장관은 관계 중앙행정기관의 장, 지방자치단체의 장, <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088561','ALLJO','');" href="javascript:;">「공공기관의 운영에 관한 법률」</a>에 따른 공공기관의 장에게 제3항에 따른 비식별화에 필요한 사항을 요청할 수 있다. 이 경우 요청을 받은 자는 정당한 사유가 없으면 이에 협조하여야 한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J10:0" id="J10:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0010', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001000" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="10:0:001000:95234887" /> <span class="bl"><label for="Y001000"> 제10조(보호출산의 지원) </label> </span> ① 신청인은 의료기관 중 산전 검진 및 출산을 원하는 의료기관을 선택하여 지역상담기관의 장에게 알리고 해당 의료기관에서 지역상담기관에서 통지받은 비식별화된 정보로 산전 검진 및 출산을 할 수 있다. </p>
+       <p class="pty1_de2_1">② 제1항에 따른 의료기관은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088587','ALLJO','');" href="javascript:;">「의료법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088593','JO','');" href="javascript:;">제22조</a> 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088585','ALLJO','');" href="javascript:;">같은 법 시행규칙</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088589','JO','');" href="javascript:;">제14조</a>에도 불구하고 신청인에 대하여 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088595','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088591','JO','');" href="javascript:;">제3항</a>에 따라 비식별화가 이루어진 정보로 진료기록부 등을 작성하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 국가와 지방자치단체는 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189007');" href="javascript:;">보건복지부령</a>으로 정하는 바에 따라 제1항에 따른 산전 검진 및 출산에 관한 비용을 지원할 수 있다. </p> 
+       <p class="pty1_de2_1">④ 제3항에 따른 비용 지원의 방법, 절차 그 밖에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189009');" href="javascript:;">보건복지부령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:95234889" id="pjuk:95234889"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="001100" data-joseq="95234889">         제4장 아동 보호 </p> 
+     </div> 
+     <a name="J11:0" id="J11:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0011', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="11:0:001100:95234891" /> <span class="bl"><label for="Y001100"> 제11조(출생사실의 통보 등) </label> </span> ① 의료기관에 종사하는 의료인은 해당 의료기관에서 보호출산을 통하여 아동이 출생한 경우 출생사실을 확인하기 위하여 다음 각 호의 사항(이하 “출생정보”라 한다)을 해당 의료기관에서 관리하는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088599','JO','');" href="javascript:;">제9조</a>의 신청인의 진료기록부 또는 조산기록부(전자적 형태로 바꾼 문서를 포함한다. 이하 같다)에 기재하여야 한다. </p>
+       <p class="pty1_de2h">1. 아동의 생모에 관한 다음 각 목의 사항 </p> 
+       <p class="pty1_de3">가. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088625','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088597','JO','');" href="javascript:;">제3항</a>에 따라 비식별화된 가명 <span class="sfon"></span></p> 
+       <p class="pty1_de3">나. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088643','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088667','JO','');" href="javascript:;">제3항</a>에 따라 비식별화된 관리번호 <span class="sfon"></span></p> 
+       <p class="pty1_de2h">2. 아동의 성별, 수(數) 및 출생 연월일시 </p> 
+       <p class="pty1_de2h">3. 그 밖에 의료기관의 주소 등 출생사실을 확인하기 위하여 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189011');" href="javascript:;">대법원규칙</a>으로 정하는 사항 </p> 
+       <p class="pty1_de2_1">② 의료기관의 장은 출생일부터 14일 이내에 출생정보를 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088675','ALLJO','');" href="javascript:;">「국민건강보험법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088677','JO','');" href="javascript:;">제62조</a>에 따른 건강보험심사평가원(이하 “심사평가원”이라 한다)에 제출하여야 한다. 이 경우 보건복지부장관이 출생사실의 통보 및 관리를 목적으로 구축하여 심사평가원에 위탁하여 운영하는 전산정보시스템을 이용하여 제출하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 심사평가원의 장은 제2항에 따라 출생정보를 제출받은 경우 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088639','JO','');" href="javascript:;">제6조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088621','JO','');" href="javascript:;">제1항</a>에 따른 중앙상담지원기관(이하 “중앙상담지원기관”이라 한다)의 장에게 해당 출생정보를 포함한 출생사실을 지체 없이 통보하여야 한다. 이 경우 심사평가원은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088665','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템을 통하여 전자적인 방법으로 출생사실을 통보할 수 있다. </p> 
+       <p class="pty1_de2_1">④ 제3항에 따라 출생사실을 통보받은 중앙상담지원기관의 장은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088605','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088653','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088673','JO','');" href="javascript:;">제2항</a>에 따른 보호출산 신청을 접수한 지역상담기관의 장에게 해당 출생정보를 포함한 출생사실을 지체 없이 통보하여야 하고, 이를 통보받은 지역상담기관의 장은 지역상담기관 소재지 관할 시ㆍ읍ㆍ면의 장에게 해당 출생정보와 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088655','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088607','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088657','JO','');" href="javascript:;">제3호</a>에 따른 아동의 성명을 포함한 출생사실을 지체 없이 통보하여야 한다. 이 경우 중앙상담지원기관 및 지역상담기관은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088615','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088635','ALLJO','');" href="javascript:;">「전자정부법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088619','JO','');" href="javascript:;">제37조</a>에 따른 행정정보 공동이용센터를 통하여 전자적인 방법으로 출생사실을 통보할 수 있다. </p> 
+       <p class="pty1_de2_1">⑤ 제1항부터 제3항까지에도 불구하고 의료기관이 아닌 곳에서 출산한 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088671','JO','');" href="javascript:;">제9조</a>의 신청인은 출산사실과 출생정보를 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088647','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088669','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088617','JO','');" href="javascript:;">제2항</a>에 따른 보호출산 신청을 접수한 지역상담기관의 장에게 통보하여야 하고, 이를 통보받은 지역상담기관의 장은 즉시 지역상담기관 소재지 관할 시ㆍ읍ㆍ면의 장에게 해당 출생정보를 포함한 출생사실을 통보하여야 한다. 이 경우 지역상담기관은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088629','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088637','ALLJO','');" href="javascript:;">「전자정부법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088651','JO','');" href="javascript:;">제37조</a>에 따른 행정정보 공동이용센터를 통하여 전자적인 방법으로 출생사실을 통보할 수 있다. 이 경우 다음 각 호의 어느 하나에 해당하는 서면을 첨부하여야 한다. </p> 
+       <p class="pty1_de2h">1. 분만에 직접 관여한 자가 모의 출산사실을 증명할 수 있는 자료 등을 첨부하여 작성한 출생사실을 증명하는 서면 </p> 
+       <p class="pty1_de2h">2. 국내 또는 외국의 권한있는 기관에서 발행한 출생사실을 증명하는 서면 </p> 
+       <p class="pty1_de2h">3. 모의 출산사실을 증명할 수 있는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088611','ALLJO','');" href="javascript:;">「119구조ㆍ구급에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088663','JO','');" href="javascript:;">제22조</a>에 따른 구조ㆍ구급활동상황일지 </p> 
+       <p class="pty1_de2h">4. 제1호부터 제3호까지에 해당하는 서면이 없는 경우 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088659','ALLJO','');" href="javascript:;">「가족관계의 등록 등에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088623','JO','');" href="javascript:;">제44조의2</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088661','JO','');" href="javascript:;">제1항</a>에 따른 가정법원의 확인서 등본 </p> 
+       <p class="pty1_de2_1">⑥ 제4항 또는 제5항에 따른 통보를 받은 시ㆍ읍ㆍ면의 장은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088601','ALLJO','');" href="javascript:;">「민법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088631','JO','');" href="javascript:;">제781조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088645','JO','');" href="javascript:;">제4항</a>에 따라 아동의 성과 본을 창설한 후 이름과 등록기준지를 정하여 가족관계등록부에 기록하여야 하며 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088641','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088613','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088627','JO','');" href="javascript:;">제2항</a>에 따른 보호출산 신청을 접수한 지역상담기관의 장에게 출생기록 사실과 아동의 성명 및 주민등록번호를 통보하여야 한다. 이 경우 시ㆍ읍ㆍ면의 장은 특별한 사유가 없으면 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088633','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088603','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088649','JO','');" href="javascript:;">제3호</a>에 따른 성명을 존중하여야 한다. </p> 
+       <p class="pty1_de2_1">⑦ 그 밖에 제2항의 전산정보시스템의 이용 방법 및 절차, 출생정보를 포함한 출생사실의 통보 절차 등에 관하여 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189013');" href="javascript:;">대법원규칙</a>으로 정하고 제3항, 제4항 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088609','JO','');" href="javascript:;">제18조</a>에 따른 전산정보시스템 및 정보시스템의 이용 방법 및 절차 등에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189015');" href="javascript:;">대통령령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J12:0" id="J12:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0012', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="12:0:001200:95234893" /> <span class="bl"><label for="Y001200"> 제12조(아동의 보호조치) </label> </span> ① <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088687','JO','');" href="javascript:;">제9조</a>의 신청인은 아동을 보호출산한 날부터 7일 이상 그 아동을 직접 양육하기 위한 숙려기간을 갖고 이 기간이 지난 후부터 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189017');" href="javascript:;">보건복지부령</a>으로 정하는 바에 따라 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088681','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088685','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088689','JO','');" href="javascript:;">제2항</a>에 따라 보호출산 신청을 접수한 지역상담기관 소재지 관할 시장ㆍ군수ㆍ구청장에게 아동을 인도하거나 그 지역상담기관 소재지 관할 시장ㆍ군수ㆍ구청장에게 아동을 인도하여줄 것을 지역상담기관의 장에게 요청할 수 있다. 이 경우 아동이 인도된 때부터 친권자의 친권행사는 정지된다. 다만, <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189019');" href="javascript:;">보건복지부령</a>으로 정하는 특별한 사유가 있는 경우에는 7일이 지나기 전이라도 아동을 인도할 수 있다. </p>
+       <p class="pty1_de2_1">② 시장ㆍ군수ㆍ구청장은 제1항에 따라 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088691','JO','');" href="javascript:;">제9조</a>의 신청인으로부터 직접 아동을 인도받은 경우에는 이를 즉시 지역상담기관의 장에게 통보하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 제1항에 따라 아동을 인도받은 시장ㆍ군수ㆍ구청장은 지체 없이 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088679','ALLJO','');" href="javascript:;">「아동복지법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088683','JO','');" href="javascript:;">제15조</a>에 따른 적절한 보호조치를 하여야 한다. 이 경우 아동을 인도받은 시장ㆍ군수ㆍ구청장이 아동의 미성년후견인이 된다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J13:0" id="J13:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0013', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '014531', '279721', '95234895', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="13:0:001300:95234895" /> <span class="bl"><label for="Y001300"> 제13조(신청 철회와 아동의 보호 등) </label> </span> ① <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088843','JO','');" href="javascript:;">제9조</a>의 신청인은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088843','JO','');" href="javascript:;">제9조</a>에 따른 신청을 철회할 수 있다. 다만, 해당 아동의 입양 절차가 진행　중인 경우에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088853','ALLJO','');" href="javascript:;">「입양특례법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088855','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088857','JO','');" href="javascript:;">제1항</a>에 따른 허가 전까지 신청을 철회할 수 있다. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088843','JO','');" href="javascript:;">제9조</a>의 신청인이 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088843','JO','');" href="javascript:;">제9조</a>에 따른 신청을 철회한 경우 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088833','JO','');" href="javascript:;">제12조</a>의 아동 인도 의사도 철회한 것으로 보며, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088839','JO','');" href="javascript:;">제12조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088841','JO','');" href="javascript:;">제3항</a>에 따른 시장ㆍ군수ㆍ구청장으로부터 아동을 다시 인도받은 때부터 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189021');" href="javascript:;">보건복지부령</a>으로 정하는 바에 따라 다시 친권을 행사할 수 있다. </p>
+       <p class="pty1_de2_1">② <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088835','ALLJO','');" href="javascript:;">「입양특례법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088837','JO','');" href="javascript:;">제16조</a>에 따른 입양 취소 판결이 확정된 때에는 제1항에 따른 철회가 이루어진 것으로 본다. 다만, 생부의 입양 취소 청구에 따른 판결이 확정된 때에는 그러하지 아니하다. </p> 
+       <p class="pty1_de2_1">③ 제1항에 따라 신청을 철회한 신청인은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088849','ALLJO','');" href="javascript:;">「가족관계의 등록 등에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088851','JO','');" href="javascript:;">제44조</a>에 따른 출생신고를 하여야 한다. 다만, 이미 아동에 대한 출생기록이 완료되었을 경우에는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088859','ALLJO','');" href="javascript:;">같은 법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088861','JO','');" href="javascript:;">제53조</a>를 준용하여 가족관계등록부 정정 신청을 하여야 한다. </p> 
+       <p class="pty1_de2_1">④ 제1항에 따라 신청인이 신청을 철회하였을 경우 지역상담기관의 장은 해당 아동에 대한 출생증서를 지체 없이 폐기하여야 한다. 다만, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088845','JO','');" href="javascript:;">제16조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088847','JO','');" href="javascript:;">제1항</a>에 따라 이미 출생증서를 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088823','ALLJO','');" href="javascript:;">「아동복지법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088825','JO','');" href="javascript:;">제10조의2</a>에 따른 국가아동권리보장원(이하 “국가아동권리보장원”이라 한다)에 이관한 경우에는 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189023');" href="javascript:;">보건복지부령</a>으로 정하는 바에 따라 국가아동권리보장원의 장(이하 “보장원장”이라 한다)에게 이 사실을 통지하여야 한다. <span class="sfon">&lt;개정 2025. 11. 11.&gt;</span> </p> 
+       <p class="pty1_de2_1">⑤ 제1항에 따른 철회는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088827','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088829','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088831','JO','');" href="javascript:;">제2항</a>에 따라 보호출산 신청을 접수한 지역상담기관의 장에게 서면으로 하되, 구체적인 방법 및 절차 등에 대하여는 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189025');" href="javascript:;">보건복지부령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J14:0" id="J14:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0014', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="14:0:001400:95234897" /> <span class="bl"><label for="Y001400"> 제14조(출산 후 아동 보호 신청) </label> </span> ① <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088697','JO','');" href="javascript:;">제9조</a>의 신청을 하지 아니한 위기임부가 아동을 출산한 후 출생신고를 마치지 아니하고 아동의 생모에 대한 비식별화, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088721','JO','');" href="javascript:;">제11조</a>에 따른 조치 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088741','JO','');" href="javascript:;">제12조</a>에 따른 아동의 보호조치를 희망하는 경우에는 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189027');" href="javascript:;">보건복지부령</a>으로 정하는 바에 따라 출산일부터 1개월 내에 지역상담기관에 신청하여야 한다. </p>
+       <p class="pty1_de2_1">② 제1항에 따른 신청이 있는 경우 지역상담기관의 장은 신청인에게 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088749','JO','');" href="javascript:;">제7조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088769','JO','');" href="javascript:;">제1항</a> 및 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088699','JO','');" href="javascript:;">제2항</a>에 따른 상담을 제공하고 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088765','JO','');" href="javascript:;">제15조</a>에 따른 출생증서를 작성하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 제1항에 따른 신청, 아동의 출생기록 및 보호, 출생증서의 영구보존 및 공개, 신청의 철회 등에 대하여는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088739','JO','');" href="javascript:;">제9조</a>, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088723','JO','');" href="javascript:;">제11조부터 제13조</a>까지, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088747','JO','');" href="javascript:;">제16조</a> 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088725','JO','');" href="javascript:;">제17조</a>를 준용한다. 이 경우 “위기임부”는 “위기산부”로, “보호출산”은 “출산 후 아동 보호”로, “아동을 보호출산한 날”은 “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088709','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088711','JO','');" href="javascript:;">제1항</a>에 따른 신청을 한 날”로, “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088739','JO','');" href="javascript:;">제9조</a>의 신청인”은 “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088743','JO','');" href="javascript:;">제14조</a>의 신청인”으로, “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088703','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088755','JO','');" href="javascript:;">제3항</a>에 따라”는 “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088709','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088711','JO','');" href="javascript:;">제1항</a>에 따라”로, “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088731','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088757','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088705','JO','');" href="javascript:;">제2항</a>에 따라 보호출산 신청을 접수한 지역상담기관”은 “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088709','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088711','JO','');" href="javascript:;">제1항</a>에 따른 신청을 접수한 지역상담기관”으로, “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088739','JO','');" href="javascript:;">제9조</a>에 따른 신청”은 “<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088743','JO','');" href="javascript:;">제14조</a>에 따른 신청”으로 본다. </p> 
+       <p class="pty1_de2_1">④ <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088717','ALLJO','');" href="javascript:;">「가족관계의 등록 등에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088693','JO','');" href="javascript:;">제44조의3</a>에 따라 제1항의 신청을 한 위기산부의 출생정보가 심사평가원에 제출되거나 출생정보를 포함한 출생사실이 위기산부의 주소지를 관할하는 시ㆍ읍ㆍ면의 장(위기산부의 주소지를 확인할 수 없는 경우에는 출생지를 관할하는 시ㆍ읍ㆍ면의 장을 말한다)에게 통보된 경우에 제1항에 따른 신청을 접수한 지역상담기관의 장은 심사평가원 또는 해당 시ㆍ읍ㆍ면의 장에게 제1항 신청사실의 통지와 함께 해당 위기산부에 관하여 제출ㆍ통보된 것을 삭제하고 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088753','ALLJO','');" href="javascript:;">같은 법</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088701','JO','');" href="javascript:;">제44조의4</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088729','JO','');" href="javascript:;">제3항</a>에 따른 직권 출생 기록이 되지 아니하도록 하는 등 필요한 조치를 취할 것을 통보하여야 한다. 이 경우 지역상담기관의 장은 지역상담기관의 소재지 관할 시ㆍ읍ㆍ면의 장에게 다음 각 호의 사항을 포함한 출생사실을 지체 없이 통보하여야 하고, 이를 위하여 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088775','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088737','ALLJO','');" href="javascript:;">「전자정부법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088773','JO','');" href="javascript:;">제37조</a>에 따른 행정정보 공동이용센터를 통하여 전자적인 방법으로 출생사실을 통보할 수 있으며 위기산부가 출산한 의료기관의 장에게 통보에 필요한 정보를 요청할 수 있다. </p> 
+       <p class="pty1_de2h">1. 아동의 생모에 관한 다음 각 목의 사항 </p> 
+       <p class="pty1_de3">가. 제1항에 따라 비식별화된 가명 <span class="sfon"></span></p> 
+       <p class="pty1_de3">나. 제3항에 따라 비식별화된 관리번호 <span class="sfon"></span></p> 
+       <p class="pty1_de2h">2. 아동의 성별, 수, 출생 연월일시 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088777','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088767','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088779','JO','');" href="javascript:;">제3호</a>에 따른 아동의 성명 </p> 
+       <p class="pty1_de2h">3. 그 밖에 의료기관의 주소 등 출생사실을 확인하기 위하여 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189029');" href="javascript:;">대법원 규칙</a>으로 정하는 사항 </p> 
+       <p class="pty1_de2h">4. 제1항의 신청을 한 위기산부가 의료기관이 아닌 곳에서 출산한 경우 다음 각 목의 어느 하나에 해당하는 서면 </p> 
+       <p class="pty1_de3">가. 분만에 직접 관여한 자가 모의 출산사실을 증명할 수 있는 자료 등을 첨부하여 작성한 출생사실을 증명하는 서면 <span class="sfon"></span></p> 
+       <p class="pty1_de3">나. 국내 또는 외국의 권한있는 기관에서 발행한 출생사실을 증명하는 서면 <span class="sfon"></span></p> 
+       <p class="pty1_de3">다. 모의 출산사실을 증명할 수 있는 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088751','ALLJO','');" href="javascript:;">「119구조ㆍ구급에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088727','JO','');" href="javascript:;">제22조</a>에 따른 구조ㆍ구급활동상황일지 <span class="sfon"></span></p> 
+       <p class="pty1_de3">라. 가목부터 다목까지에 해당하는 서면이 없는 경우 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088761','ALLJO','');" href="javascript:;">「가족관계의 등록 등에 관한 법률」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088763','JO','');" href="javascript:;">제44조의2</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088735','JO','');" href="javascript:;">제1항</a>에 따른 가정법원의 확인서 등본 <span class="sfon"></span></p> 
+       <p class="pty1_de2_1">⑤ 제4항에 따른 통보를 받은 시ㆍ읍ㆍ면의 장은 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088707','ALLJO','');" href="javascript:;">「민법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088759','JO','');" href="javascript:;">제781조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088733','JO','');" href="javascript:;">제4항</a>에 따라 아동의 성과 본을 창설한 후 이름과 등록기준지를 정하여 가족관계등록부에 기록하여야 하며 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088713','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088715','JO','');" href="javascript:;">제1항</a>에 따른 신청을 접수한 지역상담기관의 장에게 출생기록 사실과 아동의 성명 및 주민등록번호를 통보하여야 한다. 이 경우 시ㆍ읍ㆍ면의 장은 특별한 사유가 없으면 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088719','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088695','JO','');" href="javascript:;">제1항</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088745','JO','');" href="javascript:;">제3호</a>에 따른 성명을 존중하여야 한다. </p> 
+       <p class="pty1_de2_1">⑥ 그 밖에 제4항에 따른 출생정보를 포함한 출생사실의 통보 절차 등에 관하여 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189031');" href="javascript:;">대법원규칙</a>으로 정하고, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088771','JO','');" href="javascript:;">제18조</a>에 따른 정보시스템의 이용 방법 및 절차 등에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189033');" href="javascript:;">대통령령</a>으로 정한다. </p> 
+       <p class="pty1_de2_1">⑦ 제1항부터 제5항까지에서 규정한 사항 외에 출산 후 아동 보호 신청에 관한 구체적인 방법, 절차 등에 대하여는 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189035');" href="javascript:;">보건복지부령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:95234899" id="pjuk:95234899"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="001500" data-joseq="95234899">         제5장 출생증서의 작성ㆍ관리 및 공개 </p> 
+     </div> 
+     <a name="J15:0" id="J15:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0015', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '014531', '279721', '95234901', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001500" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="15:0:001500:95234901" /> <span class="bl"><label for="Y001500"> 제15조(출생증서 작성) </label> </span> ① <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088863','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088865','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088867','JO','');" href="javascript:;">제2항</a> 및 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088869','JO','');" href="javascript:;">제14조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088871','JO','');" href="javascript:;">제1항</a>에 따른 신청을 받은 지역상담기관의 장은 신청인에 대하여 다음 각 호의 사항이 포함된 출생증서를 작성한다. 다만, 생부에 관한 정보로서 소재불명 등 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189037');" href="javascript:;">대통령령</a>으로 정하는 사유로 직접 또는 신청인을 통하여 확인이 불가능한 사항에 대하여는 기재를 생략할 수 있다. </p>
+       <p class="pty1_de2h">1. 신청인 및 생부의 성명ㆍ본ㆍ등록기준지 및 주민등록번호(내국인에 한정한다) </p> 
+       <p class="pty1_de2h">2. 신청인 및 생부의 유전적 질환 및 그 밖의 건강상태 </p> 
+       <p class="pty1_de2h">3. 신청인이 아동의 성명을 지어준 경우에는 그 성명 </p> 
+       <p class="pty1_de2h">4. 신청인이 보호출산 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088873','JO','');" href="javascript:;">제14조</a>에 따른 아동 보호를 선택하기까지의 사회적ㆍ경제적ㆍ심리적 상황 등 상담 내용 </p> 
+       <p class="pty1_de2h">5. 그 밖에 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189039');" href="javascript:;">보건복지부령</a>으로 정하는 사항 </p> 
+       <p class="pty1_de2_1">② 지역상담기관의 장은 제1항에 따라 작성한 출생증서를 봉투에 넣어 밀봉하고, 봉투 겉면에 출생증서가 들어있다는 사실, 비식별화된 신청인의 가명, 출생증서를 작성한 지역상담기관의 명칭 및 주소를 기재한 후 국가아동권리보장원으로 이관할 때까지 이를 보관한다. <span class="sfon">&lt;개정 2025. 11. 11.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J16:0" id="J16:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0016', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '014531', '279721', '95234903', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001600" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="16:0:001600:95234903" /> <span class="bl"><label for="Y001600"> 제16조(출생증서의 이관 및 영구보존) </label> </span> ① <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088881','JO','');" href="javascript:;">제11조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088883','JO','');" href="javascript:;">제6항</a>에 따라 아동의 출생기록 사실을 통보받은 지역상담기관의 장은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088879','JO','');" href="javascript:;">제15조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088373','JO','');" href="javascript:;">제2항</a>에 따른 출생증서가 담긴 봉투 겉면에 아동의 성명, 성별, 주민등록번호를 추가로 기재한 뒤 이를 지체 없이 국가아동권리보장원에 이관하여야 한다. <span class="sfon">&lt;개정 2025. 11. 11.&gt;</span> </p>
+       <p class="pty1_de2_1">② 국가아동권리보장원은 제1항에 따라 이관받은 출생증서를 영구보존하여야 한다. 다만, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088875','JO','');" href="javascript:;">제13조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088877','JO','');" href="javascript:;">제4항</a> 단서에 따른 철회통지를 받은 경우에는 이를 지체 없이 폐기하여야 한다. <span class="sfon">&lt;개정 2025. 11. 11.&gt;</span> </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J17:0" id="J17:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0017', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001700" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="17:0:001700:95234905" /> <span class="bl"><label for="Y001700"> 제17조(출생증서의 공개 청구 등) </label> </span> ① 보호출산을 통하여 태어난 사람(<a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088781','JO','');" href="javascript:;">제14조</a>의 신청에 따라 출생증서가 작성된 경우도 포함한다)은 보장원장에게 자신의 출생증서 공개를 청구(이하 이 조에서 “증서공개청구”라 한다) 할 수 있다. 다만, 미성년자인 경우에는 법정대리인의 동의를 받아야 한다. </p>
+       <p class="pty1_de2_1">② 제1항의 청구를 받은 보장원장은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088785','JO','');" href="javascript:;">제9조</a> 또는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088783','JO','');" href="javascript:;">제14조</a>의 신청인(이하 이 조에서 “신청인”이라 한다) 및 생부의 동의를 받아 보관하고 있는 출생증서를 지체 없이 공개하여야 한다. 이 경우 보장원장은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189041');" href="javascript:;">대통령령</a>으로 정하는 바에 따라 신청인 또는 생부의 동의 여부를 확인할 수 있다. 다만, 신청인 또는 생부의 동의 여부가 확인되지 아니하거나 신청인 또는 생부가 동의하지 아니하는 경우에는 그 신청인 또는 생부의 인적사항을 제외하고 출생증서를 공개하여야 한다. </p> 
+       <p class="pty1_de2_1">③ 보장원장은 제2항의 단서에도 불구하고 신청인 또는 생부가 사망이나 그 밖의 사유로 동의할 수 없는 경우로서 보호출산을 통하여 태어난 사람의 의료상 목적 등 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189043');" href="javascript:;">대통령령</a>으로 정하는 특별한 사유가 있는 경우에는 신청인 또는 생부의 동의 여부와 관계없이 출생증서를 공개할 수 있다. </p> 
+       <p class="pty1_de2_1">④ 제1항부터 제3항까지에서 정한 사항 외에 증서공개청구의 신청 방법과 절차, 그 밖에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189045');" href="javascript:;">대통령령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="pjuk:95234907" id="pjuk:95234907"></a> 
+     <div class="pgroup" style="padding-bottom: 0px; margin-bottom: 5px;"> 
+      <p class="gtit" style="padding-top: 5px; margin-bottom: 0px;" data-joidfull="001800" data-joseq="95234907">         제6장 보칙 </p> 
+     </div> 
+     <a name="J18:0" id="J18:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0018', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001800" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="18:0:001800:95234909" /> <span class="bl"><label for="Y001800"> 제18조(정보시스템의 구축ㆍ운영) </label> </span> ① 보건복지부장관은 이 법에 따른 개인정보의 비식별화 및 해당 정보의 관리, 출생정보의 통보 및 보호출산 관련 기록 및 정보의 효율적 처리와 관리를 위하여 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189047');" href="javascript:;">대통령령</a>으로 정하는 바에 따라 정보시스템을 구축ㆍ운영할 수 있다. </p>
+       <p class="pty1_de2_1">② 보건복지부장관은 정보시스템의 구축ㆍ운영에 관한 업무를 중앙상담지원기관의 장에게 위탁할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 보건복지부장관, 중앙상담지원기관 및 지역상담기관은 제1항에 따른 정보시스템의 구축ㆍ운영ㆍ이용, <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088801','JO','');" href="javascript:;">제9조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088791','JO','');" href="javascript:;">제1항</a> 또는 <a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088797','JO','');" href="javascript:;">제2항</a>에 따른 보호출산 신청 등 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189049');" href="javascript:;">대통령령</a>으로 정하는 사무를 처리하기 위하여 불가피한 경우 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088799','ALLJO','');" href="javascript:;">「개인정보 보호법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088793','JO','');" href="javascript:;">제23조</a>에 따른 건강에 관한 정보와 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088787','ALLJO','');" href="javascript:;">같은 법 시행령</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088795','JO','');" href="javascript:;">제19조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088789','JO','');" href="javascript:;">제1호</a>에 따른 주민등록번호가 포함된 자료를 처리할 수 있다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J19:0" id="J19:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0019', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '014531', '279721', '95234911', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y001900" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="19:0:001900:95234911" /> <span class="bl"><label for="Y001900"> 제19조(경비의 보조) </label> </span> 국가와 지방자치단체는 예산의 범위에서 다음 각 호의 비용의 전부 또는 일부를 보조할 수 있다. <span class="sfon">&lt;개정 2025. 11. 11.&gt;</span> </p>
+       <p class="pty1_de2_1"> </p> 
+       <p class="pty1_de2h">1. 중앙상담지원기관 및 지역상담기관의 운영비 </p> 
+       <p class="pty1_de2h">2. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088891','JO','');" href="javascript:;">제16조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088375','JO','');" href="javascript:;">제2항</a>에 따라 출생증서의 영구보존에 필요한 국가아동권리보장원의 업무수행경비 </p> 
+       <p class="pty1_de2h">3. <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088889','JO','');" href="javascript:;">제21조</a>에 따른 위탁업무를 처리하는 심사평가원 및 <a title="팝업으로 이동" class="link sfon1" onclick="javascript:fncLsLawPop('1033088885','ALLJO','');" href="javascript:;">「국민건강보험법」</a> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088887','JO','');" href="javascript:;">제13조</a>에 따른 국민건강보험공단(이하 “건강보험공단”이라 한다)의 업무수행경비 </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J20:0" id="J20:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0020', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002000" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="20:0:002000:95234913" /> <span class="bl"><label for="Y002000"> 제20조(비용의 환수) </label> </span> ① 보건복지부장관은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088809','JO','');" href="javascript:;">제9조</a>의 신청인이 거짓이나 그 밖의 부정한 방법으로 이 법에 따른 지원을 받은 경우 지원된 비용을 환수할 수 있다. </p>
+       <p class="pty1_de2_1">② 보건복지부장관은 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088805','JO','');" href="javascript:;">제22조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088811','JO','');" href="javascript:;">제1항</a>에 따라 중앙상담지원기관 또는 지역상담기관의 지정이 취소된 경우에는 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088807','JO','');" href="javascript:;">제19조</a><a title="팝업으로 이동" class="link sfon4" onclick="javascript:fncLsLawPop('1033088803','JO','');" href="javascript:;">제1호</a>에 따른 운영비를 환수할 수 있다. </p> 
+       <p class="pty1_de2_1">③ 제1항 및 제2항에 따른 비용의 환수 방법 및 절차, 그 밖에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189051');" href="javascript:;">대통령령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J21:0" id="J21:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0021', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002100" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="21:0:002100:95234915" /> <span class="bl"><label for="Y002100"> 제21조(업무의 위탁 및 비용의 예탁) </label> </span> 보건복지부장관은 비용의 심사ㆍ조정, 지원 대상 여부의 확인 및 비용 지급업무 등 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088815','JO','');" href="javascript:;">제10조</a><a title="팝업으로 이동" class="link sfon3" onclick="javascript:fncLsLawPop('1033088813','JO','');" href="javascript:;">제3항</a>에 따른 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088817','JO','');" href="javascript:;">제9조</a>의 신청인의 산전 검진 및 출산 비용의 지원 업무를 심사평가원 및 건강보험공단에 위탁할 수 있다. 이 경우 보건복지부장관은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189057');" href="javascript:;">보건복지부령</a>으로 정하는 바에 따라 추정비용을 위탁 기관에 예탁하여야 한다. </p> 
+      </div> 
+     </div> 
+     <a name="J22:0" id="J22:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0022', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002200" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="22:0:002200:95234917" /> <span class="bl"><label for="Y002200"> 제22조(지정취소) </label> </span> ① 보건복지부장관은 중앙상담지원기관 또는 지역상담기관이 다음 각 호의 하나에 해당하는 경우에는 지정을 취소하거나 6개월의 범위에서 기간을 정하여 업무의 전부 또는 일부를 정지할 수 있다. 다만, 제1호의 경우에는 지정을 취소하여야 한다. </p>
+       <p class="pty1_de2h">1. 거짓이나 그 밖의 부정한 방법으로 지정을 받은 경우 </p> 
+       <p class="pty1_de2h">2. 지정받은 사항을 위반하여 업무를 행한 경우 </p> 
+       <p class="pty1_de2h">3. 제2항에 따른 지정기준에 적합하지 아니하게 된 경우 </p> 
+       <p class="pty1_de2_1">② 중앙상담지원기관 또는 지역상담기관의 지정취소의 기준 및 절차, 그 밖에 필요한 사항은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189053');" href="javascript:;">대통령령</a>으로 정한다. </p> 
+       <p></p> 
+      </div> 
+     </div> 
+     <a name="J23:0" id="J23:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0023', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+       <li><a title="연혁 팝업으로 이동" style="text-decoration: none;" onclick="javascript:fJoHstShow(this, '014531', '279721', '95234919', '010202');return false;" href="#AJAX"> <img alt="연혁" src="/LSW/images/button/btn_year3.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002300" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="23:0:002300:95234919" /> <span class="bl"><label for="Y002300"> 제23조(비밀유지의 의무) </label> </span> 중앙상담지원기관, 지역상담기관, 한부모가족복지시설, 사회복지시설, 의료기관, 국가아동권리보장원에 종사하는 사람 또는 종사하였던 사람은 이 법에 따른 업무를 행하는 과정에서 알게 된 비밀을 누설하여서는 아니 된다. <span class="sfon">&lt;개정 2025. 11. 11.&gt;</span> </p> 
+      </div> 
+     </div> 
+     <a name="J24:0" id="J24:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0024', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002400" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="24:0:002400:95234921" /> <span class="bl"><label for="Y002400"> 제24조(권한의 위임) </label> </span> 이 법에 따른 보건복지부장관의 권한은 <a title="팝업으로 이동" class="link" onclick="javascript:fncLsPttnLinkPop('189055');" href="javascript:;">대통령령</a>으로 정하는 바에 따라 그 일부를 시ㆍ도지사에게 위임할 수 있다. </p> 
+      </div> 
+     </div> 
+     <a name="J25:0" id="J25:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0025', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002500" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="25:0:002500:95234923" /> <span class="bl"><label for="Y002500"> 제25조(벌칙) </label> </span> <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088819','JO','');" href="javascript:;">제23조</a>를 위반하여 비밀을 누설한 사람은 3년 이하의 징역 또는 3천만원 이하의 벌금에 처한다. </p> 
+      </div> 
+     </div> 
+     <a name="J26:0" id="J26:0"></a> 
+     <div class="pgroup"> 
+      <ul class="lawico01"> 
+       <li><a title="조문체계도 팝업으로 이동" style="text-decoration: none;" onclick="javascript:joStmdPop('279721', '0026', '00' );return false; " href="#AJAX"> <img alt="조문체계도버튼" src="/LSW/images/button/btn_jostmdico.gif" /> </a></li> 
+      </ul> 
+      <div class="lawcon"> 
+       <p class="pty1_p4"> <input name="joNoList" id="Y002600" style="vertical-align: middle;" onclick="javascript:getJoSelectLayer(this,'');" type="checkbox" value="26:0:002600:95234925" /> <span class="bl"><label for="Y002600"> 제26조(양벌규정) </label> </span> 법인의 대표자나 법인 또는 개인의 대리인, 사용인, 그 밖의 종업원이 그 법인 또는 개인의 업무에 관하여 <a title="팝업으로 이동" class="link sfon2" onclick="javascript:fncLsLawPop('1033088821','JO','');" href="javascript:;">제23조</a>를 위반하면 그 행위자를 벌하는 외에 그 법인 또는 개인에게도 해당 조문의 벌금형을 과(科)한다. 다만, 법인 또는 개인이 그 위반행위를 방지하기 위하여 해당 업무에 관하여 상당한 주의와 감독을 게을리하지 아니한 경우에는 그러하지 아니하다. </p> 
+      </div> 
+     </div> 
+     <!-- 조문정보 --> 
+     <!-- 부칙 영역 끝 --> 
+     <br /> 
+     <div id="arDivArea"> 
+      <a name="arArea"></a> 
+      <a name="J12114875" id="J12114875"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <img id="ar12114875btn" style="vertical-align: middle;" alt="부칙<법률 제19816호,  2023. 10. 31.>조문목록 없음" src="/LSW/images/button/btn_dot.gif" /> <input name="arInf" id="chk12114875" style="vertical-align: middle;" type="checkbox" alt="부칙 <법률 제19816호,  2023. 10. 31.>체크박스 " value="12114875" /> <a class="nun" onclick="javascript:arView('ar12114875','<법률 제19816호,  2023. 10. 31.>'); return false;" href="#AJAX"> <label for="chk12114875"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;법률 제19816호, 2023. 10. 31.&gt;</span> </a> </p> 
+       <p class="pty3_dep1">이 법은 2024년 7월 19일부터 시행한다.</p> 
+      </div> 
+      <a name="J12114877" id="J12114877"></a> 
+      <div class="pgroup"> 
+       <p class="pty3" style="margin-bottom: -1px;"> <a class="nun" onclick="javascript:arView('ar12114877','<법률 제21108호,  2025. 11. 11.>'); return false;" href="#AJAX"> <img id="ar12114877btn" style="vertical-align: middle;" alt="부칙 <법률 제21108호,  2025. 11. 11.>조문목록 접기" src="/LSW/images/button/btn_cocl.gif" /> </a> <input name="arInf" id="chk12114877" style="vertical-align: middle;" type="checkbox" alt="부칙 <법률 제21108호,  2025. 11. 11.>체크박스 " value="12114877" /> <a class="nun" onclick="javascript:arView('ar12114877','<법률 제21108호,  2025. 11. 11.>'); return false;" href="#AJAX"> <label for="chk12114877"> <span class="bl"> 부      칙</span> </label> <span class="sfon">&lt;법률 제21108호, 2025. 11. 11.&gt;</span> </a> <a class="nun" onclick="javascript:fncArLawPop('아동복지법', '20251111', '21108');" href="#AJAX"> <span class="sfon">(아동복지법) </span> </a> <a class="nun" onclick="javascript:arView('ar12114877','<법률 제21108호,  2025. 11. 11.>');return false;" href="#AJAX"> <img id="ar12114877MrBtn" style="vertical-align: middle;" alt="부칙 <법률 제21108호,  2025. 11. 11.>보기" src="/LSW/images/button/btn_more_bu.gif" /> </a> </p> 
+       <p class="pty3_dep1"><span class="bl">제1조(시행일)</span> 이 법은 공포 후 6개월이 경과한 날부터 시행한다.</p>
+       <div id="ar12114877">
+        <p class="pty3_dep1"><span class="bl">제2조</span> 생략</p>
+        <p class="pty3_dep1"><span class="bl">제3조(다른 법률의 개정)</span> ①부터 ⑥까지 생략</p>
+        <p class="pty3_dep2"> ⑦ 위기 임신 및 보호출산 지원과 아동 보호에 관한 특별법 일부를 다음과 같이 개정한다.</p>
+        <p class="pty3_dep2"> 제13조제4항 단서 중 “아동권리보장원”을 각각 “국가아동권리보장원”으로 한다.</p>
+        <p class="pty3_dep2"> 제15조제2항 중 “아동권리보장원”을 “국가아동권리보장원”으로 한다. </p>
+        <p class="pty3_dep2"> 제16조제1항 및 같은 조 제2항 본문 중 “아동권리보장원”을 각각 “국가아동권리보장원”으로 한다.</p>
+        <p class="pty3_dep2"> 제19조제2호 중 “아동권리보장원”을 “국가아동권리보장원”으로 한다.</p>
+        <p class="pty3_dep2"> 제23조 중 “아동권리보장원”을 “국가아동권리보장원”으로 한다. </p>
+        <p class="pty3_dep2"> ⑧ 생략</p>
+       </div> 
+      </div> 
+     </div> 
+     <!-- 부칙 영역 끝 --> 
+     <!-- 별표 서식 시작 --> 
+     <!-- 별표 서식 끝 --> 
+    </div> 
+   </div> 
+  </div> 
+ </body>
+</html>
