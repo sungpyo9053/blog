@@ -19,13 +19,13 @@ cat > sink.py <<'X'
 import rclpy, sys
 from rclpy.node import Node
 from std_msgs.msg import String, Int32, ByteMultiArray, UInt8MultiArray, Float64MultiArray
-from geometry_msgs.msg import Twist, PoseStamped
+from geometry_msgs.msg import Twist, PoseStamped, Pose
 from sensor_msgs.msg import JointState
 rclpy.init()
 n = Node('sink')
 topics = {'/s': String, '/i': Int32, '/b': ByteMultiArray, '/u8': UInt8MultiArray,
-          '/f': Float64MultiArray, '/tw': Twist, '/ps': PoseStamped, '/js': JointState}
-for c in ['/cnt1', '/cnt2', '/cnt3', '/cnt4', '/cnt5']:
+          '/f': Float64MultiArray, '/tw': Twist, '/ps': PoseStamped, '/js': JointState, '/pose': Pose}
+for c in ['/cnt1', '/cnt2', '/cnt3', '/cnt4', '/cnt5', '/cnt6', '/cnt7']:
     topics[c] = String
 subs = []
 for t, ty in topics.items():
@@ -175,6 +175,15 @@ if [ -n "$W" ]; then
   for k in 1 2 3 4 5 6 7 8 9 10; do timeout 20 ros2 topic pub -1 -w 1 /cnt2 std_msgs/msg/String "{data: once_w1_$k}" > /dev/null 2>&1; done
   sleep 1; echo "COUNT once_with_w1 (10 runs): $(grep -c 'RECV /cnt2' sink.log)"
 else echo "COUNT once_with_w1: option not available"; fi
+c nosub_bad_once     "ros2 topic pub -1 /nosub std_msgs/msg/String '{data:hi}'"
+c nosub_bad_w0       "ros2 topic pub -1 -w 0 /nosub std_msgs/msg/String '{data:hi}'"
+c nosub_once_w0      "ros2 topic pub -1 -w 0 /nosub std_msgs/msg/String '{data: x}'"
+for k in 1 2 3 4 5 6 7 8 9 10; do timeout 20 ros2 topic pub -1 -w 0 /cnt6 std_msgs/msg/String "{data: once_w0_$k}" > /dev/null 2>&1; done
+sleep 1; echo "COUNT once_with_w0 (10 runs): $(grep -c 'RECV /cnt6' sink.log)"
+if ros2 topic pub -h 2>&1 | grep -q -- '--times'; then
+  c rate_times_w0    "ros2 topic pub -r 10 -t 20 -w 0 /cnt7 std_msgs/msg/String '{data: rtw0}' > /dev/null"
+  sleep 1; echo "COUNT rate10_times20_w0: $(grep -c 'RECV /cnt7' sink.log)"
+fi
 if ros2 topic pub -h 2>&1 | grep -q -- '--times'; then
   c rate_times       "ros2 topic pub -r 10 -t 20 /cnt3 std_msgs/msg/String '{data: rt}' > /dev/null"
   sleep 1; echo "COUNT rate10_times20: $(grep -c 'RECV /cnt3' sink.log)"
