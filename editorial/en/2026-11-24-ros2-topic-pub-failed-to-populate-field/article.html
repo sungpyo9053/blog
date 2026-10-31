@@ -1,0 +1,207 @@
+<pre><code>$ ros2 topic pub -1 /s std_msgs/msg/String '{data:hi}'
+Failed to populate field: 'String' object has no attribute 'data:hi'</code></pre>
+
+<p>The same family of errors comes from <code>ros2 service call</code>: <code>Failed to populate field: 'SetBool_Request' object has no attribute 'data:true'</code>, <code>Value '1.0' is expected to be a dictionary but is a float</code>, <code>The passed value needs to be a dictionary in YAML format</code>, and on Humble a raw <code>yaml.parser.ParserError</code> traceback.</p>
+
+<p>Short answer: the last argument is YAML, and YAML needs a space after every colon. <code>{data:hi}</code> is a map with one key called <code>data:hi</code>, so ros2cli looks for a field with that name and fails. Put the whole value in single quotes, write a space after each colon, nest sub-messages as their own maps, and quote any string that contains a colon:</p>
+
+<pre><code>ros2 topic pub -1 /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.5}, angular: {z: 1.0}}'
+ros2 topic pub -1 /s std_msgs/msg/String "{data: 'time: 12:30'}"
+ros2 service call /sb std_srvs/srv/SetBool '{data: true}'</code></pre>
+
+<p>If you don't know the field names, <code>ros2 interface proto --no-quotes &lt;type&gt;</code> prints a template that you can paste or pass straight in. Without <code>--no-quotes</code> the template is wrapped in literal quotes and fails as an argument.</p>
+
+<h2>Find your error text</h2>
+
+<p>Unless a row says otherwise, the text and exit code were the same on Humble, Jazzy and Lyrical.</p>
+
+<table>
+<thead><tr><th>What was typed</th><th>Error</th><th>Exit</th></tr></thead>
+<tbody>
+<tr><td><code>'{data:hi}'</code> (no space after colon)</td><td><code>Failed to populate field: 'String' object has no attribute 'data:hi'</code></td><td>1</td></tr>
+<tr><td><code>'data:hi'</code> (no space, no braces)</td><td><code>The passed value needs to be a dictionary in YAML format</code></td><td>1</td></tr>
+<tr><td><code>'{dat: hi}'</code> (wrong field name)</td><td><code>Failed to populate field: 'String' object has no attribute 'dat'</code></td><td>1</td></tr>
+<tr><td><code>'{data: time: 12:30}'</code> (unquoted colon in a string)</td><td>Humble: traceback ending <code>yaml.parser.ParserError: while parsing a flow mapping</code>. Jazzy, Lyrical: <code>The passed value needs to be in YAML string or a dictionary</code></td><td>1</td></tr>
+<tr><td>Twist <code>'{x: 1.0}'</code> (nested field written flat)</td><td><code>Failed to populate field: 'Twist' object has no attribute 'x'</code></td><td>1</td></tr>
+<tr><td>Twist <code>'{linear: 1.0}'</code> (scalar where a message goes)</td><td><code>Value '1.0' is expected to be a dictionary but is a float</code></td><td>1</td></tr>
+<tr><td>PoseStamped <code>'{position: {x: 1.0}}'</code> (skipped <code>pose</code>)</td><td><code>'PoseStamped' object has no attribute 'position'</code></td><td>1</td></tr>
+<tr><td>Pose <code>'{position:{1,1,1},orientation:{1,1,1,1}}'</code></td><td>Humble: <code>getattr(): attribute name must be string</code>. Jazzy, Lyrical: <code>attribute name must be string, not 'int'</code></td><td>1</td></tr>
+<tr><td>JointState <code>"{position: '[1,2]'}"</code> (quoted list)</td><td><code>cannot use a str to initialize an array with typecode 'd'</code></td><td>1</td></tr>
+<tr><td>JointState <code>'{position: 1.0}'</code> (scalar for an array)</td><td><code>'float' object is not iterable</code></td><td>1</td></tr>
+<tr><td>UInt8MultiArray <code>'{data: [256]}'</code> / <code>'{data: [-1]}'</code></td><td><code>unsigned byte integer is greater than maximum</code> / <code>... less than minimum</code></td><td>1</td></tr>
+<tr><td>ByteMultiArray <code>'{data: [3, 4]}'</code> or <code>[0x03, 0x04]</code></td><td>Humble: <code>The 'data' field must be a set or sequence and each value of type 'bytes'</code> (exit 1). Jazzy, Lyrical: <code>Assertion `PyBytes_Check(item)' failed.</code> and the process aborts</td><td>1 / 134</td></tr>
+<tr><td>Int32 <code>'{data: 3000000000}'</code></td><td>Humble: <code>The 'data' field must be an integer in [-2147483648, 2147483647]</code>. Jazzy, Lyrical: no error (see below)</td><td>1 / 0</td></tr>
+<tr><td>Float64MultiArray, tab-completed form pasted as one line</td><td>Humble: <code>yaml.scanner.ScannerError: mapping values are not allowed here</code>. Jazzy, Lyrical: <code>The passed value needs to be in YAML string or a dictionary</code></td><td>1</td></tr>
+<tr><td><code>"{data: "a: b"}"</code> (double quotes inside double quotes)</td><td><code>ros2: error: unrecognized arguments: b}</code></td><td>2</td></tr>
+<tr><td><code>{data: hi}</code> with no shell quotes</td><td><code>ros2: error: unrecognized arguments: hi}</code></td><td>2</td></tr>
+<tr><td>SetBool <code>'true'</code> (bare value)</td><td><code>Value 'True' is expected to be a dictionary but is a bool</code></td><td>1</td></tr>
+</tbody>
+</table>
+
+<p><code>Value ... is expected to be a dictionary</code> means a plain value went where the type has a nested message. That is the cause in the <a href="https://robotics.stackexchange.com/questions/115437/ros2-service-parameters-expects-dictionary">SetRobotMode question</a>, where <code>mode</code> is itself a message with its own <code>mode</code> field.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-31 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one after another, in containers with no network. A small rclpy node subscribed to every test topic and printed what it received. A second node served <code>std_srvs/srv/SetBool</code> and printed each request. Each command ran under <code>timeout 20</code>, so a hang shows as exit 124. Recording what actually arrived shows values that published but changed on the way. Topic tests used <code>-1 -w 1</code> unless noted.</p>
+
+<h2>Missing space after the colon</h2>
+
+<p>This is the most common one. In YAML, <code>data:hi</code> is a single plain scalar, not a key and a value. Inside braces it becomes a key with no value, so ros2cli tries to set an attribute named <code>data:hi</code>. Without braces the whole argument is the string <code>data:hi</code>, and you get <code>The passed value needs to be a dictionary in YAML format</code>. Service calls fail the same way: <code>'{data:true}'</code> gave <code>'SetBool_Request' object has no attribute 'data:true'</code>. The fix is a space after every colon. Braces are optional at the top level: <code>'data: hi'</code> worked too.</p>
+
+<h2>Strings that YAML reads as something else</h2>
+
+<p>Unquoted values go through YAML type rules before ros2cli sees them. For a <code>string</code> field ros2cli then turns the result back into text, so these did not fail. They published something else instead:</p>
+
+<table>
+<thead><tr><th>Typed for a string field</th><th>Received</th></tr></thead>
+<tbody>
+<tr><td><code>{data: 42}</code></td><td><code>'42'</code></td></tr>
+<tr><td><code>{data: yes}</code></td><td><code>'True'</code></td></tr>
+<tr><td><code>{data: 12:30}</code></td><td><code>'750'</code></td></tr>
+<tr><td><code>{data: 'time: 12:30'}</code></td><td><code>'time: 12:30'</code></td></tr>
+</tbody>
+</table>
+
+<p><code>12:30</code> became <code>750</code> on all three distros. YAML 1.1 reads it as a base-60 number, 12 × 60 + 30. A string with a space after a colon (<code>time: 12:30</code>) doesn't parse at all. Quote such strings inside the YAML: <code>"{data: 'time: 12:30'}"</code>.</p>
+
+<h2>Int where float is expected, and the reverse</h2>
+
+<p>Neither direction raised an error. Twist <code>'{linear: {x: 1}}'</code> arrived as <code>x=1.0</code>, and JointState <code>position: [1, 2]</code> as <code>[1.0, 2.0]</code>. The reverse needs care: Int32 <code>{data: 1.5}</code> arrived as <code>data=1</code> on every distro, with no warning. <code>{data: '5'}</code> arrived as <code>5</code>.</p>
+
+<p>Range checks changed between distros. On Humble, <code>{data: 3000000000}</code> for an <code>Int32</code> was rejected with <code>must be an integer in [-2147483648, 2147483647]</code>. On Jazzy and Lyrical, the command printed <code>publishing #1: std_msgs.msg.Int32(data=3000000000)</code> and exited 0, but the subscriber received <code>data=-1294967296</code>. The value wrapped around. <code>uint8[]</code> elements were still range-checked on all three: 256 and -1 were rejected.</p>
+
+<h2>Nested messages need nested maps</h2>
+
+<p>Each sub-message is its own map, named by its field. There is no dotted path and no flattening. Twist <code>{x: 1.0}</code> and <code>{linear.x: 1.0}</code> both failed with <code>no attribute</code>. A list in place of a <code>Vector3</code> failed with <code>is expected to be a dictionary but is a list</code>. For PoseStamped you need both levels:</p>
+
+<pre><code>ros2 topic pub -1 /ps geometry_msgs/msg/PoseStamped \
+  '{header: {frame_id: map}, pose: {position: {x: 1.0, y: 2.0}, orientation: {w: 1.0}}}'</code></pre>
+
+<p>The <a href="https://robotics.stackexchange.com/questions/102467/publish-geometry-msgs-pose-from-command-line">Pose question</a> uses <code>{position:{1,1,1},...}</code>. That fails twice: the colons have no spaces, and <code>{1,1,1}</code> is a YAML map whose keys are integers, so ros2cli can't use them as field names. Use named fields with the same nesting as the PoseStamped command above. Fields you leave out keep their defaults; the quaternion came back as <code>w=1.0</code>.</p>
+
+<p>Block YAML works if the newlines reach ros2cli; a bash <code>$'...\n...'</code> string did. The Float64MultiArray tab-completion form from <a href="https://robotics.stackexchange.com/questions/99767/publish-float64multiarray-from-command-line-ros2">this question</a> fails because the newlines are lost when it's pasted as one line (<code>layout:  dim: []  data_offset: 0data: [0.2]</code>). With real newlines, or as <code>'{data: [0.2, 0.4]}'</code>, it worked.</p>
+
+<h2>Arrays</h2>
+
+<p>Use a YAML list without quotes around it: <code>'{name: [j1, j2], position: [1.0, 2.0]}'</code>. A quoted list is a string: <code>"{position: '[1,2]'}"</code> failed with <code>cannot use a str to initialize an array with typecode 'd'</code>. A single number for an array field failed with <code>'float' object is not iterable</code>.</p>
+
+<h2>byte[] and uint8[]</h2>
+
+<p>For <code>uint8[]</code> (<code>std_msgs/UInt8MultiArray</code>), plain integers and hex both worked: <code>[3, 4, 255]</code> and <code>[0x03, 0xff]</code>. A YAML binary value worked as well: <code>{data: !!binary AwQ=}</code> arrived as <code>[3, 4]</code>.</p>
+
+<p>For <code>byte[]</code> (<code>std_msgs/ByteMultiArray</code>), each element must be a Python <code>bytes</code> object. On Humble, integers and hex failed with the message from the <a href="https://robotics.stackexchange.com/questions/102380/how-is-a-std-msgs-msg-bytemultiarray-message-published-via-cli">ByteMultiArray question</a> and <a href="https://github.com/ros2/ros2cli/issues/760">ros2cli issue #760</a>: <code>The 'data' field must be a set or sequence and each value of type 'bytes'</code>. On Jazzy and Lyrical the same input got past the Python check. The C conversion then failed with <code>Assertion `PyBytes_Check(item)' failed.</code> and the process aborted with exit code 134. On Lyrical it even printed <code>publishing #1: ... data=[3, 4]</code> first, but nothing reached the subscriber. The form that worked on all three is one <code>!!binary</code> item per byte, in base64:</p>
+
+<pre><code>ros2 topic pub -1 /b std_msgs/msg/ByteMultiArray '{data: [!!binary Aw==, !!binary BA==]}'
+# received: data=[b'\x03', b'\x04']</code></pre>
+
+<p>A single <code>!!binary AwQ=</code> for the whole <code>byte[]</code> field failed: exit 1 on Humble, abort on Jazzy and Lyrical.</p>
+
+<h2>Header stamp: now and auto</h2>
+
+<p>There is no <code>--stamp</code> option on any of the three. Instead, two placeholders work inside the YAML on all three distros. The help text for <code>values</code> mentions them: "You can use 'now' placeholder to get the current time and 'auto' placeholder to get a std_msgs.msg.Header with current time and empty frame_id."</p>
+
+<ul>
+<li><code>'{header: {stamp: now, frame_id: map}}'</code> arrived with the current wall time in <code>sec</code>/<code>nanosec</code> and <code>frame_id='map'</code>.</li>
+<li><code>'{header: auto}'</code> arrived with the current time and an empty <code>frame_id</code>. It also worked for JointState.</li>
+<li>With no header at all, the stamp was <code>sec=0, nanosec=0</code>.</li>
+<li>An explicit stamp needs a map: <code>{stamp: {sec: 5, nanosec: 0}}</code>. <code>{stamp: 5.5}</code> failed.</li>
+</ul>
+
+<h2>Shell quoting</h2>
+
+<p>Use single quotes on the outside and double quotes inside the YAML when you need them. Both <code>"{data: 'hello world'}"</code> and <code>'{data: "hello world"}'</code> worked. Two mistakes come from the shell, not from ROS:</p>
+
+<ul>
+<li>Double quotes inside double quotes. <code>"{data: "a: b"}"</code> splits into extra arguments and argparse exits 2 with <code>unrecognized arguments: b}</code>. No quotes at all (<code>{data: hi}</code>) has the same effect.</li>
+<li><code>$</code> inside double quotes. <code>"{data: price $5}"</code> published <code>'price'</code>, because the shell expanded <code>$5</code> to nothing. Single quotes kept <code>'price $5'</code>.</li>
+</ul>
+
+<p>Jazzy added <code>--stdin</code> to both commands, and Lyrical added <code>--yaml-file</code> to <code>ros2 topic pub</code>, which avoid shell quoting entirely. In my run, <code>ros2 service call ... --stdin &lt; file.yaml</code> worked on Jazzy and Lyrical. <code>ros2 topic pub --stdin</code> failed on both with <code>TypeError: a bytes-like object is required, not 'str'</code>. <code>ros2 topic pub ... --yaml-file m.yaml</code> worked on Lyrical and published <code>'time: 12:30'</code> from a file line <code>data: 'time: 12:30'</code>.</p>
+
+<h2>ros2 interface proto as a template</h2>
+
+<p><code>ros2 interface proto</code> printed the same templates on all three distros, for messages and for the request part of a service (<code>std_srvs/srv/SetBool</code> gave <code>data: false</code>). By default the output is wrapped in literal double quotes, so passing it straight in fails:</p>
+
+<pre><code>$ ros2 topic pub -1 /tw geometry_msgs/msg/Twist "$(ros2 interface proto geometry_msgs/msg/Twist)"
+The passed value needs to be a dictionary in YAML format</code></pre>
+
+<p>With <code>--no-quotes</code> it worked on all three, for Twist, PoseStamped and the SetBool request.</p>
+
+<h2>-1, -t, -r and whether the first message is lost</h2>
+
+<p>The help text on all three says <code>-w</code> "Defaults to 1 when using "-1"/"--once"/"--times", otherwise defaults to 0." I measured that with the subscriber already running:</p>
+
+<table>
+<thead><tr><th>Command</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>-1</code> (default wait), 20 separate runs</td><td>20/20</td><td>20/20</td><td>20/20</td></tr>
+<tr><td><code>-1 -w 1</code>, 20 runs</td><td>20/20</td><td>20/20</td><td>20/20</td></tr>
+<tr><td><code>-1 -w 0</code>, 20 runs</td><td>17/20</td><td>10/20</td><td>11/20</td></tr>
+<tr><td><code>-r 10 -t 20</code> (default wait), 3 rounds</td><td>20, 20, 20</td><td>20, 20, 20</td><td>20, 20, 20</td></tr>
+<tr><td><code>-r 10 -t 20 -w 0</code>, 3 rounds</td><td>0, 2, 5</td><td>20, 20, 1</td><td>20, 20, 16</td></tr>
+<tr><td><code>-r 10</code> for 3 s (no <code>-t</code>, so no wait), 3 rounds</td><td>22, 22, 22 of 22</td><td>22, 22, 13 of 22</td><td>17 of 19, 22 of 22, 0 of 22</td></tr>
+</tbody>
+</table>
+
+<p>So <code>-1</code> already waits on these distros and didn't lose a message in my runs. Messages were lost when the wait was turned off with <code>-w 0</code>, or with <code>-r</code> alone, where the default is 0. Those numbers varied a lot from round to round, so treat <code>-w 0</code> as unreliable rather than as a fixed loss rate. If you stream with <code>-r</code> and need the early messages, add <code>-w 1</code>. Once, on Lyrical, a <code>-1 -w 1</code> message printed <code>publishing #1</code> and wasn't seen by the subscriber, so <code>-w</code> lowers the risk but isn't a delivery receipt.</p>
+
+<p>The default wait has a side effect. With <code>-1</code> or <code>-t</code> and no subscriber, the command prints <code>Waiting for at least 1 matching subscription(s)...</code> and never exits. It also hides field errors: <code>ros2 topic pub -1 /nosub std_msgs/msg/String '{data:hi}'</code> waited the full 20 seconds without reporting <code>Failed to populate field</code>. The same command with <code>-w 0</code>, or with <code>-r 10</code>, failed in about a second. YAML syntax errors in my runs appeared without any <code>Waiting</code> line. If the wait never ends while a subscriber is running, the two processes probably can't discover each other. See <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">nodes that can't see each other</a>. On Jazzy and Lyrical you can also bound the wait with <code>--max-wait-time-secs</code>, which I didn't test.</p>
+
+<p>For <code>ros2 service call</code> with SetBool, the server received <code>data=True</code> for <code>true</code>, <code>True</code>, <code>yes</code>, <code>1</code> and <code>'true'</code>. With no values argument it got the default, <code>data=False</code>.</p>
+
+<h2>Rules</h2>
+
+<table>
+<thead><tr><th>Rule</th><th>Fails</th><th>Works</th></tr></thead>
+<tbody>
+<tr><td>Space after every colon</td><td><code>'{data:hi}'</code></td><td><code>'{data: hi}'</code></td></tr>
+<tr><td>Single quotes outside the YAML</td><td><code>"{data: "a: b"}"</code></td><td><code>'{data: "a: b"}'</code></td></tr>
+<tr><td>Quote strings with colons, times, yes/no or digits</td><td><code>{data: 12:30}</code> gives <code>'750'</code></td><td><code>"{data: '12:30'}"</code></td></tr>
+<tr><td>One map per sub-message</td><td><code>'{x: 1.0}'</code>, <code>'{linear.x: 1.0}'</code></td><td><code>'{linear: {x: 1.0}}'</code></td></tr>
+<tr><td>Arrays as unquoted lists</td><td><code>"{position: '[1,2]'}"</code></td><td><code>'{position: [1.0, 2.0]}'</code></td></tr>
+<tr><td>Float fields accept ints, int fields truncate floats</td><td><code>{data: 1.5}</code> gives <code>1</code></td><td><code>{data: 1}</code></td></tr>
+<tr><td><code>byte[]</code> needs bytes items</td><td><code>{data: [3, 4]}</code></td><td><code>{data: [!!binary Aw==, !!binary BA==]}</code></td></tr>
+<tr><td><code>uint8[]</code> takes ints</td><td><code>{data: [256]}</code></td><td><code>{data: [3, 4, 255]}</code></td></tr>
+<tr><td>Stamps via placeholders</td><td><code>{stamp: 5.5}</code></td><td><code>{header: auto}</code>, <code>{header: {stamp: now}}</code></td></tr>
+<tr><td>Templates without quotes</td><td><code>"$(ros2 interface proto T)"</code></td><td><code>"$(ros2 interface proto --no-quotes T)"</code></td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>Most messages were identical across Humble (ros2cli 0.18.20), Jazzy (0.32.13) and Lyrical (0.40.9). Four things changed after Humble: YAML syntax errors became a one-line message instead of a traceback, an out-of-range Int32 wraps instead of failing, integers for <code>byte[]</code> abort the process instead of failing cleanly, and the Pose <code>{1,1,1}</code> text changed. <code>--stdin</code> exists from Jazzy. <code>--yaml-file</code> for <code>topic pub</code> and <code>--timeout</code> for <code>service call</code> appear only on Lyrical.</p>
+
+<h2>Not tested</h2>
+
+<p>Custom message types, other byte forms such as <code>std_msgs/Byte</code> and <code>sensor_msgs/Image</code>, <code>--max-wait-time-secs</code>, <code>ros2 service call --timeout</code>, <code>ros2 action send_goal</code>, QoS options, Cyclone DDS or Zenoh, communication across machines, zsh or PowerShell quoting, Iron, Kilted and Rolling. I didn't investigate why the <code>-w 0</code> counts varied so much between rounds.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Failed to populate field: 'String' object has no attribute 'data:hi'" mean?</h3>
+<p>The YAML had no space after the colon, so <code>data:hi</code> became one field name. Write <code>'{data: hi}'</code>. The same error with a different name, for example <code>'dat'</code>, means the field name is wrong. Check it with <code>ros2 interface show</code>.</p>
+
+<h3>How do I fix "Value is expected to be a dictionary but is a float"?</h3>
+<p>The field is a nested message and you gave it a plain value. Write it as its own map, for example <code>'{linear: {x: 1.0}}'</code> for Twist instead of <code>'{linear: 1.0}'</code>.</p>
+
+<h3>How do I publish a ByteMultiArray from the command line?</h3>
+<p>Give each byte as a base64 binary item: <code>'{data: [!!binary Aw==, !!binary BA==]}'</code> published bytes 3 and 4 on Humble, Jazzy and Lyrical. Plain integers failed on Humble and aborted the process on Jazzy and Lyrical. UInt8MultiArray accepts plain integers.</p>
+
+<h3>Is there a way to fill header.stamp with the current time in ros2 topic pub?</h3>
+<p>Yes. Use <code>'{header: auto}'</code> for the current time with an empty frame_id, or <code>'{header: {stamp: now, frame_id: map}}'</code>. Both worked on all three distros. There is no <code>--stamp</code> flag.</p>
+
+<h3>Does ros2 topic pub --once lose the first message?</h3>
+<p>Not in my runs. <code>-1</code> waits for one subscriber by default, and 20 of 20 messages arrived on each distro. With <code>-w 0</code>, 10 to 17 of 20 arrived. With no subscriber, <code>-1</code> waits forever and doesn't report field errors.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Failed to populate field: 'String' object has no attribute 'data:hi' mean?", "acceptedAnswer": {"@type": "Answer", "text": "The YAML had no space after the colon, so data:hi became one field name. Write '{data: hi}'. The same error with a different name, for example 'dat', means the field name is wrong. Check it with ros2 interface show."}},
+{"@type": "Question", "name": "How do I fix Value is expected to be a dictionary but is a float?", "acceptedAnswer": {"@type": "Answer", "text": "The field is a nested message and you gave it a plain value. Write it as its own map, for example '{linear: {x: 1.0}}' for Twist instead of '{linear: 1.0}'."}},
+{"@type": "Question", "name": "How do I publish a ByteMultiArray from the command line?", "acceptedAnswer": {"@type": "Answer", "text": "Give each byte as a base64 binary item: '{data: [!!binary Aw==, !!binary BA==]}' published bytes 3 and 4 on Humble, Jazzy and Lyrical. Plain integers failed on Humble and aborted the process on Jazzy and Lyrical. UInt8MultiArray accepts plain integers."}},
+{"@type": "Question", "name": "Is there a way to fill header.stamp with the current time in ros2 topic pub?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Use '{header: auto}' for the current time with an empty frame_id, or '{header: {stamp: now, frame_id: map}}'. Both worked on all three distros. There is no --stamp flag."}},
+{"@type": "Question", "name": "Does ros2 topic pub --once lose the first message?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my runs. -1 waits for one subscriber by default, and 20 of 20 messages arrived on each distro. With -w 0, 10 to 17 of 20 arrived. With no subscriber, -1 waits forever and doesn't report field errors."}}
+]}
+</script>
+
+<p>Measured on 2026-10-31 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, ros2cli 0.18.20, rclpy 3.3.22, rclcpp 16.0.21, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10, PyYAML 5.4.1), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, ros2cli 0.32.13, rclpy 7.1.12, rclcpp 28.1.22, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4, PyYAML 6.0.1) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, ros2cli 0.40.9, rclpy 10.0.11, rclcpp 32.0.3, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10, PyYAML 6.0.3), default RMW (Fast DDS), bash. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-24-ros2-topic-pub-failed-to-populate-field/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/102467/publish-geometry-msgs-pose-from-command-line">Publish geometry_msgs Pose from command-line</a>, <a href="https://robotics.stackexchange.com/questions/102380/how-is-a-std-msgs-msg-bytemultiarray-message-published-via-cli">How is a std_msgs/msg/ByteMultiArray message published via CLI?</a>, <a href="https://robotics.stackexchange.com/questions/99767/publish-float64multiarray-from-command-line-ros2">Publish Float64MultiArray from command line - ROS2</a>, <a href="https://robotics.stackexchange.com/questions/115437/ros2-service-parameters-expects-dictionary">Ros2 service parameters expects dictionary</a>, <a href="https://github.com/ros2/ros2cli/issues/760">ros2cli #760: Cannot/don't know how to publish message with byte[] field</a>.</p>

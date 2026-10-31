@@ -6,7 +6,8 @@
 # the working forms, `ros2 interface proto`, and -1 / -w / -r / -t delivery counts.
 ulimit -c 0
 source /opt/ros/$ROS_DISTRO/setup.bash
-export ROS_LOCALHOST_ONLY=1 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST ROS_DOMAIN_ID=77
+export ROS_DOMAIN_ID=77
+if [ "$ROS_DISTRO" = humble ]; then export ROS_LOCALHOST_ONLY=1; else export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST; fi
 echo "=== distro=$ROS_DISTRO"
 dpkg-query -W -f='${Package} ${Version}\n' ros-$ROS_DISTRO-rclpy ros-$ROS_DISTRO-rclcpp \
   ros-$ROS_DISTRO-ros2cli ros-$ROS_DISTRO-ros2topic ros-$ROS_DISTRO-ros2service \
@@ -25,7 +26,7 @@ rclpy.init()
 n = Node('sink')
 topics = {'/s': String, '/i': Int32, '/b': ByteMultiArray, '/u8': UInt8MultiArray,
           '/f': Float64MultiArray, '/tw': Twist, '/ps': PoseStamped, '/js': JointState, '/pose': Pose}
-for c in ['/cnt1', '/cnt2', '/cnt3', '/cnt4', '/cnt5', '/cnt6', '/cnt7']:
+for c in ['/cnt%d' % i for i in range(1, 21)]:
     topics[c] = String
 subs = []
 for t, ty in topics.items():
@@ -167,34 +168,43 @@ c proto_noquotes_arg "$P /tw geometry_msgs/msg/Twist \"\$(ros2 interface proto -
 c proto_ps_as_arg    "$P /ps geometry_msgs/msg/PoseStamped \"\$(ros2 interface proto --no-quotes geometry_msgs/msg/PoseStamped)\""
 c proto_srv_as_arg   "$S \"\$(ros2 interface proto --no-quotes std_srvs/srv/SetBool)\""
 
+echo "=== 9b. --stdin / --yaml-file"
+printf "data: 'time: 12:30'\n" > /tmp/t/m.yaml
+printf "data: true\n" > /tmp/t/sb.yaml
+if ros2 topic pub -h 2>&1 | grep -q -- '--stdin'; then
+  c pub_stdin        "$P --stdin /s std_msgs/msg/String < /tmp/t/m.yaml"
+  c pub_stdin_pos    "$P /s std_msgs/msg/String --stdin < /tmp/t/m.yaml"
+else echo "pub --stdin: option not available"; fi
+if ros2 topic pub -h 2>&1 | grep -q -- '--yaml-file'; then
+  c pub_yaml_file    "$P /s std_msgs/msg/String --yaml-file /tmp/t/m.yaml"
+else echo "pub --yaml-file: option not available"; fi
+if ros2 service call -h 2>&1 | grep -q -- '--stdin'; then
+  c srv_stdin        "$S --stdin < /tmp/t/sb.yaml"
+  c srv_stdin_first  "ros2 service call --stdin /sb std_srvs/srv/SetBool < /tmp/t/sb.yaml"
+else echo "service call --stdin: option not available"; fi
 echo "=== 10. Delivery counts (subscriber 'sink' already running)"
 c nosub_once         "ros2 topic pub -1 /nosub std_msgs/msg/String '{data: x}'"
-for k in 1 2 3 4 5 6 7 8 9 10; do timeout 20 ros2 topic pub -1 /cnt1 std_msgs/msg/String "{data: once_nowait_$k}" > /dev/null 2>&1; done
-sleep 1; echo "COUNT once_without_w (10 runs): $(grep -c 'RECV /cnt1' sink.log)"
-if [ -n "$W" ]; then
-  for k in 1 2 3 4 5 6 7 8 9 10; do timeout 20 ros2 topic pub -1 -w 1 /cnt2 std_msgs/msg/String "{data: once_w1_$k}" > /dev/null 2>&1; done
-  sleep 1; echo "COUNT once_with_w1 (10 runs): $(grep -c 'RECV /cnt2' sink.log)"
-else echo "COUNT once_with_w1: option not available"; fi
+N=20
+for k in $(seq $N); do timeout 20 ros2 topic pub -1 /cnt1 std_msgs/msg/String "{data: once_default_$k}" > /dev/null 2>&1; done
+sleep 1; echo "COUNT once_default ($N runs): $(grep -c 'RECV /cnt1' sink.log)"
+for k in $(seq $N); do timeout 20 ros2 topic pub -1 -w 1 /cnt2 std_msgs/msg/String "{data: once_w1_$k}" > /dev/null 2>&1; done
+sleep 1; echo "COUNT once_w1 ($N runs): $(grep -c 'RECV /cnt2' sink.log)"
+for k in $(seq $N); do timeout 20 ros2 topic pub -1 -w 0 /cnt3 std_msgs/msg/String "{data: once_w0_$k}" > /dev/null 2>&1; done
+sleep 1; echo "COUNT once_w0 ($N runs): $(grep -c 'RECV /cnt3' sink.log)"
+echo "once_w0 indices received: $(grep -o 'once_w0_[0-9]*' sink.log | sed 's/once_w0_//' | tr '\n' ' ')"
 c nosub_bad_once     "ros2 topic pub -1 /nosub std_msgs/msg/String '{data:hi}'"
 c nosub_bad_w0       "ros2 topic pub -1 -w 0 /nosub std_msgs/msg/String '{data:hi}'"
 c nosub_once_w0      "ros2 topic pub -1 -w 0 /nosub std_msgs/msg/String '{data: x}'"
-for k in 1 2 3 4 5 6 7 8 9 10; do timeout 20 ros2 topic pub -1 -w 0 /cnt6 std_msgs/msg/String "{data: once_w0_$k}" > /dev/null 2>&1; done
-sleep 1; echo "COUNT once_with_w0 (10 runs): $(grep -c 'RECV /cnt6' sink.log)"
-if ros2 topic pub -h 2>&1 | grep -q -- '--times'; then
-  c rate_times_w0    "ros2 topic pub -r 10 -t 20 -w 0 /cnt7 std_msgs/msg/String '{data: rtw0}' > /dev/null"
-  sleep 1; echo "COUNT rate10_times20_w0: $(grep -c 'RECV /cnt7' sink.log)"
-fi
-if ros2 topic pub -h 2>&1 | grep -q -- '--times'; then
-  c rate_times       "ros2 topic pub -r 10 -t 20 /cnt3 std_msgs/msg/String '{data: rt}' > /dev/null"
-  sleep 1; echo "COUNT rate10_times20: $(grep -c 'RECV /cnt3' sink.log)"
-  if [ -n "$W" ]; then
-    c rate_times_w   "ros2 topic pub -r 10 -t 20 -w 1 /cnt5 std_msgs/msg/String '{data: rtw}' > /dev/null"
-    sleep 1; echo "COUNT rate10_times20_w1: $(grep -c 'RECV /cnt5' sink.log)"
-  fi
-else echo "COUNT rate_times: --times not available"; fi
-t0=$(date +%s.%N); timeout -s INT 3 ros2 topic pub -r 10 /cnt4 std_msgs/msg/String '{data: r}' > pubr.out 2>&1; rc=$?; t1=$(date +%s.%N)
-sleep 1; echo "COUNT rate10_for_3s: received=$(grep -c 'RECV /cnt4' sink.log) printed_publishing=$(grep -c 'publishing #' pubr.out) EXIT=$rc SECONDS=$(python3 -c "print(round($t1-$t0,2))")"
-grep 'RECV /cnt1' sink.log | head -3 | sed 's/^/SINK: /'
-grep 'RECV /cnt1' sink.log | sed 's/.*once_nowait_\([0-9]*\).*/\1/' | tr '\n' ' '; echo " <- once_without_w indices received"
+c nosub_times_default "ros2 topic pub -t 3 /nosub std_msgs/msg/String '{data: x}'"
+c nosub_rate_default "ros2 topic pub -r 10 /nosub std_msgs/msg/String '{data:hi}'"
+T=4
+for r in 1 2 3; do
+  timeout 20 ros2 topic pub -r 10 -t 20 /cnt$T std_msgs/msg/String "{data: t20_default_r$r}" > /dev/null 2>&1
+  sleep 1; echo "COUNT round$r rate10_times20_default: $(grep -c "RECV /cnt$T " sink.log)"; T=$((T+1))
+  timeout 20 ros2 topic pub -r 10 -t 20 -w 0 /cnt$T std_msgs/msg/String "{data: t20_w0_r$r}" > /dev/null 2>&1
+  sleep 1; echo "COUNT round$r rate10_times20_w0: $(grep -c "RECV /cnt$T " sink.log) first_seq_seen=n/a"; T=$((T+1))
+  timeout -s INT 3 ros2 topic pub -r 10 /cnt$T std_msgs/msg/String "{data: r3s_r$r}" > pubr.out 2>&1; rc=$?
+  sleep 1; echo "COUNT round$r rate10_for_3s_no_t: received=$(grep -c "RECV /cnt$T " sink.log) printed_publishing=$(grep -c 'publishing #' pubr.out) EXIT=$rc"; T=$((T+1))
+done
 kill %1 %2 2>/dev/null
 echo "=== done"
