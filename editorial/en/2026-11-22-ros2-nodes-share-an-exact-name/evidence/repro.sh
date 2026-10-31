@@ -258,14 +258,17 @@ L=/logs; mkdir -p $L
 # run a CLI command, show stdout/stderr separately and the exit code
 cli() { echo "\$ $*"; timeout 30 "$@" >/tmp/o 2>/tmp/e; rc=$?; sed 's/^/  out| /' /tmp/o; sed 's/^/  err| /' /tmp/e; echo "  rc=$rc"; }
 # same, but only print a one-line summary (used in repeat loops)
-q() { timeout 30 "$@" >/tmp/o 2>/tmp/e; echo "rc=$? $(tr '\n' ' ' </tmp/o | cut -c1-160) ERR:$(grep -c 'share an exact name' /tmp/e)"; }
+q() { timeout 30 "$@" >/tmp/o 2>/tmp/e; local rc=$?; echo "rc=$rc $(tr '\n' ' ' </tmp/o | cut -c1-160) ERR:$(grep -c 'share an exact name' /tmp/e)$([ $rc -ne 0 ] && echo " stderr: $(tr '\n' ' ' </tmp/e | cut -c1-120)")"; }
 bg() { local name=$1; shift; "$@" >$L/$name.log 2>&1 & echo $! >$L/$name.pid; disown; }
 stopall() { for f in $L/*.pid; do [ -f "$f" ] && kill -INT $(cat $f) 2>/dev/null; done; sleep 2;
   for f in $L/*.pid; do [ -f "$f" ] && kill -9 $(cat $f) 2>/dev/null; rm -f $f; done
-  pkill -9 -f /ws/install 2>/dev/null; pkill -9 -f component_container 2>/dev/null; pkill -9 -f 'ros2 launch' 2>/dev/null; sleep 1; ros2 daemon stop >/dev/null 2>&1; }
+  pkill -9 -f /ws/install 2>/dev/null; pkill -9 -f component_container 2>/dev/null; pkill -9 -f 'ros2 launch' 2>/dev/null; sleep 1; ros2 daemon stop >/dev/null 2>&1
+  # restart the daemon before the next scenario so it has time to discover the new nodes
+  ros2 daemon start >/dev/null 2>&1; sleep 2; }
 showlog() { for f in "$@"; do echo "  [log $f]"; grep -vE '^\s*$' $L/$f.log | head -40 | sed 's/^/    /'; done; }
 section() { echo; echo "############ $*"; echo "uptime: $(uptime)"; }
 
+ros2 daemon start >/dev/null 2>&1; sleep 2
 section "0. where the warning text lives"
 grep -rnI --include=*.py -e "share an exact name" -e "nodes in the graph with the exact name" -e "nodes with the name" /opt/ros/$ROS_DISTRO 2>/dev/null | sed "s#/opt/ros/$ROS_DISTRO/##" | cut -c1-220
 echo "binary libs containing 'share an exact name':"; grep -rl "share an exact name" /opt/ros/$ROS_DISTRO/lib/*.so 2>/dev/null || echo "  none"

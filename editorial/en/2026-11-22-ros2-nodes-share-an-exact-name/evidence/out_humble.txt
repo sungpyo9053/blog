@@ -9,19 +9,21 @@ ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
 ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
 
 ############ 0. where the warning text lives
-uptime:  23:45:53 up 94 days, 12:42,  0 users,  load average: 0.78, 0.47, 0.20
-binary libs containing the text:
+uptime:  23:53:33 up 94 days, 12:49,  0 users,  load average: 0.52, 0.40, 0.27
+lib/python3.10/site-packages/launch_ros/actions/load_composable_nodes.py:170:                        'there are now at least {} nodes with the name {} created within this '
+lib/python3.10/site-packages/launch_ros/actions/node.py:514:                    'there are now at least {} nodes with the name {} created within this '
+lib/python3.10/site-packages/ros2node/api/__init__.py:23:    'There are {num_nodes} nodes in the graph with the exact name "{node_name}". '
+binary libs containing 'share an exact name':
   none
 
 ############ 1. single node baseline
-uptime:  23:45:54 up 94 days, 12:42,  0 users,  load average: 0.78, 0.47, 0.20
+uptime:  23:53:33 up 94 days, 12:49,  0 users,  load average: 0.52, 0.40, 0.27
 $ ros2 node list
   out| /dup_node
   rc=0
-/repro.sh: line 241:   237 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 2. ros2 run twice, same name (/dup_node), tags A and B
-uptime:  23:46:03 up 94 days, 12:42,  0 users,  load average: 0.81, 0.49, 0.20
+uptime:  23:53:42 up 94 days, 12:50,  0 users,  load average: 0.44, 0.39, 0.27
 $ ros2 node list
   out| /dup_node
   out| /dup_node
@@ -50,7 +52,16 @@ $ ros2 node info /dup_node
   out| 
   err| There are 2 nodes in the graph with the exact name "/dup_node". You are seeing information about only one of them.
   rc=0
+$ ros2 node list -c
+  out| 2
+  rc=0
 $ ros2 param list /dup_node
+  out|   note
+  out|   tag
+  out|   use_sim_time
+  rc=0
+$ ros2 param list
+  out| /dup_node:
   out|   note
   out|   tag
   out|   use_sim_time
@@ -90,32 +101,31 @@ $ ros2 topic info /chatter
 --- ros2 param set /dup_node note v_i x10
      10 rc=0 Set parameter successful  ERR:0
 SETCB lines per node:
-  A: 9  B: 10
+  A: 9  B: 9
     SETCB tag=A note=v1
     SETCB tag=A note=v2
     SETCB tag=A note=v3
     SETCB tag=A note=v4
     SETCB tag=A note=v5
+    SETCB tag=A note=v6
     SETCB tag=A note=v7
     SETCB tag=A note=v8
     SETCB tag=A note=v9
-    SETCB tag=A note=v10
     SETCB tag=B note=v1
     SETCB tag=B note=v2
     SETCB tag=B note=v3
     SETCB tag=B note=v4
     SETCB tag=B note=v5
     SETCB tag=B note=v6
-    SETCB tag=B note=v7
     SETCB tag=B note=v8
     SETCB tag=B note=v9
     SETCB tag=B note=v10
 --- ros2 service call /dup_node/get_parameters x20
-      6 string_value='A' rc=0
-     14 string_value='B' rc=0
+     12 string_value='A' rc=0
+      8 string_value='B' rc=0
 --- topic echo /chatter for 5s: messages per tag
-      9 data: A
-      9 data: B
+      8 data: A
+      8 data: B
 --- each node's subscription saw:
     RECV tag=A from=A
     RECV tag=A from=B
@@ -130,10 +140,10 @@ SETCB lines per node:
     SETCB tag=A note=v3
     SETCB tag=A note=v4
     SETCB tag=A note=v5
+    SETCB tag=A note=v6
     SETCB tag=A note=v7
     SETCB tag=A note=v8
     SETCB tag=A note=v9
-    SETCB tag=A note=v10
   [log b]
     START tag=B fqn=/dup_node rmw=rmw_fastrtps_cpp
     RECV tag=B from=A
@@ -144,15 +154,12 @@ SETCB lines per node:
     SETCB tag=B note=v4
     SETCB tag=B note=v5
     SETCB tag=B note=v6
-    SETCB tag=B note=v7
     SETCB tag=B note=v8
     SETCB tag=B note=v9
     SETCB tag=B note=v10
-/repro.sh: line 241:   285 Killed                  "$@" > $L/$name.log 2>&1
-/repro.sh: line 240:   286 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 3. same-name nodes: rclcpp lifecycle (/dup_lc) x2
-uptime:  23:47:13 up 94 days, 12:43,  0 users,  load average: 0.63, 0.49, 0.22
+uptime:  23:54:57 up 94 days, 12:51,  0 users,  load average: 0.42, 0.39, 0.28
 $ ros2 lifecycle nodes
   out| /dup_lc
   rc=0
@@ -163,13 +170,11 @@ $ ros2 lifecycle set /dup_lc configure
   out| Transitioning successful
   rc=0
 --- after one configure: ros2 lifecycle get x10
-     10 rc=0 inactive [2]  ERR:0
+      5 rc=0 inactive [2]  ERR:0
+      5 rc=0 unconfigured [1]  ERR:0
 $ ros2 lifecycle set /dup_lc configure
-  err| Unknown transition requested, available ones are:
-  err| - cleanup [2]
-  err| - activate [3]
-  err| - shutdown [6]
-  rc=1
+  out| Transitioning successful
+  rc=0
 $ ros2 lifecycle set /dup_lc configure
   err| Unknown transition requested, available ones are:
   err| - cleanup [2]
@@ -182,11 +187,10 @@ $ ros2 lifecycle set /dup_lc configure
     CONFIGURED tag=LA
   [log lb]
     CONFIGURED tag=LB
-/repro.sh: line 241:  1212 Killed                  "$@" > $L/$name.log 2>&1
-/repro.sh: line 240:  1213 Killed                  "$@" > $L/$name.log 2>&1
+    [WARN] [1793404519.996897503] [rcl_lifecycle]: No transition matching configure found for current state inactive
 
 ############ 4. same-name nodes with the same action server (/dup_act, action /lookup) x2
-uptime:  23:47:52 up 94 days, 12:44,  0 users,  load average: 0.52, 0.48, 0.23
+uptime:  23:55:34 up 94 days, 12:51,  0 users,  load average: 0.40, 0.39, 0.28
 $ ros2 node list
   out| /dup_act
   out| /dup_act
@@ -203,22 +207,22 @@ $ ros2 action info /lookup
   out|     /dup_act
   rc=0
 --- ros2 action send_goal x10
-      1 rc=0 Goal accepted with ID: 265ba4eba63d45b1ad2b1d5f8e96616d frame_id: XB Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: 2d0d7c3d4d44470f8fb351aa9b2e626d frame_id: XA Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: 31bf2332ad98491e9ae18745bb47ba74 frame_id: XA Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: 3c954765148f43ac8c6e69c0cca746a0 frame_id: XB Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: 469a0045eee9478a99ae4d44f1030c2b frame_id: XA Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: a25f7df03cf444818b1fd15ac2aed4c3 frame_id: XA Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: b3ef421fce384b4b8315cf501f4f6e4e frame_id: XB Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: d560b50d07804ad0bad3efed5ad2d1a9 frame_id: XB Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: d9ce0fa149104355888ab3a3ea36f44f frame_id: XA Goal finished with status: SUCCEEDED 
-      1 rc=0 Goal accepted with ID: eaffeca6895349e499bae782d5a409db frame_id: XB Goal finished with status: SUCCEEDED 
-GOAL lines per server: XA 8 XB 9
+      1 rc=0 Goal accepted with ID: 22b011769f15464b918873e134652e19 frame_id: XA Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: 4ed7c46fd9a04c7d82c47ffd1d148cfa frame_id: XA Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: 79c4b3e6b84643a9982d41190ae709fc frame_id: XB Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: 99e078e4b09e42d6b9089d8782dcb882 frame_id: XB Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: a5bf958973284527839ee99b3b605b46 frame_id: XB Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: a7a505e6798d4d79ab31bb7298be81cf frame_id: XA Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: c5f7a53b151149a3a27fc995b1735f83 frame_id: XA Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: ca6d7d8069f445b295ff1615feddc160 frame_id: XB Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: f21033c9c44047129e502937fed99e84 frame_id: XA Goal finished with status: SUCCEEDED 
+      1 rc=0 Goal accepted with ID: f7aa0ba96b574896897e3702fefaf37b frame_id: XA Goal finished with status: SUCCEEDED 
+GOAL lines per server: XA 8 XB 8
   [log xa]
     START tag=XA
     GOAL tag=XA target=g1
     GOAL tag=XA target=g2
-    GOAL tag=XA target=g4
+    GOAL tag=XA target=g5
     GOAL tag=XA target=g6
     GOAL tag=XA target=g7
     GOAL tag=XA target=g8
@@ -230,72 +234,83 @@ GOAL lines per server: XA 8 XB 9
     GOAL tag=XB target=g2
     GOAL tag=XB target=g3
     GOAL tag=XB target=g4
-    GOAL tag=XB target=g5
     GOAL tag=XB target=g6
     GOAL tag=XB target=g8
     GOAL tag=XB target=g9
     GOAL tag=XB target=g10
-/repro.sh: line 241:  1665 Killed                  "$@" > $L/$name.log 2>&1
-/repro.sh: line 240:  1666 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 5. cause: same launch file started twice
-uptime:  23:48:11 up 94 days, 12:44,  0 users,  load average: 0.44, 0.46, 0.23
+uptime:  23:55:55 up 94 days, 12:52,  0 users,  load average: 0.28, 0.36, 0.27
 $ ros2 node list
   out| /dup_node
   out| /dup_node
   err| WARNING: Be aware that there are nodes in the graph that share an exact name, which can have unintended side effects.
   rc=0
   [log l1]
-    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-48-11-862815-2e534bc4daa8-1898
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-55-56-092404-918ae8050ff0-1914
     [INFO] [launch]: Default logging verbosity is set to INFO
-    [INFO] [py_node.py-1]: process started with pid [1902]
+    [INFO] [py_node.py-1]: process started with pid [1918]
     [py_node.py-1] START tag=unset fqn=/dup_node rmw=rmw_fastrtps_cpp
     [py_node.py-1] RECV tag=unset from=unset
   [log l2]
-    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-48-11-862815-2e534bc4daa8-1899
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-55-56-085430-918ae8050ff0-1915
     [INFO] [launch]: Default logging verbosity is set to INFO
-    [INFO] [py_node.py-1]: process started with pid [1901]
+    [INFO] [py_node.py-1]: process started with pid [1917]
     [py_node.py-1] START tag=unset fqn=/dup_node rmw=rmw_fastrtps_cpp
     [py_node.py-1] RECV tag=unset from=unset
-/repro.sh: line 241:  1898 Killed                  "$@" > $L/$name.log 2>&1
-/repro.sh: line 240:  1899 Killed                  "$@" > $L/$name.log 2>&1
 
-############ 6. cause: launch name= override renames cpp_talker to dup_node, plus ros2 run py_node (default dup_node)
-uptime:  23:48:23 up 94 days, 12:44,  0 users,  load average: 0.37, 0.45, 0.23
+############ 5b. cause: one launch file with two Node(name='dup_node')
+uptime:  23:56:08 up 94 days, 12:52,  0 users,  load average: 0.24, 0.35, 0.27
 $ ros2 node list
   out| /dup_node
   out| /dup_node
   err| WARNING: Be aware that there are nodes in the graph that share an exact name, which can have unintended side effects.
   rc=0
-      6 rc=0 String value is: launch_cpp  ERR:0
-      4 rc=0 String value is: run_py  ERR:0
-  [log ov]
-    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-48-24-170115-2e534bc4daa8-1969
+  [log s2]
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-56-08-326490-918ae8050ff0-1985
     [INFO] [launch]: Default logging verbosity is set to INFO
-    [INFO] [cpp_talker-1]: process started with pid [1973]
-    [cpp_talker-1] [INFO] [1793404104.255727684] [dup_node]: START tag=launch_cpp fqn=/dup_node
+    [INFO] [py_node.py-1]: process started with pid [1987]
+    [INFO] [py_node.py-2]: process started with pid [1989]
+    [py_node.py-2] START tag=s2 fqn=/dup_node rmw=rmw_fastrtps_cpp
+    [py_node.py-1] START tag=s1 fqn=/dup_node rmw=rmw_fastrtps_cpp
+    [py_node.py-2] RECV tag=s2 from=s2
+    [py_node.py-1] RECV tag=s1 from=s2
+    [py_node.py-1] RECV tag=s1 from=s1
+    [py_node.py-2] RECV tag=s2 from=s1
+
+############ 6. cause: launch name= override renames cpp_talker to dup_node, plus ros2 run py_node (default dup_node)
+uptime:  23:56:20 up 94 days, 12:52,  0 users,  load average: 0.19, 0.33, 0.26
+$ ros2 node list
+  out| /dup_node
+  out| /dup_node
+  err| WARNING: Be aware that there are nodes in the graph that share an exact name, which can have unintended side effects.
+  rc=0
+      5 rc=0 String value is: launch_cpp  ERR:0
+      2 rc=0 String value is: run_py  ERR:0
+      3 rc=1  ERR:0
+  [log ov]
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-56-20-778015-918ae8050ff0-2049
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [cpp_talker-1]: process started with pid [2053]
+    [cpp_talker-1] [INFO] [1793404580.862762665] [dup_node]: START tag=launch_cpp fqn=/dup_node
   [log pr]
     START tag=run_py fqn=/dup_node rmw=rmw_fastrtps_cpp
     RECV tag=run_py from=launch_cpp
     RECV tag=run_py from=run_py
-/repro.sh: line 240:  1969 Killed                  "$@" > $L/$name.log 2>&1
-/repro.sh: line 240:  1970 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 7. cause: two ComposableNodes with the same name in one container
-uptime:  23:48:49 up 94 days, 12:45,  0 users,  load average: 0.33, 0.43, 0.23
+uptime:  23:56:40 up 94 days, 12:52,  0 users,  load average: 0.27, 0.34, 0.27
 $ ros2 node list
   out| /dup_comp
   out| /dup_comp
   out| /dup_container
-  out| /launch_ros_2203
+  out| /launch_ros_2253
   err| WARNING: Be aware that there are nodes in the graph that share an exact name, which can have unintended side effects.
   rc=0
 $ ros2 component list
-  out| /dup_container
-  out|   1  /dup_comp
-  out|   2  /dup_comp
   rc=0
-     10 rc=0 String value is: c1  ERR:0
+      5 rc=0 String value is: c1  ERR:0
+      5 rc=1  ERR:0
 --- ros2 component load a third dup_comp by CLI
 $ ros2 component load /dup_container dupn dupn::Talker -n dup_comp -p tag:=c3
   out| Loaded component 3 into '/dup_container' container node as '/dup_comp'
@@ -307,28 +322,27 @@ $ ros2 component list
   out|   3  /dup_comp
   rc=0
   [log cp]
-    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-48-49-499208-2e534bc4daa8-2203
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-10-30-23-56-40-829422-918ae8050ff0-2253
     [INFO] [launch]: Default logging verbosity is set to INFO
-    [INFO] [component_container-1]: process started with pid [2217]
-    [component_container-1] [INFO] [1793404129.948657473] [dup_container]: Load Library: /ws/install/dupn/lib/libtalker_comp.so
-    [component_container-1] [INFO] [1793404129.949770812] [dup_container]: Found class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
-    [component_container-1] [INFO] [1793404129.949919261] [dup_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
-    [component_container-1] [INFO] [1793404129.955969000] [dup_comp]: START tag=c1 fqn=/dup_comp
+    [INFO] [component_container-1]: process started with pid [2267]
+    [component_container-1] [INFO] [1793404601.208403504] [dup_container]: Load Library: /ws/install/dupn/lib/libtalker_comp.so
+    [component_container-1] [INFO] [1793404601.209566492] [dup_container]: Found class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
+    [component_container-1] [INFO] [1793404601.209609678] [dup_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
+    [component_container-1] [INFO] [1793404601.215732547] [dup_comp]: START tag=c1 fqn=/dup_comp
     [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/dup_comp' in container '/dup_container'
-    [component_container-1] [INFO] [1793404129.958162962] [dup_container]: Found class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
-    [component_container-1] [INFO] [1793404129.958193156] [dup_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
-    [component_container-1] [WARN] [1793404129.958292776] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
-    [component_container-1] [INFO] [1793404129.962201746] [dup_comp]: START tag=c2 fqn=/dup_comp
+    [component_container-1] [INFO] [1793404601.218154586] [dup_container]: Found class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
+    [component_container-1] [INFO] [1793404601.218190036] [dup_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
+    [component_container-1] [WARN] [1793404601.218295103] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+    [component_container-1] [INFO] [1793404601.222321001] [dup_comp]: START tag=c2 fqn=/dup_comp
     [WARNING] [/dup_container]: there are now at least 2 nodes with the name /dup_comp created within this launch context
     [INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/dup_comp' in container '/dup_container'
-    [component_container-1] [INFO] [1793404153.379891872] [dup_container]: Found class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
-    [component_container-1] [INFO] [1793404153.380675775] [dup_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
-    [component_container-1] [WARN] [1793404153.381243701] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
-    [component_container-1] [INFO] [1793404153.387352101] [dup_comp]: START tag=c3 fqn=/dup_comp
-/repro.sh: line 240:  2203 Killed                  "$@" > $L/$name.log 2>&1
+    [component_container-1] [INFO] [1793404622.103558828] [dup_container]: Found class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
+    [component_container-1] [INFO] [1793404622.104197249] [dup_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<dupn::Talker>
+    [component_container-1] [WARN] [1793404622.104376544] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+    [component_container-1] [INFO] [1793404622.118949338] [dup_comp]: START tag=c3 fqn=/dup_comp
 
 ############ 8. cause: same name twice in one process (rclcpp)
-uptime:  23:49:18 up 94 days, 12:45,  0 users,  load average: 0.48, 0.46, 0.25
+uptime:  23:57:06 up 94 days, 12:53,  0 users,  load average: 0.18, 0.31, 0.26
 $ ros2 node list
   out| /cpp_talker
   out| /cpp_talker
@@ -336,15 +350,14 @@ $ ros2 node list
   rc=0
      10 rc=0 String value is: first  ERR:0
   [log tw]
-    [INFO] [1793404158.160599818] [cpp_talker]: START tag=first fqn=/cpp_talker
+    [INFO] [1793404626.939144780] [cpp_talker]: START tag=first fqn=/cpp_talker
     CREATED first
-    [WARN] [1793404158.160856757] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
-    [INFO] [1793404158.163424875] [cpp_talker]: START tag=second fqn=/cpp_talker
+    [WARN] [1793404626.939404804] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+    [INFO] [1793404626.942062845] [cpp_talker]: START tag=second fqn=/cpp_talker
     CREATED second
-/repro.sh: line 240:  2474 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 9. cause: same name twice in one process (rclpy)
-uptime:  23:49:38 up 94 days, 12:45,  0 users,  load average: 0.41, 0.45, 0.25
+uptime:  23:57:30 up 94 days, 12:53,  0 users,  load average: 0.25, 0.32, 0.27
 $ ros2 node list
   out| /dup_node
   out| /dup_node
@@ -352,14 +365,30 @@ $ ros2 node list
   rc=0
   [log pt]
     CREATED first
-    [WARN] [1793404179.170611333] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+    [WARN] [1793404650.771631050] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
     CREATED second
-    [INFO] [1793404179.188842406] [dup_node]: log from first
-    [INFO] [1793404179.189362263] [dup_node]: log from second
-/repro.sh: line 240:  2689 Killed                  "$@" > $L/$name.log 2>&1
+    [INFO] [1793404650.790152623] [dup_node]: log from first
+    [INFO] [1793404650.790669303] [dup_node]: log from second
+
+############ 9b. cause: -r __node:=renamed on a process that holds two differently named nodes
+uptime:  23:57:40 up 94 days, 12:53,  0 users,  load average: 0.45, 0.36, 0.28
+$ ros2 node list
+  out| /n_one
+  out| /n_two
+  rc=0
+  [log pw]
+    NAMES /n_one /n_two
+$ ros2 node list
+  out| /renamed
+  out| /renamed
+  err| WARNING: Be aware that there are nodes in the graph that share an exact name, which can have unintended side effects.
+  rc=0
+  [log pw]
+    [WARN] [1793404671.393126893] [rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+    NAMES /renamed /renamed
 
 ############ 10. fix: -r __node:=dup_node_b on the second instance
-uptime:  23:49:49 up 94 days, 12:46,  0 users,  load average: 0.35, 0.43, 0.24
+uptime:  23:58:01 up 94 days, 12:54,  0 users,  load average: 0.32, 0.33, 0.27
 $ ros2 node list
   out| /dup_node
   out| /dup_node_b
@@ -368,11 +397,9 @@ $ ros2 node list
      10 rc=0 String value is: A  ERR:0
 --- get /dup_node_b tag x10
      10 rc=0 String value is: B  ERR:0
-/repro.sh: line 241:  2740 Killed                  "$@" > $L/$name.log 2>&1
-/repro.sh: line 240:  2741 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 11. fix: -r __ns:=/robot1 on the second instance
-uptime:  23:50:26 up 94 days, 12:46,  0 users,  load average: 0.32, 0.42, 0.25
+uptime:  23:58:35 up 94 days, 12:54,  0 users,  load average: 0.49, 0.38, 0.29
 $ ros2 node list
   out| /dup_node
   out| /robot1/dup_node
@@ -387,31 +414,28 @@ $ ros2 topic list
      10 rc=0 String value is: A  ERR:0
 --- get /robot1/dup_node tag x10
      10 rc=0 String value is: B  ERR:0
-/repro.sh: line 241:  3131 Killed                  "$@" > $L/$name.log 2>&1
-/repro.sh: line 240:  3132 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 12. fix: launch namespace= (robot1, robot2)
-uptime:  23:51:04 up 94 days, 12:47,  0 users,  load average: 0.18, 0.37, 0.24
+uptime:  23:59:14 up 94 days, 12:55,  0 users,  load average: 0.35, 0.35, 0.28
 $ ros2 node list
   out| /robot1/dup_node
   out| /robot2/dup_node
   rc=0
       5 rc=0 String value is: r1  ERR:0
       5 rc=0 String value is: r2  ERR:0
-/repro.sh: line 240:  3526 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 13. fix: GroupAction + PushRosNamespace
-uptime:  23:51:28 up 94 days, 12:47,  0 users,  load average: 0.32, 0.39, 0.25
+uptime:  23:59:37 up 94 days, 12:55,  0 users,  load average: 0.42, 0.37, 0.29
 $ ros2 node list
   out| /robot1/dup_node
   out| /robot2/dup_node
   rc=0
-      5 rc=0 String value is: p1  ERR:0
+      2 rc=0 String value is: p1  ERR:0
+      3 rc=1  ERR:0
       5 rc=0 String value is: p2  ERR:0
-/repro.sh: line 240:  3755 Killed                  "$@" > $L/$name.log 2>&1
 
 ############ 14. is there an option that refuses duplicate names?
-uptime:  23:51:52 up 94 days, 12:48,  0 users,  load average: 0.38, 0.41, 0.26
+uptime:  00:00:00 up 94 days, 12:56,  0 users,  load average: 0.35, 0.36, 0.28
 rclcpp NodeOptions setters:
 allocator(rcl allow_undeclared_parameters(bool append_parameter_override(const arguments(const clock_qos(const context(rclcpp::Context::SharedPtr enable_rosout(bool enable_topic_statistics(bool parameter_event_qos(const parameter_overrides(const rosout_qos(const start_parameter_event_publisher(bool start_parameter_services(bool use_clock_thread(bool use_global_arguments(bool use_intra_process_comms(bool 
 rclpy Node.__init__ keyword args:
