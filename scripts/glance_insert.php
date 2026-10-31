@@ -3,7 +3,7 @@ global $wpdb; $m=json_decode(file_get_contents('/tmp/enfig_media.json'),true); $
 foreach($m as $id=>$x){
   $p=get_post($id); $c=$p->post_content; $i=strpos($c,'<h2');
   if(strpos($c,'hl-glance')!==false || $i===false){ $skip++; continue; }
-  $fig='<figure class="hl-glance wp-block-image"><img src="'.esc_url($x['url']).'" alt="'.esc_attr($x['alt']).'" width="'.$x['w'][0].'" height="'.$x['w'][1].'" loading="lazy" decoding="async"><figcaption>At a glance: the main measured table from this article. Full details below.</figcaption></figure>'."\n";
+  $fig='<figure class="hl-glance wp-block-image"><img src="'.esc_url($x['url']).'" alt="'.esc_attr($x['alt']).'" width="'.$x['w'][0].'" height="'.$x['w'][1].'" loading="lazy" decoding="async"><figcaption>'.(($x['lang']??'en')==='ko'?'한눈에 보기: 이 글의 핵심 표입니다. 자세한 내용은 아래 본문에 있습니다.':'At a glance: the main measured table from this article. Full details below.').'</figcaption></figure>'."\n";
   $new=substr($c,0,$i).$fig.substr($c,$i);
   $wpdb->update($wpdb->posts,['post_content'=>$new],['ID'=>$id]); clean_post_cache($id);
   $o=apply_filters('the_content',get_post($id)->post_content);

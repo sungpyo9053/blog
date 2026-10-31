@@ -1,4 +1,4 @@
-# EN "at a glance" figure: glance_export.php (WP host, wp eval-file) -> tables.json -> this (runner, --apply uploads) -> media.json -> glance_insert.php (WP host, reads /tmp/enfig_media.json) -> wp cache-enabler clear --ids=...
+# EN/KO "at a glance" figure (item["lang"]=="ko" switches the strings): glance_export.php (WP host, wp eval-file) -> tables.json -> this (runner, --apply uploads) -> media.json -> glance_insert.php (WP host, reads /tmp/enfig_media.json) -> wp cache-enabler clear --ids=...
 # Draws the post's own biggest table as a 1600px PNG (no new numbers); same palette as make_info_cards.
 import html, json, re, sys
 from pathlib import Path
@@ -6,6 +6,8 @@ sys.path.insert(0, ".")
 from PIL import Image, ImageDraw
 from scripts.make_info_cards import font, BG, INK, SUB, ACCENT
 W, PAD, MAXROWS = 1600, 70, 10
+TXT = {"en": ("+{} more rows in the article", "huntlab.app · measured results from this article", "{} — measured results table"),
+       "ko": ("본문에 {}행 더 있음", "huntlab.app · 이 글 본문의 표", "{} — 본문 표 요약")}
 def cells(row): return [re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", c))).strip() for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)]
 def wrap(d, t, f, w):
     out, cur = [], ""
@@ -52,8 +54,9 @@ def render(item, out):
             x += cw
         y += rh[k]
         d.line([PAD, y, W - PAD, y], fill="#D8CDB9", width=2)
-    if more > 0: d.text((PAD, y + 10), f"+{more} more rows in the article", font=bf, fill=SUB); y += 40
-    d.text((PAD, H - 60), "huntlab.app · measured results from this article", font=font("Regular", 26), fill=SUB)
+    tx = TXT[item.get("lang", "en")]
+    if more > 0: d.text((PAD, y + 10), tx[0].format(more), font=bf, fill=SUB); y += 40
+    d.text((PAD, H - 60), tx[1], font=font("Regular", 26), fill=SUB)
     img.save(out)
     return title
 if __name__ == "__main__":
@@ -67,8 +70,8 @@ if __name__ == "__main__":
     for it in items:
         if only and it["id"] not in only: continue
         out = outdir / f"glance-{it['id']}.png"; t = render(it, out)
-        alt = f"{t} — measured results table"
+        alt = TXT[it.get("lang", "en")][2].format(t)
         if client:
-            m = client.upload_media(out, alt_text=alt); res[it["id"]] = {"url": m["source_url"], "alt": alt, "w": Image.open(out).size}
+            m = client.upload_media(out, alt_text=alt); res[it["id"]] = {"url": m["source_url"], "alt": alt, "w": Image.open(out).size, "lang": it.get("lang", "en")}
         else: print("rendered", out, Image.open(out).size)
     if client: print(json.dumps(res))
