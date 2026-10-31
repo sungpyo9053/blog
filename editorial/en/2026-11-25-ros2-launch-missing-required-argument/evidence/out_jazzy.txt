@@ -1,0 +1,399 @@
+=== distro=jazzy
+ros-jazzy-launch 3.4.12-1noble.20260920.232232
+ros-jazzy-launch-ros 0.26.13-1noble.20260920.233704
+ros-jazzy-launch-xml 3.4.12-1noble.20260920.233548
+ros-jazzy-launch-yaml 3.4.12-1noble.20260920.233506
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-rmw 7.3.4-1noble.20260911.050254
+ros-jazzy-rmw-implementation 2.15.6-1noble.20260911.103206
+ros-jazzy-ros2cli 0.32.13-1noble.20261006.033947
+ros-jazzy-ros2launch 0.26.13-1noble.20261006.034901
+RMW_IMPLEMENTATION=<unset, default>
+
+===== (1) required argument
+
+### 1a
+$ ros2 launch larg child.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+### 1b
+$ ros2 launch larg child.launch.py x:=cli
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD x=cli
+EXIT=0
+
+### 1c
+$ ros2 launch larg parent_noargs.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+### 1d
+$ ros2 launch larg parent_noargs.launch.py x:=cli
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+### 1e
+$ ros2 launch larg parent_declares_x.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+### 1f
+$ ros2 launch larg child.launch.xml
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+### 1g
+$ ros2 launch larg child.launch.yaml
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+### 1h
+$ ros2 launch larg parent.launch.xml
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+### 1i
+$ ros2 launch larg parent_arg.launch.xml
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD x=from_xml
+EXIT=0
+
+===== (2) launch_arguments forms
+
+### 2a
+$ ros2 launch larg parent_items.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD x=from_items
+EXIT=0
+
+### 2b
+$ ros2 launch larg parent_tuples.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD x=from_tuples
+EXIT=0
+
+### 2c
+$ ros2 launch larg parent_dict.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): 'NoneType' object is not iterable
+EXIT=1
+
+### 2d
+$ ros2 launch larg parent_int.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): 'int' object is not iterable
+EXIT=1
+
+### 2e
+$ ros2 launch larg parent_lc.launch.py x:=cli
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD x=cli
+EXIT=0
+
+===== (3) scoping
+
+### 3a
+$ ros2 launch larg leak_plain.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD y=parent_default
+[INFO] [launch.user]: CHILD u=u_unset
+[INFO] [launch.user]: PARENT_AFTER z=child_z
+EXIT=0
+
+### 3b
+$ ros2 launch larg leak_plain.launch.py y:=cli_y u:=cli_u
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD y=cli_y
+[INFO] [launch.user]: CHILD u=cli_u
+[INFO] [launch.user]: PARENT_AFTER z=child_z
+EXIT=0
+
+### 3c
+$ ros2 launch larg leak_scoped.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD y=parent_default
+[INFO] [launch.user]: CHILD u=u_unset
+[INFO] [launch.user]: PARENT_AFTER z=z_unset
+EXIT=0
+
+### 3d
+$ ros2 launch larg leak_scoped.launch.py y:=cli_y u:=cli_u
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD y=cli_y
+[INFO] [launch.user]: CHILD u=cli_u
+[INFO] [launch.user]: PARENT_AFTER z=z_unset
+EXIT=0
+
+### 3e
+$ ros2 launch larg leak_noforward.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD y=child_default
+[INFO] [launch.user]: CHILD u=u_unset
+[INFO] [launch.user]: PARENT_AFTER z=z_unset
+EXIT=0
+
+### 3f
+$ ros2 launch larg leak_noforward.launch.py y:=cli_y u:=cli_u
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD y=child_default
+[INFO] [launch.user]: CHILD u=u_unset
+[INFO] [launch.user]: PARENT_AFTER z=z_unset
+EXIT=0
+
+### 3g
+$ ros2 launch larg leak_noforward_cfg.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD y=via_group
+[INFO] [launch.user]: CHILD u=u_unset
+[INFO] [launch.user]: PARENT_AFTER z=z_unset
+EXIT=0
+
+### 3h
+$ ros2 launch larg leak_required_noforward.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []
+EXIT=1
+
+===== (4) misspelled argument
+
+### 4a
+$ ros2 launch larg sim.launch.py use_sim_tme:=true
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: SIM use_sim_time=false
+EXIT=0
+
+### 4b
+$ ros2 launch larg sim.launch.py use_sim_time:=true
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: SIM use_sim_time=true
+EXIT=0
+
+### 4c
+$ ros2 launch larg child.launch.py X:=1
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: [X]
+EXIT=1
+
+===== (5) defaults and --show-args
+
+### 5a
+$ ros2 launch larg defaults.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: BEFORE_DECLARE w=from_lc_default
+[INFO] [launch.user]: AFTER_DECLARE w=from_declare
+[INFO] [launch.user]: UNDECLARED v=from_lc_only
+EXIT=0
+
+### 5b
+$ ros2 launch larg defaults.launch.py w:=cli
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: BEFORE_DECLARE w=cli
+[INFO] [launch.user]: AFTER_DECLARE w=cli
+[INFO] [launch.user]: UNDECLARED v=from_lc_only
+EXIT=0
+
+### 5c
+$ ros2 launch larg defaults.launch.py --show-args
+Arguments (pass arguments as '<name>:=<value>'):
+
+    'w':
+        w arg
+        (default: 'from_declare')
+EXIT=0
+
+### 5d
+$ ros2 launch larg child.launch.py --show-args
+Arguments (pass arguments as '<name>:=<value>'):
+
+    'x':
+        the x value
+EXIT=0
+
+### 5e
+$ ros2 launch larg parent_noargs.launch.py --show-args
+Arguments (pass arguments as '<name>:=<value>'):
+
+    'x':
+        the x value
+EXIT=0
+
+### 5f
+$ ros2 launch larg leak_plain.launch.py --show-args
+Arguments (pass arguments as '<name>:=<value>'):
+
+    'y':
+        no description given
+        (default: 'parent_default')
+
+    'z':
+        no description given
+        (default: 'child_z')
+EXIT=0
+
+### 5g
+$ ros2 launch larg child.launch.xml --show-args
+Arguments (pass arguments as '<name>:=<value>'):
+
+    'x':
+        the x value
+EXIT=0
+
+===== (6) booleans
+
+### 6 b=true
+$ ros2 launch larg bool.launch.py b:=true
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: IF=taken
+[INFO] [pnode.py-1]: process started with pid [339]
+[INFO] [pnode.py-2]: process started with pid [340]
+[pnode.py-1] NODE plain flag=True type=BOOL
+[pnode.py-2] NODE as_str flag='true' type=STRING
+[INFO] [pnode.py-1]: process has finished cleanly [pid 339]
+[INFO] [pnode.py-2]: process has finished cleanly [pid 340]
+EXIT=0
+
+### 6 b=True
+$ ros2 launch larg bool.launch.py b:=True
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: IF=taken
+[INFO] [pnode.py-1]: process started with pid [375]
+[INFO] [pnode.py-2]: process started with pid [376]
+[pnode.py-2] NODE as_str flag='True' type=STRING
+[pnode.py-1] NODE plain flag=True type=BOOL
+[INFO] [pnode.py-2]: process has finished cleanly [pid 376]
+[INFO] [pnode.py-1]: process has finished cleanly [pid 375]
+EXIT=0
+
+### 6 b=TRUE
+$ ros2 launch larg bool.launch.py b:=TRUE
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: IF=taken
+[INFO] [pnode.py-1]: process started with pid [411]
+[INFO] [pnode.py-2]: process started with pid [412]
+[pnode.py-1] NODE plain flag=True type=BOOL
+[pnode.py-2] NODE as_str flag='TRUE' type=STRING
+[INFO] [pnode.py-1]: process has finished cleanly [pid 411]
+[INFO] [pnode.py-2]: process has finished cleanly [pid 412]
+EXIT=0
+
+### 6 b=1
+$ ros2 launch larg bool.launch.py b:=1
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: IF=taken
+[INFO] [pnode.py-1]: process started with pid [447]
+[INFO] [pnode.py-2]: process started with pid [448]
+[pnode.py-2] NODE as_str flag='1' type=STRING
+[pnode.py-1] NODE plain flag=1 type=INTEGER
+[INFO] [pnode.py-2]: process has finished cleanly [pid 448]
+[INFO] [pnode.py-1]: process has finished cleanly [pid 447]
+EXIT=0
+
+### 6 b=0
+$ ros2 launch larg bool.launch.py b:=0
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: UNLESS=taken
+[INFO] [pnode.py-1]: process started with pid [483]
+[INFO] [pnode.py-2]: process started with pid [484]
+[pnode.py-2] NODE as_str flag='0' type=STRING
+[pnode.py-1] NODE plain flag=0 type=INTEGER
+[INFO] [pnode.py-2]: process has finished cleanly [pid 484]
+[INFO] [pnode.py-1]: process has finished cleanly [pid 483]
+EXIT=0
+
+### 6 b=false
+$ ros2 launch larg bool.launch.py b:=false
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: UNLESS=taken
+[INFO] [pnode.py-1]: process started with pid [519]
+[INFO] [pnode.py-2]: process started with pid [520]
+[pnode.py-1] NODE plain flag=False type=BOOL
+[pnode.py-2] NODE as_str flag='false' type=STRING
+[INFO] [pnode.py-2]: process has finished cleanly [pid 520]
+[INFO] [pnode.py-1]: process has finished cleanly [pid 519]
+EXIT=0
+
+### 6 b=False
+$ ros2 launch larg bool.launch.py b:=False
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: UNLESS=taken
+[INFO] [pnode.py-1]: process started with pid [555]
+[INFO] [pnode.py-2]: process started with pid [556]
+[pnode.py-2] NODE as_str flag='False' type=STRING
+[pnode.py-1] NODE plain flag=False type=BOOL
+[INFO] [pnode.py-2]: process has finished cleanly [pid 556]
+[INFO] [pnode.py-1]: process has finished cleanly [pid 555]
+EXIT=0
+
+### 6 b=yes
+$ ros2 launch larg bool.launch.py b:=yes
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): invalid condition expression, expected one of [true, 1, false, 0] but got 'yes', expanded from '<launch.substitutions.launch_configuration.LaunchConfiguration object at 0x7e3feff68170>'
+EXIT=1
+
+### 6 b=on
+$ ros2 launch larg bool.launch.py b:=on
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): invalid condition expression, expected one of [true, 1, false, 0] but got 'on', expanded from '<launch.substitutions.launch_configuration.LaunchConfiguration object at 0x752d140bf3b0>'
+EXIT=1
+
+===== (7) follow-ups
+
+### 7a
+$ ros2 launch larg parent_dict_optional.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): not enough values to unpack (expected 2, got 1)
+EXIT=1
+
+### 7b
+$ ros2 launch larg parent_items.launch.py x:=cli
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: CHILD x=from_items
+EXIT=0
+
+### 7c
+$ ros2 launch -d larg parent_dict.launch.py
+[DEBUG] [launch.launch_context]: emitting event synchronously: 'launch.events.IncludeLaunchDescription'
+[INFO] [launch]: Default logging verbosity is set to DEBUG
+[DEBUG] [launch]: processing event: '<launch.events.include_launch_description.IncludeLaunchDescription object at 0x76e08a8ef050>'
+[DEBUG] [launch]: processing event: '<launch.events.include_launch_description.IncludeLaunchDescription object at 0x76e08a8ef050>' ✓ '<launch.event_handlers.on_include_launch_description.OnIncludeLaunchDescription object at 0x76e08ab33b30>'
+[DEBUG] [launch.actions.include_launch_description]: Failed to get launch arguments names for launch description '<launch.substitutions.text_substitution.TextSubstitution object at 0x76e089f3c2f0>', with exception: not enough values to unpack (expected 2, got 1)
+[DEBUG] [launch]: An exception was raised in an async action/event
+[DEBUG] [launch]: Traceback (most recent call last):
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/launch_service.py", line 343, in run_async
+    raise exception_to_raise
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/launch_service.py", line 230, in _process_one_event
+    await self.__process_event(next_event)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/launch_service.py", line 250, in __process_event
+    visit_all_entities_and_collect_futures(entity, self.__context))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/utilities/visit_all_entities_and_collect_futures_impl.py", line 45, in visit_all_entities_and_collect_futures
+    futures_to_return += visit_all_entities_and_collect_futures(sub_entity, context)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/utilities/visit_all_entities_and_collect_futures_impl.py", line 45, in visit_all_entities_and_collect_futures
+    futures_to_return += visit_all_entities_and_collect_futures(sub_entity, context)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/utilities/visit_all_entities_and_collect_futures_impl.py", line 38, in visit_all_entities_and_collect_futures
+    sub_entities = entity.visit(context)
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/action.py", line 109, in visit
+    return self.execute(context)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/actions/include_launch_description.py", line 229, in execute
+    argument_names.extend(ild_action._try_get_arguments_names_without_context())
+TypeError: 'NoneType' object is not iterable
+
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): 'NoneType' object is not iterable
+[DEBUG] [launch.launch_context]: emitting event: 'launch.events.Shutdown'
+[DEBUG] [launch]: processing event: '<launch.events.shutdown.Shutdown object at 0x76e08a092870>'
+[DEBUG] [launch]: processing event: '<launch.events.shutdown.Shutdown object at 0x76e08a092870>' ✓ '<launch.event_handlers.on_shutdown.OnShutdown object at 0x76e08a0d1970>'
+EXIT=1
+=== done
