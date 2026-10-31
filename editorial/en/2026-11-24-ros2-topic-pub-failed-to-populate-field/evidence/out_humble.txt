@@ -1,0 +1,929 @@
+=== distro=humble
+python3-yaml 5.4.1-1ubuntu1
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-ros2interface 0.18.20-1jammy.20260907.215522
+ros-humble-ros2service 0.18.20-1jammy.20260907.215538
+ros-humble-ros2topic 0.18.20-1jammy.20260907.215610
+ros-humble-rosidl-runtime-py 0.9.3-1jammy.20260907.210804
+RMW_IMPLEMENTATION=default
+=== help: topic pub options
+usage: ros2 topic pub [-h] [-r N] [-p N] [-1 | -t TIMES]
+                      [-w WAIT_MATCHING_SUBSCRIPTIONS] [--keep-alive N]
+                      [-n NODE_NAME]
+                      [--qos-profile {unknown,system_default,sensor_data,services_default,parameters,parameter_events,action_status_default}]
+                      [--qos-depth N]
+                      [--qos-history {system_default,keep_last,keep_all,unknown}]
+                      [--qos-reliability {system_default,reliable,best_effort,unknown}]
+                      [--qos-durability {system_default,transient_local,volatile,unknown}]
+                      [--spin-time SPIN_TIME] [-s]
+                      topic_name message_type [values]
+
+Publish a message to a topic
+
+positional arguments:
+  topic_name            Name of the ROS topic to publish to (e.g. '/chatter')
+  message_type          Type of the ROS message (e.g. 'std_msgs/String')
+  values                Values to fill the message with in YAML format (e.g.
+                        'data: Hello World'), otherwise the message will be
+                        published with default values. You can use 'now'
+                        placeholder to get the current time and 'auto'
+                        placeholder to get a std_msgs.msg.Header with current
+                        time and empty frame_id.
+
+options:
+  -h, --help            show this help message and exit
+  -r N, --rate N        Publishing rate in Hz (default: 1)
+  -p N, --print N       Only print every N-th published message (default: 1)
+  -1, --once            Publish one message and exit
+  -t TIMES, --times TIMES
+                        Publish this number of times and then exit
+  -w WAIT_MATCHING_SUBSCRIPTIONS, --wait-matching-subscriptions WAIT_MATCHING_SUBSCRIPTIONS
+                        Wait until finding the specified number of matching
+                        subscriptions. Defaults to 1 when using "-1"/"--
+                        once"/"--times", otherwise defaults to 0.
+  --keep-alive N        Keep publishing node alive for N seconds after the
+                        last msg (default: 0.1)
+  -n NODE_NAME, --node-name NODE_NAME
+                        Name of the created publishing node
+  --qos-profile {unknown,system_default,sensor_data,services_default,parameters,parameter_events,action_status_default}
+                        Quality of service preset profile to publish)
+  --qos-depth N         Queue size setting to publish with (overrides depth
+                        value of --qos-profile option)
+  --qos-history {system_default,keep_last,keep_all,unknown}
+                        History of samples setting to publish with (overrides
+                        history value of --qos-profile option, default:
+                        keep_last)
+  --qos-reliability {system_default,reliable,best_effort,unknown}
+                        Quality of service reliability setting to publish with
+                        (overrides reliability value of --qos-profile option,
+                        default: reliable)
+  --qos-durability {system_default,transient_local,volatile,unknown}
+                        Quality of service durability setting to publish with
+                        (overrides durability value of --qos-profile option,
+                        default: transient_local)
+  --spin-time SPIN_TIME
+                        Spin time in seconds to wait for discovery (only
+                        applies when not using an already running daemon)
+  -s, --use-sim-time    Enable ROS simulation time
+=== help: service call options
+usage: ros2 service call [-h] [-r N] service_name service_type [values]
+
+Call a service
+
+positional arguments:
+  service_name    Name of the ROS service to call to (e.g. '/add_two_ints')
+  service_type    Type of the ROS service (e.g. 'std_srvs/srv/Empty')
+  values          Values to fill the service request with in YAML format (e.g.
+                  '{a: 1, b: 2}'), otherwise the service request will be
+                  published with default values
+
+options:
+  -h, --help      show this help message and exit
+  -r N, --rate N  Repeat the call at a specific rate in Hz
+W=[-w 1]
+=== 1. String
+
+--- CASE str_ok
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data: hi}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+EXIT=0 SECONDS=1.11
+SINK: RECV /s std_msgs.msg.String(data='hi')
+
+--- CASE str_nobrace
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String 'data: hi'
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hi')
+
+EXIT=0 SECONDS=1.41
+SINK: RECV /s std_msgs.msg.String(data='hi')
+
+--- CASE str_nospace
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data:hi}'
+Waiting for at least 1 matching subscription(s)...
+Failed to populate field: 'String' object has no attribute 'data:hi'
+EXIT=1 SECONDS=1.5
+
+--- CASE str_nospace_nobrace
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String 'data:hi'
+The passed value needs to be a dictionary in YAML format
+EXIT=1 SECONDS=1.31
+
+--- CASE str_wrongfield
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{dat: hi}'
+Failed to populate field: 'String' object has no attribute 'dat'
+EXIT=1 SECONDS=0.98
+
+--- CASE str_colon_unquoted
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data: time: 12:30}'
+Traceback (most recent call last):
+  File "/opt/ros/humble/bin/ros2", line 33, in <module>
+    sys.exit(load_entry_point('ros2cli==0.18.20', 'console_scripts', 'ros2')())
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2cli/cli.py", line 91, in main
+    rc = extension.main(parser=parser, args=args)
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/command/topic.py", line 41, in main
+    return extension.main(args=args)
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/verb/pub.py", line 225, in main
+    return main(args)
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/verb/pub.py", line 243, in main
+    return publisher(
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/verb/pub.py", line 274, in publisher
+    values_dictionary = yaml.safe_load(values)
+  File "/usr/lib/python3/dist-packages/yaml/__init__.py", line 162, in safe_load
+    return load(stream, SafeLoader)
+  File "/usr/lib/python3/dist-packages/yaml/__init__.py", line 114, in load
+    return loader.get_single_data()
+  File "/usr/lib/python3/dist-packages/yaml/constructor.py", line 49, in get_single_data
+    node = self.get_single_node()
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 36, in get_single_node
+    document = self.compose_document()
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 55, in compose_document
+    node = self.compose_node(None, None)
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 84, in compose_node
+    node = self.compose_mapping_node(anchor)
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 127, in compose_mapping_node
+    while not self.check_event(MappingEndEvent):
+  File "/usr/lib/python3/dist-packages/yaml/parser.py", line 98, in check_event
+    self.current_event = self.state()
+  File "/usr/lib/python3/dist-packages/yaml/parser.py", line 549, in parse_flow_mapping_key
+    raise ParserError("while parsing a flow mapping", self.marks[-1],
+yaml.parser.ParserError: while parsing a flow mapping
+  in "<unicode string>", line 1, column 1:
+    {data: time: 12:30}
+    ^
+expected ',' or '}', but got ':'
+  in "<unicode string>", line 1, column 12:
+    {data: time: 12:30}
+               ^
+EXIT=1 SECONDS=0.97
+
+--- CASE str_sexagesimal
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data: 12:30}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='750')
+
+EXIT=0 SECONDS=2.88
+SINK: RECV /s std_msgs.msg.String(data='750')
+
+--- CASE str_colon_quoted
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String "{data: 'time: 12:30'}"
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='time: 12:30')
+
+EXIT=0 SECONDS=1.09
+SINK: RECV /s std_msgs.msg.String(data='time: 12:30')
+
+--- CASE str_number
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data: 42}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='42')
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /s std_msgs.msg.String(data='42')
+
+--- CASE str_number_quoted
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String "{data: '42'}"
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='42')
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /s std_msgs.msg.String(data='42')
+
+--- CASE str_bool_yes
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data: yes}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='True')
+
+EXIT=0 SECONDS=1.09
+SINK: RECV /s std_msgs.msg.String(data='True')
+
+--- CASE str_bare_scalar
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String 'hi'
+The passed value needs to be a dictionary in YAML format
+EXIT=1 SECONDS=0.98
+=== 2. Shell quoting
+
+--- CASE sh_double_inner_single
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String "{data: 'hello world'}"
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hello world')
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /s std_msgs.msg.String(data='hello world')
+
+--- CASE sh_single_inner_double
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data: "hello world"}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='hello world')
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /s std_msgs.msg.String(data='hello world')
+
+--- CASE sh_double_inner_double
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String "{data: "a: b"}"
+usage: ros2 [-h] [--use-python-default-buffering]
+            Call `ros2 <command> -h` for more detailed usage. ...
+ros2: error: unrecognized arguments: b}
+EXIT=2 SECONDS=0.32
+
+--- CASE sh_double_dollar
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String "{data: price $5}"
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='price')
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /s std_msgs.msg.String(data='price')
+
+--- CASE sh_single_dollar
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String '{data: price $5}'
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: std_msgs.msg.String(data='price $5')
+
+EXIT=0 SECONDS=1.88
+SINK: RECV /s std_msgs.msg.String(data='price $5')
+
+--- CASE sh_unquoted
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String {data: hi}
+usage: ros2 [-h] [--use-python-default-buffering]
+            Call `ros2 <command> -h` for more detailed usage. ...
+ros2: error: unrecognized arguments: hi}
+EXIT=2 SECONDS=0.33
+
+--- CASE sh_unquoted_nospace
+CMD: ros2 topic pub -1 -w 1 /s std_msgs/msg/String {data:hi}
+Failed to populate field: 'String' object has no attribute 'data:hi'
+EXIT=1 SECONDS=1.32
+=== 3. Int vs float
+
+--- CASE tw_int_for_float
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist '{linear: {x: 1}}'
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=1.0, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0))
+
+EXIT=0 SECONDS=1.43
+SINK: RECV /tw geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=1.0, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0))
+
+--- CASE tw_float
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist '{linear: {x: 0.5}, angular: {z: 1.0}}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=0.5, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=1.0))
+
+EXIT=0 SECONDS=2.98
+SINK: RECV /tw geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=0.5, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=1.0))
+
+--- CASE tw_str_for_float
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist "{linear: {x: '1.0'}}"
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=1.0, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0))
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /tw geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=1.0, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0))
+
+--- CASE i32_float_for_int
+CMD: ros2 topic pub -1 -w 1 /i std_msgs/msg/Int32 '{data: 1.5}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.Int32(data=1)
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /i std_msgs.msg.Int32(data=1)
+
+--- CASE i32_float_whole
+CMD: ros2 topic pub -1 -w 1 /i std_msgs/msg/Int32 '{data: 1.0}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.Int32(data=1)
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /i std_msgs.msg.Int32(data=1)
+
+--- CASE i32_str_for_int
+CMD: ros2 topic pub -1 -w 1 /i std_msgs/msg/Int32 "{data: '5'}"
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: std_msgs.msg.Int32(data=5)
+
+EXIT=0 SECONDS=2.88
+SINK: RECV /i std_msgs.msg.Int32(data=5)
+
+--- CASE i32_ok
+CMD: ros2 topic pub -1 -w 1 /i std_msgs/msg/Int32 '{data: 5}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: std_msgs.msg.Int32(data=5)
+
+EXIT=0 SECONDS=2.28
+SINK: RECV /i std_msgs.msg.Int32(data=5)
+
+--- CASE i32_overflow
+CMD: ros2 topic pub -1 -w 1 /i std_msgs/msg/Int32 '{data: 3000000000}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Failed to populate field: The 'data' field must be an integer in [-2147483648, 2147483647]
+EXIT=1 SECONDS=2.18
+=== 4. Nested messages
+
+--- CASE tw_flat
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist '{x: 1.0}'
+Failed to populate field: 'Twist' object has no attribute 'x'
+EXIT=1 SECONDS=0.98
+
+--- CASE tw_dotted
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist '{linear.x: 1.0}'
+Failed to populate field: 'Twist' object has no attribute 'linear.x'
+EXIT=1 SECONDS=0.99
+
+--- CASE tw_scalar_for_msg
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist '{linear: 1.0}'
+Failed to populate field: Value '1.0' is expected to be a dictionary but is a float
+EXIT=1 SECONDS=0.99
+
+--- CASE tw_list_for_msg
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist '{linear: [1.0, 0.0, 0.0]}'
+Failed to populate field: Value '[1.0, 0.0, 0.0]' is expected to be a dictionary but is a list
+EXIT=1 SECONDS=1.27
+
+--- CASE ps_skip_pose
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped '{position: {x: 1.0}}'
+Failed to populate field: 'PoseStamped' object has no attribute 'position'
+EXIT=1 SECONDS=1.0
+
+--- CASE ps_ok
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped '{header: {frame_id: map}, pose: {position: {x: 1.0, y: 2.0}, orientation: {w: 1.0}}}'
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=1.0, y=2.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+EXIT=0 SECONDS=1.1
+SINK: RECV /ps geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=1.0, y=2.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+--- CASE pose_question_form
+CMD: ros2 topic pub -1 -w 1 /pose geometry_msgs/msg/Pose '{position:{1,1,1},orientation:{1,1,1,1}}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+failed to get subscription count: publisher's context is invalid, at ./src/rcl/publisher.c:389
+EXIT=124 SECONDS=20.23
+
+--- CASE pose_set_form
+CMD: ros2 topic pub -1 -w 1 /pose geometry_msgs/msg/Pose '{position: {1,1,1}, orientation: {1,1,1,1}}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+failed to get subscription count: publisher's context is invalid, at ./src/rcl/publisher.c:389
+EXIT=124 SECONDS=20.23
+
+--- CASE ps_block_yaml
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped $'header:\n  frame_id: map\npose:\n  position:\n    x: 3.0'
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=3.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+EXIT=0 SECONDS=1.09
+SINK: RECV /ps geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=3.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+=== 5. Arrays
+
+--- CASE js_ok
+CMD: ros2 topic pub -1 -w 1 /js sensor_msgs/msg/JointState '{name: [j1, j2], position: [1.0, 2.0]}'
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), name=['j1', 'j2'], position=[1.0, 2.0], velocity=[], effort=[])
+
+EXIT=0 SECONDS=1.89
+SINK: RECV /js sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), name=['j1', 'j2'], position=[1.0, 2.0], velocity=[], effort=[])
+
+--- CASE js_int_list
+CMD: ros2 topic pub -1 -w 1 /js sensor_msgs/msg/JointState '{name: [j1, j2], position: [1, 2]}'
+publisher: beginning loop
+publishing #1: sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), name=['j1', 'j2'], position=[1.0, 2.0], velocity=[], effort=[])
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /js sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), name=['j1', 'j2'], position=[1.0, 2.0], velocity=[], effort=[])
+
+--- CASE js_quoted_list
+CMD: ros2 topic pub -1 -w 1 /js sensor_msgs/msg/JointState "{name: [j1, j2], position: '[1,2]'}"
+Failed to populate field: cannot use a str to initialize an array with typecode 'd'
+EXIT=1 SECONDS=0.99
+
+--- CASE js_nospace_list
+CMD: ros2 topic pub -1 -w 1 /js sensor_msgs/msg/JointState '{name: [j1,j2], position: [1.0,2.0]}'
+publisher: beginning loop
+publishing #1: sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), name=['j1', 'j2'], position=[1.0, 2.0], velocity=[], effort=[])
+
+EXIT=0 SECONDS=1.08
+SINK: RECV /js sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), name=['j1', 'j2'], position=[1.0, 2.0], velocity=[], effort=[])
+
+--- CASE js_scalar_for_list
+CMD: ros2 topic pub -1 -w 1 /js sensor_msgs/msg/JointState '{position: 1.0}'
+Failed to populate field: 'float' object is not iterable
+EXIT=1 SECONDS=0.99
+
+--- CASE f64_ok
+CMD: ros2 topic pub -1 -w 1 /f std_msgs/msg/Float64MultiArray '{data: [0.2, 0.4]}'
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: std_msgs.msg.Float64MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[0.2, 0.4])
+
+EXIT=0 SECONDS=1.64
+SINK: RECV /f std_msgs.msg.Float64MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[0.2, 0.4])
+
+--- CASE f64_tabcomplete
+CMD: ros2 topic pub -1 -w 1 /f std_msgs/msg/Float64MultiArray 'layout:  dim: []  data_offset: 0data: [0.2]'
+Traceback (most recent call last):
+  File "/opt/ros/humble/bin/ros2", line 33, in <module>
+    sys.exit(load_entry_point('ros2cli==0.18.20', 'console_scripts', 'ros2')())
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2cli/cli.py", line 91, in main
+    rc = extension.main(parser=parser, args=args)
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/command/topic.py", line 41, in main
+    return extension.main(args=args)
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/verb/pub.py", line 225, in main
+    return main(args)
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/verb/pub.py", line 243, in main
+    return publisher(
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2topic/verb/pub.py", line 274, in publisher
+    values_dictionary = yaml.safe_load(values)
+  File "/usr/lib/python3/dist-packages/yaml/__init__.py", line 162, in safe_load
+    return load(stream, SafeLoader)
+  File "/usr/lib/python3/dist-packages/yaml/__init__.py", line 114, in load
+    return loader.get_single_data()
+  File "/usr/lib/python3/dist-packages/yaml/constructor.py", line 49, in get_single_data
+    node = self.get_single_node()
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 36, in get_single_node
+    document = self.compose_document()
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 55, in compose_document
+    node = self.compose_node(None, None)
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 84, in compose_node
+    node = self.compose_mapping_node(anchor)
+  File "/usr/lib/python3/dist-packages/yaml/composer.py", line 127, in compose_mapping_node
+    while not self.check_event(MappingEndEvent):
+  File "/usr/lib/python3/dist-packages/yaml/parser.py", line 98, in check_event
+    self.current_event = self.state()
+  File "/usr/lib/python3/dist-packages/yaml/parser.py", line 428, in parse_block_mapping_key
+    if self.check_token(KeyToken):
+  File "/usr/lib/python3/dist-packages/yaml/scanner.py", line 116, in check_token
+    self.fetch_more_tokens()
+  File "/usr/lib/python3/dist-packages/yaml/scanner.py", line 223, in fetch_more_tokens
+    return self.fetch_value()
+  File "/usr/lib/python3/dist-packages/yaml/scanner.py", line 577, in fetch_value
+    raise ScannerError(None, None,
+yaml.scanner.ScannerError: mapping values are not allowed here
+  in "<unicode string>", line 1, column 13:
+    layout:  dim: []  data_offset: 0data: [0.2]
+                ^
+EXIT=1 SECONDS=1.11
+
+--- CASE f64_block
+CMD: ros2 topic pub -1 -w 1 /f std_msgs/msg/Float64MultiArray $'layout:\n  dim: []\n  data_offset: 0\ndata: [0.2]'
+publisher: beginning loop
+publishing #1: std_msgs.msg.Float64MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[0.2])
+
+EXIT=0 SECONDS=1.42
+SINK: RECV /f std_msgs.msg.Float64MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[0.2])
+=== 6. byte[] / uint8[]
+
+--- CASE byte_ints
+CMD: ros2 topic pub -1 -w 1 /b std_msgs/msg/ByteMultiArray '{data: [3, 4]}'
+Failed to populate field: The 'data' field must be a set or sequence and each value of type 'bytes'
+EXIT=1 SECONDS=0.99
+
+--- CASE byte_hex
+CMD: ros2 topic pub -1 -w 1 /b std_msgs/msg/ByteMultiArray '{data: [0x03, 0x04]}'
+Failed to populate field: The 'data' field must be a set or sequence and each value of type 'bytes'
+EXIT=1 SECONDS=1.33
+
+--- CASE byte_binary_items
+CMD: ros2 topic pub -1 -w 1 /b std_msgs/msg/ByteMultiArray '{data: [!!binary Aw==, !!binary BA==]}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.ByteMultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[b'\x03', b'\x04'])
+
+EXIT=0 SECONDS=1.43
+SINK: RECV /b std_msgs.msg.ByteMultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[b'\x03', b'\x04'])
+
+--- CASE byte_binary_whole
+CMD: ros2 topic pub -1 -w 1 /b std_msgs/msg/ByteMultiArray '{data: !!binary AwQ=}'
+Failed to populate field: The 'data' field must be a set or sequence and each value of type 'bytes'
+EXIT=1 SECONDS=0.99
+
+--- CASE u8_ints
+CMD: ros2 topic pub -1 -w 1 /u8 std_msgs/msg/UInt8MultiArray '{data: [3, 4, 255]}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: std_msgs.msg.UInt8MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[3, 4, 255])
+
+EXIT=0 SECONDS=2.19
+SINK: RECV /u8 std_msgs.msg.UInt8MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[3, 4, 255])
+
+--- CASE u8_hex
+CMD: ros2 topic pub -1 -w 1 /u8 std_msgs/msg/UInt8MultiArray '{data: [0x03, 0xff]}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: std_msgs.msg.UInt8MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[3, 255])
+
+EXIT=0 SECONDS=2.28
+SINK: RECV /u8 std_msgs.msg.UInt8MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[3, 255])
+
+--- CASE u8_256
+CMD: ros2 topic pub -1 -w 1 /u8 std_msgs/msg/UInt8MultiArray '{data: [256]}'
+Failed to populate field: unsigned byte integer is greater than maximum
+EXIT=1 SECONDS=0.99
+
+--- CASE u8_neg
+CMD: ros2 topic pub -1 -w 1 /u8 std_msgs/msg/UInt8MultiArray '{data: [-1]}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Failed to populate field: unsigned byte integer is less than minimum
+EXIT=1 SECONDS=3.48
+
+--- CASE u8_binary
+CMD: ros2 topic pub -1 -w 1 /u8 std_msgs/msg/UInt8MultiArray '{data: !!binary AwQ=}'
+publisher: beginning loop
+publishing #1: std_msgs.msg.UInt8MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[3, 4])
+
+EXIT=0 SECONDS=1.07
+SINK: RECV /u8 std_msgs.msg.UInt8MultiArray(layout=std_msgs.msg.MultiArrayLayout(dim=[], data_offset=0), data=[3, 4])
+=== 7. Header stamp
+
+--- CASE ps_stamp_now
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped '{header: {stamp: now, frame_id: map}}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1793418151, nanosec=343800404), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+EXIT=0 SECONDS=3.6
+SINK: RECV /ps geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1793418151, nanosec=343800404), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+--- CASE ps_header_auto
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped '{header: auto}'
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1793418153, nanosec=495707770), frame_id=''), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+EXIT=0 SECONDS=1.43
+SINK: RECV /ps geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1793418153, nanosec=495707770), frame_id=''), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+--- CASE ps_stamp_explicit
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped '{header: {stamp: {sec: 5, nanosec: 0}, frame_id: map}}'
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=5, nanosec=0), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+EXIT=0 SECONDS=1.09
+SINK: RECV /ps geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=5, nanosec=0), frame_id='map'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+--- CASE ps_stamp_float
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped '{header: {stamp: 5.5}}'
+Failed to populate field: Value '5.5' is expected to be a dictionary but is a float
+EXIT=1 SECONDS=0.99
+
+--- CASE ps_no_header
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped '{pose: {position: {x: 1.0}}}'
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=1.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+EXIT=0 SECONDS=1.1
+SINK: RECV /ps geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=1.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+--- CASE js_header_auto
+CMD: ros2 topic pub -1 -w 1 /js sensor_msgs/msg/JointState '{header: auto, name: [j1], position: [0.5]}'
+publisher: beginning loop
+publishing #1: sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1793418160, nanosec=682777302), frame_id=''), name=['j1'], position=[0.5], velocity=[], effort=[])
+
+EXIT=0 SECONDS=1.1
+SINK: RECV /js sensor_msgs.msg.JointState(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1793418160, nanosec=682777302), frame_id=''), name=['j1'], position=[0.5], velocity=[], effort=[])
+=== 8. Service call (std_srvs/SetBool)
+
+--- CASE srv_ok
+CMD: ros2 service call /sb std_srvs/srv/SetBool '{data: true}'
+requester: making request: std_srvs.srv.SetBool_Request(data=True)
+
+response:
+std_srvs.srv.SetBool_Response(success=True, message='ok')
+
+EXIT=0 SECONDS=0.47
+SERVER: SRV got data=True
+
+--- CASE srv_True
+CMD: ros2 service call /sb std_srvs/srv/SetBool '{data: True}'
+requester: making request: std_srvs.srv.SetBool_Request(data=True)
+
+response:
+std_srvs.srv.SetBool_Response(success=True, message='ok')
+
+EXIT=0 SECONDS=0.48
+SERVER: SRV got data=True
+
+--- CASE srv_yes
+CMD: ros2 service call /sb std_srvs/srv/SetBool '{data: yes}'
+waiting for service to become available...
+requester: making request: std_srvs.srv.SetBool_Request(data=True)
+
+response:
+std_srvs.srv.SetBool_Response(success=True, message='ok')
+
+EXIT=0 SECONDS=2.25
+SERVER: SRV got data=True
+
+--- CASE srv_int
+CMD: ros2 service call /sb std_srvs/srv/SetBool '{data: 1}'
+requester: making request: std_srvs.srv.SetBool_Request(data=True)
+
+response:
+std_srvs.srv.SetBool_Response(success=True, message='ok')
+
+EXIT=0 SECONDS=0.47
+SERVER: SRV got data=True
+
+--- CASE srv_string
+CMD: ros2 service call /sb std_srvs/srv/SetBool "{data: 'true'}"
+waiting for service to become available...
+requester: making request: std_srvs.srv.SetBool_Request(data=True)
+
+response:
+std_srvs.srv.SetBool_Response(success=True, message='ok')
+
+EXIT=0 SECONDS=1.23
+SERVER: SRV got data=True
+
+--- CASE srv_nospace
+CMD: ros2 service call /sb std_srvs/srv/SetBool '{data:true}'
+Failed to populate field: 'SetBool_Request' object has no attribute 'data:true'
+EXIT=1 SECONDS=0.48
+
+--- CASE srv_wrongfield
+CMD: ros2 service call /sb std_srvs/srv/SetBool '{dta: true}'
+Failed to populate field: 'SetBool_Request' object has no attribute 'dta'
+EXIT=1 SECONDS=0.46
+
+--- CASE srv_nobrace
+CMD: ros2 service call /sb std_srvs/srv/SetBool 'data: false'
+requester: making request: std_srvs.srv.SetBool_Request(data=False)
+
+response:
+std_srvs.srv.SetBool_Response(success=False, message='ok')
+
+EXIT=0 SECONDS=0.48
+SERVER: SRV got data=False
+
+--- CASE srv_noargs
+CMD: ros2 service call /sb std_srvs/srv/SetBool
+requester: making request: std_srvs.srv.SetBool_Request(data=False)
+
+response:
+std_srvs.srv.SetBool_Response(success=False, message='ok')
+
+EXIT=0 SECONDS=0.48
+SERVER: SRV got data=False
+
+--- CASE srv_bare_scalar
+CMD: ros2 service call /sb std_srvs/srv/SetBool 'true'
+Failed to populate field: Value 'True' is expected to be a dictionary but is a bool
+EXIT=1 SECONDS=0.46
+=== 9. interface proto
+--- PROTO std_msgs/msg/String
+"data: ''
+"
+EXIT=0
+--- PROTO geometry_msgs/msg/Twist
+"linear:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+angular:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+"
+EXIT=0
+--- PROTO geometry_msgs/msg/PoseStamped
+"header:
+  stamp:
+    sec: 0
+    nanosec: 0
+  frame_id: ''
+pose:
+  position:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  orientation:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+"
+EXIT=0
+--- PROTO sensor_msgs/msg/JointState
+"header:
+  stamp:
+    sec: 0
+    nanosec: 0
+  frame_id: ''
+name: []
+position: []
+velocity: []
+effort: []
+"
+EXIT=0
+--- PROTO std_srvs/srv/SetBool
+"data: false
+"
+EXIT=0
+--- PROTO std_msgs/msg/ByteMultiArray
+"layout:
+  dim: []
+  data_offset: 0
+data: []
+"
+EXIT=0
+--- PROTO --no-quotes
+linear:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+angular:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+
+EXIT=0
+
+--- CASE proto_as_arg
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist "$(ros2 interface proto geometry_msgs/msg/Twist)"
+The passed value needs to be a dictionary in YAML format
+EXIT=1 SECONDS=1.26
+
+--- CASE proto_noquotes_arg
+CMD: ros2 topic pub -1 -w 1 /tw geometry_msgs/msg/Twist "$(ros2 interface proto --no-quotes geometry_msgs/msg/Twist)"
+Waiting for at least 1 matching subscription(s)...
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0))
+
+EXIT=0 SECONDS=1.56
+SINK: RECV /tw geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0), angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=0.0))
+
+--- CASE proto_ps_as_arg
+CMD: ros2 topic pub -1 -w 1 /ps geometry_msgs/msg/PoseStamped "$(ros2 interface proto --no-quotes geometry_msgs/msg/PoseStamped)"
+publisher: beginning loop
+publishing #1: geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+EXIT=0 SECONDS=1.39
+SINK: RECV /ps geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))
+
+--- CASE proto_srv_as_arg
+CMD: ros2 service call /sb std_srvs/srv/SetBool "$(ros2 interface proto --no-quotes std_srvs/srv/SetBool)"
+requester: making request: std_srvs.srv.SetBool_Request(data=False)
+
+response:
+std_srvs.srv.SetBool_Response(success=False, message='ok')
+
+EXIT=0 SECONDS=0.77
+SERVER: SRV got data=False
+=== 10. Delivery counts (subscriber 'sink' already running)
+
+--- CASE nosub_once
+CMD: ros2 topic pub -1 /nosub std_msgs/msg/String '{data: x}'
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+Waiting for at least 1 matching subscription(s)...
+failed to get subscription count: publisher's context is invalid, at ./src/rcl/publisher.c:389
+EXIT=124 SECONDS=20.23
+COUNT once_without_w (10 runs): 10
+COUNT once_with_w1 (10 runs): 10
+
+--- CASE rate_times
+CMD: ros2 topic pub -r 10 -t 20 /cnt3 std_msgs/msg/String '{data: rt}' > /dev/null
+EXIT=0 SECONDS=2.98
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_1')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_2')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_3')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_4')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_5')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_6')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_7')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_8')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_9')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_10')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_1')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_2')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_3')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_4')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_5')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_6')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_7')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_8')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_9')
+SINK: RECV /cnt2 std_msgs.msg.String(data='once_w1_10')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+SINK: RECV /cnt3 std_msgs.msg.String(data='rt')
+COUNT rate10_times20: 20
+
+--- CASE rate_times_w
+CMD: ros2 topic pub -r 10 -t 20 -w 1 /cnt5 std_msgs/msg/String '{data: rtw}' > /dev/null
+EXIT=0 SECONDS=4.78
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+SINK: RECV /cnt5 std_msgs.msg.String(data='rtw')
+COUNT rate10_times20_w1: 20
+COUNT rate10_for_3s: received=22 printed_publishing=22 EXIT=124 SECONDS=3.16
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_1')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_2')
+SINK: RECV /cnt1 std_msgs.msg.String(data='once_nowait_3')
+1 2 3 4 5 6 7 8 9 10  <- once_without_w indices received
+=== done
