@@ -1,0 +1,215 @@
+<pre><code>$ colcon test-result --test-result-base build/apache_pkg --all --verbose
+build/apache_pkg/pytest.xml: 3 tests, 0 errors, 2 failures, 0 skipped
+- apache_pkg.test.test_copyright test_copyright
+  &lt;&lt;&lt; failure message
+    AssertionError: Found errors
+    assert 1 == 0
+  &gt;&gt;&gt;
+- apache_pkg.test.test_flake8 test_flake8
+  &lt;&lt;&lt; failure message
+    AssertionError: Found 6 code style errors / warnings:
+      ./apache_pkg/talker.py:1:1: F401 'os' imported but unused
+      ./apache_pkg/talker.py:2:1: I201 Missing newline between import groups. 'import rclpy' is identified as Third Party and 'import os' is identified as Stdlib.
+      ./apache_pkg/talker.py:5:1: E302 expected 2 blank lines, found 1
+      ./apache_pkg/talker.py:7:17: Q000 Double quotes found but single quotes preferred
+      ./apache_pkg/talker.py:8:28: Q000 Double quotes found but single quotes preferred
+      ./apache_pkg/talker.py:8:100: E501 line too long (107 &gt; 99 characters)
+    assert 1 == 0
+  &gt;&gt;&gt;</code></pre>
+
+<p>Short answer: a package fresh from <code>ros2 pkg create --build-type ament_python</code> passed <code>colcon test</code> on Humble, Jazzy and Lyrical, with or without <code>--license</code>. The failures start when you add your own Python file. Three linters run as pytest tests. <code>test_flake8</code> fails on style (quotes, blank lines, line length, unused imports). <code>test_copyright</code> fails once you remove its <code>skip</code> decorator and a file has no license header. <code>test_pep257</code> fails on badly formatted docstrings, but not on missing ones. The fix that made every test pass was to put a license header at the top of each <code>.py</code> file and fix the style errors flake8 lists. Read the errors with <code>colcon test-result --all --verbose</code>, because <code>colcon test</code> itself returned 0 even when tests failed.</p>
+
+<pre><code class="language-python"># Copyright 2026 Example
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# ... (the rest of the Apache-2.0 header, as in test/test_flake8.py)
+
+"""Minimal talker node."""
+
+import rclpy
+from rclpy.node import Node
+
+
+def main():
+    """Log one message and exit."""
+    rclpy.init()
+    node = Node('talker')
+    node.get_logger().info(
+        'hello from talker, this line is longer than ninety-nine characters on purpose')
+    rclpy.shutdown()</code></pre>
+
+<p>If <code>test_flake8</code> fails with <code>ValueError: 'string' is not callable</code> or <code>FailedToLoadPlugin</code> rather than a list of style errors, the problem is a flake8 installed with pip. That case is covered further down.</p>
+
+<h2>Find your error</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my runs</th></tr></thead>
+<tbody>
+<tr><td><code>test_copyright</code>: <code>AssertionError: Found errors</code>, and in the pytest log <code>talker.py: could not find copyright notice</code></td><td>A <code>.py</code> file without a copyright and license header, after the generated <code>skip</code> decorator was removed</td></tr>
+<tr><td><code>test_flake8</code>: <code>Found N code style errors / warnings</code> followed by <code>Q000</code>, <code>E302</code>, <code>E501</code>, <code>F401</code>, <code>I201</code></td><td>Style errors in your files. The list is the full report</td></tr>
+<tr><td><code>test_pep257</code>: <code>Found code style errors / warnings</code> with no detail in <code>test-result</code></td><td>Docstring format: <code>D400</code>, <code>D415</code>, <code>D300</code>, <code>D200</code>. The codes are only in the pytest log</td></tr>
+<tr><td><code>ValueError: 'string' is not callable</code></td><td>Humble: flake8 7.4.1 from pip together with the apt <code>python3-flake8-import-order</code> plugin</td></tr>
+<tr><td><code>FailedToLoadPlugin ... module 'pycodestyle' has no attribute 'missing_whitespace_after_import_keyword'</code></td><td>Humble: pip flake8 uninstalled, but pip's newer pycodestyle left behind</td></tr>
+<tr><td><code>ModuleNotFoundError: No module named 'flake8'</code>, <code>colcon test</code> exit code 2</td><td>Jazzy: <code>pip install --break-system-packages</code> removed apt's flake8, then <code>pip uninstall</code> removed pip's</td></tr>
+<tr><td><code>Warning: SelectableGroups dict interface is deprecated. Use select.</code></td><td>Humble only, printed on every run. A warning, not a failure</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-31 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images. In each one I created three packages: <code>nolic_pkg</code> with no <code>--license</code>, <code>apache_pkg</code> with <code>--license Apache-2.0</code>, and <code>gen_pkg</code> with <code>--license Apache-2.0 --node-name my_node</code>. I installed test dependencies with <code>rosdep install --from-paths src --ignore-src -y</code>. Then I ran <code>colcon build</code>, <code>colcon test --packages-select</code> and <code>colcon test-result --all --verbose</code> after each change and recorded both exit codes. The changes were a node file with style problems, removing the copyright <code>skip</code>, each fix option, a pip-installed flake8, and the flake8 plugins from the ROS 2 source-build setup.</p>
+
+<p>What <code>ros2 pkg create</code> gave me:</p>
+
+<ul>
+<li>Without <code>--license</code>, <code>package.xml</code> got <code>&lt;license&gt;TODO: License declaration&lt;/license&gt;</code>, no <code>LICENSE</code> file was written, and the tool warned <code>Unknown license 'TODO: License declaration'.  This has been set in the package.xml, but no LICENSE file has been created.</code> With <code>--license Apache-2.0</code> a <code>LICENSE</code> file was created.</li>
+<li>The <code>test/</code> folder was identical either way. <code>diff -r</code> found no difference on any distro. Humble and Jazzy generate <code>test_copyright.py</code>, <code>test_flake8.py</code> and <code>test_pep257.py</code>. Lyrical adds <code>test_mypy.py</code> and <code>test_xmllint.py</code>.</li>
+<li><code>test_copyright.py</code> comes with <code>@pytest.mark.skip(reason='No copyright header has been placed in the generated source file.')</code> and a comment: "Remove the `skip` decorator once the source file(s) have a copyright header".</li>
+</ul>
+
+<p>All three fresh packages passed on all three distros: <code>2 passed, 1 skipped</code> on Humble and Jazzy, <code>4 passed, 1 skipped</code> on Lyrical. The skipped test is <code>test_copyright</code>. So <code>--license</code> by itself doesn't decide whether tests pass. In my runs the license header in each file decided whether <code>test_copyright</code> passed, and only once the skip was gone.</p>
+
+<h2>test_copyright: could not find copyright notice</h2>
+
+<p>After I deleted the <code>skip</code> line, fresh <code>nolic_pkg</code> and <code>apache_pkg</code> still passed. They contain only an empty <code>__init__.py</code> and <code>setup.py</code>. <code>gen_pkg</code> failed right away, because the file <code>--node-name</code> generates has no header:</p>
+
+<pre><code>gen_pkg/my_node.py: could not find copyright notice
+1 errors, checked 5 files</code></pre>
+
+<p>After I added a node file without a header, <code>test_copyright</code> failed the same way in both <code>nolic_pkg</code> and <code>apache_pkg</code>. Once I added the Apache header to the file, it passed in both. The <code>TODO</code> license in <code>nolic_pkg</code>'s <code>package.xml</code> and its missing <code>LICENSE</code> file changed nothing in my runs.</p>
+
+<p>The useful line is easy to miss. <code>colcon test-result --verbose</code> only shows <code>AssertionError: Found errors</code>. The file name appears in the captured stderr in <code>log/latest_test/&lt;pkg&gt;/stdout_stderr.log</code>, or when you run <code>ament_copyright</code> in the package folder:</p>
+
+<pre><code>$ ament_copyright apache_pkg
+apache_pkg/talker.py: could not find copyright notice
+1 errors, checked 2 files</code></pre>
+
+<p>One <a href="https://robotics.stackexchange.com/questions/94630">question</a> asks what header a proprietary license needs. I only tested the Apache-2.0 header text copied from the generated test files.</p>
+
+<h2>test_flake8: which rules fired</h2>
+
+<p>The node file I added had an unused <code>import os</code>, one blank line before <code>def main()</code>, double quotes, and a 107-character line. On Jazzy and Lyrical, after <code>rosdep install</code>, <code>test_flake8</code> reported six errors: <code>F401</code>, <code>I201</code>, <code>E302</code>, two <code>Q000</code> and <code>E501</code> (the block at the top of this page). On Humble the same file gave three: <code>F401</code>, <code>E302</code> and <code>E501</code>. On Humble <code>rosdep</code> didn't install the quote and import-order plugins. After I installed the eight <code>python3-flake8-*</code> packages listed in the Humble <a href="https://docs.ros.org/en/humble/Installation/Alternatives/Ubuntu-Development-Setup.html">source-build setup</a>, Humble reported the same six as Jazzy.</p>
+
+<p>Things that didn't fire:</p>
+
+<ul>
+<li>Missing docstrings. The file had no module or function docstring. No <code>D100</code> or <code>D103</code> appeared from flake8 or pep257 on any distro, even with <code>python3-flake8-docstrings</code> installed.</li>
+<li>The line limit is 99, not 79. The message said <code>E501 line too long (107 &gt; 99 characters)</code>.</li>
+</ul>
+
+<p>The full report is in <code>test-result --verbose</code>, so this is the easiest of the three to read. Running <code>ament_flake8</code> in the package folder printed the same codes.</p>
+
+<h2>test_pep257: docstring format, not missing docstrings</h2>
+
+<p><code>ament_pep257</code> printed <code>No problems found</code> for my node file with no docstrings at all. It fails on docstrings that exist but are formatted wrong. With a module docstring <code>"""my node module"""</code>, a function docstring in <code>'''</code> quotes and a one-line docstring spread over three lines, I got this on all three distros:</p>
+
+<pre><code>gen_pkg/my_node.py:15 at module level: D400: First line should end with a period (not 'e')
+gen_pkg/my_node.py:15 at module level: D415: First line should end with a period, question mark, or exclamation point (not 'e')
+gen_pkg/my_node.py:19 in public function `main`: D300: Use """triple double quotes""" (found '''-quotes)
+gen_pkg/my_node.py:24 in public function `helper`: D200: One-line docstring should fit on one line with quotes (found 3)
+4 errors</code></pre>
+
+<p>In <code>colcon test-result --verbose</code> this showed only as <code>AssertionError: Found code style errors / warnings</code>. The codes were in the pytest log. The same file also failed <code>test_flake8</code> on Jazzy (<code>D400</code>, <code>D300</code>, <code>D200</code>, <code>Q002</code>) and Lyrical (<code>Q002</code> only), and passed it on Humble.</p>
+
+<h2>A pip-installed flake8</h2>
+
+<p><a href="https://github.com/ament/ament_lint/issues/545">ament_lint#545</a> reports that the latest flake8 breaks <code>ament_flake8</code> on Humble with <code>ValueError: 'string' is not callable</code>. I ran <code>pip install -U flake8</code> as root inside each container and got flake8 7.4.1 on Humble and 7.5.0 on Jazzy and Lyrical.</p>
+
+<p>Humble. With only the rosdep packages, flake8 7.4.1 passed. After I added the apt flake8 plugins, it failed exactly as in the issue:</p>
+
+<pre><code>/usr/lib/python3/dist-packages/flake8_import_order/flake8_linter.py:98: in register_opt
+    parser.add_option(*args, **kwargs)
+/usr/local/lib/python3.10/dist-packages/flake8/options/manager.py:281: in add_option
+    self._current_group.add_argument(*option_args, **option_kwargs)
+/usr/lib/python3.10/argparse.py:1447: in add_argument
+    raise ValueError('%r is not callable' % (type_func,))
+E   ValueError: 'string' is not callable</code></pre>
+
+<p>The traceback runs through the apt <code>flake8_import_order</code> plugin (0.18.1) and the pip flake8. On Humble, pip couldn't remove apt's flake8 4.0.1 (<code>Not uninstalling flake8 at /usr/lib/python3/dist-packages, outside environment /usr</code>), so it installed flake8, pycodestyle 2.15.0, pyflakes 4.0.3 and mccabe 0.7.0 into <code>/usr/local</code>. <code>pip uninstall flake8</code> alone made things worse. apt's flake8 4.0.1 came back but loaded pip's pycodestyle:</p>
+
+<pre><code>E   flake8.exceptions.FailedToLoadPlugin: Flake8 failed to load plugin "pycodestyle.missing_whitespace_after_import_keyword" due to module 'pycodestyle' has no attribute 'missing_whitespace_after_import_keyword'.</code></pre>
+
+<p>The test passed again after <code>pip uninstall -y flake8 pycodestyle pyflakes mccabe</code>.</p>
+
+<p>Jazzy. Plain <code>pip install</code> was refused with the PEP 668 message. With <code>--break-system-packages</code>, pip uninstalled apt's flake8 7.0.0 and pycodestyle 2.11.1 and installed 7.5.0. Tests still passed, with and without the plugins. The damage came at recovery. After <code>pip uninstall</code>, no flake8 was left at all:</p>
+
+<pre><code>E   ModuleNotFoundError: No module named 'flake8'
+...
+Failed   &lt;&lt;&lt; apache_pkg [0.79s, exited with code 2]</code></pre>
+
+<p><code>colcon test-result</code> then reported <code>1 test, 1 error</code> with <code>collection failure</code>. <code>apt-get install --reinstall python3-flake8 python3-pycodestyle python3-pyflakes</code> brought back 7.0.0, 2.11.1 and 3.2.0, and all tests passed.</p>
+
+<p>Lyrical. Even with <code>--break-system-packages</code> pip stopped with <code>Cannot uninstall pyflakes 3.4.0</code> and <code>The package was installed by debian.</code> With <code>--ignore-installed</code> as well, it installed 7.5.0 into <code>/usr/local</code>. Tests passed with and without plugins. <code>pip uninstall</code> returned to apt's 7.3.0 without errors.</p>
+
+<p>In the issue thread a maintainer wrote "the general expectation is that the version available from the Ubuntu system packages is used". My runs fit that. The reliable state was apt's flake8, pycodestyle and pyflakes with nothing from pip in <code>/usr/local</code>. Check with <code>python3 -c 'import flake8, pycodestyle; print(flake8.__file__, pycodestyle.__file__)'</code>. Any <code>/usr/local</code> path means pip is in play.</p>
+
+<p>The older <a href="https://robotics.stackexchange.com/questions/95987">AttributeError question</a> on Eloquent was the same kind of mismatch with flake8 3.8, which I didn't test.</p>
+
+<h2>Fix options compared</h2>
+
+<p>Each row was run on <code>apache_pkg</code> with the bad node file and the copyright skip removed. Before the fix, two tests failed (<code>test_copyright</code> and <code>test_flake8</code>). Results were the same on all three distros, except for the extra Lyrical tests noted in the table.</p>
+
+<table>
+<thead><tr><th>Option</th><th>Result</th><th><code>test-result</code> exit</th></tr></thead>
+<tbody>
+<tr><td>Add the license header only</td><td><code>test_copyright</code> passed, <code>test_flake8</code> still failed</td><td>1</td></tr>
+<tr><td>Header and flake8 errors fixed</td><td>all passed (3 on Humble and Jazzy, 5 on Lyrical)</td><td>0</td></tr>
+<tr><td><code>--license Apache-2.0</code> at create time</td><td>no difference from no <code>--license</code>; same test files, same results</td><td>same as without</td></tr>
+<tr><td><code>[flake8]</code> with <code>max-line-length = 200</code> and <code>extend-ignore = E501,F401,E302</code> in <code>setup.cfg</code></td><td>ignored; the same flake8 errors</td><td>1</td></tr>
+<tr><td><code>main_with_errors(argv=['--linelength', '200'])</code> in <code>test_flake8.py</code></td><td><code>E501</code> gone, the other errors stayed</td><td>1</td></tr>
+<tr><td><code>@pytest.mark.skip</code> on all three tests</td><td><code>3 skipped</code> (Lyrical: <code>2 passed, 3 skipped</code>)</td><td>0</td></tr>
+<tr><td><code>colcon test --pytest-args -k "not flake8 and not pep257 and not copyright"</code></td><td><code>3 deselected</code>, and <code>test-result</code> counted <code>0 tests</code> (Lyrical: mypy and xmllint still ran)</td><td>0</td></tr>
+<tr><td><code>colcon test --ctest-args -E flake8</code></td><td>no effect on an <code>ament_python</code> package, the same two failures</td><td>1</td></tr>
+</tbody>
+</table>
+
+<p>The <code>setup.cfg</code> row answers a <a href="https://robotics.stackexchange.com/questions/103510">common question</a>. <code>ament_flake8</code> didn't read a <code>[flake8]</code> section there in my runs. The <code>--linelength</code> argument in the test file did change the line limit. Skipping or deselecting makes the run green without checking anything, so the gap shows up later in CI. Fixing the file is the only option that leaves the checks on.</p>
+
+<h2>Exit codes and where the results live</h2>
+
+<p><code>colcon test</code> returned 0 on every run where tests only failed. The summary said <code>1 package had test failures: apache_pkg</code>, and the package line ended with <code>[ with test failures ]</code>. With <code>--return-code-on-test-failure</code> it returned 1 for the same failures. It returned 2 only when pytest couldn't collect a test file (the missing flake8 module on Jazzy). <code>colcon test-result</code> returned 1 whenever there was a failure or an error and 0 otherwise. In CI, use one of those two signals, not a plain <code>colcon test</code>.</p>
+
+<p>For an <code>ament_python</code> package, the JUnit file was <code>build/&lt;pkg&gt;/pytest.xml</code>, and that is what <code>colcon test-result</code> reads. I found no <code>test_results</code> folder for these packages. That folder belongs to <code>ament_cmake</code> packages, which I didn't test here. The full pytest output, including the copyright and pep257 details, was in <code>log/latest_test/&lt;pkg&gt;/stdout_stderr.log</code>, next to <code>stdout.log</code>, <code>stderr.log</code>, <code>command.log</code> and <code>streams.log</code>. For quick checks, I ran the linters in the package folder: <code>ament_flake8</code>, <code>ament_pep257</code> and <code>ament_copyright</code>. Each returned 1 on errors and printed the file names. If <code>colcon build</code> for an <code>ament_python</code> package also shows git warnings, see <a href="https://huntlab.app/en/colcon-build-listing-git-files-failed-pretending-there-arent-any/">listing git files failed in ament_python packages</a>.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (Ubuntu 22.04, Python 3.10): apt flake8 4.0.1, pycodestyle 2.8.0, pydocstyle 6.1.1, ament_lint 0.12.15. <code>rosdep</code> installed no quote or import-order plugins, so <code>Q000</code> and <code>I201</code> only appeared after a manual install. Every run printed <code>SelectableGroups dict interface is deprecated</code>, which is the warning in <a href="https://robotics.stackexchange.com/questions/107321">this tutorial question</a>. It didn't fail any test. The license warning has the typo <code>identitifers</code>.</li>
+<li>Jazzy (24.04, Python 3.12): flake8 7.0.0, pycodestyle 2.11.1, ament_lint 0.17.5, with <code>python3-flake8-quotes</code> and <code>python3-flake8-import-order</code> installed by <code>rosdep</code>.</li>
+<li>Lyrical (26.04, Python 3.14): flake8 7.3.0, pycodestyle 2.14.0, ament_lint 0.20.6, five generated tests including <code>test_mypy</code> and <code>test_xmllint</code>. pytest took 6 to 9 seconds per package there, against under half a second on Humble and Jazzy.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p><code>ament_cmake</code> packages and their <code>ament_lint_auto</code> tests, licenses other than Apache-2.0 (including proprietary headers), <code>CONTRIBUTING.md</code> checks, a <code>--config</code> file for <code>ament_flake8</code>, flake8 installed in a venv or with <code>pip --user</code>, <code>ros-dev-tools</code> on Jazzy and Lyrical, Iron, Rolling and Foxy.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does colcon test say 1 package had test failures but exit with 0?</h3>
+<p>That was the default in every run. <code>colcon test</code> returned 0 when tests failed. Add <code>--return-code-on-test-failure</code> to get 1, or run <code>colcon test-result --all --verbose</code>, which returned 1 and printed each failure.</p>
+
+<h3>Does ros2 pkg create --license fix test_copyright?</h3>
+<p>No. With or without <code>--license Apache-2.0</code> the generated tests were identical and <code>test_copyright</code> was skipped. Once the skip was removed, it failed for any <code>.py</code> file without a header and passed after adding one, in both packages.</p>
+
+<h3>Why does setup.cfg [flake8] max-line-length not work for test_flake8?</h3>
+<p>In my runs <code>ament_flake8</code> ignored the <code>[flake8]</code> section in <code>setup.cfg</code>. Changing the call in <code>test/test_flake8.py</code> to <code>main_with_errors(argv=['--linelength', '200'])</code> did remove the <code>E501</code> errors.</p>
+
+<h3>How do I fix ValueError: 'string' is not callable in test_flake8?</h3>
+<p>It came from a pip flake8 (7.4.1) with the apt <code>flake8-import-order</code> plugin on Humble. <code>pip uninstall -y flake8 pycodestyle pyflakes mccabe</code> fixed it. Removing only flake8 led to <code>FailedToLoadPlugin</code>. If apt's flake8 is gone too, reinstall <code>python3-flake8 python3-pycodestyle python3-pyflakes</code> with apt.</p>
+
+<h3>Why does test_pep257 pass on a file with no docstrings?</h3>
+<p><code>ament_pep257</code> reported no missing-docstring errors on any distro. It failed on badly formatted docstrings: <code>D400</code> and <code>D415</code> for no final period, <code>D300</code> for <code>'''</code> quotes, and <code>D200</code> for a one-line docstring split across lines.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does colcon test say 1 package had test failures but exit with 0?", "acceptedAnswer": {"@type": "Answer", "text": "That was the default in every run. colcon test returned 0 when tests failed. Add --return-code-on-test-failure to get 1, or run colcon test-result --all --verbose, which returned 1 and printed each failure."}},
+{"@type": "Question", "name": "Does ros2 pkg create --license fix test_copyright?", "acceptedAnswer": {"@type": "Answer", "text": "No. With or without --license Apache-2.0 the generated tests were identical and test_copyright was skipped. Once the skip was removed, it failed for any .py file without a header and passed after adding one, in both packages."}},
+{"@type": "Question", "name": "Why does setup.cfg [flake8] max-line-length not work for test_flake8?", "acceptedAnswer": {"@type": "Answer", "text": "In my runs ament_flake8 ignored the [flake8] section in setup.cfg. Changing the call in test/test_flake8.py to main_with_errors(argv=['--linelength', '200']) did remove the E501 errors."}},
+{"@type": "Question", "name": "How do I fix ValueError: 'string' is not callable in test_flake8?", "acceptedAnswer": {"@type": "Answer", "text": "It came from a pip flake8 (7.4.1) with the apt flake8-import-order plugin on Humble. pip uninstall -y flake8 pycodestyle pyflakes mccabe fixed it. Removing only flake8 led to FailedToLoadPlugin. If apt's flake8 is gone too, reinstall python3-flake8 python3-pycodestyle python3-pyflakes with apt."}},
+{"@type": "Question", "name": "Why does test_pep257 pass on a file with no docstrings?", "acceptedAnswer": {"@type": "Answer", "text": "ament_pep257 reported no missing-docstring errors on any distro. It failed on badly formatted docstrings: D400 and D415 for no final period, D300 for triple single quotes, and D200 for a one-line docstring split across lines."}}
+]}
+</script>
+
+<p>Measured on 2026-10-31 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, ament_lint 0.12.15, flake8 4.0.1), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, ament_lint 0.17.5, flake8 7.0.0) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, ament_lint 0.20.6, flake8 7.3.0), colcon-core 0.21.3. The pip flake8 was 7.4.1 on Humble and 7.5.0 on Jazzy and Lyrical. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-26-ros2-colcon-test-flake8-pep257-copyright-fail/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103510">How to configure Flake8 with colcon test</a>, <a href="https://robotics.stackexchange.com/questions/94630">proper way to use a proprietary software license according to ament_copyright</a>, <a href="https://robotics.stackexchange.com/questions/107321">ROS2 Humble colcon tutorial causes flake8 error</a>, <a href="https://robotics.stackexchange.com/questions/95987">ament_flake8 fails with AttributeError</a>, <a href="https://github.com/ament/ament_lint/issues/545">Installing latest flake8 breaks ament_flake8 on humble: ValueError: 'string' is not callable</a>.</p>
