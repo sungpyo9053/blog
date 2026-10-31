@@ -4,6 +4,9 @@
 # the CLI warning, ros2 param / get_parameters services, topics, lifecycle,
 # actions, common causes (ros2 run x2, launch x2, launch name override,
 # composable nodes, same process) and the renaming fixes.
+# Run, one distro after another:
+#   docker run --rm --name dupn-$d --ulimit core=0 --pids-limit 200 -e ROS_DOMAIN_ID=77 \
+#     -v $PWD/repro.sh:/repro.sh:ro ros:$d-ros-base bash /repro.sh > out_$d.txt 2>&1
 ulimit -c 0
 source /opt/ros/$ROS_DISTRO/setup.bash
 echo "=== distro=$ROS_DISTRO"

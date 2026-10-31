@@ -1,0 +1,186 @@
+<pre><code>$ ros2 node list
+/dup_node
+/dup_node
+WARNING: Be aware that there are nodes in the graph that share an exact name, which can have unintended side effects.</code></pre>
+
+<p>The warning goes to stderr and <code>ros2 node list</code> still exits with code 0. <code>ros2 node info</code> prints a different message for the same situation: <code>There are 2 nodes in the graph with the exact name "/dup_node". You are seeing information about only one of them.</code>, also with exit code 0.</p>
+
+<p>Short answer: two running nodes have the same fully qualified name (namespace plus name). ROS 2 doesn't stop you from doing that. It only warns in the CLI. Topics keep working, but anything addressed to the node name stops being predictable. <code>ros2 param get</code> answered from either node at random, <code>ros2 param set</code> changed both, and lifecycle transitions and action goals reached both. The fix is to give every node its own name or namespace. On the command line:</p>
+
+<pre><code>ros2 run my_pkg my_node --ros-args -r __node:=my_node_b
+# or
+ros2 run my_pkg my_node --ros-args -r __ns:=/robot1</code></pre>
+
+<p>In a launch file, set a different <code>name=</code> or <code>namespace=</code> on each <code>Node</code>, or wrap each copy in <code>GroupAction([PushRosNamespace('robot1'), Node(...)])</code>. With each of these the warning was gone and every <code>ros2 param get</code> call reached the node I asked for (10 of 10 per name for the command-line fixes, 5 of 5 for the launch fixes), on Humble, Jazzy and Lyrical.</p>
+
+<h2>Find your message</h2>
+
+<p>Several tools print their own message for duplicate names. All of these came out of the runs below:</p>
+
+<table>
+<thead><tr><th>Where you see it</th><th>Exact text</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 node list</code> (stderr, exit 0)</td><td><code>WARNING: Be aware that there are nodes in the graph that share an exact name, which can have unintended side effects.</code></td></tr>
+<tr><td><code>ros2 node info /name</code> (stderr, exit 0)</td><td><code>There are 2 nodes in the graph with the exact name "/dup_node". You are seeing information about only one of them.</code></td></tr>
+<tr><td>Node output, when one process creates a second node with a name it already has (Humble)</td><td><code>[rcl.logging_rosout]: Publisher already registered for provided node name. If this is due to multiple nodes with the same name then all logs for that logger name will go out over the existing publisher. ...</code></td></tr>
+<tr><td>Same case on Jazzy and Lyrical</td><td><code>[rcl.logging_rosout]: Publisher already registered for node name: 'dup_comp'. If this is due to multiple nodes with the same name then all logs for the logger named 'dup_comp' will go out over the existing publisher. ...</code></td></tr>
+<tr><td><code>ros2 launch</code> output, two composable nodes with the same name in one container</td><td><code>[WARNING] [/dup_container]: there are now at least 2 nodes with the name /dup_comp created within this launch context</code></td></tr>
+</tbody>
+</table>
+
+<p>None of the other commands I ran printed any warning, even though they were talking to a duplicated name. That covers <code>ros2 param get</code>, <code>set</code>, <code>list</code> and <code>dump</code>, <code>ros2 service call</code>, <code>ros2 topic list</code>, <code>ros2 service list</code>, <code>ros2 lifecycle</code>, <code>ros2 action info</code> and <code>ros2 component list</code>. I checked the warning count on stderr for every repeated <code>param get</code> call, and it was 0 each time. So if you only use <code>ros2 param</code>, you won't see the warning at all. Run <code>ros2 node list</code> to find out.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-31 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro after another, all with the default RMW (<code>rmw_fastrtps_cpp</code>). One package held:</p>
+
+<ul>
+<li>an rclpy node named <code>dup_node</code>. It declares a <code>tag</code> parameter, publishes its tag on <code>/chatter</code> twice a second, subscribes to <code>/chatter</code>, and prints a line from its parameter callback whenever a parameter is set,</li>
+<li>an rclcpp component <code>dupn::Talker</code> (default name <code>cpp_talker</code>) that does the same, plus an executable that creates it twice in one process,</li>
+<li>an rclcpp lifecycle node <code>dup_lc</code> that prints a line in <code>on_configure</code>,</li>
+<li>an rclpy node <code>dup_act</code> with an action server on <code>/lookup</code> (<code>tf2_msgs/action/LookupTransform</code>, which ships in the base image) that prints its tag for each goal and returns the tag in the result,</li>
+<li>launch files for the causes and fixes below.</li>
+</ul>
+
+<p>For each case I started the nodes, waited for discovery, and called the CLI 10 or 20 times in a row. The tag in each answer shows which node replied. The script and full output are linked at the end.</p>
+
+<h2>What breaks when two nodes share a name</h2>
+
+<p>I started the rclpy node twice with <code>ros2 run</code>, once with <code>-p tag:=A</code> and once with <code>-p tag:=B</code>. Both came up as <code>/dup_node</code>.</p>
+
+<table>
+<thead><tr><th>Call</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 param get /dup_node tag</code>, 20 calls</td><td>A 9, B 11</td><td>A 5, B 15</td><td>A 9, B 11</td></tr>
+<tr><td><code>ros2 service call /dup_node/get_parameters</code>, 20 calls</td><td>A 10, B 10</td><td>A 13, B 7</td><td>A 7, B 13</td></tr>
+<tr><td><code>ros2 param set /dup_node note vN</code>, 10 calls: callbacks that ran in A / B</td><td>10 / 10</td><td>8 / 10</td><td>10 / 10</td></tr>
+<tr><td><code>ros2 topic echo /chatter</code> for 5 s</td><td>8 from A, 8 from B</td><td>8, 8</td><td>9, 9</td></tr>
+</tbody>
+</table>
+
+<p><strong>Parameter reads are a coin flip.</strong> Every <code>param get</code> exited with 0 and printed a clean <code>String value is: ...</code>, but the value came from either node. Calling the <code>get_parameters</code> service by hand behaved the same way, so this isn't a CLI quirk. Both nodes offer a service named <code>/dup_node/get_parameters</code>, and the client takes whichever reply comes first. <code>ros2 param dump</code> has the same problem. On Humble, one <code>param get</code> returned <code>A</code>, and the <code>param dump</code> right after it returned <code>tag: B</code>.</p>
+
+<p><strong>Parameter writes go to both.</strong> All 10 <code>param set</code> calls printed <code>Set parameter successful</code>. The callback logs show the request reached both nodes in most calls. On Jazzy, node A's callback ran for 8 of the 10. So a set call can change two nodes, or only one, and the CLI looks the same in both cases.</p>
+
+<p><strong>Listings merge or hide.</strong> On Humble, <code>ros2 param list /dup_node</code> printed one parameter list. On Jazzy and Lyrical it printed the list twice, one after the other, and <code>ros2 param list</code> with no argument showed a <code>/dup_node:</code> header twice. <code>ros2 node info</code> shows one node and tells you so. <code>ros2 lifecycle nodes</code> listed <code>/dup_lc</code> only once, with no warning.</p>
+
+<p><strong>Topics are fine.</strong> <code>ros2 topic info /chatter</code> showed <code>Publisher count: 2</code> and <code>Subscription count: 2</code>, the echo got messages from both nodes in equal numbers, and each node's subscription received messages from both. Topics are matched by topic name, not node name, so a duplicate node name doesn't affect them.</p>
+
+<h3>Lifecycle nodes</h3>
+
+<p>Two copies of the rclcpp lifecycle node <code>/dup_lc</code> both started <code>unconfigured</code>. I sent <code>ros2 lifecycle set /dup_lc configure</code> once, read the state 10 times, then sent <code>configure</code> twice more.</p>
+
+<ul>
+<li>Humble and Lyrical: the first <code>configure</code> printed <code>Transitioning successful</code>, and both nodes logged <code>CONFIGURED</code>. All 10 reads showed <code>inactive [2]</code>. The next <code>configure</code> failed with <code>Unknown transition requested, available ones are: ...</code> and exit code 1.</li>
+<li>Jazzy: the first <code>configure</code> also printed <code>Transitioning successful</code>, but only one node changed. The 10 reads showed <code>inactive [2]</code> 7 times and <code>unconfigured [1]</code> 3 times. The second <code>configure</code> printed <code>Transitioning failed</code> with exit code 0. The already configured node logged <code>[rcl_lifecycle]: No transition matching configure found for current state inactive</code>. The other node logged <code>CONFIGURED</code>, and every read after that showed <code>inactive [2]</code>. Only the third call failed with <code>Unknown transition requested</code>.</li>
+</ul>
+
+<p>So a lifecycle manager that drives nodes by name can get a success reply while a node stays behind, or a failure reply while the node did transition.</p>
+
+<h3>Action servers</h3>
+
+<p>Two <code>/dup_act</code> nodes each served <code>/lookup</code>. <code>ros2 action info /lookup</code> listed <code>Action servers: 2</code>, with <code>/dup_act</code> twice. I sent 10 goals with <code>ros2 action send_goal</code>. Every goal was accepted and finished with <code>SUCCEEDED</code>, but both servers ran most of them:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Goals executed by server A / B (out of 10)</td><td>10 / 8</td><td>9 / 10</td><td>10 / 10</td></tr>
+<tr><td>Result the client got came from A / B</td><td>8 / 2</td><td>1 / 9</td><td>4 / 6</td></tr>
+</tbody>
+</table>
+
+<p>Strictly, this is a duplicate action name, not a duplicate node name. Two nodes with different names serving the same action name would probably behave the same, but I didn't test that. In practice the two come together, because a node started twice serves the same action twice. If the action moves a robot, that means two executions of every goal.</p>
+
+<h2>Causes I reproduced</h2>
+
+<p>Every case below printed the <code>ros2 node list</code> warning on all three distros.</p>
+
+<table>
+<thead><tr><th>Cause</th><th>What it printed when it started</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 run</code> of the same executable twice</td><td>nothing</td></tr>
+<tr><td>The same launch file started twice with <code>ros2 launch</code></td><td>nothing</td></tr>
+<tr><td>One launch file with two <code>Node(..., name='dup_node')</code></td><td>nothing</td></tr>
+<tr><td>Launch renames the C++ node with <code>name='dup_node'</code>, and another executable already uses <code>dup_node</code> as its default name</td><td>nothing</td></tr>
+<tr><td>Two <code>ComposableNode(name='dup_comp')</code> in one <code>ComposableNodeContainer</code></td><td>the <code>Publisher already registered</code> warning from the container and <code>there are now at least 2 nodes with the name /dup_comp created within this launch context</code> from launch</td></tr>
+<tr><td>A third <code>dup_comp</code> loaded with <code>ros2 component load ... -n dup_comp</code></td><td><code>Loaded component 3 into '/dup_container' container node as '/dup_comp'</code>, exit 0, and the <code>Publisher already registered</code> warning in the container</td></tr>
+<tr><td>One rclcpp process creating the same node class twice</td><td><code>Publisher already registered</code></td></tr>
+<tr><td>One rclpy process calling <code>Node('dup_node')</code> twice</td><td><code>Publisher already registered</code></td></tr>
+<tr><td><code>-r __node:=renamed</code> on a process that holds two nodes with different names (<code>n_one</code>, <code>n_two</code>)</td><td><code>Publisher already registered</code>, and both nodes reported <code>/renamed</code></td></tr>
+</tbody>
+</table>
+
+<p>The first four cases are separate processes, and nothing warns when they start. You only find out from <code>ros2 node list</code>, or when parameters start acting up. Launch's own duplicate check only fired for composable nodes. The one-file case with two <code>Node(name='dup_node')</code> started without that warning on all three distros.</p>
+
+<p>The launch override case is easy to miss. The C++ executable's default name was <code>cpp_talker</code>, and <code>name='dup_node'</code> in the launch file renamed it onto the Python node's default name. <code>ros2 param get /dup_node tag</code> then returned the C++ node's tag 8, 7 and 5 times out of 10 (Humble, Jazzy, Lyrical), and the Python node's tag the rest of the time.</p>
+
+<p>Within one process the answer was stable but still wrong for one of the nodes. With two <code>dup_comp</code> components in the same container, 10 out of 10 <code>param get</code> calls returned the first component's tag on Humble and Lyrical, and 9 out of 10 on Jazzy. With two <code>cpp_talker</code> nodes in one rclcpp process, all 10 calls on every distro returned the first one. The second node's parameters couldn't be reached by name.</p>
+
+<p>The last row matters when you apply the fix. <code>__node:=</code> without a node prefix renames every node in the process, so a process that holds several nodes gets duplicates from it. The issue <a href="https://github.com/ros2/rclcpp/issues/843">ros2/rclcpp#843</a> describes this for the extra nodes that libraries create inside a process. If the process has more than one node, rename it with a namespace instead, or use a remap rule with a node-name prefix. I didn't test the prefix form.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Resulting names</th><th>Warning</th><th><code>param get</code>, each name</th></tr></thead>
+<tbody>
+<tr><td><code>--ros-args -r __node:=dup_node_b</code> on the second copy</td><td><code>/dup_node</code>, <code>/dup_node_b</code></td><td>gone</td><td>A 10/10, B 10/10</td></tr>
+<tr><td><code>--ros-args -r __ns:=/robot1</code> on the second copy</td><td><code>/dup_node</code>, <code>/robot1/dup_node</code></td><td>gone</td><td>A 10/10, B 10/10</td></tr>
+<tr><td>Launch: <code>Node(name='dup_node', namespace='robot1')</code> and <code>namespace='robot2'</code></td><td><code>/robot1/dup_node</code>, <code>/robot2/dup_node</code></td><td>gone</td><td>5/5 each</td></tr>
+<tr><td>Launch: <code>GroupAction([PushRosNamespace('robot1'), Node(...)])</code>, same for robot2</td><td><code>/robot1/dup_node</code>, <code>/robot2/dup_node</code></td><td>gone</td><td>5/5 each</td></tr>
+</tbody>
+</table>
+
+<p>The results were the same on all three distros. There's one difference between the two command-line fixes. <code>__ns</code> also moves relative topics: <code>ros2 topic list</code> showed <code>/robot1/chatter</code> next to <code>/chatter</code>, so the second node no longer publishes where the first one listens. That's what you want for two robots. It's not what you want if you only meant to rename a node. <code>__node</code> changes the name only, so topics stay where they are. For composable nodes, give each <code>ComposableNode</code> its own <code>name=</code>. The renaming fixes above apply there too, but I only measured them on standalone nodes.</p>
+
+<h2>Can ROS 2 refuse a duplicate name?</h2>
+
+<p>Not found. I listed every setter in rclcpp's <code>NodeOptions</code> and every argument of rclpy's <code>Node.__init__</code> on all three distros. None of them is about name uniqueness. The extras on newer distros were <code>enable_logger_service</code>, <code>clock_type</code>, <code>log_level</code> and <code>rosout_qos_profile</code>. The rcl header says it plainly. <code>rcl/node.h</code> contains <code>\todo TODO(wjwwood): node name uniqueness is not yet enforced</code> on Humble, Jazzy and Lyrical. Creating a second node with a name already in use never threw in my runs, in C++ or in Python, in the same process or in another one. If you need a guard, you have to write it yourself. One way is to check the graph for your own name at startup, as in the <a href="https://robotics.stackexchange.com/questions/112998">Duplicate node names</a> question. I didn't measure a check like that.</p>
+
+<h2>Version notes</h2>
+
+<p>The <code>ros2 node list</code> and <code>ros2 node info</code> texts were identical on Humble, Jazzy and Lyrical. Three things differed:</p>
+
+<ul>
+<li><code>ros2 param list /dup_node</code> printed one list on Humble and both lists on Jazzy and Lyrical. Newer distros also add a <code>start_type_description_service</code> parameter and a <code>get_type_description</code> service to every node.</li>
+<li>The <code>Publisher already registered</code> text names the node on Jazzy and Lyrical (<code>for node name: 'dup_node'</code>) and doesn't on Humble (<code>for provided node name</code>). Search for the part before that.</li>
+<li>Lifecycle: one <code>configure</code> reached both nodes on Humble and Lyrical, and only one on Jazzy. That's one run per distro. I wouldn't read it as a fixed version difference, since the parameter calls show the same kind of randomness everywhere.</li>
+</ul>
+
+<p>Which node answered changed from run to run on every distro. Treat the counts as "both, unpredictably", not as a ratio.</p>
+
+<h2>Not tested</h2>
+
+<p>Other RMWs (Cyclone DDS, Zenoh), nodes on different hosts or containers, ROS 2 domain bridges, remap rules with a node prefix (<code>-r my_node:__node:=x</code>), duplicate names under <code>use_sim_time</code> or with services other than the parameter and lifecycle ones, two nodes with different names serving one action, <code>ros2 doctor</code>, nav2's lifecycle manager, ros2_control, Foxy, Iron and Rolling.</p>
+
+<p>More ROS 2 measurements are on the <a href="https://huntlab.app/en/">huntlab English index</a>.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "nodes in the graph that share an exact name" mean?</h3>
+<p>At least two running nodes have the same namespace and name. <code>ros2 node list</code> prints the warning on stderr and still exits with 0. ROS 2 lets both nodes run. Topics work, but parameter calls, lifecycle transitions and action goals sent to that name reach either node or both.</p>
+
+<h3>Is the warning harmless if my topics still work?</h3>
+<p>No. In my runs 20 <code>ros2 param get</code> calls split between the two nodes, anywhere from 5/15 to 10/10, <code>param set</code> changed both nodes, and both action servers ran most goals. The CLI reported success every time.</p>
+
+<h3>How do I fix duplicate node names in a launch file?</h3>
+<p>Give each <code>Node</code> a unique <code>name=</code>, or a different <code>namespace=</code>, or wrap each copy in <code>GroupAction</code> with <code>PushRosNamespace</code>. Both namespace methods removed the warning, and every <code>param get</code> went to the right node.</p>
+
+<h3>Why do I get "Publisher already registered for provided node name"?</h3>
+<p>One process created a second node with a name it already had. That happened with two composable nodes with the same name in one container, with a class created twice, and with <code>__node:=</code> applied to a process that holds two nodes. Rename the extra node. Use a namespace if a global <code>__node</code> remap caused it.</p>
+
+<h3>Can rclcpp or rclpy refuse to start a node whose name is taken?</h3>
+<p>Not found. No <code>NodeOptions</code> setter or rclpy <code>Node</code> argument does that on Humble, Jazzy or Lyrical, and <code>rcl/node.h</code> says "node name uniqueness is not yet enforced".</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does nodes in the graph that share an exact name mean?", "acceptedAnswer": {"@type": "Answer", "text": "At least two running nodes have the same namespace and name. ros2 node list prints the warning on stderr and still exits with 0. ROS 2 lets both nodes run. Topics work, but parameter calls, lifecycle transitions and action goals sent to that name reach either node or both."}},
+{"@type": "Question", "name": "Is the warning harmless if my topics still work?", "acceptedAnswer": {"@type": "Answer", "text": "No. In my runs 20 ros2 param get calls split between the two nodes, anywhere from 5/15 to 10/10, param set changed both nodes, and both action servers ran most goals. The CLI reported success every time."}},
+{"@type": "Question", "name": "How do I fix duplicate node names in a launch file?", "acceptedAnswer": {"@type": "Answer", "text": "Give each Node a unique name=, or a different namespace=, or wrap each copy in GroupAction with PushRosNamespace. Both namespace methods removed the warning, and every param get went to the right node."}},
+{"@type": "Question", "name": "Why do I get Publisher already registered for provided node name?", "acceptedAnswer": {"@type": "Answer", "text": "One process created a second node with a name it already had. That happened with two composable nodes with the same name in one container, with a class created twice, and with __node:= applied to a process that holds two nodes. Rename the extra node. Use a namespace if a global __node remap caused it."}},
+{"@type": "Question", "name": "Can rclcpp or rclpy refuse to start a node whose name is taken?", "acceptedAnswer": {"@type": "Answer", "text": "Not found. No NodeOptions setter or rclpy Node argument does that on Humble, Jazzy or Lyrical, and rcl/node.h says node name uniqueness is not yet enforced."}}
+]}
+</script>
+
+<p>Measured on 2026-10-31 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rcl 5.3.13, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10, launch_ros 0.19.14), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rcl 9.2.11, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4, launch_ros 0.26.13) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rcl 10.4.5, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10, launch_ros 0.29.9), default RMW <code>rmw_fastrtps_cpp</code>. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-22-ros2-nodes-share-an-exact-name/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/112998">Duplicate node names</a>, <a href="https://github.com/osrf/vrx/issues/878">Duplicate optical_frame_publisher node names cause "nodes share an exact name" warning</a>, <a href="https://github.com/ros2/ros2cli/issues/279">ros2 node info does not show info for nodes of the same name</a>, <a href="https://github.com/ros2/rcl/issues/984">Add identifying information to the log message when duplicate nodes are created</a>, <a href="https://github.com/ros2/rclcpp/issues/843">Global __node argument causes node name collisions</a>, <a href="https://github.com/moveit/moveit2/issues/3660">Logger node gets duplicate name when setting node name in launch file</a>.</p>

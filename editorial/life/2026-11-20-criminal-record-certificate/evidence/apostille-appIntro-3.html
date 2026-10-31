@@ -1,0 +1,2678 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+	<meta name="_csrf" content=>
+	<meta name="_csrf_header" content=>
+	<meta charset="utf-8">
+	<!-- <meta http-equiv="X-UA-Compatible" content="IE=edge"> --> <!-- accessibility sonpain 중복 -->
+	<title>e-Apostille</title>
+	<!-- css js include -->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="외교부">
+
+<link rel="stylesheet" type="text/css" href="/css/select2.css" />
+<link rel="stylesheet" type="text/css" href="/css/swiper-bundle.min.css" />
+<link rel="shortcut icon" type="text/css" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" href="/css/reset.css">
+
+<link rel="stylesheet" href="/css/jquery-ui.min.css" />
+<link rel="stylesheet" type="text/css" href="/css/common.css?v=20251127" />
+<link rel="stylesheet" type="text/css" href="/css/layout.css?v=20251127" />
+<link rel="stylesheet" type="text/css" href="/css/style.css?v=20251127" />
+<link rel="stylesheet" type="text/css" href="/css/mo.css" />
+
+<script src="/js/jquery-3.7.1.min.js"></script>
+<script src="/js/jquery-ui.min.js"></script>
+<script src="/js/swiper-bundle.min.js"></script>
+<script src="/js/jquery.form.js"></script>
+<script src="/js/jquery.blockUI.js"></script>
+<script src="/js/slick.js"></script>
+<script src="/js/select2.js"></script>
+
+<script src="/js/datetime.js"></script>
+<script src="/js/jquery.datepicker.js"></script>
+<script src="/js/jquery.monthpicker.js"></script>
+
+<script src="/js/common.js"></script>
+<script defer src="/js/common_defer.js"></script>
+<script src="/js/layer_dim.js?v=20240418_1"></script>
+
+<script src="/js/jsbn.js"></script>
+<script src="/js/rsa.js"></script>
+<script src="/js/prng4.js"></script>
+<script src="/js/rng.js"></script>
+
+<script nonce="eapp0311" type="text/javascript">
+	var gfv_kuploadMode = "real";
+</script>
+
+<!-- RAON K Upload -->
+<script type="text/javascript" src="/solution/raonkupload/js/raonkupload.js"></script>
+<script type="text/javascript" src="/js/raonKuploadUtil.js"></script>
+<!--[if lte IE 9]>
+<link rel="stylesheet" type="text/css" media="screen" href="/css/ie_8.css"/>
+<script src="https://cdn.jsdelivr.net/html5shiv/3.7.3/html5shiv.min.js"></script>
+<![endif]-->
+
+<script nonce="eapp0311">
+
+var EAMS_CONTEXT_PATH		= "";
+
+var EAMS_URL = 'www.apostille.go.kr';
+
+if(EAMS_URL.indexOf("apostille.go.kr") > -1){
+	EAMS_URL = "https://" + EAMS_URL;
+}
+else {
+	EAMS_URL = "http://" + EAMS_URL + ":8080";
+}
+var EAMS_GLOBALS_HOST_URL	= EAMS_URL + EAMS_CONTEXT_PATH;
+/*var EAMS_GLOBALS_RUN_MODE	= "";
+/var EAMS_GLOBALS_REAL_RUN_MODE	= "";*/ 
+var EAMS_GLOBALS_LANGUAGE	= "ko";
+
+/* 구글 주석
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){ 
+	  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o), 
+	  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m) 
+	  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga'); 
+	  ga('create', 'UA-100584795-1', 'auto'); 
+	  ga('send', 'pageview'); 
+*/
+	  
+//화면 캡쳐 방지에 필요한 브라우저 버전 확인(in Javascript)
+var userAgent = window.navigator.userAgent;
+var isIE = userAgent.indexOf("Trident"); // ie제외 나머지 브라우저는 -1 반환
+
+
+//세션체크
+/* var iSecond = 1200; 
+if('') initTimer(); 
+
+
+function initTimer(){
+	if (iSecond > 0) {
+		iSecond--;
+		setTimeout(initTimer, 1000); // 1초 간격으로 체크
+	} else {
+		location.href="/ga/login/logout.do?te=Y"; 
+	} 
+} */
+
+
+//시간체크
+var timerchecker = null;
+var iSecond;
+
+/* window.onload = function(){
+	fn_clearTime();
+	initTimer();
+} */
+
+$(document).ready(function() {
+	
+	if(''){		
+		fn_clearTime();
+		initTimer();
+	}
+	
+	if (EAMS_GLOBALS_LANGUAGE == "ko") setJsLanguage('ko');
+	else setJsLanguage('en');
+});
+
+function fn_clearTime(){ 
+	iSecond = 1200;   
+} 
+ 
+function Lpad(str, len){ 
+	str = str + "";
+	while(str.length < len){
+		str = "0" + str;
+	}
+	return str;
+}
+
+function initTimer(){
+	var timer = document.getElementById("timer");
+	if(timer){
+		rHour = parseInt(iSecond / 3600);
+		rHour = rHour % 60; 
+		rMinute = parseInt(iSecond / 60);
+		rMinute = rMinute % 60;
+		rSecond = iSecond % 60;
+	
+		if (iSecond > 0) {
+			// 2025-02-17 웹 보안성으로 코드 변경
+			//timer.innerHTML = Lpad(rMinute, 2) + " : " + Lpad(rSecond, 2) + "&nbsp;";
+			timer.insertAdjacentHTML('afterend', Lpad(rMinute, 2) + " : " + Lpad(rSecond, 2) + "&nbsp;");
+			iSecond--;
+			timerchecker = setTimeout("initTimer()", 1000); // 1초 간격으로 체크
+		} else {
+			var dddd = new Date();
+			var eeee = new Date(dddd);
+			eeee.setMinutes(dddd.getMinutes()+5);
+			
+			var hhhh = addZero(dddd.getHours(), 2);
+			var mmmm = addZero(dddd.getMinutes(), 2);
+			var hhh = addZero(eeee.getHours(), 2);
+			var mmm = addZero(eeee.getMinutes(), 2);
+			var currentTime = hhhh + "시 " + mmmm + "분";
+			var nextTime = hhh + "시 " + mmm + "분";
+			
+			sessionLogout(); 
+		}
+	}
+}
+ 
+function sessionLogout(){
+	 var aForm = document.createElement("form");
+	 aForm.name = "form";
+	 aForm.id = "form";
+	 document.body.appendChild(aForm);
+	 
+	 $('#form').attr('target','_self');
+	 $('#form').attr('action','/ga/login/logout.do?te=Y').attr('method', 'post').submit();
+	 $("#form").remove();	
+}
+
+function addZero(x,n) {
+	while (x.toString().length < n) {
+	   x = "0" + x;
+	}
+	return x;
+}
+</script>
+
+<!--[if lte IE 9]>
+	<link rel="stylesheet" type="text/css" media="screen" href="/css/ie_8.css"/>
+	<![endif]-->
+	<script nonce="eapp0311">
+	
+	document.title = "아포스티유 제도 소개 | e-Apostille"; 
+	
+	//홈페이지이용안내 팝업
+	function fn_popUp(gubun){	
+		if(gubun == "P"){
+			var url='/gd/intro/appProcess.do';
+		}else if(gubun == "I"){
+			var url='/gd/intro/installProgram.do';
+		}else{
+			var url='/gd/intro/EamsIntroAppInfo.do';
+		}
+
+	var name="popup";
+	
+	var popX = (window.screen.width / 2) - (1000/2);
+	var popY = (window.screen.height / 2) - (725/2);
+	
+	var status = 'width=1000,height=725,toolbar=no,status=no,location=no,scrollbars=no,menubar=no,resizable=yes,left='+popX+',top='+popY+',screenX='+popX+',screenY='+popY;
+	window.open("",name,status);
+
+	document.frm.action = url;
+	document.frm.target = "popup"; 
+	document.frm.method = "post";
+	document.frm.submit();
+	}
+	
+	$(document).ready(function(){
+		// 20220922 대민 영사확인 제도 발급절차 및 구비서류 페이지 일원화 start
+		
+			$(".tab > ul > li > a").removeAttr("class");
+			$(".tab > ul > li > a").attr('class', "txt-c el-text-lv5");
+			$(".tab > ul > li:nth-child(3)").children('a').click();
+			/* $(".tab>li:nth-child(1)").removeAttr("class");
+			$(".tab>li:nth-child(3)").click(); */
+			$(".sm-tabSwiper > ul > li > a").removeAttr("class");
+			$(".sm-tabSwiper > ul > li > a").attr('class', "txt-c el-text-lv5");
+			$(".sm-tabSwiper > ul > li:nth-child(3)").children('a').click();
+		
+		
+		$(".tab > ul > li").on("click", function(e) {
+			var hrefStr = e.target.toString();
+			$("#checkTabNo").val(hrefStr.substr(-1));
+		});
+		$(".sm-tabSwiper > ul > li").on("click", function(e) {
+			var hrefStr = e.target.toString();
+			$("#checkTabNo").val(hrefStr.substr(-1));
+		});
+		// 20220922 대민 영사확인 제도 발급절차 및 구비서류 페이지 일원화 end
+		
+		//fn_tabScript();
+	});
+	
+	function fn_visited(obj) {
+		obj.css("color", "#681da8");
+	}
+	
+	var imageFocus = "";
+	function imageModalOpen(e) {
+		imageFocus = e;
+		let el = e.querySelector("img");
+		let src = el.src;
+		
+		$('#modal-image-info').fadeIn().addClass('is-open')
+		$('#modal-image-info').attr('tabindex', 0).focus()
+		$('body').append('<div class="el-bg-popup"></div>')
+		$('html, body').css('overflow', 'hidden')
+		$('#modal-popup-image').attr('src', src);
+	}
+	function imageModalClose() {
+		$('.modal').fadeOut();
+		$('.modal').removeAttr('tabindex')
+		$('.el-bg-popup').fadeOut()
+		$('body .el-bg-popup').remove();
+		$('html, body').css('overflow', '')
+		
+		imageFocus.focus();
+	}
+	</script>
+</head>
+
+<body>
+	<form id="frm" name="frm" method="post">
+	<input type="hidden" name="_csrf" value=""/>
+	<input type="hidden" name="checkTabNo" id="checkTabNo" value="3"/>
+<!-- 	<input type="hidden" id="inquryMttrNo" 	name="inquryMttrNo"> -->
+
+	<!-- wrap area -->
+	<div id="wrap">
+		<div id="wrap_win">
+			<!-- skip navigation -->
+			<div id="skip-nav">
+				<a href="#container">본문 바로가기</a> <!-- message code : 본문 바로가기 -->
+			</div>
+			<!-- // skip navigation -->   
+		
+			<!-- header area -->
+			<header class="ly-header">
+	<!-- gov-banner -->
+			<div class="gov-banner">
+				<div class="ly-inner ">
+					<span class="gov-desc">
+						<img src="/images/icon_taegeukgi.png" width="24" height="16" alt="태극기">
+						이 누리집은 대한민국 공식 전자정부 누리집입니다.
+					</span>
+				</div>
+			</div>
+			<!-- ./ gov-banner -->
+		<div class="ly-inner">
+		<!-- header-top -->
+		<div class="header-top"> 
+			<!-- header-util -->
+			<div class="header-util lg-onlyFlex-768">
+				<ul class="flex-ac flex-item-right">
+					<li><a href="https://www.g4k.go.kr"  target="_blank" class="flex-ac" title="재외동포 365민원포털(새 창 열림)">재외동포 365민원포털<!-- 재외동포 365민원포털 --><img src="/images/icon_link_00.svg" alt="재외동포 365민원포털 바로가기" class="ml-2"></a></li>
+					<li id="pc-util-box-control" class="bl-util-control">
+						<button type="button" id="pc-util-box-controlbtn" class="el-toggleList el-toggle-open-screenSize" title="화면크기열기">화면크기</button>
+						<div class="bl-utilbox lg-only-768" style="--xPosition: 1.2rem">
+							<ul class="bl-utilgroup">
+								<li><button type="button" onclick="zoomBtn(1)" title="작게">작게</button></li>
+								<li><button type="button" onclick="zoomBtn(2)" title="보통">보통</button></li>
+								<li class="is-active"><button type="button" onclick="zoomBtn(3)" title="조금 크게">조금 크게</button></li>
+								<li><button type="button" onclick="zoomBtn(4)" title="크게">크게</button></li>
+								<li><button type="button" onclick="zoomBtn(5)" title="가장크게">가장크게</button></li>
+							</ul>
+							<div class="bl-utiletc">
+								<button type="button" title="초기화">
+									<span class="flex-ac gap-4 el-before-20 reset" onclick="zoomReset()">초기화</span></button>
+							</div>
+						</div>
+					</li>
+				</ul>
+			</div>
+			<!-- .// header-util -->
+		</div> 
+		<!-- header-top -->
+		<!-- header-bottom -->
+		<div class="header-bottom flex-acjs">
+			<h1 class="logo">
+				<a href="/index.do" class="lg-only-768">
+					<img src="/images/logo/logo.png" alt="대한민국 아포스티유">
+				</a>
+				<a href="/index.do" class="sm-only-768">
+					<img src="/images/logo/logo.png" alt="대한민국 아포스티유">
+				</a>
+			</h1>
+			<div class="header-global">
+				<ul class="flex-ac gap-8">
+					<li><button type="button" class="engBtn md-only-1024" onclick="fn_chgLanguage('en')" title="Change Language">ENGLISH</button></li>
+						<li><a href="#" onclick="anyidAdaptor.ssoLoginPage(anyidAdaptor.agencyContextPath+'/index.do','2')" class="flex-ac login">로그인</a></li>
+						<!--
+						<li><a href="/ga/login/login.do?headFg=issue" class="flex-ac login">로그인</a></li>
+						-->
+						<li><a href="/ga/join/joinIntro.do" class="flex-ac join">회원가입</a></li>
+					<li class="md-onlyFlex-1024"><a id="sm_allMenu" href="javascript:void(0);" class="flex-ac hamburger" title="전체메뉴열기">전체메뉴</a></li> <!-- 전체메뉴 -->
+				</ul>
+			</div>
+		</div>
+		<!-- .// header-bottom -->
+		<!-- header-border -->
+		<!-- <div class="hp-header-border"></div> -->
+		<!-- ./ header-border -->
+	</div>
+
+	<div class="header-gnb-cont">
+		<div class="ly-inner">
+			<!-- <div class="header-gnb" id="gnb"> -->
+			<div class="header-gnb">
+				<!-- pc용 gnb -->
+				<nav id="gnb-lg">
+					<ul class="gnb-area flex-ac" role="tablist">
+						<li class="gnb-menu">
+							<button type="button" title="정책∙정보열기">정책∙정보</button>			<!-- 정책∙정보 -->
+							<div class="gnb-submenu grid">
+								<ul>
+									<li class="gnb-submenu-link">
+										<button type="button" title="아포스티유 제도 소개">아포스티유 제도</button>			<!-- 아포스티유 -->
+										<div class="dep-wrap">
+											<div class="flex-col gap-24">
+												<div class="dep-content flex-col gap-16">
+												 	<ul class="gnb-intro flex-col gap-16">
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/appIntro.do?checkTabNo=1" class="flex-col gap-16">
+														<strong class="el-text-lv5">아포스티유 제도 소개</strong><p>아포스티유란 ?<br>「외국공문서에 대한 인증의 요구를 폐지하는 협약」이 2007년 7월 14일 정식발효하게 됨에 따라 재외동포청, 법무부에서 아포스티유를 받은 우리 공문서가 협약가입국에서 현지 공문서와 동일한 효력을 인정받게 됩니다.</p></a></li>		<!-- 아포스티유 제도 소개 -->
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/appIntro.do?checkTabNo=2" class="flex-col gap-16">
+														<strong class="el-text-lv5">아포스티유 대상 문서</strong><p>아포스티유 대상문서는 「공문서에 대한 아포스티유 및 본부영사확인 발급에 관한 규정」(제2조3항)에 해당하는 문서 입니다.</p></a></li>		<!-- 아포스티유 대상 문서 -->
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/appIntro.do?checkTabNo=3" class="flex-col gap-16">
+														<strong class="el-text-lv5">아포스티유 발급절차 및 구비서류</strong><p>아포스티유 발급이 가능한 문서의 발급절차 및 구비서류를 안내 합니다.</p></a></li>		<!-- 아포스티유 발급 절차 및 구비 서류 -->
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/appIntro.do?checkTabNo=4" class="flex-col gap-16">
+														<strong class="el-text-lv5">아포스티유 신청서 작성 방법</strong><p>아포스티유 발급이 가능한 문서의 신청서 작성방법을 안내합니다.</p></a></li>			<!-- 아포스티유 신청서 작성방법 -->
+													</ul>
+												</div>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="영사확인 제도 소개">영사확인 제도</button>				<!-- 영사 확인 제도 -->
+										<div class="dep-wrap">
+											<div class="flex-col gap-24">
+												<div class="dep-content flex-col gap-16">
+													<ul class="gnb-intro flex-col gap-16">
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/consulIntro.do?checkTabNo=1" class="flex-col gap-16">
+														<strong class="el-text-lv5">영사확인 제도 소개</strong><p>영사확인이란 ?<br>문서의 국외사용을 위한 인증(Legalization)을 받아야만 합니다. 일반적으로 문서가 사용될 국가(문서접수국)가 자국의 해외공관에서 ‘영사확인’이라는 이름으로 문서 확인을 해 주고 있습니다.</p></a></li>				<!-- 영사확인 제도 소개 -->
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/consulIntro.do?checkTabNo=2" class="flex-col gap-16">
+														<strong class="el-text-lv5">영사확인 대상 문서</strong><p>본부 영사확인 대상문서는 「공문서에 대한 아포스티유 및 본부영사확인 발급에 관한 규정」(제2조3항)에 해당하는 문서 입니다.</p></a></li>			<!-- 영사확인 대상 문서 -->
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/consulIntro.do?checkTabNo=3" class="flex-col gap-16">
+														<strong class="el-text-lv5">영사확인 발급절차 및 구비서류</strong><p>영사확인 발급이 가능한 문서의 발급절차 및 구비서류를 안내 합니다.</p></a></li>			<!-- 영사확인 발급 절차 및 구비 서류 -->
+														<li class="relative flex-col gap-16 pd-16 hp-border-radius-12 hp-border-gray-03"><a href="/gd/intro/consulIntro.do?checkTabNo=4" class="flex-col gap-16">
+														<strong class="el-text-lv5">영사확인 신청서 작성 방법</strong><p>영사확인 발급이 가능한 문서의 신청서 작성방법을 안내합니다.</p></a></li>			<!-- 영사확인 신청서 작성방법 -->
+													</ul>
+												</div>
+											</div>
+										</div>
+									</li>
+								</ul>
+							</div>
+						</li>
+						<!-- // 정책 정보 -->
+						
+						<li class="gnb-menu">
+							<button type="button" title="인증서신청열기">인증서신청</button>		<!-- message code: 인증서 신청 -->
+							<div class="gnb-submenu grid">
+								<ul>
+									<li class="gnb-submenu-link">
+										<button type="button" title="대법원">대법원</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','01' , $(this));" title="가족관계증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	가족관계증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인과 부모, 배우자, 자녀에 관한 사항이 기재되는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','06' , $(this));" title="영문증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	영문증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인과 부모, 배우자에 관한 사항과 본인의 출생 및 혼인에 관한 사항이 영문으로 기재되는 증명서(영문 가족관계증명서가 아닌 별도의 증명서)</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','02' , $(this));" title="기본증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	기본증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인의 출생, 사망, 국적 등에 관한 사항이 기재되는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','03' , $(this));" title="혼인관계증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	혼인관계증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인 및 배우자에 관한 사항과 혼인에 관한 사항이 기재되는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','04' , $(this));" title="입양관계증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	입양관계증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인 및 친생부모·양부모 또는 양자에 관한 사항과 입양에 관한 사항이 기재되는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','05' , $(this));" title="친양자입양관계 증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	친양자입양관계 증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인 및 친생부모·양부모 또는 친양자에 관한 사항과 친양자입양에 관한 사항이 기재되는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','10' , $(this));" title="제적등본바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	제적등본</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본적 등의 호적사항과 호주 및 모든 구성원의 성명, 부모 성명, 출생, 혼인, 사망 등의 신분사항이 기재되는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('03','11' , $(this));" title="제적초본바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	제적초본</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본적 등의 호적사항과 호주 및 본인의 성명, 부모 성명, 출생, 혼인, 사망 등의 신분사항이 기재되는 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="정부24">정부24</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('01','1310000001501' , $(this));" title="주민등록표등본바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	주민등록표등본</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">한 세대의 모든 구성원의 주민등록 사항이 기재되는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('01','1310000001502' , $(this));" title="주민등록표초본바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	주민등록표초본</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">한 사람의 자세한 주민등록 사항이 기재되는 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="외교부">외교부</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('10','00' , $(this));" title="여권발급기록증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	여권발급기록증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인이 발급받은 모든 여권에 대한 기록 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('10','01' , $(this));" title="여권실효확인서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	여권실효확인서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">여권이 효력 상실된 사실을 확인받은 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('10','02' , $(this));" title="여권발급신청서류 증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	여권발급신청서류 증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인이 발급받은 여권의 신청서류의 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('10','04' , $(this));" title="여권정보증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	여권정보증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">여권명의인의 주민등록번호를 확인하기 위한 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="교육부">교육부</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('05','037000072g' , $(this));" title="초중고등학교 졸업증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	초중고등학교 졸업증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">초·중·고등학교 졸업증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('05','037000070g' , $(this));" title="초중고등학교 재학증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	초중고등학교 재학증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">초·중·고등학교 재학증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('05','037000078g' , $(this));" title="중고등학교 성적증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	중고등학교 성적증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">중·고등학교 성적증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('05','037000071d' , $(this));" title="검정고시 성적증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	검정고시 성적증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">검정고시 응시생의 성적증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('05','037000073e' , $(this));" title="검정고시 합격증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	검정고시 합격증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">검정고시 합격증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="병무청">병무청</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('06','6001' , $(this));" title="병적증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	병적증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">군 복무 여부를 확인하는 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="국세청">국세청</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B0001' , $(this));" title="사업자등록증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	사업자등록증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">사업자등록을 한 자의 사업내역 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B0002' , $(this));" title="휴업사실증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	휴업사실증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">휴업 사실 확인 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B0012' , $(this));" title="폐업사실증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	폐업사실증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">폐업 사실 확인 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B0006' , $(this));" title="납세증명서(대금수령용)바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	납세증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">국세 체납 사실 없음을 증명(납부기한연장액, 압류·매각의 유예액 등 제외)</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B0005' , $(this));" title="납부내역증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	납부내역증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">납세자가 직접 납부한 세금(국세) 내역 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B1001' , $(this));" title="소득금액증명(종합소득세신고자용)바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	소득금액증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">소득이 있는 자가 과세된 소득에 대한 소득금액 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B4009' , $(this));" title="부가가치세 과세표준증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	부가가치세 과세표준증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">납세자(사업자) 신청에 의한 부가가치세 신고내역 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B1002' , $(this));" title="부가가치세 면세사업자수입금액증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	부가가치세 면세사업자수입금액증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">부가가치세 면세사업자의 수입금액을 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B1003' , $(this));" title="표준재무제표증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	표준재무제표증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">종합소득세·법인세 신고 시 표준재무제표를 제출한 자가 이를 확인 받기 위한 증명</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('08','B0021' , $(this));" title="사업자단위과세 적용 종된사업장증명(개별)바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	사업자단위과세 적용 종된사업장증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">종된 사업장의 사업자등록 현황 증명</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="경찰청">경찰청</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('02','993' , $(this));" title="범죄·수사경력회보서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	범죄·수사경력회보서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인의 범죄 및 수사경력의 내용 확인을 위한 증명서로서 외국 입국/체류 허가용으로 발급하는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('02','995' , $(this));" title="범죄경력회보서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	범죄경력회보서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인의 범죄 및 수사경력의 내용 확인을 위한 증명서로서 범죄경력 회보서를 분리한 외국 입국/체류 허가용으로 발급하는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('02','997' , $(this));" title="수사경력회보서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	수사경력회보서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">본인의 범죄 및 수사경력의 내용 확인을 위한 증명서로서 수사경력 회보서를 분리한 외국 입국/체류 허가용으로 발급하는 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('02','991' , $(this));" title="운전경력증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	운전경력증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">운전자의 법규위반, 사고내역 등 운전경력이 기재되는 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="국민연금공단">국민연금공단</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('12','NPS111' , $(this));" title="국민연금 가입자 가입증명바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	국민연금 가입자 가입증명</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">국민연금 가입 내역 확인을 위한 증명서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('12','NPS411' , $(this));" title="연금산정용 가입내역 확인서(개인)바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	연금산정용 가입내역 확인서(개인)</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">국민연금 가입자의 연금산정용 가입내역 확인을 위한 확인서</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('12','NPS713' , $(this));" title="국민연금 수급증명(지급내역)바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	국민연금 수급증명(지급내역)</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">국민연금 월별, 연도별 지급내역  증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="질병관리청">질병관리청</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('09','00001' , $(this));" title="예방접종증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	예방접종증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">감염병의 예방 및 관리에 관한 법률에 의한 예방접종 사실 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="한국산업인력공단">한국산업인력공단</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('07','HRD06' , $(this));" title="국가기술자격 취득사항확인서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	국가기술자격 취득사항확인서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">국가기술자격 취득사실 확인을 위한 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="해양경찰청">해양경찰청</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('11','kcg001' , $(this));" title="수상구조사 자격증바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	수상구조사 자격증</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">수상구조사 국가자격시험에 합격한 사람에게 발급하는 자격증</p>
+															</a></li>
+														<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('11','kcg002' , $(this));" title="조종면허 증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	조종면허 증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">동력수상레저기구 조종면허(일반, 요트)취득자에 대하여 조종면허 면허증 발급하는 자격증</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									<li class="gnb-submenu-link">
+										<button type="button" title="보건복지부">보건복지부</button>
+										<div class="dep-wrap">
+											<div class="dep-content">
+												<ul class="flex-quarter flex-as flex-wrap gap-4024 flex-quarter">
+													<li class="pd-1612"><a href="javascript:void(0);" onclick="fn_go_appl('13','MOHW04' , $(this));" title="장애인증명서바로가기">
+																<p class="hp-borderBottom-after certi-tlt">
+																	장애인증명서</p>
+																<p class="hp-txt-gray-06 el-text-lv7 word-keep">등록된 장애인임을 확인하기 위한 증명서</p>
+															</a></li>
+														</ul>
+											</div>
+										</div>
+									</li>
+									</ul>
+							</div>
+						</li>
+						<!-- // 인증서 신청 -->
+						
+						<li class="gnb-menu has-dep2">
+							<button type="button" title="인증서 검증열기">인증서 검증</button>				<!-- 인증서 검증  -->
+							<div class="gnb-submenu">
+								<ul class="ly-inner">
+									<!-- submenu depth 2 -->
+									<li class="gnb-submenu-link">
+										<!-- <button type="button">아포스티유</button> -->
+										<div class="dep-wrap">
+											<div class="dep-content basic-dep fg-dep">
+												<ul class="flex-as flex-wrap">
+													<li><a href="/ha/rgst/onlnVrf.do?language=ko" class="koFg">한국어</a></li>
+													<li><a href="/ha/rgst/onlnVrf.do?language=en" class="enFg">English</a></li>
+													<li><a href="/ha/rgst/onlnVrf.do?language=zh" class="cnFg">中國語</a></li>
+													<li><a href="/ha/rgst/onlnVrf.do?language=ja" class="jpFg">日本語</a></li>
+													<li><a href="/ha/rgst/onlnVrf.do?language=vi" class="vnFg">tiếng việt</a></li>
+													<li><a href="/ha/rgst/onlnVrf.do?language=fr" class="frFg">français</a></li>
+													<li><a href="/ha/rgst/onlnVrf.do?language=es" class="esFg">español</a></li>
+												</ul>
+											</div>
+										</div>
+									</li>
+									<!-- ./ submenu depth 2 -->
+								</ul>
+							</div>
+						</li>
+						<!-- // 인증서 검증 -->
+						
+						<li class="gnb-menu has-dep2">
+							<button type="button" title="고객센터열기">고객센터</button> <div class="gnb-submenu">
+								<ul>
+									<!-- submenu depth 2 -->
+									<li class="gnb-submenu-link">
+										<!-- <button type="button">아포스티유</button> -->
+										<div class="dep-wrap">
+											<div class="dep-content basic-dep">
+												<ul class="flex-quarter flex-as flex-wrap">
+													<li><a href="/ea/ntc/ntcList.do">공지사항</a></li>	<!-- message code: 공지사항 -->
+													<li><a href="/ea/resrm/resrmList.do">자료실</a></li>									<!-- message code: 자료실 -->
+													<li><a href="/ea/faq/faqList.do">자주 묻는 질문</a></li>										<!-- message code: FAQ -->
+													<li><a href="javascript:fn_url('/ea/inqury/inquryReg.do','Y');">1:1 문의하기</a></li>		<!-- message code: 1:1 문의하기 -->
+												</ul>
+											</div>
+										</div>
+									</li>
+									<!-- ./ submenu depth 2 -->
+								</ul>
+							</div>
+						</li>
+						<!-- // 고객센터 -->
+						
+						<!-- site map -->
+						<li class="gnb-menu flex-item-right sitemap">
+							<button type="button" title="사이트맵열기">모아보기</button> <!-- 전체 서비스 보기 -->
+							<div class="gnb-submenu">
+								<ul style="min-height: 145rem;">
+									<!-- submenu depth 2 -->
+									<li class="gnb-submenu-link">
+										<div class="dep-wrap">
+											<!-- 전체 서비스 보기 -->
+											<div class="dep-content basic-dep flex-col gap-40 mt-24 pb-40">
+												
+												<!-- 정책·정보 -->
+												<div class="flex-col gap-24 siteSec">
+													<h3>정책∙정보</h3> <!-- 정책∙정보 -->
+													<div class="flex-onefifth flex-as flex-wrap gap-2432 flex-quarter">
+														<ul class="flex-col">
+															<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">아포스티유 제도</p></li> <!-- 아포스티유 -->
+															<li><a href="/gd/intro/appIntro.do?checkTabNo=1">아포스티유 제도 소개</a></li> <!-- 아포스티유 제도 소개 -->
+															<li><a href="/gd/intro/appIntro.do?checkTabNo=2">아포스티유 대상 문서</a></li> <!-- 아포스티유 대상 문서 -->
+															<li><a href="/gd/intro/appIntro.do?checkTabNo=3">아포스티유 발급절차 및 구비서류</a></li> <!-- 아포스티유 발급 절차 및 구비 서류 -->
+															<li><a href="/gd/intro/appIntro.do?checkTabNo=4">아포스티유 신청서 작성 방법</a></li> <!-- 아포스티유 신청서 작성방법 -->
+														</ul>
+														<ul class="flex-col">
+															<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">영사확인 제도</p></li> <!-- 영사 확인 제도 -->
+															<li><a href="/gd/intro/consulIntro.do?checkTabNo=1">영사확인 제도 소개</a></li> <!-- 영사확인 제도 소개 -->
+															<li><a href="/gd/intro/consulIntro.do?checkTabNo=2">영사확인 대상 문서</a></li> <!-- 영사확인 대상 문서 -->
+															<li><a href="/gd/intro/consulIntro.do?checkTabNo=3">영사확인 발급절차 및 구비서류</a></li> <!-- 영사확인 발급 절차 및 구비 서류 -->
+															<li><a href="/gd/intro/consulIntro.do?checkTabNo=4">영사확인 신청서 작성 방법</a></li> <!-- 영사확인 신청서 작성방법 -->
+														</ul>
+													</div>
+												</div>
+												
+												<!-- 인증서 신청 -->
+												<div class="flex-col gap-24 siteSec">
+													<h3>인증서신청</h3><!-- message code: 인증서 신청 -->
+													<div class="flex-onefifth flex-as flex-wrap gap-2432 flex-quarter">
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">대법원</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','01' , $(this));" title="가족관계증명서바로가기">
+																				가족관계증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','06' , $(this));" title="영문증명서바로가기">
+																				영문증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','02' , $(this));" title="기본증명서바로가기">
+																				기본증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','03' , $(this));" title="혼인관계증명서바로가기">
+																				혼인관계증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','04' , $(this));" title="입양관계증명서바로가기">
+																				입양관계증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','05' , $(this));" title="친양자입양관계 증명서바로가기">
+																				친양자입양관계 증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','10' , $(this));" title="제적등본바로가기">
+																				제적등본</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('03','11' , $(this));" title="제적초본바로가기">
+																				제적초본</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">정부24</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('01','1310000001501' , $(this));" title="주민등록표등본바로가기">
+																				주민등록표등본</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('01','1310000001502' , $(this));" title="주민등록표초본바로가기">
+																				주민등록표초본</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">외교부</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('10','00' , $(this));" title="여권발급기록증명서바로가기">
+																				여권발급기록증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('10','01' , $(this));" title="여권실효확인서바로가기">
+																				여권실효확인서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('10','02' , $(this));" title="여권발급신청서류 증명서바로가기">
+																				여권발급신청서류 증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('10','04' , $(this));" title="여권정보증명서바로가기">
+																				여권정보증명서</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">교육부</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('05','037000072g' , $(this));" title="초중고등학교 졸업증명서바로가기">
+																				초중고등학교 졸업증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('05','037000070g' , $(this));" title="초중고등학교 재학증명서바로가기">
+																				초중고등학교 재학증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('05','037000078g' , $(this));" title="중고등학교 성적증명서바로가기">
+																				중고등학교 성적증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('05','037000071d' , $(this));" title="검정고시 성적증명서바로가기">
+																				검정고시 성적증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('05','037000073e' , $(this));" title="검정고시 합격증명서바로가기">
+																				검정고시 합격증명서</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">병무청</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('06','6001' , $(this));" title="병적증명서바로가기">
+																				병적증명서</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">국세청</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B0001' , $(this));" title="사업자등록증명바로가기">
+																				사업자등록증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B0002' , $(this));" title="휴업사실증명바로가기">
+																				휴업사실증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B0012' , $(this));" title="폐업사실증명바로가기">
+																				폐업사실증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B0006' , $(this));" title="납세증명서(대금수령용)바로가기">
+																				납세증명서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B0005' , $(this));" title="납부내역증명바로가기">
+																				납부내역증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B1001' , $(this));" title="소득금액증명(종합소득세신고자용)바로가기">
+																				소득금액증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B4009' , $(this));" title="부가가치세 과세표준증명바로가기">
+																				부가가치세 과세표준증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B1002' , $(this));" title="부가가치세 면세사업자수입금액증명바로가기">
+																				부가가치세 면세사업자수입금액증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B1003' , $(this));" title="표준재무제표증명바로가기">
+																				표준재무제표증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('08','B0021' , $(this));" title="사업자단위과세 적용 종된사업장증명(개별)바로가기">
+																				사업자단위과세 적용 종된사업장증명</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">경찰청</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('02','993' , $(this));" title="범죄·수사경력회보서바로가기">
+																				범죄·수사경력회보서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('02','995' , $(this));" title="범죄경력회보서바로가기">
+																				범죄경력회보서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('02','997' , $(this));" title="수사경력회보서바로가기">
+																				수사경력회보서</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('02','991' , $(this));" title="운전경력증명서바로가기">
+																				운전경력증명서</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">국민연금공단</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('12','NPS111' , $(this));" title="국민연금 가입자 가입증명바로가기">
+																				국민연금 가입자 가입증명</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('12','NPS411' , $(this));" title="연금산정용 가입내역 확인서(개인)바로가기">
+																				연금산정용 가입내역 확인서(개인)</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('12','NPS713' , $(this));" title="국민연금 수급증명(지급내역)바로가기">
+																				국민연금 수급증명(지급내역)</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">질병관리청</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('09','00001' , $(this));" title="예방접종증명서바로가기">
+																				예방접종증명서</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">한국산업인력공단</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('07','HRD06' , $(this));" title="국가기술자격 취득사항확인서바로가기">
+																				국가기술자격 취득사항확인서</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">해양경찰청</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('11','kcg001' , $(this));" title="수상구조사 자격증바로가기">
+																				수상구조사 자격증</a>
+																		</li>
+																	<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('11','kcg002' , $(this));" title="조종면허 증명서바로가기">
+																				조종면허 증명서</a>
+																		</li>
+																	</ul>
+														<ul class="flex-col">
+																<li><p class="pd-16 hp-font-bold hp-bg-lblue-00 hp-borderBottom-black-00">보건복지부</p></li>
+																
+																<li>
+																			<a href="javascript:void(0);" onclick="fn_go_appl('13','MOHW04' , $(this));" title="장애인증명서바로가기">
+																				장애인증명서</a>
+																		</li>
+																	</ul>
+														</div>
+												</div>
+												
+												<!-- 인증서 검증 -->
+												<div class="flex-col gap-24 siteSec">
+													<h3>인증서 검증</h3> <!-- 인증서 검증  -->
+													<ul class="flex-onefifth flex-as flex-wrap gap-2432 flex-quarter">
+														<li><a href="/ha/rgst/onlnVrf.do?language=ko" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">한국어</a></li>
+														<li><a href="/ha/rgst/onlnVrf.do?language=en" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">English</a></li>
+														<li><a href="/ha/rgst/onlnVrf.do?language=zh" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">中國語</a></li>
+														<li><a href="/ha/rgst/onlnVrf.do?language=ja" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">日本語</a></li>
+														<li><a href="/ha/rgst/onlnVrf.do?language=vi" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">tiếng việt</a></li>
+														<li><a href="/ha/rgst/onlnVrf.do?language=fr" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">français</a></li>
+														<li><a href="/ha/rgst/onlnVrf.do?language=es" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">español</a></li>
+													</ul>
+												</div>
+												
+												<!-- 고객센터 -->
+												<div class="flex-col gap-24 siteSec">
+													<h3>고객센터</h3> <!-- message code : 고객센터 -->
+													<ul class="flex-onefifth flex-as flex-wrap gap-2432 flex-quarter">
+														<li><a href="/ea/ntc/ntcList.do" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">공지사항</a></li> <!-- message code: 공지사항 -->
+														<li><a href="/ea/resrm/resrmList.do" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">자료실</a></li> <!-- message code: 자료실 -->
+														<li><a href="/ea/faq/faqList.do" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">자주 묻는 질문</a></li> <!-- message code: FAQ -->
+														<li><a href="javascript:fn_url('/ea/inqury/inquryReg.do','Y');" class="hp-bg-lblue-00 hp-border-radius-01 hp-borderReset hp-font-bold el-text-lv6">1:1 문의하기</a></li> <!-- message code: 1:1 문의하기 -->
+													</ul>
+												</div>
+											</div>
+										</div>
+									</li>
+									<!-- ./ submenu depth 2 -->
+								</ul>
+							</div>
+						</li>
+						<!-- //site map -->
+					</ul>
+				</nav>
+				<!-- .// pc용 gnb -->
+				
+				<!-- 모바일용 gnb --> 
+				<nav id="gnb-sm">
+					<div class="gnb-sm-in">
+						<div class="gnb-sm-header">
+							<section>
+								<div id="gnb-mo-util-box-control" class="gnb-sm-util el-text-lv7 bl-util-control">
+									<!-- 화면 크기  -->
+									<button id="gnb-mo-util-box-controlbtn" type="button" class="el-toggle-open-screenSize" title="화면크기열기">화면크기</button>			<!-- 화면크기 -->
+									<div class="bl-utilbox" style="--xPosition: 4.5rem">
+										<ul class="bl-utilgroup">
+											<li><button type="button" onclick="zoomBtn(1)" title="작게">작게</button></li>				<!-- 작게 -->
+											<li><button type="button" onclick="zoomBtn(2)" title="보통">보통</button></li>			<!-- 보통 -->
+											<li class="is-active"><button type="button" onclick="zoomBtn(3)" title="조금 크게">조금 크게</button></li>				<!-- 조금 크게 -->
+											<li><button type="button" onclick="zoomBtn(4)" title="크게">크게</button></li>				<!-- 크게 -->
+											<li><button type="button" onclick="zoomBtn(5)" title="가장크게">가장크게</button></li>				<!-- 가장 크게 -->
+										</ul>
+										<div class="bl-utiletc">
+											<button type="button" title="초기화">
+												<span class="flex-ac gap-4 el-before-20 reset" onclick="zoomReset()">초기화</span>			<!-- 초기화 -->
+											</button>
+										</div>
+									</div>
+									<!-- .// 화면 크기  -->
+									<button type="button" onclick="fn_chgLanguage('en')" title="Change Language">ENGLISH</button>
+										</div>
+								<div class="gnb-sm-loginInfo">
+									<a href="/ga/login/login.do?headFg=issue" class="hp-font-bold el-before-20 login flex-ac gap-8">
+											
+																로그인해주세요
+												</a>
+									<!-- 로그인 세션 확인 완료 시 -->
+									<!-- .// 로그인 세션 확인 완료 시 -->
+								</div>
+							</section>
+							<button type="button" class="gnb-sm-close el-before-24" title="닫기"><span class="sr-only">닫기</span></button> <!-- 닫기  -->
+						</div>
+						<div class="gnb-sm-body">
+							<div class="gnb-sm-menu-wrap">
+								<div class="gnb-sm-menu">
+									<ul>
+										<li><button type="button" title="정책∙정보선택됨">정책∙정보<!-- 정책∙정보 --></button></li>
+										<li><button type="button" title="인증서신청">인증서신청<!-- 인증서 신청 --></button></li>
+										<li><button type="button" title="인증서 검증">인증서 검증<!-- 인증서 검증 --></button></li>
+										<li><button type="button" title="고객센터">고객센터<!-- 고객센터 --></button></li>
+									</ul>
+								</div>
+								<div class="gnb-sm-submenu">
+									<ul class="submenu-wrap">
+										<li class="submenu-title">정책∙정보<!-- 정책∙정보 --></li>
+										<li>
+											<button type="button" class="el-toggle-open el-toggleList" title="아포스티유 제도 소개">아포스티유 제도</button>
+											<div class="submenu-dep3">
+												<ul>
+													<li><a href="/gd/intro/appIntro.do?checkTabNo=1">아포스티유 대상 문서</a></li> <!-- 아포스티유 대상 문서 -->
+													<li><a href="/gd/intro/appIntro.do?checkTabNo=2">아포스티유 발급절차 및 구비서류</a></li> <!-- 아포스티유 발급 구비서류 -->
+													<li><a href="/gd/intro/appIntro.do?checkTabNo=3">아포스티유 발급 절차</a></li> <!-- 아포스티유 발급 절차 -->
+													<li><a href="/gd/intro/appIntro.do?checkTabNo=4">아포스티유 신청서 작성 방법</a></li> <!-- 아포스티유 신청서 작성방법 -->
+												</ul>
+											</div>
+										</li>
+										<li> 
+											<button type="button" class="el-toggle-open el-toggleList" title="영사확인 제도 소개">영사확인 제도</button>
+											<div class="submenu-dep3">
+												<ul>
+													 <li><a href="/gd/intro/consulIntro.do?checkTabNo=1">영사확인 대상 문서</a></li> <!-- 영사확인 대상 문서 -->
+													 <li><a href="/gd/intro/consulIntro.do?checkTabNo=2">영사확인 발급절차 및 구비서류</a></li> <!-- 영사확인 발급 구비서류 -->
+													 <li><a href="/gd/intro/consulIntro.do?checkTabNo=3">영사확인 발급 절차</a></li> <!-- 영사확인 발급 절차 -->
+													 <li><a href="/gd/intro/consulIntro.do?checkTabNo=4">영사확인 신청서 작성 방법</a></li> <!-- 영사확인 신청서 작성방법 -->
+												 </ul>
+											</div>
+										</li>
+									</ul>
+									<ul class="submenu-wrap">
+										<li class="submenu-title">인증서신청</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="대법원"><span>대법원</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','01' , $(this));" title="가족관계증명서바로가기">
+																		가족관계증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','06' , $(this));" title="영문증명서바로가기">
+																		영문증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','02' , $(this));" title="기본증명서바로가기">
+																		기본증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','03' , $(this));" title="혼인관계증명서바로가기">
+																		혼인관계증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','04' , $(this));" title="입양관계증명서바로가기">
+																		입양관계증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','05' , $(this));" title="친양자입양관계 증명서바로가기">
+																		친양자입양관계 증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','10' , $(this));" title="제적등본바로가기">
+																		제적등본</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('03','11' , $(this));" title="제적초본바로가기">
+																		제적초본</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="정부24"><span>정부24</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('01','1310000001501' , $(this));" title="주민등록표등본바로가기">
+																		주민등록표등본</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('01','1310000001502' , $(this));" title="주민등록표초본바로가기">
+																		주민등록표초본</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="외교부"><span>외교부</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('10','00' , $(this));" title="여권발급기록증명서바로가기">
+																		여권발급기록증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('10','01' , $(this));" title="여권실효확인서바로가기">
+																		여권실효확인서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('10','02' , $(this));" title="여권발급신청서류 증명서바로가기">
+																		여권발급신청서류 증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('10','04' , $(this));" title="여권정보증명서바로가기">
+																		여권정보증명서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="교육부"><span>교육부</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('05','037000072g' , $(this));" title="초중고등학교 졸업증명서바로가기">
+																		초중고등학교 졸업증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('05','037000070g' , $(this));" title="초중고등학교 재학증명서바로가기">
+																		초중고등학교 재학증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('05','037000078g' , $(this));" title="중고등학교 성적증명서바로가기">
+																		중고등학교 성적증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('05','037000071d' , $(this));" title="검정고시 성적증명서바로가기">
+																		검정고시 성적증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('05','037000073e' , $(this));" title="검정고시 합격증명서바로가기">
+																		검정고시 합격증명서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="병무청"><span>병무청</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('06','6001' , $(this));" title="병적증명서바로가기">
+																		병적증명서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="국세청"><span>국세청</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B0001' , $(this));" title="사업자등록증명바로가기">
+																		사업자등록증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B0002' , $(this));" title="휴업사실증명바로가기">
+																		휴업사실증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B0012' , $(this));" title="폐업사실증명바로가기">
+																		폐업사실증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B0006' , $(this));" title="납세증명서(대금수령용)바로가기">
+																		납세증명서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B0005' , $(this));" title="납부내역증명바로가기">
+																		납부내역증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B1001' , $(this));" title="소득금액증명(종합소득세신고자용)바로가기">
+																		소득금액증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B4009' , $(this));" title="부가가치세 과세표준증명바로가기">
+																		부가가치세 과세표준증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B1002' , $(this));" title="부가가치세 면세사업자수입금액증명바로가기">
+																		부가가치세 면세사업자수입금액증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B1003' , $(this));" title="표준재무제표증명바로가기">
+																		표준재무제표증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('08','B0021' , $(this));" title="사업자단위과세 적용 종된사업장증명(개별)바로가기">
+																		사업자단위과세 적용 종된사업장증명</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="경찰청"><span>경찰청</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('02','993' , $(this));" title="범죄·수사경력회보서바로가기">
+																		범죄·수사경력회보서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('02','995' , $(this));" title="범죄경력회보서바로가기">
+																		범죄경력회보서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('02','997' , $(this));" title="수사경력회보서바로가기">
+																		수사경력회보서</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('02','991' , $(this));" title="운전경력증명서바로가기">
+																		운전경력증명서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="국민연금공단"><span>국민연금공단</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('12','NPS111' , $(this));" title="국민연금 가입자 가입증명바로가기">
+																		국민연금 가입자 가입증명</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('12','NPS411' , $(this));" title="연금산정용 가입내역 확인서(개인)바로가기">
+																		연금산정용 가입내역 확인서(개인)</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('12','NPS713' , $(this));" title="국민연금 수급증명(지급내역)바로가기">
+																		국민연금 수급증명(지급내역)</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="질병관리청"><span>질병관리청</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('09','00001' , $(this));" title="예방접종증명서바로가기">
+																		예방접종증명서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="한국산업인력공단"><span>한국산업인력공단</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('07','HRD06' , $(this));" title="국가기술자격 취득사항확인서바로가기">
+																		국가기술자격 취득사항확인서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="해양경찰청"><span>해양경찰청</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('11','kcg001' , $(this));" title="수상구조사 자격증바로가기">
+																		수상구조사 자격증</a>
+																</li>
+															<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('11','kcg002' , $(this));" title="조종면허 증명서바로가기">
+																		조종면허 증명서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										<li>
+												<button type="button" class="el-toggle-open el-toggleList" title="보건복지부"><span>보건복지부</span></button>
+												<div class="submenu-dep3">
+													<ul>
+														<li>
+																	<a href="javascript:void(0);" onclick="fn_go_appl('13','MOHW04' , $(this));" title="장애인증명서바로가기">
+																		장애인증명서</a>
+																</li>
+															</ul>
+												</div>
+											</li>
+										</ul>
+									<ul class="submenu-wrap">
+										<li class="submenu-title">인증서 검증<!-- 인증서 검증 --></li>
+										<li><a href="/ha/rgst/onlnVrf.do?language=ko">한국어</a></li>
+										<li><a href="/ha/rgst/onlnVrf.do?language=en">English</a></li>
+										<li><a href="/ha/rgst/onlnVrf.do?language=zh">中國語</a></li>
+										<li><a href="/ha/rgst/onlnVrf.do?language=ja">日本語</a></li>
+										<li><a href="/ha/rgst/onlnVrf.do?language=vi">tiếng việt</a></li>
+										<li><a href="/ha/rgst/onlnVrf.do?language=fr">français</a></li>
+										<li><a href="/ha/rgst/onlnVrf.do?language=es">español</a></li>
+									</ul>
+									<ul class="submenu-wrap">
+										<li class="submenu-title">고객센터</li><!-- 고객센터 -->
+										<li><a href="/ea/ntc/ntcList.do">공지사항</a></li> <!-- message code: 공지사항 -->
+										<li><a href="/ea/resrm/resrmList.do">자료실</a></li> <!-- message code: 자료실 -->
+										<li><a href="/ea/faq/faqList.do">자주 묻는 질문</a></li> <!-- message code: FAQ -->
+										<li><a href="javascript:fn_url('/ea/inqury/inquryReg.do','Y');">1:1 문의하기</a></li> <!-- message code: 1:1 문의하기 -->
+									</ul>
+								</div>
+							</div>
+						</div>
+						<div class="gnb-sm-footer">
+							<a href="https://www.g4k.go.kr" class="flex-ac" title="재외동포 365민원포털"><img src="/images/icon_link_00.svg" alt="재외동포 365민원포털" class="mr-2">재외동포 365민원포털<!-- 재외동포 365민원포털 --></a>
+						</div>
+					</div>
+				</nav>
+				<!-- 모바일용 gnb -->
+			</div>
+		</div>
+	</div>
+
+<!-- //header area -->
+</header>
+
+    <!-- Any-ID script 시작 -->
+    <script src="/anyid/app/api/anyidAdaptor.js?v=20260930"></script>
+    <script>
+    	debugger;
+    	console.log("");
+    	let anyidAdaptor = new AnyidAdaptor(
+    			{
+    				agencyContextPath : ""
+    				, mode : "prod" // 20260805 추가
+    				, ssoByPass : ""
+    			}
+    	);
+    </script>
+    <!-- Any-ID script 끝 -->
+
+<script nonce="eapp0311">
+//로그 아웃
+function fn_logout(){	
+	if(!confirm("로그아웃 하시겠습니까?")){
+		return ;
+	}
+	// 260930 수정
+	try {
+		const isAnyidLogin = "";
+		if (isAnyidLogin === "true") {
+			anyidAdaptor.ssoLogout(anyidAdaptor.agencyContextPath + "/ga/anyid/logout.do");
+		} else {
+			location.href="/ga/login/logout.do";
+		}
+	} catch (e) {
+		location.href="/ga/login/logout.do";
+	}
+}
+
+//화면 이동
+function fn_url(url, isLogin){
+	if ( isLogin == "Y" ){
+		if ( url.indexOf("/ea/sovs/") > -1 || url.indexOf("/scan/") > -1 || url.indexOf("/appl/") > -1){
+			
+				//alert("공동인증서 로그인이 필요한 화면입니다. " + "\r\n" + "공동인증서로 로그인을 해주세요.");
+				//location.href="/ga/login/login.do?pkiLogin=Y";
+				// 20220614 회원로그인, 비회원로그인 - 인증 필요한 메뉴인 경우 인증서 선택 화면으로 이동
+				location.href="/ga/login/auth.do";
+				return ;
+			
+		}
+	}
+	
+	if( isLogin == "N" ){
+		
+			alert("로그인이 필요한 화면입니다. 먼저 로그인을 해주세요.");
+			location.href="/ga/login/login.do";
+			return ;
+		
+	}
+	location.href = url;		
+}
+
+//언어 선택
+function fn_chgLanguage(opt){
+	// 20220922 대민 영사확인 제도 발급절차 및 구비서류 페이지 일원화
+	var actionStr = "?language="+ opt;
+	
+	actionStr += "&checkTabNo=" + $("#checkTabNo").val();
+	
+	// 260901 anyid관련 언어처리 
+	if (location.href.includes("ga/anyid/login")) {
+		const params = new URLSearchParams(window.location.search);
+		params.delete('language');
+		const newSearch = params.toString();
+		$('#frm').attr('action', '?' + newSearch + '&' + actionStr.substr(1));
+	} else {
+		$('#frm').attr('action',actionStr);
+	}
+	$('#frm').attr('target','_self');
+	$('#frm').submit();	
+}
+
+
+
+function fn_go_appl(gubn, docCd , loc){
+	console.log("fn_issInfo :: param ==>gubn :: "+gubn+"// docCd ::"+docCd+"// loc ::"+loc);
+	
+	if($('#cntcFg').val() == undefined){
+		$('#frm').append('<input type="hidden" id="cntcFg" name="cntcFg"/>');
+	}
+	if($('#objDocFg').val() == undefined){
+		$('#frm').append('<input type="hidden" id="objDocFg" name="objDocFg"/>');
+	}
+	
+	
+	if(''){
+		if(gubn == '01'){
+			
+			if(docCd == '1320000004901'){
+				$('#cntcFg').val("02");
+				$('#objDocFg').val("991");	
+				$('#issPlaceCd').val("G");
+			
+			} else if(docCd == '1341000002001'){
+				$('#cntcFg').val("05");
+				$('#objDocFg').val("037000072g");
+			
+			} else if(docCd == '1340400000801'){
+				$('#cntcFg').val("05");
+				$('#objDocFg').val("037000078g");
+			
+			} else if(docCd == '1340400001902'){
+				$('#cntcFg').val("05");
+				$('#objDocFg').val("037000071d");
+			
+			} else if(docCd == '1340400002102'){
+				$('#cntcFg').val("05");
+				$('#objDocFg').val("037000073e");
+			
+			} else if(docCd == '1300000001602'){
+				$('#cntcFg').val("06");
+				$('#objDocFg').val("6001");
+			} else{
+				$('#cntcFg').val(gubn);
+				$('#objDocFg').val(docCd);
+			}
+		} else {
+			$('#cntcFg').val(gubn);
+			$('#objDocFg').val(docCd);	
+		}		
+		$('#frm').attr('target','_self');
+		//showProgress("ko","잠시만 기다려 주세요.<br>조회중입니다.");
+		$('#frm').attr('action','/gb/app/appAppl.do').submit();
+		//location.href="/gb/app/appAppl.do?cntcFg="+gubn+"&objDocFg="+docCd;
+		//hideProgress();
+	}else if(('' === 'true' || '' === 'true') && '' !== 'true'){ // 20230314 메인페이지 디자인 변경
+		// 202404 본인인증 후 발급 페이지 연결
+		var pageInfo = sessionStorage.getItem("pageInfo");
+		if('Y' == pageInfo) {
+			setPageInfo(gubn, docCd , loc);
+		}
+		
+		// 20220607 회원로그인, 비회원로그인
+		location.href="/ga/login/auth.do?headFg=issue";
+	}else {
+		alert("발급사실 확인 및 추가정보 입력을 위해서는 로그인이 필요합니다.");
+		location.href="/ga/login/login.do?headFg=issue";
+	}
+}
+
+function setPageInfo(gubn, docCd , loc) {
+	if(null != gubn && null != docCd && null != loc) {
+		sessionStorage.setItem("gubn", gubn);
+		sessionStorage.setItem("docCd", docCd);
+		sessionStorage.setItem("loc", loc);
+	}
+}
+
+function clearPageInfo() {
+	sessionStorage.removeItem("pageInfo");
+	
+	sessionStorage.removeItem("gubn");
+	sessionStorage.removeItem("docCd");
+	sessionStorage.removeItem("loc");
+}
+
+function subLink(obj){
+	$(obj).parent().parent().children('.dep-content').find('a:first').trigger('click');
+}
+
+
+function setCookie(cName, cValue, cDay) {
+	var expire = new Date();
+	expire.setDate(expire.getDate() + cDay);
+	cookies = cName + '=' + escape(cValue) + '; path=/ ';
+	if (typeof cDay != 'undefined')
+		cookies += ';expires=' + expire.toGMTString() + ';';
+	document.cookie = cookies;
+}
+
+function getCookie(cName) {
+	cName = cName + '=';
+	var cookieData = document.cookie;
+	var start = cookieData.indexOf(cName);
+	var cValue = '';
+	if (start != -1) {
+		start += cName.length;
+		var end = cookieData.indexOf(';', start);
+		if (end == -1)
+			end = cookieData.length;
+		cValue = cookieData.substring(start, end);
+	}
+	return unescape(cValue);
+}
+
+function getCallerName() {
+    const error = new Error();
+    const stack = error.stack?.split('\n');
+    const callerLine = stack?.[3];
+    const match = callerLine?.match(/at\s+([^\s(]+)/);
+    return match ? match[1] + '()' : '';
+}
+
+$(document).ready(function(){
+	
+	
+	// 태블릿 : 1024 px
+	// 모바일 : 768 px
+	// 사이즈 확인 : console.log("window-width : " + window.innerWidth);
+	var zm = getCookie("zoomSize");
+	if(zm != ""){
+		zoom(zm);
+		
+		$('.bl-util-control .bl-utilbox .bl-utilgroup li').removeClass('is-active');
+		var zse = 2;
+		if (zm == 1) zse = 0;
+		else if (zm == 2) zse = 1;
+		else if (zm == 3) zse = 2;
+		else if (zm == 4) zse = 3;
+		else if (zm == 5) zse = 4;
+		$('.bl-util-control .bl-utilbox .bl-utilgroup li').eq(zse).addClass('is-active');
+	} else {
+		// var size = -1;
+		// if (window.innerWidth <= 768) { // 모바일 }
+		// else if (window.innerWidth <= 1024) { // 태블릿 }
+		// else { // PC }
+		
+		zoom(3);
+		$('.bl-util-control .bl-utilbox .bl-utilgroup li').removeClass('is-active');
+		$('.bl-util-control .bl-utilbox .bl-utilgroup li').eq(2).addClass('is-active');
+	}
+	
+	if ('' == 'true') {
+		startTimer();
+	} else {
+		stopTimer();
+	}
+});
+</script><!-- //header area -->
+		
+			<!-- con area-->
+			<main id="container" class="ly-contBody-00">
+				<!-- breadcrumb -->
+				<nav id="location" class="bl-breadcrumb ly-inner" aria-label="브레드크럼브">
+					<ol class="path">
+						<li class="home"><a href="/index.do" class="txt">홈</a></li>
+						<li><p class="bl-normal-text">정책∙정보</p></li>
+						<li><p class="bl-normal-text">아포스티유</p></li> <!-- message code : 아포스티유 -->
+						<li><a href="/gd/intro/appIntro.do">아포스티유 제도 소개</a></li> <!-- message code : 아포스티유 제도 소개 -->
+					</ol>
+				</nav>
+				<!-- .// breadcrumb -->
+				<div id="contents" class="ly-inner">
+					<!-- 상단 제목 -->
+					<div class="conts-title sm-flexColumn">
+						<h2>아포스티유</h2> <!-- message code : 아포스티유 -->
+					</div>
+					<!-- .// 상단 제목 -->
+					<div class="tab-area layer">
+						<!-- tab list -->
+						<div class="tab line full lg-only-768">
+							<ul class="reload_tab flex-ac flex-evenly flex-align-stretch" role="tablist">
+								<li role="tab" aria-selected="true" aria-controls="tab-1" data-tab="tab-1" title="제도소개 선택됨">
+									<a href="#tab-1" class="txt-c el-text-lv5 show">제도소개</a>
+								</li>
+								<li role="tab" aria-selected="false" aria-controls="tab-2" data-tab="tab-2" title="대상문서">
+									<a href="#tab-2" class="txt-c el-text-lv5">대상문서</a>
+								</li>
+								<li role="tab" aria-selected="false" aria-controls="tab-3" data-tab="tab-3" title="발급절차 및 구비서류">
+									<a href="#tab-3" class="txt-c el-text-lv5">발급절차 및 구비서류</a>
+								</li>
+								<li role="tab" aria-selected="false" aria-controls="tab-4" data-tab="tab-4" title="신청서 작성방법">
+									<a href="#tab-4" class="txt-c el-text-lv5">신청서 작성방법</a>
+								</li>
+							</ul>
+						</div>
+						<!-- // tab list -->
+						<!-- mobile tab list -->
+						<div class="sm-tab sm-only-768">
+							<div class="swiper sm-tabSwiper">
+								<ul class="flex-align-stretch swiper-wrapper">
+									<li class="swiper-slide" role="tab" aria-selected="true" aria-controls="tab-1" data-tab="tab-1" title="제도소개 선택됨">
+										<a href="#tab-1">제도소개</a>
+									</li>
+									<li class="swiper-slide" role="tab" aria-selected="false" aria-controls="tab-2" data-tab="tab-2" title="대상문서">
+										<a href="#tab-2">대상문서</a>
+									</li>
+									<li class="swiper-slide" role="tab" aria-selected="false" aria-controls="tab-3" data-tab="tab-3" title="발급절차 및 구비서류">
+										<a href="#tab-3">발급절차 및 구비서류</a>
+									</li>
+									<li class="swiper-slide" role="tab" aria-selected="false" aria-controls="tab-4" data-tab="tab-4" title="신청서 작성방법">
+										<a href="#tab-4">신청서 작성방법</a>
+									</li>
+								</ul>
+								<div class="swiper-button-next"></div>
+								<div class="swiper-button-prev"></div>
+							</div>
+						</div>
+						<!-- .// mobile tab list -->
+						<!-- tab contents > (아포스티유 탭 컨텐츠) -->
+						<div class="tab-conts-wrap">
+							<!-- 아포스티유 > 제도 소개 conts -->
+							<section id="tab-1" role="tabpanel" aria-labelledby="tab-1" class="tab-conts show">
+								<h3 class="sr-only">제도소개</h3>
+								<!-- 아포스티유란? 배너 -->
+								<div class="el-cont-02 hp-bg-blue-02 mt-80 hp-txt-white-00">
+									<div class="flex-acjs gap-40 sm-flexColumn-768 sm-fs">
+										<div class="flex-col gap-40">
+											<h2 class="el-text-lv2 text-shadow-md">"아포스티유 (Apostille)란?"</h2>
+											<p class="el-text-lv5 text-shadow-md">「외국공문서에 대한 인증의 요구를 폐지하는 협약」이 2007년 7월 14일 정식발효하게 됨에 따라
+												재외동포청, 법무부에서 아포스티유를 받은 우리 공문서가 협약가입국에서 
+												현지 공문서와 동일한 효력을 인정받게 됩니다.
+											</p>
+										</div>
+										<div class="el-imgCont lg-responsive-miw hp-responsiveW-set-768" style="--lg-minwidth: 40rem; --lg-width:100%; --sm-width:24rem">
+											<img src="/images/img_appostille.png" alt="아포스티유 소개 이미지">
+										</div>
+									</div>
+								</div>
+								<!-- .// 아포스티유란? 배너 -->
+								<!-- 정책제도 타이틀 -->
+								<h3 class="el-text-lv3 mt-64">아포스티유란?</h3>
+								<div class="flex gap-24 mt-40 sm-flexColumn-768">
+									<div class="flex-col gap-32 hp-txt-gray-07 sm-flexColumn-768">
+										<p>
+											지구촌의 국제화·세계화 물결에 따라 한 국가에서 발행한 문서가 다른 국가에서 사용되는 사례가 급격히 증가하고 있는 가운데,
+											이처럼 한 국가의 문서가 다른 국가에서 인정받기 위해서는 문서의 국외사용을 위한 확인(Legalization)을 받아야만 합니다.
+										</p>
+										<p>
+											하지만 공관주재원(영사)이 문서를 확인하는 경우 주재국 공문서인지 여부를 신속 하게 확인하기 힘들어 확인에 장시간이
+											소요되는 불편이 있어 왔습니다. 이러한 불편을 해소 하기 위해 도입된 것이 문서발행 국가의 권한있는 당국이 자국 문서를 
+											확인하고 협약 가입국이 이를 인정하는 내용을 골자로 한 ‘외국공문서에 대한 인증의 요구를 폐지하는 협약(이른바 아포스티유 
+											협약)’ 입니다.
+										</p>
+										<p>
+											우리나라의 권한 있는 당국으로 지정된 재외동포청, 법무부가 협약에 따라 문서의 관인 또는 서명을 대조하여 
+											진위를 확인하고 발급하는 것이 아포스티유(Apostille)입니다. 따라서 아포스티유가 부착된 공문서는 주한 공관 영사 확인 없이
+											협약 가입국에서 공문서로서의 효력을 인정받게 됩니다.
+										</p>
+									</div>
+									<div class="el-imgCont lg-responsive-miw" style="--lg-minwidth: 40rem">
+										<img src="/images/img_appostille_ko.jpg" class="sm-width-100" alt="아포스티유 정책제도 소개 이미지">
+									</div>
+								</div>
+								<!-- .// 정책제도 타이틀 -->
+								<!-- 정책제도 단계 표시기 -->
+								<ol class="bl-step info-only mt-64 sm-mt-32 sm-flexColumn sm-gap-32">
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">1</span>
+											<span class="step">국내</span>
+										</div>
+									</li>
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">2</span>
+											<div class="sm-flexColumn-768 sm-gap-16">
+												<span class="step">2단계</span>
+												<ul class="step-list bl-infolist demical flex-col gap-16">
+													<li class="bl-infolist-desc">재외동포청 아포스티유</li>
+													<li class="bl-infolist-desc">법무부 아포스티유</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">3</span>
+											<div class="sm-flexColumn-768 sm-gap-16">
+												<span class="step">3단계</span>
+												<ul class="step-list bl-infolist demical flex-col gap-16">
+													<li class="bl-infolist-desc">해외 문서접수기관</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">4</span>
+											<span class="step">해외</span>
+										</div>
+									</li>
+								</ol>
+								<!-- .// 정책제도 단계 표시기 -->
+								<div class="el-cont-00 mt-64">
+									<!-- 아포스티유 협약 개요 -->
+									<div class="flex-col gap-32">
+										<h5 class="el-text-lv5">아포스티유 협약 개요</h5>
+										<ul class="bl-infolist demical flex-col gap-24">
+											<li class="bl-infolist-desc">명칭 : Convention Abolishing the Requirement of Legalization for Foreign Public Document (외국공문서에 대한 인증의 요구를 폐지하는 협약)</li>
+											<li class="bl-infolist-desc">개요 : 협약 가입국들 사이에서 공문서의 국제적 활용을 보다 용이하게 하기 위해, 외국 공관의 영사확인 등 복잡한 인증절차를 폐지하는 대신
+												공문서 발행국가가 인증하는 내용을 골자로 하는 다자간 협약</li>
+											<li class="bl-infolist-desc">발효시기 : 1961. 10. 5 헤이그에서 작성, 1965. 1. 24 발효</li>
+											<li class="bl-infolist-desc">우리나라에 대한 발효 : 2007. 7. 14</li>
+											<li class="bl-infolist-desc">가입국 현황 : 2026. 09. 11 현재 131개 국가 및 지역 가입</li>
+										</ul>
+										<!-- 아포스티유 가입국 표 -->
+										<div class="overflow-auto">
+											<table class="bl-vertical-list hp-miw table-layout-inherit" summary="아포스티유 가입국 표">
+												<caption>아포스티유 가입국 표</caption>
+												<colgroup>
+													<col style="width: 16rem;">
+													<col style="width: auto;">
+												</colgroup>
+												<thead>
+													<tr>
+														<th scope="col">대륙</th>
+														<th scope="col">가입국</th>
+													</tr>
+												</thead>
+												<tbody class="hp-txt-gray-07 verticalTop-tbody">
+													<tr>
+														<td class="txt-l">아시아, 대양주</td>
+														<td class="txt-l">뉴질랜드, 니우에, 마샬군도, 모리셔스, 몽골, 바누아투, 바레인, 방글라데시, 베트남, 브루나이, 사모아, 사우디아라비아, 싱가포르, 오만, 오스트레일리아(호주), 우즈베키스탄, 이스라엘, 인도, 인도네시아, 일본, 중국(마카오, 홍콩 포함), 쿡아일랜드(쿠크군도), 키르기즈스탄, 타지키스탄, 통가, 파키스탄, 팔라우, 피지, 필리핀, 한국</td>
+													</tr>
+													<tr>
+														<td class="txt-l">유럽</td>
+														<td class="txt-l">그루지아/조지아, 그리스, 네덜란드, 노르웨이, 덴마크, 독일, 라트비아, 러시아, 루마니아, 룩셈부르크, 리투아니아, 리히텐슈타인, 북마케도니아, 모나코, 몬테네그로, 몰도바, 몰타, 벨기에, 벨라루스, 보스니아 헤르체고비나, 불가리아, 사이프러스/키프로스, 산마리노, 세르비아, 스웨덴, 스위스, 스페인, 슬로바키아, 슬로베니아, 아르메니아, 아이슬란드, 아일랜드, 아제르바이잔, 안도라, 알바니아, 에스토니아, 영국, 오스트리아, 우크라이나, 이탈리아, 체코, 카자흐스탄, 코소보, 크로아티아, 튀르키예, 포르투갈, 폴란드, 프랑스, 핀란드, 헝가리</td>
+													</tr><tr>
+														<td class="txt-l">북미</td>
+														<td class="txt-l">미국(괌, 마우리제도, 사이판, 푸에르토리코 포함), 캐나다</td>
+													</tr>
+													<tr>
+														<td class="txt-l">중남미</td>
+														<td class="txt-l">가이아나, 과테말라, 그레나다, 니카라과, 도미니카공화국, 도미니카연방, 멕시코, 바베이도스, 바하마, 베네수엘라, 벨리즈, 볼리비아, 브라질, 세인트루시아, 세인트빈센트 그레나딘, 세인트키츠네비스, 수리남, 아르헨티나, 앤티가바부다, 에콰도르, 엘살바도르, 온두라스, 우루과이, 칠레, 코스타리카, 콜롬비아, 트리니다드토바고, 파나마, 페루, 파라과이, 자메이카</td>
+													</tr>
+													<tr>
+														<td class="txt-l">아프리카</td>
+														<td class="txt-l">나미비아, 남아프리카공화국, 라이베리아, 레소토, 말라위, 모로코, 보츠와나, 상투메프린시페, 세네갈, 세이셸, 알제리, 에스와티니, 카보베르데, 브룬디, 튀니지, 르완다</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+										<!-- .// 아포스티유 가입국 표 -->
+										<ul class="bl-infolist demical flex-col gap-24">
+											<li class="bl-infolist-desc">
+												<a class="flex-ac sm-flexColumn-768 sm-fs sm-gap-12" title="서비스 제공 국가(e-Register) 목록 (새 창 열림)" href="https://www.hcch.net/en/instruments/conventions/publications1/?dtid=49&cid=41" target="_blank">
+													인증서 진위 확인 서비스 제공 국가(e-Register) 목록
+													<img src="/images/icon_link_00.svg" alt="인증서 진위 확인 서비스 목록" class="ml-4 lg-only-768">
+													<!-- 모바일용 목록 버튼 -->
+													<button type="button" class="el-btn-ss hp-border-black-00 w-auto-i sm-only-768">
+														<img src="/images/icon_link_00.svg" alt="인증서 진위 확인 서비스 목록" class="ml-4">
+														목록보기
+													</button>
+												</a>
+											</li>
+											<li class="bl-infolist-desc flex-col gap-20">
+												협약 가입국에 주재하고 있는 우리나라 공관 홈페이지에서 확인하는 방법
+												<div class="pd-16 hp-border-radius-12 hp-bg-gray-00 hp-border-gray-02">
+													외교부 홈페이지 <a class="text-deco-underline" href="https://www.mofa.go.kr" title="외교부 홈페이지로 이동">(www.mofa.go.kr)</a> → 상단 메뉴 오른쪽 ‘외교부 소개’, 세부메뉴 ‘재외공관’ 클릭 → 해당 대륙 클릭 → 화면 아래 해당국가 지역을 관할하는 우리나라 재외공관명 클릭(해당 공관 홈페이지 이동) → 상단 메뉴 ‘영사’, 보통 세부메뉴 ‘공증’란 클릭하면 관련 문서중 ‘아포스티유’ 또는 ‘영사확인’ 문서에서 관련정보 확인 가능
+												</div> 
+											</li>
+										</ul>
+									</div>
+									<!-- .// 아포스티유 협약 개요 -->
+									<!-- 아포스티유 절차 비교 -->
+									<div class="mt-40 sm-mt-32">
+										<h5 class="el-text-lv5">절차 비교</h5>
+										<div class="overflow-auto mt-32">
+											<table class="bl-vertical-list hp-miw table-layout-inherit" summary="아포스티유 절차비교 표">
+												<caption>아포스티유 절차비교 표</caption>
+												<colgroup>
+													<col class="hp-responsiveW-set-768" style="--lg-width:50%; --sm-width: 12rem">
+													<col class="hp-responsiveW-set-768" style="--lg-width:50%; --sm-width: auto">
+												</colgroup>
+												<thead>
+													<tr>
+														<th scope="col">현재 절차</th>
+														<th scope="col">Apostille발효 이후 절차</th>
+													</tr>
+												</thead>
+												<tbody class="hp-txt-gray-07 verticalTop-tbody">
+													<tr>
+														<td>공문서발급 → 재외동포청 확인 → 주한 공관 확인 → 해당국가에서 공문서로서 인정</td>
+														<td>공문서발급 → 재외동포청/법무부확인 → 협약가입국에서 공문서로서 인정</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+									</div>
+									<!-- .// 아포스티유 절차 비교 -->
+								</div>
+							</section>
+							<!-- .// 아포스티유 > 제도 소개 conts -->
+							<!-- 아포스티유 > 대상문서 conts -->
+							<section id="tab-2" role="tabpanel" aria-labelledby="tab-2" class="tab-conts">
+								<h3 class="sr-only">대상문서</h3>
+								<h3 class="el-text-lv3 mt-80">아포스티유(Apostille) 대상문서의 종류는?</h3>
+								<div class="el-cont-00 mt-40">
+									<div class="flex-col gap-40">
+										<div>
+											<h5 class="el-text-lv5">「공문서에 대한 아포스티유 및 본부영사확인 발급에 관한 규정」(제2조3항)</h5>
+											<ul class="bl-infolist demical mt-32 flex-col gap-24">
+												<li class="bl-infolist-desc">국가 또는 지방자치단체(국가 또는 지자체 업무를 위탁받은 기관 포함)에서 공무상 작성한 문서</li>
+												<li class="bl-infolist-desc">공증문서</li>
+												<li class="bl-infolist-desc">재판서 또는 재판을 적은 조서의 등본이나 초본</li>
+											</ul>
+										</div>
+										<div>
+											<h5 class="el-text-lv5">아포스티유(Apostille) 발급 기관에 따른 분류</h5>
+											<div class="overflow-auto mt-32">
+												<table class="bl-vertical-list hp-miw table-layout-inherit" summary="아포스티유 발급 기관에 따른 분류 표">
+													<caption>아포스티유(Apostille) 발급 기관에 따른 분류 표</caption>
+													<colgroup>
+														<col class="hp-responsiveW-set-768" style="--lg-width:50%; --sm-width: 100%">
+														<col class="hp-responsiveW-set-768 lg-only-768" style="--lg-width:50%;">
+													</colgroup>
+													<thead>
+														<tr>
+															<th scope="col">재외동포청 아포스티유 발급 대상 문서</th>
+															<th scope="col" class="lg-only-768">법무부 아포스티유 발급 대상 문서</th>
+														</tr>
+													</thead>
+													<tbody class="hp-txt-gray-07 verticalTop-tbody">
+														<tr>
+															<td>
+																<ul class="bl-infolist demical flex-col gap-24">
+																	<li class="bl-infolist-desc">법무부 및 그 소속기관(공소청)외의 국가 및 지자체에서 공무상 작성한 문서</li>
+																	<li class="bl-infolist-desc">국가 및 지자체 업무를 위탁받은 기관에서 공무상 작성한 문서</li>
+																</ul>
+															</td>
+															<td class="lg-only-768">
+																<ul class="bl-infolist demical flex-col gap-24">
+																	<li class="bl-infolist-desc">법무부 및 그 소속기관(공소청)에서 공무상 작성한 문서</li>
+																	<li class="bl-infolist-desc">재판서 또는 재판을 적은 조서의 등본이나 초본</li>
+																	<li class="bl-infolist-desc">공증문서</li>
+																</ul>
+															</td>
+														</tr>
+													</tbody>
+												</table>
+												<!-- 모바일 전환 시 두개의 테이블로 변경 -->
+												<div class="sm-only-768 sm-mt-32">   
+													<table class="bl-vertical-list hp-miw table-layout-inherit" summary="아포스티유 발급 기관에 따른 모바일 분류 표">
+														<caption>아포스티유(Apostille) 발급 기관에 따른 모바일 분류 표</caption>
+														<colgroup>
+															<col style="width: 100%;">
+														</colgroup>
+														<thead>
+															<tr>
+																<th scope="col">법무부 아포스티유 발급 대상 문서</th>
+																<th scope="col" class="lg-only-768">재외동포청 아포스티유 발급 대상 문서</th>
+															</tr>
+														</thead>
+														<tbody class="hp-txt-gray-07 verticalTop-tbody">
+															<tr>
+																<td>
+																	<ul class="bl-infolist demical flex-col gap-24">
+																		<li class="bl-infolist-desc">법무부 및 그 소속기관(공소청)에서 공무상 작성한 문서</li>
+																		<li class="bl-infolist-desc">재판서 또는 재판을 적은 조서의 등본이나 초본</li>
+																		<li class="bl-infolist-desc">공증문서</li>
+																	</ul>
+																</td>
+																<td class="lg-only-768">
+																	<ul class="bl-infolist demical flex-col gap-24">
+																	<li class="bl-infolist-desc">법무부 및 그 소속기관(공소청)외의 국가 및 지자체에서 공무상 작성한 문서</li>
+																	<li class="bl-infolist-desc">국가 및 지자체 업무를 위탁받은 기관에서 공무상 작성한 문서</li>
+																	</ul>
+																</td>
+															</tr>
+														</tbody>
+													</table>
+												</div>
+												<!-- .// 모바일 전환 시 두개의 테이블 변경 -->
+											</div>
+										</div>
+									</div>
+								</div>
+							</section>
+							<!-- .// 아포스티유 > 대상문서 conts -->
+							<!-- 아포스티유 > 발급절차 및 구비서류 -->
+							<section id="tab-3" role="tabpanel" aria-labelledby="tab-3" class="tab-conts">
+								<h3 class="sr-only">발급절차 및 구비서류</h3>
+								<h3 class="el-text-lv3 mt-80">아포스티유 발급절차는?</h3>
+								<!-- 발급절차 단계 표시기 -->
+								<ol class="bl-step info-only mt-40 sm-mt-32 sm-flexColumn sm-gap-32">
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">1</span>
+											<div class="sm-flexColumn-768 sm-gap-16">
+												<span class="step">신청</span>
+												<ul class="step-list bl-infolist demical flex-col gap-16">
+													<li class="bl-infolist-desc">
+														아포스티유 증명신청
+														<br class="lg-only-768">
+														(1 건당 1,000원)
+													</li>
+													<li class="bl-infolist-desc">온라인/방문/우편</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">2</span>
+											<div class="sm-flexColumn-768 sm-gap-16">
+												<span class="step">심사확인</span>
+												<ul class="step-list bl-infolist demical flex-col gap-16">
+													<li class="bl-infolist-desc">인영대조 진정여부 확인</li>
+													<li class="bl-infolist-desc">공증서 원본 확인</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">3</span>
+											<div class="sm-flexColumn-768 sm-gap-16">
+												<span class="step">발급</span>
+												<ul class="step-list bl-infolist demical flex-col gap-16">
+													<li class="bl-infolist-desc">증명서 발급</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">4</span>
+											<div class="sm-flexColumn-768 sm-gap-16">
+												<span class="step">교부</span>
+												<ul class="step-list bl-infolist demical flex-col gap-16">
+													<li class="bl-infolist-desc">증명서 교부</li>
+													<li class="bl-infolist-desc">온라인 즉시 교부</li>
+													<li class="bl-infolist-desc">
+														창구교부 또는 우편 송부
+														<br>
+														(우편 신청 시만)
+													</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+									<li>
+										<div class="sm-flex-768 sm-gap-20">
+											<span class="step-ico">5</span>
+											<div class="sm-flexColumn-768 sm-gap-16">
+												<span class="step">조회</span>
+												<ul class="step-list bl-infolist demical flex-col gap-16">
+													<li class="bl-infolist-desc">
+														상대국가에 증명사실 
+														<br>
+														유무 확인 및 통보
+													</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+								</ol>
+								<!-- .// 발급절차 단계 표시기 -->
+								<!-- 신청 구비서류 안내 -->
+								<div class="mt-64 flex-col gap-64">
+									<div>
+										<h3 class="el-text-lv3">아포스티유 신청 구비서류는?</h3>
+										<div class="el-cont-00 mt-40 flex-col gap-32">
+											<div>
+												<h5 class="el-text-lv5">신청서<br>(홈페이지 다운로드 또는 통합민원실내 구비)</h5>
+												<div class="bl-file mt-24">
+													<ul class="bl-file-list">
+														<li>
+															<div class="bl-file-in">
+																<div class="bl-file-name">신규신청서 다운로드(첨부 ①)</div>
+																<div class="bl-file-btn">
+																	<a href="/gd/intro/ApostilleLegalizationRequestFormDownload.do" class="el-after-20 download flex-ac gap-4" title="신규신청서 다운로드(첨부 ①)">다운로드</a>
+																</div>
+															</div>
+														</li>
+														<li>
+															<div class="bl-file-in">
+																<div class="bl-file-name">위임장 양식 다운로드(첨부 ②)</div>
+																<div class="bl-file-btn">
+																	<a href="/gd/intro/PowerofAttorneyDownload.do" class="el-after-20 download flex-ac gap-4" title="위임장 양식 다운로드(첨부 ②)">다운로드</a>
+																</div>
+															</div>
+														</li>
+													</ul>
+												</div>
+											</div>
+											<div>
+												<h5 class="el-text-lv5">아포스티유를 받고자 하는 문서</h5>
+												<ul class="bl-infolist demical flex-col gap-24 hp-txt-gray-07 mt-24">
+													<li>
+														<div>
+															국가 또는 지자체 발급 문서 또는 <span class="hp-txt-red-00"><a href="/gd/intro/EntrustedDocListDownload.do" title="위탁 문서/기관 리스트(첨부 ③)" onmousedown="javascript:fn_visited($(this));">국가 또는 지자체 업무를 위탁받은 기관의 발급 문서</a></span><br>
+															※ 대법원 인터넷 등기소, 정부24 등 발급되는 서류 중 열람용 및 발급용으로 나누어져 있는 경우, 열람용 문서는 법적 효력이 없으므로,<br><span class="hp-txt-red-00">반드시 "제출용"으로 발급</span>받아 오시기 바랍니다.
+														</div>
+													</li>
+													<div class="bl-file">
+														<ul class="bl-file-list">
+															<li>
+																<div class="bl-file-in">
+																	<div class="bl-file-name">위탁 문서/기관 리스트(첨부 ③)</div>
+																	<div class="bl-file-btn">
+																		<a href="/gd/intro/EntrustedDocListDownload.do" class="el-after-20 download flex-ac gap-4" title="위탁 문서/기관 리스트(첨부 ③)">다운로드</a>
+																	</div>
+																</div>
+															</li>
+														</ul>
+													</div>
+													<li>2024.4.1.부터 상공회의소 원산지증명서 원본은 공증 없이 아포스티유 신청 가능</li>
+													<li>2024.6.1.부터 국립대학교 학적서류 원본은 공증 없이 아포스티유 신청 가능</li>
+													<li>2024.7.22.부터 대한화장품협회 서류 원본은 공증 없이 아포스티유 신청 가능</li>
+													<li>2025.12.1.부터 공공의료기관 서류 원본은 공증 없이 아포스티유 신청 가능</li>
+													<li>
+														<div>
+														상기 외, 문서는 공증을 받고 오셔야 가능하며, 상세내용을 안내받고 싶은 경우, 02-6747-0404로 문의하시기 바랍니다.<br>
+														<span class="hp-txt-red-00">※ 재외동포청 및 법무부는 아포스티유 발급을 위해 특정 공증사무소를 지정하고 있지 않습니다.</span>
+														</div>
+													</li>
+												</ul>
+											</div>
+											<div>
+												<h5 class="el-text-lv5">신청인의 신분 확인하는 서류</h5>
+												<div class="overflow-auto mt-32">
+													<!-- message code : 아포스티유 신청건수,접수시간,교부시간에 따른 처리기간 정보입니다. -->
+													<table class="bl-vertical-list hp-miw table-layout-inherit" summary="신청인의 신분을 확인하는 서류 정보">
+														<caption>신청인의 신분을 확인하는 서류 정보입니다.</caption>
+														<!-- 모바일 화면 -->
+															<colgroup>
+																<col class="hp-responsiveW-set-768 hp-miw" style="--lg-width:32rem; --sm-width: 15%; --minwidth: 8rem;">
+																<col class="hp-responsiveW-set-768 hp-miw" style="--lg-width:16rem; --sm-width: 45%; --minwidth: 8rem;">
+																<col class="hp-responsiveW-set-768 hp-miw" style="--lg-width:auto; --sm-width: 40%; --minwidth: 13rem;">
+															</colgroup>
+															<thead>
+																<tr>
+																	<th scope="col" style="text-align:center;">구분</th>
+																	<th scope="col" style="text-align:center;">본인 신청</th>
+																	<th scope="col" style="text-align:center;">대리 신청<br>(가족·지인,<br>대행사,<br>회사 직원)</th>
+																</tr>
+															</thead>
+															<tbody class="hp-txt-gray-07 verticalTop-tbody">
+																<tr>
+																	<td class="txt-l">개인 서류</td>
+																	<td class="txt-l">
+																		<ul class="bl-infolist demical flex-col gap-24">
+																			<li class="bl-infolist-desc">신분증 (예)<br>주민등록증,<br>운전면허증,<br>여권 등</li>
+																		</ul>
+																	</td>
+																	<td class="txt-l">
+																		<ul class="bl-infolist demical flex-col gap-24">
+																			<li class="bl-infolist-desc">신청인 신분증<br>(사본 또는 원본)</li>
+																			<li class="bl-infolist-desc">대리인 신분증<br>(원본)</li>
+																			<li class="bl-infolist-desc">
+																				대리권 확인에<br>필요한 서류 (예)<br>
+																				가족관계증명서, 위임장(원본) 등
+																			</li>
+																		</ul>
+																	</td>
+																</tr>
+																<tr>
+																	<td class="txt-l">회사 서류</td>
+																	<td class="txt-l">
+																		<ul class="bl-infolist demical flex-col gap-24">
+																			<li class="bl-infolist-desc">회사 대표<br>본인 신분증</li>
+																			<li class="bl-infolist-desc">사업자등록증</li>
+																		</ul>
+																	</td>
+																	<td class="txt-l">
+																		<ul class="bl-infolist demical flex-col gap-24">
+																			<li class="bl-infolist-desc">대리인 신분증<br>(원본)</li>
+																			<li class="bl-infolist-desc">사업자등록증</li>
+																			<li class="bl-infolist-desc">인감증명서 원본</li>
+																			<li class="bl-infolist-desc">위임장 원본<br>(인감 날인 必)</li>
+																			<li class="bl-infolist-desc">
+																				(인감증명서 및 위임장 원본 구비가 어려운 경우)<br>
+																				신청서(앞·뒤면) 회사명판 및 인감 날인으로 대체 가능
+																			</li>
+																		</ul>
+																	</td>
+																</tr>
+															</tbody>
+														</table>
+												</div>
+											</div>
+											<div>
+												<h5 class="el-text-lv5">전자수입인지(1,000원) : 발급 건당 구매 필요</h5>
+												<ul class="bl-infolist demical flex-col gap-24 hp-txt-gray-07 mt-24">
+													<li class="bl-infolist-desc flex-wrap">
+														전자수입인지 구매 방법
+														(<span class="hp-txt-red-00">아래 중 택1</span>)
+														<p class="w-100">- 전자수입인지 홈페이지(<a href="https://www.e-revenuestamp.or.kr" class="text-deco-underline hp-txt-blue-00 hp-font-regular" title="전자수입인지 홈페이지로 이동">www.e-revenuestamp.or.kr</a>)에서 구입 후 출력</p>
+														<p class="w-100">- 15층 통합민원실에서 현금으로 구매 가능</p>
+													</li>
+												</ul>
+											</div>
+											<div>
+												<h5 class="el-text-lv5">(우편접수시) 반송봉투</h5>
+												<ul class="bl-infolist demical flex-col gap-24 hp-txt-gray-07 mt-24">
+													<li>
+														<span class="hp-txt-red-00">반송봉투에 등기용 우표 부착, 수취인의 성명 및 주소를 반드시 기입 필요</span>
+													</li>
+												</ul>
+											</div>
+										</div>
+									</div>
+									<div>
+										<h3 class="el-text-lv3">아포스티유(Apostille) 신청방법 및 처리기간</h3>
+										<div class="el-cont-00 mt-40">
+											<div>
+												<h5 class="el-text-lv5">방문 접수</h5>
+												<div class="flex-col gap-16">
+													<ul class="bl-infolist demical flex-col gap-16 hp-txt-gray-07 mt-24">
+														<li class="bl-infolist-desc flex-wrap hp-txt-gray-07">
+															<p>근무시간 : 평일 09:00~18:00</p>
+															<p class="hp-txt-red-00 w-100">&#8251; 점심시간의 경우, 직원들의 교대근무로 여타시간보다 대기시간이 길어질 수 있습니다.</p>
+														</li>
+														<li class="bl-infolist-desc">처리기간</li>
+													</ul>
+													<div class="overflow-auto">
+														<!-- message code : 아포스티유 신청건수,접수시간,교부시간에 따른 처리기간 정보입니다. -->
+														<!-- 모바일 화면 -->
+															<table class="bl-vertical-list hp-miw" summary="아포스티유 신청건수,접수시간,교부시간에 따른 처리기간 정보입니다.">
+																<caption>아포스티유 신청건수,접수시간,교부시간에 따른 처리기간 정보입니다.</caption>
+																<colgroup>
+																	<col class="hp-responsiveW-set-768 hp-miw" style="--lg-width:32rem; --sm-width: 25%; --minwidth: 8rem;">
+																	<col class="hp-responsiveW-set-768 hp-miw" style="--lg-width:16rem; --sm-width: 35%; --minwidth: 10rem;">
+																	<col class="hp-responsiveW-set-768 hp-miw" style="--lg-width:auto; --sm-width: 40%; --minwidth: 12rem;">
+																</colgroup>
+																<thead>
+																	<tr>
+																		<th scope="col" style="text-align:center;">신청건수</th>
+																		<th scope="col" style="text-align:center;">접수시간</th>
+																		<th scope="col" style="text-align:center;">교부시간</th>
+																	</tr>
+																</thead>
+																<tbody class="verticalTop-tbody hp-txt-gray-07">
+																	<tr>
+																		<td class="txt-l">신청인당 10건 이하</td>
+																		<td class="txt-l">
+																			<ul class="bl-infoist demical flex-col gap-24">
+																				<li class="bl-infolist-desc sm-m-ht-8rem">09:00~11:30</li>
+																				<li class="bl-infolist-desc sm-m-ht-8rem">11:30~13:00</li>
+																				<li class="bl-infolist-desc sm-m-ht-8rem">13:00~14:30</li>
+																				<li class="bl-infolist-desc sm-m-ht-8rem">14:30 이후</li>
+																			</ul>
+																		</td>
+																		<td>
+																			<ul class="flex-col gap-24">
+																				<li class="bl-infolist-desc sm-m-ht-8rem">평균 1시간 이내 교부</li>
+																				<li class="bl-infolist-desc sm-m-ht-8rem">신청 당일 14:00 일괄 교부</li>
+																				<li class="bl-infolist-desc sm-m-ht-8rem">평균 1시간 이내 교부</li>
+																				<li class="bl-infolist-desc sm-m-ht-8rem">접수일 다음날(주말·공휴일인 경우 그 다음날) 09:30에 교부</li>
+																			</ul>
+																		</td>
+																	</tr>
+																	<tr>
+																		<td class="txt-l">신청인당 10건 초과 ~ 50건 이하</td>
+																		<td class="txt-l">근무시간</td>
+																		<td class="txt-l">접수일 다음날(주말·공휴일인 경우 그 다음날) 09:30에 교부</td>
+																	</tr>
+																	<tr>
+																		<td class="txt-l">대행사·<br>퀵서비스·<br>신청인당<br>50건 초과</td>
+																		<td class="txt-l">근무시간</td>
+																		<td class="txt-l">3일 이내 교부</td>
+																	</tr>
+																</tbody>
+															</table>
+															</div>
+												</div>
+												<div class="mt-32">
+													<h5 class="el-text-lv5">우편 접수</h5>
+													<ul class="bl-infolist demical flex-col gap-24 hp-txt-gray-07 mt-24">
+														<li>(주소) (03142) 서울시 종로구 율곡로 6 트윈트리타워 A동 15층 아포스티유 담당자</li>
+														<li>
+															<div>
+																(처리기간) 통상 7~10일<br> ※ 우편 상황, 미비서류 보완 요청 등으로 추가 소요 가능
+															</div>
+													   	</li>
+													</ul>
+												</div>
+												<div class="mt-32">
+													<h5 class="el-text-lv5">온라인 발급(e-아포스티유·영사확인 서비스)</h5>
+													<ul class="bl-infolist demical flex-col gap-24 hp-txt-gray-07 mt-24">
+														<li>
+															<div>
+																일부 공문서에 한해, 재외동포청 방문 없이 '무료'로 온라인 아포스티유 발급<br>
+																☞ 상세내용 확인(e-아포스티유·영사확인 서비스 <a href="/index.do" class="text-deco-underline hp-txt-blue-00" title="메인화면으로 이동">바로가기</a>)
+															</div>
+														</li>
+													</ul>
+												</div>
+											</div>	
+										</div>
+									</div>
+									<div>
+										<h3 class="el-text-lv3">아포스티유(Apostille) 발급이 거절될 수 있나요?</h3>
+										<div class="el-cont-00 mt-40">
+											<div>
+												<h5 class="el-text-lv5">「공문서에 대한 아포스티유 및 본부영사확인서 발급에 관한 규정」 제7조에 해당하는 경우, 발급을 거절할 수 있습니다.</h5>
+												<ul class="bl-infolist demical flex-col gap-24 hp-txt-gray-07 mt-24">
+													<li>제출한 문서가 명백하게 거짓인 경우</li>
+													<li>외국에서 발급한 문서를 첨부한 경우 등 공문서의 진위 여부를 확인하는 것이 불가능한 경우</li>
+												</ul>
+											</div>
+										</div>
+									</div>
+								</div>
+								<!-- .// 신청 구비서류 안내 -->
+							</section>
+							<!-- .// 아포스티유 > 발급절차 및 구비서류 -->
+							<!-- 아포스티유 > 신청서 작성방법 -->
+							<section id="tab-4" role="tabpanel" aria-labelledby="tab-4" class="tab-conts">
+								<h3 class="sr-only">신청서 작성방법</h3>
+								<div class="flex-col gap-64 mt-80 sm-mt-40">
+									<!-- 본인 신청 -->
+									<div>
+										<h3 class="el-text-lv3">본인 신청시</h3>
+										<div class="flex-acjc sm-flexColumn-768 gap-16 mt-40 sm-mt-32">
+											<div class="el-cont-00 bl-imgBox hp-responsiveW-set-768" style="--sm-width: 100%;">
+												<a href="javascript:void(0);" title="본인 신청시 앞면 이미지 자세히보기 팝업 열기" onclick="imageModalOpen(this)">
+													<img src="/images/contents/application_form01-1.gif" alt="본인 신청시 앞면 이미지">
+												</a>
+											</div>
+											<div class="el-cont-00 bl-imgBox hp-responsiveW-set-768" style="--sm-width: 100%;">
+												<a href="javascript:void(0);" title="본인 신청시 뒷면 이미지 자세히보기 팝업 열기" onclick="imageModalOpen(this)">
+													<img src="/images/contents/application_form01-2.gif" alt="본인 신청시 뒷면 이미지">
+												</a>
+											</div>
+										</div>
+									</div>
+									<!-- .// 본인 신청 -->
+									<!-- 대리 대행 신청 -->
+									<div>
+										<h3 class="el-text-lv3">대리(대행) 신청시</h3>
+										<div class="flex-acjc sm-flexColumn-768 gap-16 mt-40 sm-mt-32">
+											<div class="el-cont-00 bl-imgBox hp-responsiveW-set-768" style="--sm-width: 100%;">
+												<a href="javascript:void(0);" title="대리(대행) 신청시 앞면 이미지 자세히보기 팝업 열기" onclick="imageModalOpen(this)">
+													<img src="/images/contents/application_form02-1.gif" alt="대리(대행) 신청시 앞면 이미지">
+												</a>
+											</div>
+											<div class="el-cont-00 bl-imgBox hp-responsiveW-set-768" style="--sm-width: 100%;">
+												<a href="javascript:void(0);" title="대리(대행) 신청시 뒷면 이미지 자세히보기 팝업 열기" onclick="imageModalOpen(this)">
+													<img src="/images/contents/application_form02-2.gif" alt="대리(대행) 신청시 뒷면 이미지">
+												</a>
+											</div>
+										</div>
+									</div>
+									<!-- .// 대리 대행 신청시 -->
+									<!-- 회사 신청시 -->
+									<div>
+										<h3 class="el-text-lv3">회사 신청시</h3>
+										<div class="flex-acjc sm-flexColumn-768 gap-16 mt-40 sm-mt-32">
+											<div class="el-cont-00 bl-imgBox hp-responsiveW-set-768" style="--sm-width: 100%;">
+												<a href="javascript:void(0);" title="회사 신청시 앞면 이미지 자세히보기 팝업 열기" onclick="imageModalOpen(this)">
+													<img src="/images/contents/application_form03-1.gif" alt="회사 신청시 앞면 이미지">
+												</a>
+											</div>
+											<div class="el-cont-00 bl-imgBox hp-responsiveW-set-768" style="--sm-width: 100%;">
+												<a href="javascript:void(0);" title="회사 신청시 뒷면 이미지 자세히보기 팝업 열기" onclick="imageModalOpen(this)">
+													<img src="/images/contents/application_form03-2.gif" alt="회사 신청시 뒷면 이미지">
+												</a>
+											</div>
+										</div>
+									</div>
+									<!-- .// 회사 신청시 -->
+								</div>
+							</section>
+							<!-- .// 아포스티유 > 신청서 작성방법 -->
+						</div>
+						<!-- .// tab contents (아포스티유 탭 컨텐츠) -->
+						<!-- tab contents > (영사민원 탭 컨텐츠) ※컨텐츠 활성화를 원할 시 hidden 클래스 제거 -->
+						<!-- <div class="tab-conts-wrap hidden">
+							영사민원 > 제도 소개 conts
+							<section id="tab-1" role="tabpanel" aria-labelledby="tab-1" class="tab-conts show">
+								<h3 class="sr-only">제도소개</h3>
+								<p>탭1</p>
+							</section>
+							.// 영사민원 > 제도 소개 conts
+							영사민원 > 대상문서 conts
+							<section id="tab-2" role="tabpanel" aria-labelledby="tab-2" class="tab-conts">
+								<h3 class="sr-only">대상문서</h3>
+								<p>탭2</p>
+							</section>
+							.// 영사민원 > 대상문서 conts
+							영사민원 > 발급절차 및 구비서류
+							<section id="tab-3" role="tabpanel" aria-labelledby="tab-3" class="tab-conts">
+								<h3 class="sr-only">발급절차 및 구비서류</h3>
+								<p>탭3</p>
+							</section>
+							.// 영사민원 > 발급절차 및 구비서류
+							영사민원 > 신청서 작성방법
+							<section id="tab-4" role="tabpanel" aria-labelledby="tab-4" class="tab-conts">
+								<h3 class="sr-only">신청서 작성방법</h3>
+								<p>탭4</p>
+							</section>
+							.// 영사민원 > 신청서 작성방법
+						</div> -->
+						<!-- .// tab contents > (영사민원 탭 컨텐츠) -->
+					</div>
+					
+					<div class="bl-modal-00 modal" id="modal-image-info" role="dialog">
+						<div class="ly-inner ">
+							<div class="el-cont-00 hp-bg-white-00 modal-inner">
+								<div class="flex-col gap-32">
+									<!-- modal-header -->
+									<div class="modal-header flex-acjs">
+										<h2 class="hp-font-bold">전자가족관계등록시스템(온라인) 발급</h2>
+										<button type="button" class="el-before-20 close" onclick="imageModalClose()" title="닫기"><span class="sr-only">닫기</span></button>
+									</div>
+									<!-- ./ modal-header -->
+									
+									<!-- modal-body -->
+									<div class="modal-body">
+										<h2 class="el-text-lv5">신청서 작성 방법</h2>
+										<div class="modal-body-desc bl-chklist sm-indent gap-12 mt-24">
+										   	 <img id="modal-popup-image" src="#" alt="신청서 이미지 확대" />
+										</div>
+									</div>
+									<!-- ./ modal-body -->
+									
+									<!-- modal-button-group -->
+									<div class="modal-button-group sm-flex-evenly flex">
+										<button type="button" class="el-btn-s hp-border-black-00 flex-item-right" onclick="imageModalClose()" title="닫기">닫기</button>
+									</div>
+									<!-- ./ modal-button-group -->
+								</div>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</main>
+			<!-- //con area -->
+		</div>
+		<!-- Footer area -->
+		<!-- <link rel="stylesheet" type="text/css" href="/css/slick.css"/> -->
+<script nonce="eapp0311">
+		
+var chgLang = "ko";
+if(chgLang != 'ko'){
+	chgLang = 'en';
+}
+$(document).ready(function(){
+	$(".foot_top .btn_prev").on("click", function () {
+		$(this).parent().siblings(".foot_slider").slick("slickPrev");
+	})
+	$(".foot_top .btn_next").on("click", function () {
+		$(this).parent().siblings(".foot_slider").slick("slickNext");
+	})
+
+	
+	$(".foot_slider").slick({
+		infinite: true,
+		slidesToShow: 5, 
+		autoplay: true,
+		speed : 400,
+		arrows: false
+	}); 
+	
+	$(".foot_slider .slick-arrow, .bannerImg").on('click', function(){
+		$('.foot_slider').slick('slickPause');
+		$('.btn-slider-stop').hide();
+		$('.btn-slider-play').show(); 
+	});
+	
+	// accessibility sonpain 포커스 사라지지않기위해 수정 
+	$(".btn-slider-stop").on('click', function(){
+		$('.foot_slider').slick('slickPause');
+		$('.btn-slider-stop').hide();
+		$('.btn-slider-play').show().focus();
+	});
+	$(".btn-slider-play").on('click', function(){
+		$('.foot_slider').slick('slickPlay');
+		$('.btn-slider-stop').show().focus();
+		$('.btn-slider-play').hide(); 
+	});
+	
+});
+
+
+function fn_linkAgree(){
+	location.href = "/ga/link/linkAgree.do"+"?language="+chgLang;
+}
+
+
+function fn_inquryRegF() {
+	
+		alert("로그인이 필요한 화면입니다. 먼저 로그인을 해주세요.");
+		location.href="/ga/login/login.do";
+		return;
+	
+
+	location.href = "/ea/inqury/inquryReg.do";
+}
+
+
+function fn_linkPolicy(){
+	// 20221207 개인정보처리방침 링크 수정(외교부 개인정보처리방침으로 이동), 폰트사이즈 및 색상 변경
+	//window.open('https://www.mofa.go.kr/www/wpge/m_4194/contents.do');
+	//location.href = "/ga/link/linkPolicy.do"+"?language="+chgLang;
+	
+	// 20240530 #17708 재외동포365민원포털, 아포스티유 개인정보처리방침 변경작업
+	window.open('https://oka.go.kr/web/content.do?menu_cd=000075');
+}
+
+
+function fn_qestnarPartcptn(){  
+	var win_height = '740';
+	var win_width = '910';
+	
+	var winP,
+		win_top = (screen.height-win_height)/2,
+		win_left = (screen.width-win_width)/2,
+		win_option = 'width=' + win_width +', height=' + win_height + ', left='+win_left+', top='+win_top+', scrollbars=no, resizable=0, location=0';  
+	
+		winP = window.open("", "qestnarPop", win_option);
+		
+		var dForm = document.createElement("form");
+		dForm.name = "cmmnForm";
+		dForm.id = "cmmnForm";
+		dForm.action = "/qn/EamsQestnarPartcptn.do";
+		dForm.target = "qestnarPop";
+		
+		document.body.appendChild(dForm);
+		dForm.submit();	 
+		
+		$("#cmmnForm").remove();
+	  
+	if(window.focus){
+		winP.focus();
+		return false;
+	};
+}
+</script>
+<!-- message code :사이트정보안내 및 카피라이터영역 -->
+
+<!-- footer-quick -->
+<footer class="ly-footer">
+	<div class="footer-quick">
+		<div class="ly-inner flex sm-flexColumn-768">
+			<div class="flex-ac flex-wrap">
+				<ul class="footer-menu mr-32 w-100">
+					<li><a href="javascript:void(0)" onClick="fn_linkAgree();">이용약관</a></li>
+					<li><a href="javascript:void(0)" onClick="fn_linkPolicy();" title="새 창 열림"><strong class="hp-txt-emp-00">개인정보처리방침</strong></a></li> <!-- message code : 개인정보처리방침 -->
+					</ul>
+				<p class="w-100">시스템문의(관인/직인·홈페이지 이용) : 02-6399-7181 (해외 +82-2-6399-7181)</p> </div>
+			<div class="flex-ac ly-footer-right">
+				<div class="footer-quick-button">
+					<button type="button" onclick="fn_inquryRegF();" class="footer-quick-btn" title="1:1 문의하기">1:1 문의하기</button>
+				</div>
+				<div class="footer-quick-link">
+					<button type="button" onclick="btnTitle(this);" class="footer-quick-btn" title="패밀리 사이트 열기">패밀리사이트</button> <!-- 패밀리사이트 -->
+					<ul class="footer-twodepth">				
+						<li><a href="https://www.oka.go.kr" target="_blank" title="재외동포청사이트 새창열기">재외동포청</a></li>
+								<li><a href="http://www.mofa.go.kr" target="_blank" title="외교부사이트 새창열기">외교부</a></li>
+								<li><a href="https://www.g4k.go.kr" target="_blank" title="재외동포365민원포털사이트 새창열기">재외동포365민원포털</a></li>
+								<li><a href="https://www.hcch.net" target="_blank" title="HCCH사이트 새창열기">HCCH</a></li>
+							</ul>
+				</div>
+				<div class="footer-quick-link">
+					<button type="button" onclick="btnTitle(this);" class="footer-quick-btn" title="유관기관 열기">유관기관</button> <!-- 유관기관 -->
+					<ul class="footer-twodepth">
+						<li><a href="https://www.mois.go.kr" target="_blank" title="행정안전부사이트 새창열기">행정안전부</a></li>
+								<li><a href="https://www.gov.kr" target="_blank" title="정부24사이트 새창열기">정부 24</a></li>
+								<li><a href="https://www.police.go.kr" target="_blank" title="경찰청사이트 새창열기">경찰청</a></li>
+								<li><a href="https://minwon.police.go.kr" target="_blank" title="경찰민원포털사이트 새창열기">경찰청 민원 포털</a></li>
+								<li><a href="https://www.efine.go.kr" target="_blank" title="경찰청교통민원24사이트 새창열기">경찰청 교통민원 24</a></li>
+								<li><a href="http://crims.police.go.kr" target="_blank" title="범죄경력회보서발급시스템사이트 새창열기">범죄경력회보서 발급시스템</a></li>
+								<li><a href="https://www.scourt.go.kr" target="_blank" title="대법원사이트 새창열기">대법원</a></li>
+								<li><a href="http://efamily.scourt.go.kr/index.jsp" target="_blank" title="전자가족관계등록시스템사이트 새창열기">전자가족관계등록시스템</a></li>
+								<li><a href="http://www.moj.go.kr" target="_blank" title="법무부사이트 새창열기">법무부</a></li>
+								<li><a href="https://www.moe.go.kr" target="_blank" title="교육부사이트 새창열기">교육부</a></li>
+								<li><a href="https://www.neis.go.kr" target="_blank" title="나이스 대국민서비스사이트 새창열기">나이스 대국민서비스</a></li>
+								<li><a href="https://www.mma.go.kr" target="_blank" title="병무청사이트 새창열기">병무청</a></li>
+								<li><a href="http://www.hrdkorea.or.kr" target="_blank" title="한국산업인력공단 새창열기">한국산업인력공단</a></li>
+								<li><a href="https://www.q-net.or.kr" target="_blank" title="큐넷 새창열기">큐넷</a></li>
+								<li><a href="https://www.hometax.go.kr" target="_blank" title="국세청 새창열기">국세청</a></li>
+								<li><a href="http://www.kdca.go.kr" target="_blank" title="질병관리청사이트 새창열기">질병관리청</a></li>
+								<li><a href="https://kcg.go.kr/kcg/main.do" target="_blank" title="해양경찰청사이트 새창열기">해양경찰청</a></li>
+								<li><a href="https://imsm.kcg.go.kr/CLMS/" target="_blank" title="수상구조사종합정보사이트 새창열기">수상구조사종합정보</a></li>
+								<li><a href="https://boat.kcg.go.kr/home/main.do" target="_blank" title="수상레저종합정보사이트 새창열기">수상레저종합정보</a></li>
+							</ul>
+				</div>
+			</div>
+		</div>
+		<!-- ./ footer-quick -->
+	</div>
+	<div class="footer-body">
+		<div class="ly-inner">
+			<!-- footer-top -->
+			<div class="footer-top">
+				<!-- footer-logo -->
+				<div class="footer-logo flex-ajs">
+					<a href="https://oka.go.kr"  target="_blank"  title="재외동포청새 창 열기">
+						<img src="/images/logo_footer_00_pc.png" alt="재외동포청로고">
+					</a>
+					<!-- sns-wrap -->
+					<div class="flex-col gap-16 link-go mt-10">
+					<ul class="sns-wrap flex-ac gap-8">
+						<li><a href="https://instagram.com/overseas_koreans_agency" target="_blank" class="insta" title="재외동포청 insta 새 창 열기"><span style="display: none;">인스타그램</span></a></li>
+						<li><a href="https://www.youtube.com/@OKAKOREA" target="_blank" class="youtube" title="재외동포청 youtube 새 창 열기"><span style="display: none;">유튜브</span></a></li>
+						<li><a href="https://www.facebook.com/oka202365" target="_blank" class="facebook" title="재외동포청 facebook 새 창 열기"><span style="display: none;">페이스북</span></a></li>
+						<li><a href="https://blog.naver.com/oka202365" target="_blank" class="naverblog" title="재외동포청 naver blog 새 창 열기"><span style="display: none;">블로그</span></a></li>
+					</ul>
+					</div>
+					<!-- ./ sns-wrap -->
+				</div>
+				<!-- ./ footer-logo -->
+			</div>
+			<!-- ./ footer-top -->
+			<div class="footer-middle">
+				<div class="flex-ajs sm-py-32 sm-flexColumn-768">
+					<!-- footer-middleLeft -->
+					<div class="footer-middleLeft">
+						<div>
+							<p class="mt-10">재외동포 365 민원콜센터 <strong>: 02-6747-0404 (해외 +82-2-6747-0404)</strong></p> <!-- info-cs -->
+							<div>
+								<!-- info-address -->
+								<div class="info-address info-cs">
+									<address>
+										<strong>재외동포 통합민원실(재외동포서비스지원센터) : </strong>(03142)서울시 종로구 율곡로 6 트윈트리A동 15층(광화문)<br>방문접수 운영시간 : 평일 09:00~18:00
+										</address>
+								</div>
+								<!-- ./ info-address -->
+							</div>
+							<!-- info-browser -->
+							<div class="info-cs">
+								<p> 
+									※ 아포스티유 사이트는 <em class="hp-txt-blue-00">엣지(Edge), 크롬(Chrome)</em>에 최적화되어 있습니다.
+									</p>
+								<p class="copyright hp-font-regular hp-txt-gray-07">© The Government of the Republic of Korea. All rights reserved.</p> <!-- // #46023 아포스티유) 웹 접근성 진단 결과 조치  -->
+							</div>
+							<!-- info-browser -->
+						</div>
+					</div>
+					<!-- ./ footer-middleLeft -->
+					<!-- footer-middleRight -->
+					<div class="footer-middleRight">
+						<div class="flex-col gap-16 link-go mt-60">
+							<!-- 이용안내 -->
+							<a href="/gd/intro/acptCmsn.do" class="icon-arrRight-20 flex-ac ml-4">찾아오시는길</a> <!-- 찾아오시는길 -->
+						</div>
+						<ul class="flex-ac mt-17">
+						<li style="width: 13rem;"><a href="https://www.apostille.go.kr/webAccessibility.pdf" title="WA 품질인증 마크, 웹와치(WebWatch) 2026.7.3 ~ 2027.7.2 새 창" target="_blank"><img src="/images/webAccessibility.png" alt="과학기술정보통신부 WA(WEB접근성) 품질인증 마크, 웹와치(WebWatch) 2026.7.3 ~ 2027.7.2"></a></li>
+						</ul>
+					</div>
+					<!-- ./ footer-middleRight -->
+				</div>
+			</div>
+		</div>
+	</div>
+</footer>
+<!-- //Footer E -->
+	</div>
+	<!-- //wrap area -->
+	</form>
+</body>
+</html>
