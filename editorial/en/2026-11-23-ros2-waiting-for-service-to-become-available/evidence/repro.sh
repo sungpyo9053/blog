@@ -195,7 +195,9 @@ case_hdr "C1 no server at all: CLI output, does it time out on its own (bounded 
 call /trigger std_srvs/srv/Trigger 30
 echo "lines printed in a 10s run:"; timeout 10 ros2 service call /trigger std_srvs/srv/Trigger 2>&1 | grep -c "waiting for service"
 echo "--- Ctrl-C (SIGINT after 5s)"
-timeout -s INT 5 ros2 service call /trigger std_srvs/srv/Trigger 2>&1 | tail -5; echo "rc=${PIPESTATUS[0]}"
+timeout --preserve-status -s INT 5 ros2 service call /trigger std_srvs/srv/Trigger 2>&1 | tail -8; echo "rc=${PIPESTATUS[0]} (exit code of ros2 itself)"
+echo "--- SIGTERM after 5s, --preserve-status"
+timeout --preserve-status 5 ros2 service call /trigger std_srvs/srv/Trigger 2>&1 | tail -5; echo "rc=${PIPESTATUS[0]} (exit code of ros2 itself)"
 if ros2 service call -h 2>&1 | grep -q -- '--timeout'; then echo "--- --timeout option exists"; call /trigger std_srvs/srv/Trigger 30 --timeout 3; fi
 ros2 run wsvc py_client.py /trigger once 3
 ros2 run wsvc cpp_client /trigger 3
@@ -315,10 +317,10 @@ ros2 daemon stop; ros2 service list | grep trigger || echo "(none)"
 
 case_hdr "C10 does ros2 daemon stop change the wrong-name / domain cases?"
 startsrv env ROS_DOMAIN_ID=7 ros2 run wsvc py_server.py trigger Trigger 1
-ros2 daemon stop; call /trigger std_srvs/srv/Trigger 8
+ros2 service list >/dev/null; ros2 daemon stop; call /trigger std_srvs/srv/Trigger 8
 stopsrv
 startsrv ros2 run wsvc py_server.py add_trigger Trigger 1
-ros2 daemon stop; call /trigger std_srvs/srv/Trigger 8
+ros2 service list >/dev/null; ros2 daemon stop; call /trigger std_srvs/srv/Trigger 8
 stopsrv
 
 case_hdr "C11 call issued before the server starts (server starts 4s later)"
@@ -344,6 +346,12 @@ done
 echo "--- full ros2 service call wall time against an already running py server (3 runs)"
 startsrv ros2 run wsvc py_server.py trigger Trigger 1
 for i in 1 2 3; do s=$(date +%s.%N); timeout 20 ros2 service call /trigger std_srvs/srv/Trigger >/tmp/c.out 2>&1; echo "run$i rc=$? $(sub $(date +%s.%N) $s)s waiting_lines=$(grep -c waiting /tmp/c.out)"; done
+stopsrv
+
+case_hdr "C13 repeatability: fresh client process vs a running server, wait_for_service(3s), 8 runs each"
+startsrv ros2 run wsvc py_server.py trigger Trigger 1
+for i in 1 2 3 4 5 6 7 8; do ros2 run wsvc py_client.py /trigger once 3 2>&1 | grep -o 'returned.*'; done | sort | uniq -c | sed 's/^/py  /'
+for i in 1 2 3 4 5 6 7 8; do ros2 run wsvc cpp_client /trigger 3 2>&1 | grep -o 'returned [a-z]*'; done | sort | uniq -c | sed 's/^/cpp /'
 stopsrv
 uptime
 echo "=== done $ROS_DISTRO"
