@@ -1,0 +1,243 @@
+
+
+
+
+
+
+
+
+<script type="text/javascript">
+/*********************************************************
+ * 초기화
+ ******************************************************** */
+function fn_egov_initl_faqlist(){
+	// 첫 입력란에 포커스..
+	document.FaqListForm.searchKeyword.focus();
+}
+
+/* ********************************************************
+ * 상세화면 이동 (현재는 사용 안 함: 리스트에서 바로 답변 노출)
+ ******************************************************** */
+function fn_egov_inquire_faqlistdetail(faqId) {		
+	document.FaqListForm.faqId.value = faqId;
+	document.FaqListForm.action = ""+prefixPath+"/faq/FaqInqireCoUpdt.do";
+	document.FaqListForm.submit();	
+}
+
+$(document).ready(function(){
+
+	if($('.tab-list li a').length>0){
+		$('.tab-list li a').removeClass('show');
+		$('.tab-list li a')[0].classList.add('show');
+	}
+	
+	fn_comm_enterSearch($("#btnSearch"));//엔터키조회
+	$("#pageSize").val("10");//페이지사이즈 기본값 10
+
+	// 조회 버튼
+	$("#btnSearch").click(function(){
+		$("#pageIndex").val("1");
+		fn_egov_search_faq();
+	});
+	
+	// 상세에서 돌아온 경우 ajax Paging 호출
+	if( !($('#pageIndex').val() == null || $.trim($('#pageIndex').val()) == '') ) {
+		fn_egov_search_faq();
+	}
+
+	// 첫번째 조건 변경 시
+	$("#searchCondition").change(function(){
+		fn_changeSearchCnd();
+	});
+
+	// 두번째 조건 변경시 자동 검색
+	$("#searchCondition2").change(function() {
+		if (this.value) fn_egov_search_faq();
+	});
+
+	fn_changeSearchCnd();
+});
+
+/* FAQ 조회 (AJAX) */
+function fn_egov_search_faq(){
+
+	var url = prefixPath + "/faq/selectFaqListInqireAjax.do";
+	
+	if( !($('#pageIndex').val() == null || $.trim($('#pageIndex').val()) == '') ) {
+		url = url + "?d-49520-p="+$("#pageIndex").val();
+	}
+	trionsoft.ajaxCall(
+		url,
+		$('#FaqListForm'),
+		$('#divMain'),
+		"html",
+		true,
+		null,
+		null,
+		null
+	);
+}
+
+/* 페이지 사이즈 변경 */
+/* function fn_changePageSize() {
+	$("#pageIndex").val("1");
+	$("#pageSize").val($('#selectPageSize option:selected').val());
+	fn_egov_search_faq();
+} */
+function fn_changePageSize() {
+    $("#pageIndex").val("1");
+
+    let $select = $('#selectPageSize');
+    let val = $select.val();
+
+    if (!val) {
+        val = $("#pageSize").val();
+    }
+
+    $("#pageSize").val(val);
+
+    fn_egov_search_faq();
+	
+	setTimeout(function() {
+		var $el = $("#selectPageSize");
+		if($el.length > 0){
+			$el.focus();
+		}
+	}, 1000);
+}
+
+/* 검색 조건 (대상 선택 시 2차 조건 노출) */
+function fn_changeSearchCnd()
+{
+	if("faqGbn" == $("#searchCondition").val())
+	{
+		$("#searchCondition2").css("display", "");
+		$("#searchKeyword").css("display", "none");
+		$("#searchKeyword").val("");
+		
+	}
+	else
+	{
+		$("#searchKeyword").css("display", "");
+		$("#searchCondition2").css("display", "none");
+		$("#searchCondition2").val("");
+	}
+}
+
+/* 온라인 상담 탭 이동 */
+function fn_moveToRegUpdateReqListPage(){
+	if(prefixPath.includes("/reg")){
+		fn_subPageMove('45400000', '/qna/selectBoardList.do?bbsId=BBSMSTR_000000000021', '게시판');
+	}else{
+		fn_subPageMove('33400000', '/org/selectBoardList.do?bbsId=BBSMSTR_000000000051', '게시판');
+	}
+}
+</script>
+
+<form name="FaqListForm" id="FaqListForm" onsubmit="return false;" method="post">
+	<input type="hidden" name="faqId"        id="faqId"      value="">
+	<input type="hidden" name="bbsId"        id="bbsId"      value="" />
+	<input type="hidden" name="pageIndex"    id="pageIndex"  value="1" />  
+	<input type="hidden" name="menuNo"       id="menuNo"     value="" />
+	<input type="hidden" name="topMenuNm"    id="topMenuNm"  value="" />
+	<input type="hidden" name="pageSize"     id="pageSize"   value="" />
+
+	
+
+	<!-- 퍼블리싱 구조 적용 -->
+	<div class="sub_content">
+		<div class="container_md">
+			<div class="sub_top">
+				<div class="page_location">
+					<div class="item"><a href="javascript:;" class="home">홈으로</a></div>
+					<div class="item"><a href="javascript:;">게시판</a></div>
+					<div class="item"><a href="javascript:;">자주하는 질문</a></div>
+				</div>
+				<h2>자주하는 질문</h2>
+			</div>
+		</div>
+
+		<div id="content" class="container_md">
+		
+			
+
+			<!-- 검색 영역: faq.html 스타일 + 기존 파라미터 매핑 -->
+			<div class="list_search_wrap">
+				<div class="list_search_col">
+					<fieldset style="border: 0px">
+						<legend>검색</legend>
+						<div class="item" style="width:260px;">
+							<label for="searchCondition" class="sound_only">자주 묻는 질문 검색 조건 선택</label>
+							<select name="searchCondition" id="searchCondition" class="no_line" title="조회조건 선택">
+								<option value="ALL" class="all-option"
+									selected="selected">
+									전체
+								</option>
+								<option value="qestnSj"
+									>
+									제목
+								</option>
+								
+								<option value="qestnCn"
+									>
+									내용
+								</option>
+							</select>
+						</div>
+
+						<div class="item input_search" style="width:500px;">
+							<!-- 대상 선택용 2차 조건 (기존 searchCondition2) -->
+							<select name="searchCondition2" id="searchCondition2" class="no_line"
+									style="display:none;" title="조회조건 선택">
+								<option value="" selected="selected">선택</option>
+								
+									<option value="01"
+										>
+										이용자
+									</option>
+								
+									<option value="02"
+										>
+										사용기관
+									</option>
+								
+							</select>
+
+							<label for="searchKeyword" class="sound_only">자주하는 질문 검색어 입력</label>
+							<input name="searchKeyword" id="searchKeyword"
+								   type="text"
+								   value=""
+								   maxlength="35"
+								   placeholder="검색어를 입력하세요."
+								   class="no_line"
+								   title="검색어 입력">
+							<button type="button" id="btnSearch">검색</button>
+						</div>
+					</fieldset>
+				</div>
+			</div>
+
+			<!-- 리스트 영역: 실제 내용은 Ajax로 EgovFaqListInqirePagging.jsp에서 로딩 -->
+			<div id="divMain">
+				<div class="board_list">
+					<div class="list_top">
+						<div class="list_total">
+							총 <strong><span id="spTotalCount">0</span></strong> 건
+						</div>
+					</div>
+					<div class="list_content">
+						<div class="list_faq">
+							<div class="item_row">
+								<div class="faq_q">
+									<button type="button" disabled>검색 조건을 설정한 후 조회 버튼을 눌러 주세요.</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- 페이지 사이즈 / 페이징은 Ajax 결과(EgovFaqListInqirePagging.jsp)에서 그려지도록 유지 -->
+				</div>
+			</div>
+
+		</div>
+	</div>
+</form>

@@ -1,0 +1,204 @@
+
+
+
+
+
+
+
+
+<script type="text/javascript">
+
+$(document).ready( function(){
+
+	fn_comm_enterSearch($("#btnSearch"));//엔터키조회
+	//페이지사이즈 기본값 10, 상세에서 돌아온 경우 기존 값 유지
+	if ($.trim($("#pageSize").val()) == '') {
+		$("#pageSize").val("10");
+	}
+	
+	//사용자조회 이벤트
+	$("#btnSearch").click(function(){
+		$("#pageIndex").val("1");
+		fn_egov_select_noticeList();
+	});
+	
+	//상세페이지에서 돌아온 경우 ajax Paging 호출
+	if( !($('#pageIndex').val() == null || $.trim($('#pageIndex').val()) == '') ) {
+		fn_egov_select_noticeList();
+	}
+	
+	$("#searchCnd").on('change', fn_searchCndSelect);
+	fn_searchCndSelect();
+});
+
+function fn_egov_select_noticeList(){
+	var url = prefixPath + "/cop/bbs/selectBoardListAjax.do";
+	
+	if( !($('#pageIndex').val() == null || $.trim($('#pageIndex').val()) == '') ) {
+		url = url + "?d-49520-p="+$("#pageIndex").val();
+	}
+	trionsoft.ajaxCall(url,
+			$('#frm'),
+			$('#divMain'),
+			"html",
+			true,
+			null,
+			null,
+			null);
+}
+
+function fn_egov_inqire_notice_local(nttId,bbsId,localNm) {
+	document.frm.nttId.value = nttId;
+	document.frm.bbsId.value = bbsId;
+	document.frm.localNm.value = localNm;
+	document.frm.action = ""+prefixPath+"/cop/bbs/selectBoardArticle.do";
+	document.frm.submit();
+}
+
+function fn_egov_inqire_notice(nttId,bbsId) {
+	document.frm.nttId.value = nttId;
+	document.frm.bbsId.value = bbsId;
+	document.frm.action = ""+prefixPath+"/cop/bbs/selectBoardArticle.do";
+	document.frm.submit();
+}
+
+function fn_changePageSize() {
+    $("#pageIndex").val("1");
+
+    let $select = $('#selectPageSize');
+    let val = $select.val();
+
+    if (!val) {
+        val = $("#pageSize").val();
+    }
+
+    $("#pageSize").val(val);
+
+    fn_egov_select_noticeList();
+	
+	setTimeout(function() {
+		var $el = $("#selectPageSize");
+		if($el.length > 0){
+			$el.focus();
+		}
+	}, 1000);
+}
+
+function fn_searchCndSelect(){
+	var searchCndVal = $("#searchCnd option:selected").val();
+	if(searchCndVal == '3'){
+		$('#searchWrd').val('');
+		$('#searchWrd').css('display','none');
+		$('#localCd').css('display','inline');
+	}else{
+		$('#localCd').val('');
+		$('#localCd').css('display','none');
+		$('#searchWrd').css('display','inline');
+	}
+}
+</script>
+
+
+<script type="text/javascript" src="/js/egovframework/com/cop/bbs/EgovBBSMng.js" ></script>
+
+	<!-- content -->
+	<div class="sub_content">
+        <div class="container_md">
+            <div class="sub_top">
+                <div class="page_location">
+                    <div class="item"> <a href="javascript:;" class="home">홈으로</a> </div>
+                    <div class="item"> <a href="javascript:;">게시판</a> </div>
+                    <div class="item"> <a href="javascript:;">공지사항</a> </div>
+                </div>
+                <h2>공지사항</h2>
+            </div>
+        </div>
+        <div id="content" class="container_md">
+
+            <div class="list_search_wrap">
+                <div class="list_search_col">
+                	<form name="frm" id="frm" onsubmit="return false;" method="post">
+					<input type="hidden" name="bbsId"          id="bbsId"        value="BBSMSTR_000000000001" />
+					<input type="hidden" name="nttId"          id="nttId"        value="0" />
+					<input type="hidden" name="bbsTyCode"      id="bbsTyCode"    value="BBST03" />
+					<input type="hidden" name="bbsAttrbCode"   id="bbsAttrbCode" value="BBSA03" />
+					<input type="hidden" name="authFlag"       id="authFlag"     value="N" />
+					<input type="hidden" name="pageIndex" 	   id="pageIndex" 	 value="1" 	/>  
+					<input type="hidden" name="menuNo" 		   id="menuNo" 	     value=""		/>
+					<input type="hidden" name="topMenuNm"  	   id="topMenuNm" 	 value="" >
+					<input type="hidden" name="localNm"  	   id="localNm" 	 value="" >
+					<input type="hidden" name="pageSize"  	   id="pageSize" 	 value="10" >
+					<input type="hidden" name="noticeType"  	   	id="noticeType" 	 value="normal" >
+                    <legend>검색</legend>
+                    <div class="item" style="width:260px;">
+                         <label for="searchCnd" class="sound_only">검색 조건 선택</label>
+                         <select name="searchCnd" id="searchCnd" class="no_line">
+                         	
+								
+								
+								
+								
+									<option value="ALL" selected class="all-option">전체</option>
+									<option value="0" >제목</option>
+									<option value="1" >내용</option>
+								
+							
+                         </select>
+                     </div>
+                     <div class="item input_search" style="width: 500px;">
+                         <label for="searchWrd" class="sound_only">검색어 입력</label>
+                         <input type="text" name="searchWrd" id="searchWrd" value='' maxlength="35" placeholder="검색어를 입력하세요." class="no_line">
+                         <button type="button" id="btnSearch" >검색</button>
+                     </div>
+                     </form>
+                </div>
+            </div>
+
+            <div id="divMain" class="board_list">
+                <div id="divSub" class="list_content">
+                    <!-- pc 리스트 -->
+                    <table id="list" class="table_list pc">
+                        <caption>공지사항</caption>
+                        <colgroup>
+                        <col style="width:7.14%;">
+                        <col style="width:11.43%;">
+                        <col style="width:11.43%;">
+                        <col style="width:47.86%;">
+                        <col style="width:9.29%;">
+                        <col style="width:12.86%;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th scope="col">번호</th>
+                                <th scope="col">카테고리</th>
+                                <th scope="col">지역</th>
+                                <th scope="col">제목</th>
+                                <th scope="col">첨부파일</th>
+                                <th scope="col">작성일</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>10</td>
+                                <td><strong class="cate" style="color:#6A40C5">추첨·선정</strong></td>
+                                <td><strong class="cate" style="color:#2E6FE4">전체</strong></td>
+                                <td class="subject">
+                                    <a href="javascript:;">
+                                        <div>
+                                            <span>2025년도 평생교육이용권 사용기관 등록 안내2025년도 평생교육이용권 사용기관 등록 안내2025년도 평생교육이용권 사용기관 등록 안내2025년도 평생교육이용권 사용기관 등록 안내</span>
+                                            <strong class="icon_new"><span class="sound_only">새글</span></strong>
+                                        </div>
+                                    </a>
+                                </td>
+                                <td><span class="icon_file">첨부파일</span></td>
+                                <td class="text_sub">2025-09-24</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <!-- //pc 리스트 -->
+                    
+                </div>
+            </div>
+        </div>
+	</div>
+	<!-- //content -->
