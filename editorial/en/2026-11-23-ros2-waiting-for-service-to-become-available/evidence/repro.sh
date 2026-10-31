@@ -4,6 +4,9 @@
 #     ros:<distro>-ros-base bash /w/repro.sh > out_<distro>.txt 2>&1
 # Reproduces "waiting for service to become available..." and wait_for_service timeouts
 # with a minimal rclpy and rclcpp std_srvs service server and client.
+# Note: out_humble.txt and out_jazzy.txt were produced before two edits: py_client.py used
+# log.warn (removed in Lyrical rclpy, so it was changed to log.warning), and C14 did not exist
+# (C14 only runs when ros2 service call has --timeout, which only Lyrical has).
 ulimit -c 0
 source /opt/ros/$ROS_DISTRO/setup.bash
 echo "=== distro=$ROS_DISTRO"
@@ -138,7 +141,7 @@ if mode == 'discover':
 for i in range(int(to)):
     if cli.wait_for_service(timeout_sec=1.0):
         break
-    log.warn(f'{cli.srv_name} not available after {i+1}s, still waiting (check ros2 service list -t)')
+    log.warning(f'{cli.srv_name} not available after {i+1}s, still waiting (check ros2 service list -t)')
 else:
     log.error(f'gave up on {cli.srv_name} after {int(to)}s')
     sys.exit(2)
@@ -353,5 +356,11 @@ startsrv ros2 run wsvc py_server.py trigger Trigger 1
 for i in 1 2 3 4 5 6 7 8; do ros2 run wsvc py_client.py /trigger once 3 2>&1 | grep -o 'returned.*'; done | sort | uniq -c | sed 's/^/py  /'
 for i in 1 2 3 4 5 6 7 8; do ros2 run wsvc cpp_client /trigger 3 2>&1 | grep -o 'returned [a-z]*'; done | sort | uniq -c | sed 's/^/cpp /'
 stopsrv
+if ros2 service call -h 2>&1 | grep -q -- '--timeout'; then
+  case_hdr "C14 --timeout against a server that never spins"
+  startsrv ros2 run wsvc py_server.py trigger Trigger 0
+  call /trigger std_srvs/srv/Trigger 30 --timeout 3
+  stopsrv
+fi
 uptime
 echo "=== done $ROS_DISTRO"
