@@ -134,10 +134,10 @@ var a=homeScore(owner,years),b=depScore(deps),c=acctScore(months),s=spouseScore(
 return {home:a,dep:b,acct:c,spouse:c2-c,acctTotal:c2,total:a+b+c2}}
 var DEP={sp:{'85':300,'102':600,'135':1000,'all':1500},metro:{'85':250,'102':400,'135':700,'all':1000},other:{'85':200,'102':300,'135':400,'all':500}};
 function rank(o){
-var need={reg:24,metro:12,nonmetro:6,shrink:1}[o.area],miss=[];
+var need={reg:24,metro:12,nonmetro:6,shrink:1}[o.area],miss=[],block=false;
 if(o.months>=need){}else{miss.push('통장 가입기간 '+need+'개월 이상 필요(현재 '+o.months+'개월)')}
 if(o.type==='national'){
-if(o.nohouse){}else{miss.push('국민주택은 세대 전원이 무주택이어야 함')}
+if(o.nohouse){}else{block=true}
 var cn={reg:24,metro:12,nonmetro:6,shrink:0}[o.area];
 if(o.count>=cn){}else{miss.push('납입 인정 횟수 '+cn+'회 이상 필요(현재 '+o.count+'회)')}
 }else{
@@ -149,7 +149,7 @@ if(o.area==='reg'){
 if(o.head){}else{miss.push('규제지역은 세대주여야 함')}
 if(o.nowin){}else{miss.push('규제지역은 최근 5년 세대 당첨 이력이 없어야 함')}
 }
-return {ok:miss.length===0,need:need,miss:miss}}
+return {ok:miss.length===0?!block:false,blocked:block,need:need,miss:miss}}
 window.subScore=score;window.subRank=rank;window.subDeposit=DEP;
 var $=function(i){return document.getElementById(i)};
 if(!$('hs-score'))return;
@@ -160,7 +160,7 @@ var r=score($('hs-owner').checked,num('hs-hy'),num('hs-dep'),num('hs-ay')*12+num
 lines($('hs-score'),['가점 합계: '+r.total+'점 / 84점','무주택기간 '+r.home+'점 + 부양가족 '+r.dep+'점 + 통장 가입기간 '+r.acctTotal+'점(본인 '+r.acct+'점, 배우자 가산 '+r.spouse+'점)']);
 var o={type:$('hs-type').value,area:$('hs-area').value,months:num('hs-ay')*12+num('hs-am'),count:num('hs-cnt'),deposit:num('hs-dp'),res:$('hs-res').value,size:$('hs-size').value,head:$('hs-head').checked,nowin:$('hs-nowin').checked,nohouse:$('hs-nohouse').checked,two:$('hs-two').checked};
 var k=rank(o),L=[];
-if(k.ok){L.push('1순위 통장 요건 충족')}else{L.push('1순위 아님(2순위)');k.miss.forEach(function(m){L.push('- '+m)})}
+if(k.blocked){L.push('신청 대상 아님: 국민주택은 세대 전원이 무주택인 무주택세대구성원만 신청할 수 있습니다.')}else if(k.ok){L.push('1순위 통장 요건 충족')}else{L.push('1순위 아님(2순위)');k.miss.forEach(function(m){L.push('- '+m)})}
 if(o.type==='private'){if($('hs-owner').checked){L.push('유주택 세대는 원칙적으로 가점제에서 빠지고 추첨제로 경쟁합니다.')}}else{L.push('국민주택은 가점이 아니라 저축총액·납입횟수 순으로 뽑습니다.')}
 if(o.area==='metro'){L.push('시·도지사가 24개월·24회까지 늘려 공고할 수 있으니 공고문을 확인하세요.')}
 if(o.area==='nonmetro'){L.push('시·도지사가 12개월·12회까지 늘려 공고할 수 있으니 공고문을 확인하세요.')}
@@ -233,9 +233,9 @@ run()})();
 </script>
 <h2>같이 보면 좋은 글</h2>
 <ul>
-<li><a href="https://huntlab.app/housing-subscription-first-priority/">주택청약 1순위 조건: 공고에서 확인할 값과 판정 사례</a></li>
+<li><a href="https://huntlab.app/housing-subscription-first-priority/">주택청약 1순위 조건 정리(공고에서 볼 값과 판정 사례)</a></li>
 <li><a href="https://huntlab.app/housing-subscription-account-cancel-withdraw/">청약통장 해지 전 확인: 부분 인출 불가, 잃는 가입기간·1순위와 유지 비용</a></li>
-<li><a href="https://huntlab.app/housing-subscription-savings-conversion/">청약저축·청약예금 주택청약종합저축 전환 기준</a></li>
+<li><a href="https://huntlab.app/housing-subscription-savings-conversion/">옛 청약저축·예금·부금의 주택청약종합저축 전환 기준</a></li>
 <li><a href="https://huntlab.app/didimdol-bogeumjari-loan-conditions-2026/">디딤돌대출·보금자리론 조건 2026: 소득·순자산·집값 기준과 자격 계산기</a></li>
 <li><a href="https://huntlab.app/beotimmok-jeonse-loan-conditions-2026/">버팀목 전세자금대출 조건 2026: 소득·순자산 기준, 금리표, 한도 계산기</a></li>
 <li><a href="https://huntlab.app/happy-housing-eligibility-2026/">행복주택 자격 조건 2026 총정리: 계층별 소득·자산 기준과 자격 계산기</a></li>

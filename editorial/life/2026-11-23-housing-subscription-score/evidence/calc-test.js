@@ -45,10 +45,11 @@ const rk = [
   ['국민 규제 24개월 24회', { type: 'national', area: 'reg', months: 24, count: 24 }, true],
   ['국민 규제 5년 내 당첨', { type: 'national', area: 'reg', months: 24, count: 24, nowin: false }, false],
   ['국민 수도권 밖 6개월 6회', { type: 'national', area: 'nonmetro', months: 6, count: 6 }, true],
-  ['국민 유주택 세대', { type: 'national', count: 12, nohouse: false }, false],
+  ['국민 유주택 세대(신청 대상 아님)', { type: 'national', count: 12, nohouse: false }, false],
   ['국민 위축 1개월', { type: 'national', area: 'shrink', months: 1, count: 0 }, true],
 ];
-for (const [n, o, ok] of rk) { const r = R(Object.assign({}, base, o)); assert.strictEqual(r.ok, ok, n + ' ' + JSON.stringify(r)); console.log('PASS', n, r.ok ? '1순위' : '2순위: ' + r.miss.join(' / ')); }
+for (const [n, o, ok] of rk) { const r = R(Object.assign({}, base, o)); assert.strictEqual(r.ok, ok, n + ' ' + JSON.stringify(r)); console.log('PASS', n, r.blocked ? '신청 대상 아님' : r.ok ? '1순위' : '2순위: ' + r.miss.join(' / ')); }
+assert.strictEqual(R(Object.assign({}, base, { type: 'national', count: 12, nohouse: false })).blocked, true);
 // 별표 2 예치금 표
 assert.deepStrictEqual(window.subDeposit, { sp: { '85': 300, '102': 600, '135': 1000, all: 1500 }, metro: { '85': 250, '102': 400, '135': 700, all: 1000 }, other: { '85': 200, '102': 300, '135': 400, all: 500 } });
 console.log('PASS 별표 2 예치금 12칸');
