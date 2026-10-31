@@ -1,0 +1,205 @@
+<pre><code>$ ros2 service call /trigger std_srvs/srv/Trigger
+waiting for service to become available...</code></pre>
+
+<p>In code the same problem shows up as <code>client.wait_for_service(timeout_sec=3.0)</code> returning <code>False</code> in rclpy, or <code>wait_for_service(3s)</code> returning <code>false</code> in rclcpp.</p>
+
+<p>Short answer: the client can't find a server with that exact name and that exact type in its own ROS domain. <code>ros2 service call</code> never gives up on its own. It printed the line once and then waited silently until I killed it. Run <code>ros2 service list -t</code> in the same shell as the client, then copy the name and the type from that output into your call:</p>
+
+<pre><code>ros2 service list -t
+# /robot1/trigger [std_srvs/srv/Trigger]
+ros2 service call /robot1/trigger std_srvs/srv/Trigger</code></pre>
+
+<p>If the service is in the list with the type you used and the call still hangs, look at the line after "waiting". If <code>requester: making request: ...</code> appears and then nothing happens, the client did find the server. The server isn't answering. In my runs that meant the server never spun, or the server and client used different RMW implementations.</p>
+
+<h2>Find your cause</h2>
+
+<p>Each row is one cause, tested alone. The four commands on the right ran in the client's shell, with the client's <code>ROS_DOMAIN_ID</code> and RMW. Every row behaved the same on Humble, Jazzy and Lyrical unless noted.</p>
+
+<table>
+<thead><tr><th>Cause</th><th><code>ros2 service call</code></th><th><code>ros2 service list -t</code></th><th><code>ros2 service type /trigger</code></th><th><code>ros2 node info</code> (Service Servers)</th></tr></thead>
+<tbody>
+<tr><td>No server running</td><td>waits at "waiting for service..."</td><td>no <code>/trigger</code></td><td>prints nothing, exit 1</td><td>no node</td></tr>
+<tr><td>Wrong name (server is <code>/add_trigger</code>)</td><td>waits</td><td><code>/add_trigger [std_srvs/srv/Trigger]</code></td><td>nothing, exit 1</td><td><code>/add_trigger: std_srvs/srv/Trigger</code></td></tr>
+<tr><td>Server in namespace <code>/robot1</code>, relative name <code>trigger</code></td><td>waits</td><td><code>/robot1/trigger [std_srvs/srv/Trigger]</code></td><td>nothing, exit 1</td><td>node is <code>/robot1/wsvc_server</code>, server <code>/robot1/trigger</code></td></tr>
+<tr><td>Server remapped with <code>-r trigger:=trigger_v2</code></td><td>waits</td><td><code>/trigger_v2 [std_srvs/srv/Trigger]</code></td><td>nothing, exit 1</td><td><code>/trigger_v2: std_srvs/srv/Trigger</code></td></tr>
+<tr><td>Server type is <code>SetBool</code>, CLI says <code>Trigger</code></td><td>waits, no error</td><td><code>/trigger [std_srvs/srv/SetBool]</code></td><td><code>std_srvs/srv/SetBool</code></td><td><code>/trigger: std_srvs/srv/SetBool</code></td></tr>
+<tr><td>Server in <code>ROS_DOMAIN_ID=7</code>, client in 0</td><td>waits</td><td>empty</td><td>nothing, exit 1</td><td>node not found</td></tr>
+<tr><td>Server exited cleanly (SIGTERM)</td><td>waits</td><td>empty after 2 s</td><td>nothing, exit 1</td><td>node not found</td></tr>
+<tr><td>Server killed with SIGKILL</td><td>waits</td><td><code>/trigger</code> still listed for at least 15 s via the daemon, gone by 30 s; empty with <code>--no-daemon</code></td><td colspan="2">Not tested separately</td></tr>
+<tr><td>Server created but never spins</td><td>prints <code>requester: making request</code>, then hangs</td><td><code>/trigger [std_srvs/srv/Trigger]</code></td><td><code>std_srvs/srv/Trigger</code></td><td><code>/trigger: std_srvs/srv/Trigger</code></td></tr>
+<tr><td>Server on <code>rmw_cyclonedds_cpp</code>, client on the default <code>rmw_fastrtps_cpp</code> (and the reverse)</td><td>prints <code>requester: making request</code>, then hangs</td><td>sometimes listed, sometimes empty</td><td>sometimes the type, sometimes exit 1</td><td>listed in some runs; in the reversed case <code>ros2 node list</code> was empty</td></tr>
+</tbody>
+</table>
+
+<p>Two groups fall out of this. In the first eight rows the client never finds a matching server, and <code>wait_for_service</code> returns False. In the last two rows the client finds one, <code>wait_for_service</code> returns True after 0.00 to 2.42 s, and the request never gets a reply.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-31 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one after another, with every process in one container. One package held four programs. <code>py_server.py</code> and <code>cpp_server</code> create a <code>std_srvs/srv/Trigger</code> service (the Python one can also use <code>SetBool</code>) and either spin or just sleep. <code>py_client.py</code> and <code>cpp_client</code> call <code>wait_for_service</code> with a timeout and print what it returned and how long it took. All CLI calls were bounded with <code>timeout</code>. The default RMW was <code>rmw_fastrtps_cpp</code> on all three distros. <code>rmw_cyclonedds_cpp</code> isn't in these images, so the script installed it with apt for the RMW cases. The baseline worked everywhere: a spinning server, a matching name and type, and <code>ros2 service call</code> got <code>success=True</code> back in 0.48 to 2.07 s, including Python start-up.</p>
+
+<h2>It never times out by itself</h2>
+
+<p>With no server at all, <code>ros2 service call</code> printed one line and then nothing:</p>
+
+<pre><code>$ timeout 30 ros2 service call /trigger std_srvs/srv/Trigger
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428</code></pre>
+
+<p>The second line only appears when the process is being shut down. A 10-second run printed the "waiting" line exactly once on every distro.</p>
+
+<p>Exit codes, measured with <code>timeout --preserve-status</code> so I got the code of <code>ros2</code> itself:</p>
+
+<ul>
+<li>SIGINT (what Ctrl-C sends): exit 2, with no traceback.</li>
+<li>SIGTERM: exit 1, after the <code>rcl node's context is invalid</code> line.</li>
+<li>Plain <code>timeout 30</code>: exit 124. That's <code>timeout</code>'s own code for "I had to stop it".</li>
+</ul>
+
+<p>The line number in that message was <code>node.c:428</code> on Humble, <code>node.c:404</code> on Jazzy and <code>node.c:409</code> on Lyrical. Drop it when you search.</p>
+
+<p>Lyrical's <code>ros2 service call</code> has a <code>--timeout N</code> option. Humble's and Jazzy's help lists only <code>-r</code> (and <code>--stdin</code> on Jazzy). The help text says "Maximum time to wait for service response in seconds", and that is all it covers. With no server, <code>--timeout 3</code> still waited until my 30 s <code>timeout</code> killed it. Against a server that never spins, it gave up after 3 s:</p>
+
+<pre><code>waiting for service to become available...
+requester: making request: std_srvs.srv.Trigger_Request()
+
+Timed out waiting for response from service /trigger (timeout: 3.0s)</code></pre>
+
+<p>That run exited with 1 after 3.82 s. In scripts on any distro, wrap the call yourself: <code>timeout 10 ros2 service call ...</code>.</p>
+
+<h2>Name, namespace and remap</h2>
+
+<p>The client's name has to resolve to exactly the name the server registered. Three ways to miss it:</p>
+
+<ul>
+<li><strong>Wrong name.</strong> A server on <code>/add_trigger</code> doesn't answer <code>/trigger</code>. <code>ros2 service list -t</code> shows the real name.</li>
+<li><strong>Namespace.</strong> A server started with <code>--ros-args -r __ns:=/robot1</code> that creates a service with the relative name <code>trigger</code> ends up at <code>/robot1/trigger</code>. A call to <code>/trigger</code> waits forever, and a call to <code>/robot1/trigger</code> worked in 0.48 to 0.84 s. The client side follows the same rule. A Python client inside <code>/robot1</code> that asked for the relative name <code>trigger</code> found the server (True after 0.25 to 1.50 s). The same client asking for <code>/trigger</code> got False after 3.00 s. If the server uses an absolute name, <code>/trigger</code>, the namespace doesn't apply, and a call to <code>/trigger</code> worked.</li>
+<li><strong>Remap.</strong> <code>--ros-args -r trigger:=trigger_v2</code> on the server moved the service to <code>/trigger_v2</code>, for both the Python and the C++ server. <code>ros2 node info</code> on the server node shows it.</li>
+</ul>
+
+<p>In all three cases <code>ros2 service type /trigger</code> printed nothing and exited with 1, which is easy to check in a script.</p>
+
+<h2>A wrong type waits, it doesn't fail</h2>
+
+<p>I put a <code>std_srvs/srv/SetBool</code> server on <code>/trigger</code> and called it with <code>std_srvs/srv/Trigger</code>. The CLI didn't print a type error. It showed the same "waiting for service to become available..." and waited, on all three distros. <code>wait_for_service</code> returned False after 3.00 s in both client libraries. A service only matches when the name and the type both match. With the right type the call worked:</p>
+
+<pre><code>ros2 service call /trigger std_srvs/srv/SetBool "{data: true}"</code></pre>
+
+<p>A type that doesn't exist at all fails right away, in 0.33 to 0.43 s with exit 1:</p>
+
+<pre><code>$ ros2 service call /trigger std_srvs/srv/Trigge
+The passed service type is invalid</code></pre>
+
+<p>So <code>ros2 service list -t</code> is better than plain <code>ros2 service list</code>. The type in brackets is the one to copy.</p>
+
+<h2>Different ROS_DOMAIN_ID</h2>
+
+<p>With the server in domain 7 and the client in the default domain, the client side saw nothing. <code>ros2 service list -t</code> was empty, <code>ros2 node list</code> was empty, and the call waited. Running the same commands with <code>ROS_DOMAIN_ID=7</code> showed <code>/trigger [std_srvs/srv/Trigger]</code>, and the call returned in 0.73 to 3.05 s. An empty <code>ros2 node list</code> while you know the server is running points to the domain, or to discovery in general. If the two sides are on different machines or containers, see <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">ROS 2 nodes can't see each other</a>. I tested only one container here.</p>
+
+<h2>The server exists but never spins</h2>
+
+<p>A node that calls <code>create_service</code> and then sleeps, or blocks in a callback, never runs the executor. Discovery doesn't need the executor, so the service looks fine everywhere. <code>ros2 service list -t</code>, <code>ros2 service type</code> and <code>ros2 node info</code> all showed <code>/trigger: std_srvs/srv/Trigger</code>. <code>wait_for_service</code> returned True after 0.00 to 2.42 s. The CLI printed the request and then hung:</p>
+
+<pre><code>requester: making request: std_srvs.srv.Trigger_Request()
+</code></pre>
+
+<p>The fix is on the server side. Call <code>rclpy.spin(node)</code> or <code>rclcpp::spin(node)</code>, or add the node to an executor that is spinning. And don't block the thread that spins.</p>
+
+<h2>Different RMW between server and client</h2>
+
+<p>I ran the server on <code>rmw_cyclonedds_cpp</code> and the client on the default <code>rmw_fastrtps_cpp</code>, then the other way round. Both clients found the service. <code>wait_for_service</code> returned True in both libraries. No reply ever came back. The CLI hung after <code>requester: making request</code>, and the C++ client logged <code>no response within 5s</code>. The graph tools didn't agree with each other either. In one run <code>ros2 service list -t</code> was empty while <code>ros2 service type /trigger</code> printed the type. In another the list showed the service and <code>service type</code> exited with 1. In the reversed case <code>ros2 node list</code> was empty while the service was listed. With both sides on <code>rmw_cyclonedds_cpp</code>, the call worked in 0.54 to 0.65 s. Put the same <code>RMW_IMPLEMENTATION</code> on every process.</p>
+
+<p>On one Lyrical run in this mixed setup, <code>ros2 service call</code> didn't exit when <code>timeout</code> sent it SIGTERM. It was still there 16 minutes later, and the Cyclone DDS server's main thread was at about 99% CPU. I killed it with SIGKILL. The reversed case in the same Lyrical run, and this case on Humble and Jazzy, ended normally after 15 s. Use <code>timeout -k 5 ...</code> if you script this. The host-side capture is at the end of <code>out_lyrical.txt</code>.</p>
+
+<h2>A server that already exited, and the daemon</h2>
+
+<p>After a clean SIGTERM, <code>/trigger</code> was gone from <code>ros2 service list</code> 2 s later, both through the daemon and with <code>--no-daemon</code>. After SIGKILL it was different. The daemon kept listing <code>/trigger</code> at 1, 5 and 15 s, and only dropped it by 30 s. <code>--no-daemon</code> showed nothing at all of those times. <code>ros2 service call</code> waited at "waiting for service to become available..." the whole time, so the stale entry didn't fool the call. It only fooled the listing. <code>ros2 daemon stop</code> cleared it right away.</p>
+
+<p><code>ros2 daemon stop</code> did nothing for the real causes. With the domain mismatch and with the wrong name, I stopped the daemon and the call waited exactly as before (8.24 to 8.40 s until <code>timeout</code>). One more thing: on Jazzy and Lyrical, the first <code>ros2 service list</code> right after the daemon was stopped printed nothing once, although the server was running. If the list is empty and you don't believe it, run it again or add <code>--no-daemon</code>.</p>
+
+<h2>How long discovery takes</h2>
+
+<p>A client that waits is fine as long as the server shows up. When I started <code>ros2 service call</code> 4 s before the server, it printed "waiting" once, then got its answer, after 4.98 to 5.33 s in total. To measure the delay, I started a Python client that polls <code>wait_for_service</code>, waited 3 s, then started a server. Five runs per server per distro, all in one container:</p>
+
+<table>
+<thead><tr><th>Distro</th><th>Python server: process start to seen</th><th>C++ server: process start to seen</th><th>Service created to seen (both)</th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>0.57 to 0.58 s</td><td>0.33 s</td><td>0.17 to 0.25 s</td></tr>
+<tr><td>Jazzy</td><td>0.48 to 0.66 s</td><td>0.41 to 0.42 s</td><td>0.06 to 0.25 s</td></tr>
+<tr><td>Lyrical</td><td>0.75 s</td><td>0.49 to 0.73 s</td><td>0.05 to 0.25 s</td></tr>
+</tbody>
+</table>
+
+<p>Most of the delay is process start-up. A fresh client against a server that was already running: 8 runs per library per distro, and every <code>wait_for_service(3s)</code> returned True. Python took 0.00 to 0.50 s, in rclpy's 0.25 s polling steps. So a timeout of a few seconds is enough on one host. If it fails every time, the cause is in the table above, not discovery speed.</p>
+
+<h2>A client that tells you what is wrong</h2>
+
+<p>A bare <code>while not cli.wait_for_service(): pass</code> hangs as quietly as the CLI. This loop gives up after a fixed time and says why. It also bounds the wait for the response, which catches the "found but no reply" group:</p>
+
+<pre><code class="language-python">for i in range(10):
+    if cli.wait_for_service(timeout_sec=1.0):
+        break
+    node.get_logger().warning(f'{cli.srv_name} not available after {i+1}s, still waiting (check ros2 service list -t)')
+else:
+    node.get_logger().error(f'gave up on {cli.srv_name}')
+    raise SystemExit(2)
+fut = cli.call_async(Trigger.Request())
+rclpy.spin_until_future_complete(node, fut, timeout_sec=5.0)
+if not fut.done():
+    node.get_logger().error(f'{cli.srv_name} is available but sent no response within 5s')
+    raise SystemExit(3)</code></pre>
+
+<p>With no server it logged one warning per second and exited with 2. With a server that never spins it got past the wait at once and exited with 3 after 5 s. Use <code>warning</code>, not <code>warn</code>. On Lyrical, <code>log.warn</code> raised <code>AttributeError: 'RcutilsLogger' object has no attribute 'warn'</code>. Humble and Jazzy accepted it. The C++ client in <code>repro.sh</code> does the same with <code>wait_for_service</code> and <code>spin_until_future_complete(node, f, std::chrono::seconds(5))</code>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Helps with</th><th>Measured effect</th></tr></thead>
+<tbody>
+<tr><td>Copy the name and type from <code>ros2 service list -t</code></td><td>wrong name, namespace, remap, type</td><td>call worked in every such case</td></tr>
+<tr><td>Same <code>ROS_DOMAIN_ID</code> on both sides</td><td>domain mismatch</td><td>call worked in 0.73 to 3.05 s</td></tr>
+<tr><td>Same <code>RMW_IMPLEMENTATION</code> on both sides</td><td>found but no reply</td><td>both on Cyclone: 0.54 to 0.65 s</td></tr>
+<tr><td>Spin the server</td><td>found but no reply</td><td>baseline: 0.48 to 2.07 s</td></tr>
+<tr><td><code>ros2 daemon stop</code></td><td>stale entries in <code>ros2 service list</code> after a crash</td><td>no change for any cause that made the call wait</td></tr>
+<tr><td><code>timeout N ros2 service call ...</code></td><td>scripts that must not hang</td><td>exit 124 after N s; add <code>-k</code> for the rare case that ignores SIGTERM</td></tr>
+<tr><td><code>--timeout N</code> (Lyrical only)</td><td>server found but slow or stuck</td><td>gave up after 3 s; did not limit the wait for discovery</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The cause-by-cause behavior was the same on Humble, Jazzy and Lyrical. The differences I saw: only Lyrical's <code>ros2 service call</code> has <code>--timeout</code> and the <code>--qos-*</code> options. Jazzy and Lyrical list a <code>/wsvc_server/get_type_description</code> service for every node, and Humble doesn't. Lyrical's rclpy logger has no <code>warn</code> method. The C++ server was seen about 0.25 s sooner than the Python server on every distro (median of five runs).</p>
+
+<h2>Not tested</h2>
+
+<p>Clients and servers on different machines or in different containers, <code>ROS_LOCALHOST_ONLY</code> and <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code>, Zenoh and other RMWs, incompatible service QoS (<a href="https://github.com/ros2/ros2cli/issues/818">ros2cli issue 818</a>), services inside launch files or component containers, lifecycle nodes, a callback that deadlocks inside an otherwise spinning node, actions, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 service call say waiting for service to become available forever?</h3>
+<p>It can't find a server with that name and type in its domain, and it has no time limit. In my runs that happened with a wrong name, a missing namespace, a remapped server, a different type, a different <code>ROS_DOMAIN_ID</code>, and a server that had exited. Compare your call with <code>ros2 service list -t</code>.</p>
+
+<h3>The service shows in ros2 service list but the call still hangs. Why?</h3>
+<p>Check the type in <code>ros2 service list -t</code>. A different type waits the same way. If the CLI got as far as <code>requester: making request</code>, the server was found but didn't answer. That happened when the server never spun and when the server and client used different RMW implementations.</p>
+
+<h3>Does ros2 service call have a timeout?</h3>
+<p>Not on Humble or Jazzy. Lyrical has <code>--timeout N</code>, but it only limits the wait for the response. It didn't stop the wait for a missing service. Wrap the command in <code>timeout N</code> on any distro.</p>
+
+<h3>Why does wait_for_service return False?</h3>
+<p>For the same reasons the CLI waits. In rclpy it returned False after exactly the timeout you give it. A real server on the same host was found in 0.00 to 0.50 s, so a False after a few seconds means a name, type, domain or RMW problem, not slow discovery.</p>
+
+<h3>Does ros2 daemon stop fix it?</h3>
+<p>Only the listing. After a server was killed with SIGKILL, the daemon kept showing the dead service for at least 15 s, and <code>ros2 daemon stop</code> cleared that. It didn't change the result of any call that was waiting.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 service call say waiting for service to become available forever?", "acceptedAnswer": {"@type": "Answer", "text": "It can't find a server with that name and type in its domain, and it has no time limit. In my runs that happened with a wrong name, a missing namespace, a remapped server, a different type, a different ROS_DOMAIN_ID, and a server that had exited. Compare your call with ros2 service list -t."}},
+{"@type": "Question", "name": "The service shows in ros2 service list but the call still hangs. Why?", "acceptedAnswer": {"@type": "Answer", "text": "Check the type in ros2 service list -t. A different type waits the same way. If the CLI got as far as requester: making request, the server was found but didn't answer. That happened when the server never spun and when the server and client used different RMW implementations."}},
+{"@type": "Question", "name": "Does ros2 service call have a timeout?", "acceptedAnswer": {"@type": "Answer", "text": "Not on Humble or Jazzy. Lyrical has --timeout N, but it only limits the wait for the response. It didn't stop the wait for a missing service. Wrap the command in timeout N on any distro."}},
+{"@type": "Question", "name": "Why does wait_for_service return False?", "acceptedAnswer": {"@type": "Answer", "text": "For the same reasons the CLI waits. In rclpy it returned False after exactly the timeout you give it. A real server on the same host was found in 0.00 to 0.50 s, so a False after a few seconds means a name, type, domain or RMW problem, not slow discovery."}},
+{"@type": "Question", "name": "Does ros2 daemon stop fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Only the listing. After a server was killed with SIGKILL, the daemon kept showing the dead service for at least 15 s, and ros2 daemon stop cleared that. It didn't change the result of any call that was waiting."}}
+]}
+</script>
+
+<p>Measured on 2026-10-31 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10, rmw_cyclonedds_cpp 1.3.5), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4, rmw_cyclonedds_cpp 2.2.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10, rmw_cyclonedds_cpp 4.1.5). The default RMW was Fast DDS on all three. Full digests and versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-23-ros2-waiting-for-service-to-become-available/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/101692">[ROS2] Service call keeps waiting for the service to be available</a>, <a href="https://robotics.stackexchange.com/questions/107435">Service callback in ros2 Python is not firing</a>, <a href="https://github.com/ros2/ros2cli/issues/1159">Add configurable timeout for service calls to prevent command from hanging indefinitely</a>, <a href="https://github.com/ros2/ros2cli/issues/818">ros2 service call waits forever if QoS is incompatible with concerned server</a>, <a href="https://github.com/ros2/rclpy/issues/802">wait_for_service discovery fails if multiple nodes wait for the same service</a>.</p>

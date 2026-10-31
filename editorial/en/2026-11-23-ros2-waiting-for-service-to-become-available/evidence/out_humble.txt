@@ -1,0 +1,409 @@
+=== distro=humble
+2026-10-31T01:47:33Z
+ros-humble-fastrtps 2.6.12-1jammy.20260723.233918
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-rmw-implementation 2.8.5-1jammy.20260907.211224
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-ros2service 0.18.20-1jammy.20260907.215538
+ros-humble-std-srvs 4.9.2-1jammy.20260907.204811
+--- default RMW
+rmw_fastrtps_cpp
+--- installing rmw_cyclonedds_cpp (not in image)
+ros-humble-cyclonedds 0.10.5-2jammy.20260226.013234
+ros-humble-rmw-cyclonedds-cpp 1.3.5-1jammy.20260907.205235
+build ok
+--- ros2 service call -h (options)
+options:
+  -h, --help      show this help message and exit
+  -r N, --rate N  Repeat the call at a specific rate in Hz
+
+##### C0 baseline: py server /trigger spinning
+ 01:47:57 up 94 days, 14:44,  0 users,  load average: 0.59, 0.36, 0.18
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411278.295
+$ ros2 service list -t
+/trigger [std_srvs/srv/Trigger]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+std_srvs/srv/Trigger
+rc=0
+$ ros2 node list
+/wsvc_server
+$ ros2 node info /wsvc_server (Service Servers part)
+  Service Servers:
+    /trigger: std_srvs/srv/Trigger
+  Service Clients:
+$ timeout 20 ros2 service call /trigger std_srvs/srv/Trigger 
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='ok from py')
+
+rc=0 elapsed=0.48s
+[INFO] [1793411284.442714382] [wsvc_client]: py wait_for_service(/trigger, timeout_sec=3.0) returned True after 0.00s
+[INFO] [1793411284.756681581] [wsvc_client_cpp]: cpp wait_for_service(/trigger, 3.0s) returned true after 0.00s
+[INFO] [1793411284.757883246] [wsvc_client_cpp]: response: ok from py
+
+##### C0b baseline: cpp server /trigger spinning
+ 01:48:06 up 94 days, 14:44,  0 users,  load average: 0.50, 0.35, 0.18
+[server] SERVER_READY /trigger t=1793411286.373
+$ timeout 20 ros2 service call /trigger std_srvs/srv/Trigger 
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='ok from cpp')
+
+rc=0 elapsed=0.81s
+
+##### C1 no server at all: CLI output, does it time out on its own (bounded 30s)
+ 01:48:11 up 94 days, 14:44,  0 users,  load average: 0.45, 0.35, 0.18
+$ timeout 30 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=30.26s
+lines printed in a 10s run:
+1
+--- Ctrl-C (SIGINT after 5s)
+waiting for service to become available...
+rc=2 (exit code of ros2 itself)
+--- SIGTERM after 5s, --preserve-status
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=1 (exit code of ros2 itself)
+[INFO] [1793411345.916471103] [wsvc_client]: py wait_for_service(/trigger, timeout_sec=3.0) returned False after 3.00s
+[ros2run]: Process exited with failure 1
+[INFO] [1793411349.220238206] [wsvc_client_cpp]: cpp wait_for_service(/trigger, 3.0s) returned false after 3.00s
+[ros2run]: Process exited with failure 1
+[WARN] [1793411350.686542887] [wsvc_client]: /trigger not available after 1s, still waiting (check ros2 service list -t)
+[WARN] [1793411351.688848703] [wsvc_client]: /trigger not available after 2s, still waiting (check ros2 service list -t)
+[WARN] [1793411352.691177320] [wsvc_client]: /trigger not available after 3s, still waiting (check ros2 service list -t)
+[WARN] [1793411353.693446495] [wsvc_client]: /trigger not available after 4s, still waiting (check ros2 service list -t)
+[ERROR] [1793411353.694122404] [wsvc_client]: gave up on /trigger after 4s
+[ros2run]: Process exited with failure 2
+rc=2
+
+##### C2 wrong name: server /add_trigger, client /trigger
+ 01:49:14 up 94 days, 14:45,  0 users,  load average: 0.16, 0.28, 0.17
+[server] SERVER_READY add_trigger type=Trigger spin=1 t=1793411354.474
+$ ros2 service list -t
+/add_trigger [std_srvs/srv/Trigger]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+rc=1
+$ ros2 node list
+/wsvc_server
+$ ros2 node info /wsvc_server (Service Servers part)
+  Service Servers:
+    /add_trigger: std_srvs/srv/Trigger
+  Service Clients:
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.24s
+
+##### C3 namespace: server in /robot1 with relative name 'trigger', client calls /trigger
+ 01:49:28 up 94 days, 14:45,  0 users,  load average: 0.13, 0.27, 0.16
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411368.971
+$ ros2 service list -t
+/robot1/trigger [std_srvs/srv/Trigger]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+rc=1
+$ ros2 node list
+/robot1/wsvc_server
+$ ros2 node info /robot1/wsvc_server (Service Servers part)
+  Service Servers:
+    /robot1/trigger: std_srvs/srv/Trigger
+  Service Clients:
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.24s
+$ timeout 15 ros2 service call /robot1/trigger std_srvs/srv/Trigger 
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='ok from py')
+
+rc=0 elapsed=0.48s
+--- py client in /robot1 using relative name 'trigger'
+[INFO] [1793411384.562468714] [robot1.wsvc_client]: py wait_for_service(trigger, timeout_sec=3.0) returned True after 1.50s
+--- py client in /robot1 using absolute name '/trigger'
+[INFO] [1793411388.089308431] [robot1.wsvc_client]: py wait_for_service(/trigger, timeout_sec=3.0) returned False after 3.00s
+[ros2run]: Process exited with failure 1
+
+##### C3b namespace: server in /robot1 with absolute name '/trigger'
+ 01:49:49 up 94 days, 14:46,  0 users,  load average: 0.29, 0.30, 0.18
+[server] SERVER_READY /trigger type=Trigger spin=1 t=1793411389.907
+$ timeout 15 ros2 service call /trigger std_srvs/srv/Trigger 
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='ok from py')
+
+rc=0 elapsed=0.47s
+
+##### C4 remapped server name: server run with -r trigger:=trigger_v2
+ 01:49:54 up 94 days, 14:46,  0 users,  load average: 0.27, 0.29, 0.17
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411394.687
+$ ros2 service list -t
+/trigger_v2 [std_srvs/srv/Trigger]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+rc=1
+$ ros2 node list
+/wsvc_server
+$ ros2 node info /wsvc_server (Service Servers part)
+  Service Servers:
+    /trigger_v2: std_srvs/srv/Trigger
+  Service Clients:
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.24s
+[server] SERVER_READY /trigger_v2 t=1793411408.812
+(cpp server)
+/trigger_v2
+
+##### C5 server created but never spins (py)
+ 01:50:13 up 94 days, 14:46,  0 users,  load average: 0.19, 0.27, 0.17
+[server] SERVER_READY trigger type=Trigger spin=0 t=1793411413.663
+$ ros2 service list -t
+/trigger [std_srvs/srv/Trigger]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+std_srvs/srv/Trigger
+rc=0
+$ ros2 node list
+/wsvc_server
+$ ros2 node info /wsvc_server (Service Servers part)
+  Service Servers:
+    /trigger: std_srvs/srv/Trigger
+  Service Clients:
+$ timeout 10 ros2 service call /trigger std_srvs/srv/Trigger 
+requester: making request: std_srvs.srv.Trigger_Request()
+
+rc=124 elapsed=10.17s
+[INFO] [1793411429.027822818] [wsvc_client]: py wait_for_service(/trigger, timeout_sec=3.0) returned True after 0.25s
+[ERROR] [1793411434.537256497] [wsvc_client]: /trigger is available but sent no response within 5s
+[ros2run]: Process exited with failure 3
+rc=3
+[INFO] [1793411434.852179395] [wsvc_client_cpp]: cpp wait_for_service(/trigger, 3.0s) returned true after 0.00s
+[ERROR] [1793411439.852783597] [wsvc_client_cpp]: no response within 5s
+
+##### C5b server created but never spins (cpp)
+ 01:50:41 up 94 days, 14:47,  0 users,  load average: 0.12, 0.24, 0.16
+[server] SERVER_READY /trigger t=1793411441.487
+$ timeout 10 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+requester: making request: std_srvs.srv.Trigger_Request()
+
+rc=124 elapsed=10.16s
+
+##### C6 different ROS_DOMAIN_ID: server domain 7, client default
+ 01:50:55 up 94 days, 14:47,  0 users,  load average: 0.17, 0.25, 0.17
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411456.140
+$ ros2 service list -t
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+rc=1
+$ ros2 node list
+$ ros2 node info /wsvc_server (Service Servers part)
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.26s
+[INFO] [1793411472.470432208] [wsvc_client]: py wait_for_service(/trigger, timeout_sec=3.0) returned False after 3.00s
+[ros2run]: Process exited with failure 1
+--- client with ROS_DOMAIN_ID=7
+$ ros2 service list -t
+/trigger [std_srvs/srv/Trigger]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+std_srvs/srv/Trigger
+rc=0
+$ ros2 node list
+/wsvc_server
+$ timeout 15 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='ok from py')
+
+rc=0 elapsed=0.73s
+
+##### C7 different RMW: server rmw_cyclonedds_cpp, client default rmw_fastrtps_cpp
+ 01:51:17 up 94 days, 14:47,  0 users,  load average: 0.18, 0.25, 0.17
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411477.364
+$ ros2 service list -t
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+std_srvs/srv/Trigger
+rc=0
+$ ros2 node list
+/wsvc_server
+$ ros2 node info /wsvc_server (Service Servers part)
+  Service Servers:
+    /trigger: std_srvs/srv/Trigger
+  Service Clients:
+$ timeout 15 ros2 service call /trigger std_srvs/srv/Trigger 
+requester: making request: std_srvs.srv.Trigger_Request()
+
+rc=124 elapsed=15.17s
+[INFO] [1793411497.765351141] [wsvc_client]: py wait_for_service(/trigger, timeout_sec=5.0) returned True after 0.25s
+[INFO] [1793411498.084014519] [wsvc_client_cpp]: cpp wait_for_service(/trigger, 5.0s) returned true after 0.00s
+[ERROR] [1793411503.084776743] [wsvc_client_cpp]: no response within 5s
+
+##### C7b different RMW reversed: server default rmw_fastrtps_cpp, client rmw_cyclonedds_cpp
+ 01:51:44 up 94 days, 14:48,  0 users,  load average: 0.12, 0.23, 0.16
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411504.909
+$ ros2 service list -t
+/trigger [std_srvs/srv/Trigger]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+std_srvs/srv/Trigger
+rc=0
+$ ros2 node list
+$ timeout 15 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+requester: making request: std_srvs.srv.Trigger_Request()
+
+rc=124 elapsed=15.26s
+
+##### C7c both on rmw_cyclonedds_cpp
+ 01:52:06 up 94 days, 14:48,  0 users,  load average: 0.08, 0.21, 0.16
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411527.032
+$ timeout 15 ros2 service call /trigger std_srvs/srv/Trigger 
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='ok from py')
+
+rc=0 elapsed=0.54s
+
+##### C8 type mismatch: server SetBool on /trigger, CLI gives Trigger
+ 01:52:12 up 94 days, 14:48,  0 users,  load average: 0.15, 0.22, 0.16
+[server] SERVER_READY trigger type=SetBool spin=1 t=1793411532.499
+$ ros2 service list -t
+/trigger [std_srvs/srv/SetBool]
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+std_srvs/srv/SetBool
+rc=0
+$ ros2 node list
+/wsvc_server
+$ ros2 node info /wsvc_server (Service Servers part)
+  Service Servers:
+    /trigger: std_srvs/srv/SetBool
+  Service Clients:
+$ timeout 10 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=10.24s
+[INFO] [1793411550.808790003] [wsvc_client]: py wait_for_service(/trigger, timeout_sec=3.0) returned False after 3.00s
+[ros2run]: Process exited with failure 1
+[INFO] [1793411554.122120131] [wsvc_client_cpp]: cpp wait_for_service(/trigger, 3.0s) returned false after 3.00s
+[ros2run]: Process exited with failure 1
+--- correct type
+$ timeout 15 ros2 service call /trigger std_srvs/srv/SetBool {data: true}
+requester: making request: std_srvs.srv.SetBool_Request(data=True)
+
+response:
+std_srvs.srv.SetBool_Response(success=True, message='ok from py')
+
+rc=0 elapsed=0.57s
+--- type name that does not exist
+$ timeout 15 ros2 service call /trigger std_srvs/srv/Trigge 
+The passed service type is invalid
+rc=1 elapsed=0.33s
+
+##### C9 server already exited (clean SIGTERM)
+ 01:52:36 up 94 days, 14:48,  0 users,  load average: 0.17, 0.22, 0.17
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411556.820
+daemon view while running:
+/trigger
+t+2s daemon view:
+(none)
+t+2s --no-daemon view:
+(none)
+$ ros2 service list -t
+rc=0 (parameter services hidden)
+$ ros2 service type /trigger
+rc=1
+$ ros2 node list
+$ ros2 node info /wsvc_server (Service Servers part)
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.24s
+
+##### C9b server killed with SIGKILL (crash)
+ 01:52:53 up 94 days, 14:49,  0 users,  load average: 0.13, 0.21, 0.16
+/trigger
+t+1s daemon: /trigger  no-daemon: none
+t+5s daemon: /trigger  no-daemon: none
+t+15s daemon: /trigger  no-daemon: none
+t+30s daemon: none  no-daemon: none
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.24s
+--- after ros2 daemon stop
+The daemon has been stopped
+(none)
+
+##### C10 does ros2 daemon stop change the wrong-name / domain cases?
+ 01:53:38 up 94 days, 14:49,  0 users,  load average: 0.06, 0.17, 0.15
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411618.569
+The daemon has been stopped
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.24s
+[server] SERVER_READY add_trigger type=Trigger spin=1 t=1793411632.130
+The daemon has been stopped
+$ timeout 8 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+rc=124 elapsed=8.24s
+
+##### C11 call issued before the server starts (server starts 4s later)
+ 01:54:05 up 94 days, 14:50,  0 users,  load average: 0.18, 0.19, 0.16
+$ timeout 20 ros2 service call /trigger std_srvs/srv/Trigger 
+waiting for service to become available...
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='ok from py')
+
+rc=0 elapsed=4.98s
+
+##### C12 discovery delay: server process start -> client wait_for_service True (5 runs each)
+ 01:54:11 up 94 days, 14:50,  0 users,  load average: 0.31, 0.22, 0.17
+py run1: process start -> seen 0.58s ; service created -> seen 0.25s
+py run2: process start -> seen 0.58s ; service created -> seen 0.25s
+py run3: process start -> seen 0.58s ; service created -> seen 0.25s
+py run4: process start -> seen 0.57s ; service created -> seen 0.24s
+py run5: process start -> seen 0.58s ; service created -> seen 0.25s
+cpp run1: process start -> seen 0.33s ; service created -> seen 0.17s
+cpp run2: process start -> seen 0.33s ; service created -> seen 0.17s
+cpp run3: process start -> seen 0.33s ; service created -> seen 0.17s
+cpp run4: process start -> seen 0.33s ; service created -> seen 0.17s
+cpp run5: process start -> seen 0.33s ; service created -> seen 0.18s
+--- full ros2 service call wall time against an already running py server (3 runs)
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411697.823
+run1 rc=0 0.76s waiting_lines=1
+run2 rc=0 0.83s waiting_lines=0
+run3 rc=0 0.56s waiting_lines=0
+
+##### C13 repeatability: fresh client process vs a running server, wait_for_service(3s), 8 runs each
+ 01:55:03 up 94 days, 14:51,  0 users,  load average: 0.17, 0.20, 0.17
+[server] SERVER_READY trigger type=Trigger spin=1 t=1793411704.338
+py        6 returned True after 0.00s
+py        2 returned True after 0.25s
+cpp       8 returned true
+ 01:55:15 up 94 days, 14:51,  0 users,  load average: 0.21, 0.20, 0.17
+=== done humble

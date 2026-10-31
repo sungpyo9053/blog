@@ -1,0 +1,1203 @@
+<?xml version="1.0" encoding="EUC-KR"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms">
+    <head>
+        <w2:type>DEFAULT</w2:type>
+        <w2:buildDate/>
+        <xf:model>
+            <xf:instance>
+                <data xmlns="" />
+            </xf:instance>
+            <w2:dataCollection baseNode="map">
+                <w2:dataMap baseNode="map" id="dma_login">
+                    <w2:keyInfo>
+                        <w2:key id="crypted_id" name="SSO토큰ID" dataType="text"></w2:key>
+                        <w2:key id="user_id" name="사용자ID" dataType="text"></w2:key>
+                        <w2:key id="req_access_no" name="인터넷신청접근번호" dataType="text"></w2:key>
+                        <w2:key id="link_yn" name="연계여부" dataType="text"></w2:key>
+                    </w2:keyInfo>
+                </w2:dataMap>
+            </w2:dataCollection>
+            <w2:workflowCollection></w2:workflowCollection>
+            <xf:submission id="sbm_Pm10ComSessionBaseCtrl_deleteSession" ref="" target="" action="/biz/Pm10ComSessionBaseCtrl/deleteSession.do"
+                method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+                mode="asynchronous" processMsg="$blank" ev:submit="" ev:submitdone="scwin.sbm_Pm10ComSessionBaseCtrl_deleteSession_submitdone"
+                ev:submiterror="" abortTrigger="">
+            </xf:submission>
+            <xf:submission id="sbm_Pm10ComSessionBaseCtrl_deleteNmbrSession" ref="" target="" action="/biz/Pm10ComSessionBaseCtrl/deleteNmbrSession.do"
+                method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+                mode="asynchronous" processMsg="$blank" ev:submit="" ev:submitdone="scwin.sbm_Pm10ComSessionBaseCtrl_deleteSession_submitdone"
+                ev:submiterror="" abortTrigger="">
+            </xf:submission>
+            <xf:submission id="sbm_Pm10ComSessionBaseCtrl_executeLogout" ref="" target="" action="/biz/Pm10ComSessionBaseCtrl/deleteSession.do"
+                method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+                mode="asynchronous" processMsg="" ev:submit="" ev:submitdone="scwin.sbm_Pm10ComSessionBaseCtrl_executeLogout_submitdone"
+                ev:submiterror="" abortTrigger="">
+            </xf:submission>
+            <xf:submission id="sbm_Pm10ComSessionBaseCtrl_executeNmbrLogout" ref="" target="" action="/biz/Pm10ComSessionBaseCtrl/deleteNmbrSession.do"
+                method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+                mode="asynchronous" processMsg="" ev:submit="" ev:submitdone="scwin.sbm_Pm10ComSessionBaseCtrl_executeLogout_submitdone"
+                ev:submiterror="" abortTrigger="">
+            </xf:submission>
+            <xf:submission id="sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin" ref='data:json,{"id":"dma_login","key":"websquare_param"}' target='' action="/biz/Pm10P0LoginMngCtrl/linkHandleMbrLogin.do"
+                method="post" mediatype="application/json" encoding="UTF-8" instance="" replace="" errorHandler="" customHandler=""
+                mode="asynchronous" processMsg="$blank" ev:submit="" ev:submitdone="scwin.sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone"
+                ev:submiterror="" abortTrigger="">
+            </xf:submission>
+        </xf:model>
+        <script type="text/javascript" src="/js/opensource/jquery/jquery-ui.min.js"></script>
+        <script type="text/javascript" src="/js/opensource/jquery/jquery.selectric.js"></script>
+        <script type="text/javascript" src="/js/pm10/wq/libs/lib.js"></script>
+        <script type="text/javascript" lazy="false"><![CDATA[
+            /***************************************************************************
+             * 프로젝트명    : 미래등기시스템 구축사업
+             * 파일명      : Pm10P0IrosMain.xml
+             * 파일설명     : 외부포탈 메인 화면
+             * 
+             * <<         변           경          사          항       >>
+             *
+             *    수정일       수정자                수 정 내 용 
+             *  ==========   ============   =============================
+             *  2022.05.18     장기순        최초 생성
+             *  2025.07.03     장원호      [2025-W00223] 인터넷등기소 내 OTP발급 홍보 개선             
+             *  2025.09.18    하자보수담당자(인터넷)  (2025-W00406) [하자] 온라인법인설립 수수료 결제메뉴 접근 시 전자신청사용자로 로그인하도록 조치
+             *  2025.09.18     박준표        인터넷등기소 메인화면 UI 개선  (2025-W00580)
+             *  2025.09.30     장원호    [2025-W00599] 인터넷등기소 내 OTP 발급 홍보 팝업 삭제
+             *  2026.04.23    정태명       [법원제안] 등기예규 디렉토리 안내 화면 제공 (2026-W00243)
+             *  2026.06.18    정태명       [2026-W00340] 아이디 로그인 사용자의 온라인법인설립시스템 수수료 결제 페이지 이동 시 오류 조치
+             ***************************************************************************/
+            
+            //scwin.otpMainPopId = ""; //OTP 배너 존재 여부 파악용 2025.07.03. whjang01(장원호) (2025-W00223) -> (2025-W00599) OTP 배너 팝업 사용 안되도록 수정. 2025.09.30. whjang01(장원호).
+            /**
+             * 함수명  : scwin.onpageload
+             * 함수설명 : top 메인 화면를 초기화
+             * 파라미터 : N/A
+             * 리턴       : N/A
+             * 작성일  : 2022.05.17
+             * 작성자  : 장기순
+             */ 
+            scwin.onpageload = function() {
+                scwin.callExtLinkYn = "N";
+                scwin.linkCryptedId = WebSquareExternal.strCryptedId;          //타기관 로그인 세션 SSO연동 CRYPTED_ID
+                scwin.linkUserId = WebSquareExternal.strUserId;                //타기관 로그인 세션 SSO연동 USER_ID
+                scwin.linkMoveLinkSap = WebSquareExternal.w2xPathSub;          //이동할 MENU_ID
+                scwin.forwardLoginYn = WebSquareExternal.forwardLoginYn;       //LOGIN 페이지 이동여부
+                
+                //인터넷등기소 서버 환경 정보 셋팅(서버환경 , 개발자모드, 접속서버정보)
+                Pm10ComRigt.gfn_setSeverEnvInfo();
+                
+                Pm10ComRigt.gfn_setRigtMenuId(""); //메뉴권한아이디(로케이션정보)를 클리어
+                
+                if(gcm.data.getLocalStorage("IS_NMBR_LOGIN__")) { //비회원 로긴 여부 세션
+                    Pm10ComRigt.gfn_refreshLocalSessionStorageForInit(); //로컬, 세션스토리지 초기화
+                    com.sbm.execute(sbm_Pm10ComSessionBaseCtrl_deleteNmbrSession); //비회원세션삭제
+                } else {
+                    if(com.util.isEmpty(scwin.linkCryptedId) && com.util.isEmpty(scwin.linkUserId) && Pm10ComRigt.gfn_isExistsMbrZombieSession()) {
+                        Pm10ComRigt.gfn_refreshLocalSessionStorageForInit(); //로컬, 세션스토리지 초기화
+                        com.sbm.execute(sbm_Pm10ComSessionBaseCtrl_deleteSession); //회원세션삭제
+                    } else {
+                        scwin.sbm_Pm10ComSessionBaseCtrl_deleteSession_submitdone();
+                    }
+                }
+            };
+            
+            /**
+             * 함수명   : scwin.sbm_Pm10ComSessionBaseCtrl_deleteSession_submitdone
+             * 함수설명 : 세션 삭제 후처리
+             * 파라메터 : N/A
+             * 리턴     : N/A
+             * 작성일   : 2022.05.01
+             * 작성자   : 장기순
+             */
+            scwin.sbm_Pm10ComSessionBaseCtrl_deleteSession_submitdone = function(e) {
+                if(com.util.isNotEmpty(scwin.linkCryptedId) && com.util.isNotEmpty(scwin.linkUserId)) {
+                    dma_login.set("crypted_id", scwin.linkCryptedId);
+                    dma_login.set("user_id", scwin.linkUserId);
+                    var reqAccessNo = "";
+                    if(com.util.isNotEmpty(scwin.linkMoveLinkSap) && scwin.linkMoveLinkSap.indexOf("_") > -1) {
+                        reqAccessNo = scwin.linkMoveLinkSap.split("_")[1];
+                        scwin.linkMoveLinkSap = scwin.linkMoveLinkSap.split("_")[0];
+                        WebSquareExternal.w2xPathSub = scwin.linkMoveLinkSap.split("_")[0];
+                    }
+                    dma_login.set("req_access_no", reqAccessNo);
+                    dma_login.set("link_yn", "Y");
+                    gcm.data.setLocalStorage("CRYPTED_ID__", scwin.linkCryptedId); //CRYPTED_ID 저장
+                    gcm.data.setLocalStorage("USER_ID__", scwin.linkUserId); //USER_ID 저장
+                    com.storage.removeLocalStorage("ONE_MORE_AUTH");
+                    com.sbm.execute(sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin);
+                } else {
+                    scwin.after_sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone();
+                }
+            };
+            
+            /**
+             * 함수명  : scwin.sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone
+             * 함수설명 : 로그인 처리 리턴
+             * 파라미터 : N/A
+             * 리턴       : N/A
+             * 작성일  : 2022.05.17
+             * 작성자  : 장기순
+             */
+            scwin.sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone = function(e) {
+               
+                var returnData = e.responseJSON;
+               
+                if(returnData.success_yn == "Y") {
+                    //LocalStorage에 저장해야 Interceptor에서 세션정보
+                    gcm.data.setLocalStorage("CRYPTED_ID__", returnData.crypted_id); //CRYPTED_ID 저장
+                    gcm.data.setLocalStorage("USER_ID__", returnData.user_id); //USER_ID 저장
+                    com.storage.removeLocalStorage("ONE_MORE_AUTH");
+                    WebSquareExternal.strCryptedId = "";
+                    WebSquareExternal.strUserId = "";
+                    
+                    if(Pm10ComRigt.gfn_getSessVal("iros_mbr_cls_cd") == "19012" && Pm10ComRigt.gfn_getSessVal("gpin_athn_cls_cd") == "Y") {
+                        com.message.openMessage(Pm10ComUtil.gfn_getMesOption('info', "pm10.message.find.web.p0.CCMEM122", ""), scwin.afterLinkLoginMessageShow);
+                    } else {
+                       scwin.after_sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone();
+                    }
+                } else {
+                    Pm10ComRigt.gfn_refreshLocalSessionStorageForInit(); //로컬, 세션스토리지 초기화
+                    com.message.openMessage(Pm10ComUtil.gfn_getMesOption('info', 'pm10.message.info.web.p0.0000', returnData.fail_message), scwin.after_sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone);
+                }
+            };
+            
+            /**
+             * 함수명  : scwin.afterLinkLoginMessageShow
+             * 함수설명 : 메시지 확인 후 처리
+             * 파라미터 : N/A
+             * 리턴       : N/A
+             * 작성일  : 2022.05.17
+             * 작성자  : 장기순
+             */
+            scwin.afterLinkLoginMessageShow = function(data) {
+                if(data.btnType == 'confirm') {
+                    scwin.after_sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone();
+                }
+            };
+            
+            /**
+             * 함수명  : scwin.after_sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone
+             * 함수설명 : 회원 로그인 후 처리
+             * 파라미터 : N/A
+             * 리턴       : N/A
+             * 작성일  : 2022.05.17
+             * 작성자  : 장기순
+             */
+            scwin.after_sbm_Pm10P0LoginMngCtrl_linkHandleMbrLogin_submitdone = function() {
+                //공통개발자 제공 코드 - History back 초기화면 셋팅
+                com.win.addBrowserHistory('INIT', {});
+                
+                if(scwin.linkMoveLinkSap == "") {
+                    if(scwin.forwardLoginYn == "Y") {
+                        WebSquareExternal.forwardLoginYn = "N";
+                        Pm10ComRigt.gfn_afterZombieSessionMoveLoginPage();
+                    } else {
+                        //메인홈 이동
+                        wfm_potal_main.setSrc(Pm10ComMenu.gfn_getHomeUrl());
+                    }
+                } else {
+                    //content 화면으로 이동
+                    wfm_potal_main.setSrc(Pm10ComMenu.gfn_getContsUrl());
+                }
+                /*
+                if(Pm10ComMenu.gfn_getIrosEnvType() == "R") {
+                    iframeChat.setSrc("https://www.iros.go.kr/chat/");
+                } else if(Pm10ComMenu.gfn_getIrosEnvType() == "V") {
+                    iframeChat.setSrc("https://nlv.iros.go.kr:8443/chat/");
+                } else {
+                    iframeChat.setSrc("https://nld.iros.go.kr:8443/chat/");
+                }
+                */
+            };
+            
+            /**
+             * 함수명   : scwin.sbm_Pm10ComSessionBaseCtrl_executeLogout_submitdone
+             * 함수설명 : 로그아웃 완료 이벤트
+             * 파라메터 : N/A
+             * 리턴     : N/A
+             * 작성일   : 2022.05.01
+             * 작성자   : 장기순
+             */
+            scwin.sbm_Pm10ComSessionBaseCtrl_executeLogout_submitdone = function(e) {
+                Pm10ComRigt.gfn_setRigtMenuId("");   //메뉴권한아이디(로케이션정보)를 클리어   
+                Pm10ComRigt.gfn_refreshLocalSessionStorageForInit(); //로컬, 세션스토리지 초기화
+                com.win.goHome(); //홈페이지 이동
+            };
+                              
+            /**
+             * 함수명  : scwin.goToMenuPage
+             * 함수설명 : header Main, header Side, location, sideBar 인터넷등기소 화면에서 각 시스템별 메뉴이동
+             * 파라미터 : N/A
+             * 리턴       : N/A
+             * 작성일  : 2022.05.17
+             * 작성자  : 장기순
+             */ 
+            scwin.goToMenuPage = function(moveCls, menuId, paramData) {
+                //OTP 배너 popup 종료. 2025.07.03. whjang01(장원호) (2025-W00223) -> (2025-W00599) OTP 배너 팝업 사용 안되도록 수정. 2025.09.30. whjang01(장원호).
+                /*
+                if (com.util.isEmpty(scwin.otpMainPopId) == false &&  scwin.otpMainPopId != "") { //팝업이 닫혔는지 열렸는지 확인. 값이 비어있으면 닫힘  2025.07.03. whjang01(장원호) (2025-W00223)
+                    wfm_potal_main.getWindow().scwin.popTopAutoClose();
+                }
+                */
+                
+                //메뉴정보(로케이션 재정렬)  
+                var paramIdOrUrl =  menuId;
+                
+                //이동가능한 url
+                var movePathUrl = scwin.getIrosPageUrl(moveCls, paramIdOrUrl);
+                
+                // Pm10ComRigt.gfn_setRigtMenuId 사용제한
+                //   1. 로케이션 메뉴아이디값을 설정하여 gfn_setRigtMenuId을 호출할경우 사용을 제한한다.
+                //   2. PM10 등기외부포털 메인 홈페이지(Pm10P0IrosMain.xml) 및 공통 JS에서만 허용만 사용허용!!!!
+                //   3. PM10 등기외부포털을 제외한 타 시스템에서는 사용불가!!!!
+                
+                //해당 아이디 전역변수 저장
+                Pm10ComRigt.gfn_setRigtMenuId(menuId); //권한으로 사용할 메뉴아이디
+                Pm10ComMenu.gfn_setReturnMenuId(menuId); //로그인 후 리턴할 메뉴아이디
+                
+                console.log("## 통합테스트용 콘솔 로그 - OPEN_MENU :: MENU_ID:" + menuId + ", MENU_URL:" + movePathUrl);
+                
+                if(com.util.isNotEmpty(movePathUrl)) { 
+                    
+                    //기타(E) 메뉴중 [아이디/비밀번호찾기]는 팝업으로 제공(예외적용)
+                    var moveClsCd = com.session.getMenu(menuId).move_cls_cd;
+                    
+                    if(moveClsCd == 'P') { //팝업일 경우
+                        var popWid = 950;
+                        var popHei = 750;
+                        var popOption = {type : 'wframePopup', width : popWid, height : popHei, modal : true};
+                        var paramData = "";
+                        if(menuId == "06010300") { //기타(E) 메뉴중 [아이디/비밀번호찾기]는 팝업
+                            popOption.popupName  = "아이디 비밀번호 찾기";
+                            paramData = {extLinkYn : "Y", callbackFn : scwin.closedExtLinkPopup};
+                            scwin.callExtLinkYn = "Y";
+                        } else {
+                            popOption.popupName  = "";
+                            paramData = {extLinkYn : "N"};
+                        }
+                        var passLoginCheck = true; //로그인이 필요하지 않은 팝업일경우만
+                        com.win.openPopup(movePathUrl, popOption, paramData, passLoginCheck);
+                        
+                    } else {
+                        //로그인페이지를 경유하여 페이지를 이동할 경우
+                        if(Pm10ComMenu.gfn_getMoveToLoginYn() == "Y") {
+                            //로그인페이지 경유 후 다시 호출 하지 않게 설정을 돌려준다
+                            Pm10ComMenu.gfn_setMoveToLoginYn('N');
+                        }
+                                        
+                        //콘텐츠화면(Pm10P0IrosContent.xml) 이동
+                        com.win.openWFrame(wfm_potal_main, Pm10ComMenu.gfn_getContsUrl());
+                        
+                        //로케이션 재정렬 메뉴정보
+                        var menuData = com.session.getMenu(Pm10ComRigt.gfn_getRigtMenuId());
+                        
+                        if(movePathUrl.indexOf(".xml?") > -1) {
+                            var getParameterSplit = movePathUrl.split("?")[1];
+                            var parametersArray = getParameterSplit.split("&");
+                            var sendParam = {};
+                            for(var idx = 0; idx < parametersArray.length; idx++) {
+                                var keyString = parametersArray[idx].split("=")[0];
+                                var valString = parametersArray[idx].split("=")[1];
+                                sendParam[keyString] = valString;
+                            }
+                            //메뉴페이지이동
+                            wfm_potal_main.getWindow().scwin.setGoToPage(menuData, movePathUrl, {dataObject : com.option.parameter(sendParam)});
+                        } else {
+                            //메뉴페이지이동
+                            wfm_potal_main.getWindow().scwin.setGoToPage(menuData, movePathUrl, paramData);
+                        }
+                    }
+                }
+                //document.title변경(감리 지적 사항 수정)
+                document.title = "인터넷등기소 - " + com.session.getMenu(menuId).menu_name;
+            };
+            
+            scwin.closedExtLinkPopup = function(resultData) {
+                if((resultData == "close" && scwin.callExtLinkYn == "Y") || resultData == "Y") {
+                    window.close();
+                }
+            };
+            
+            /**
+             * 함수명  : scwin.goToMovePage
+             * 함수설명 : 인터넷등기소 화면에서 각 시스템별 화면이동
+             * 파라미터 : N/A
+             * 리턴       : N/A
+             * 작성일  : 2022.05.17
+             * 작성자  : 장기순
+             */ 
+            scwin.goToMovePage = function(moveCls, moveUrl, paramData) {
+                var paramIdOrUrl = moveUrl;
+                var movePathUrl = "";
+                
+                
+                
+                //이동가능한 url
+                movePathUrl = scwin.getIrosPageUrl(moveCls, paramIdOrUrl);
+                
+                console.log("## 통합테스트용 콘솔 로그 - MOVE_PAGE :: PAGE_URL:" + movePathUrl);
+                
+                if(com.util.isNotEmpty(movePathUrl)) {
+                    
+                    //OTP 배너 popup 종료.  2025.07.03. whjang01(장원호) (2025-W00223) -> (2025-W00599) OTP 배너 팝업 사용 안되도록 수정. 2025.09.30. whjang01(장원호).
+                    /*
+                    if (com.util.isEmpty(scwin.otpMainPopId) == false &&  scwin.otpMainPopId != "") { //팝업이 닫혔는지 열렸는지 확인. 값이 비어있으면 닫힘. 2025.07.03. whjang01(장원호) (2025-W00223)
+                        wfm_potal_main.getWindow().scwin.popTopAutoClose();
+                    }
+                    */
+                    
+                    //콘텐츠화면(Pm10P0IrosContent.xml) 이동
+                    com.win.openWFrame(wfm_potal_main, Pm10ComMenu.gfn_getContsUrl());
+                    
+                    //로케이션 재정렬 메뉴정보
+                    var menuData = com.session.getMenu(Pm10ComRigt.gfn_getRigtMenuId());
+                    
+                    //메뉴페이지이동
+                    wfm_potal_main.getWindow().scwin.setGoToPage(menuData, movePathUrl, paramData);
+               }
+            };
+            
+            /**
+             * 함수명  : scwin.getIrosPageUrl
+             * 함수설명 : 해당메뉴가 메뉴관리에 설정되 있는지 체크하여 최종 이동url를 가져온다.
+             * 파라미터 : N/A
+             * 리턴       : N/A
+             * 작성일  : 2022.05.17
+             * 작성자  : 장기순 
+             */ 
+            scwin.getIrosPageUrl = function(moveCls, paramIdOrUrl) {
+                
+                var moveRsltUrl = null;
+                var menuId = null;
+                var moveUrl = null;
+                
+                if(moveCls == "menu" || moveCls == "nmbr_menu") {
+                    menuId = paramIdOrUrl;
+                } else if(moveCls == "page" || moveCls == "nmbr_page") {
+                    if (paramIdOrUrl == "/ui/pm10/p0/mbrinfo/join/Pm10P0EnrNoVrfy.xml" 
+                        || paramIdOrUrl == "/ui/pm10/p0/mbrinfo/join/Pm10P0DgUserAthnFail.xml"
+                        || paramIdOrUrl == "/ui/pm10/p0/potalmain/Pm10P0IrosLogin.xml") {
+                        moveRsltUrl = paramIdOrUrl;
+                        return moveRsltUrl;
+                    } else {
+                        menuId = Pm10ComRigt.gfn_getRigtMenuId();
+                    }
+                    
+                } 
+                
+                //해당메뉴경로가 TB_RP422 및 TB_RP423 메뉴관리테이블에 존재여부 및 권한체크
+                var isIrosPage = Pm10ComRigt.gfn_isMenuId(menuId); //아이디로 구하기
+                var isLogin = Pm10ComRigt.gfn_getSessVal(); //로그인여부체크
+                
+                //메뉴관리테이블에 상위메뉴가 등록되어 있지 않아 권한정보를 알수 없는 경우       
+                if(isIrosPage == 'Z') {
+                 
+                    //콘텐츠관리(CMS) 시스템에서 TB_RP422 및 TB_RP423 메뉴관리테이블에 사용하는 메뉴가 등록 되어야한다.
+                    //메시지 : {메뉴관리에} 해당 {권한화면}이 존재하지 않습니다.  
+                    com.message.openMessage(Pm10ComUtil.gfn_getMesOption('info', 'pm10.message.error.biz.p0.0012', '메뉴관리에^권한화면'));
+                    return null;
+                }
+                
+                if(moveCls == "menu" || moveCls == "nmbr_menu") {
+                    moveUrl = com.session.getMenu(menuId).menu_url;
+                } else if(moveCls == "page" || moveCls == "nmbr_page") {
+                    moveUrl = paramIdOrUrl;
+                } 
+                
+                console.log("moveRsltUrl  ===> " + moveRsltUrl);
+                console.log("menuId  ========> " + menuId);
+                console.log("moveCls ========> " + moveCls);
+                //메뉴관리테이블에 존재하고 로그인처리가 필요하지 않은 화면인 경우 
+                if(isIrosPage == 'N') {
+                    
+                    moveRsltUrl = moveUrl;
+                    
+                //메뉴관리테이블에 존재하고 로그인처리가 필요한 화면인 경우   
+                } else if(isIrosPage == 'Y') {
+                    //로그인세션이 존재 할 경우
+                    if(isLogin) {
+                        var rigtWhlVal = Pm10ComRigt.gfn_getRigtWhlVals("IROS_LOGIN_RIGT_CLS_CD", menuId);
+                        //온라인법인설립 수수료 결제메뉴 접근 시 전자신청사용자로 로그인하도록 조치, 2025.09.18, 이원정(2025-W00406)
+                        var sessCertType = Pm10ComRigt.gfn_getSessVal('cert_type');
+                        if((rigtWhlVal == "D" || rigtWhlVal == "E" || rigtWhlVal == "D|E" || rigtWhlVal == "F"|| rigtWhlVal == "D|F") && (sessCertType == null || sessCertType == "") && moveCls == "menu") {
+	                        //온라인법인설립 수수료 결제메뉴 접근 시 전자신청사용자로 로그인하도록 메인페이지로 이동 조치, 2026.06.18, 정태명(2026-W00340)
+                            com.message.openMessage(Pm10ComUtil.gfn_getMesOption('info', 'pm10.message.info.web.p0.0000', "해당 메뉴는 전자신청 로그인 사용자만  이용<br>가능합니다. 로그아웃 후, 전자신청 사용자로<br> 로그인해 주시기 바랍니다."), scwin.goMainPageCallback);
+                            return null;                        
+                        } else {
+                            var irosLoginCls = Pm10ComRigt.gfn_getSessVal('iros_login_cls');
+                            var rigtInfoData = { rigt_id : 'IROS_LOGIN_RIGT_CLS_CD', rigt_val : irosLoginCls};
+                            var rigtRsltYn = Pm10ComRigt.gfn_getRigtVal(rigtInfoData)
+                            
+                            // 로그인세션이 이미 존재, 화면권한과 세션이 일치 할 경우
+                            if(rigtRsltYn) {
+                                moveRsltUrl = moveUrl;
+                                
+                            // 로그인세션이 이미 존재, 화면권한과 세션이 일치 하지 않을 경우
+                            } else {
+                                
+                                //--------------------------------------------------------------------------------
+                                // TO-DO :: 인터넷등기소로그인권한 구분별 로그인처리 여부에따라 메시지처리              
+                                
+                                //     1. 정리되면 제거 할 것  
+                                moveRsltUrl = moveUrl;
+                                
+                                //     2. 정리되면 적용 할 것      
+                                //var loginClsVal = "";
+                                //if(irosLoginCls == "C") {
+                                //    loginClsVal = "[일반(ID/PW)로그인]";
+                                //} else if(irosLoginCls == "D") {
+                                //    loginClsVal = "[전자신청용 로그인]";
+                                //} else if(irosLoginCls == "E") {
+                                //    loginClsVal = "[전자등기촉탁 로그인]";
+                                //} else if(irosLoginCls == "F") {
+                                //    loginClsVal = "[법인등기 온라인 사용자 로그인]";
+                                //} 
+                                //현재 로그인 권한{0}으로는 사용할 수 없는 화면입니다.
+                                //com.message.openMessage(Pm10ComUtil.gfn_getMesOption('info', 'pm10.message.info.web.p0.0039', loginClsVal), scwin.retrieveHandlRsltCallback);
+                                //return null;
+                                //--------------------------------------------------------------------------------
+                            }
+                        }
+                                     
+                    //로그인세션이 존재 하지 않을 경우 로그인페이지 이동
+                    } else {
+                        
+                        //메뉴이동시는 로그인페이지 바로 이동처리(메뉴)
+                        if(moveCls == 'menu') {
+                            Pm10ComMenu.gfn_setMoveToLoginYn('Y'); //로그인페이지를 경유하여 페이지를 이동할 경우
+                            moveRsltUrl = Pm10ComMenu.gfn_getloginUrl(); //로그인페이지        
+                                            
+                        //화면이동시는 메시지출력 후 인터넷등기소 홈페이지 이동(화면)
+                        } else if(moveCls == 'page') {
+                            //{해당} 화면은 {로그인}이 필요한 화면입니다.
+                            com.message.openMessage(Pm10ComUtil.gfn_getMesOption('info', 'pm10.message.info.web.p0.0018', '해당^로그인'), scwin.retrieveHandlRsltCallback);
+                            return null;
+                            
+                        //비회원 로그인 처리 일 경우   
+                        } else if(moveCls == 'nmbr_menu' || moveCls == 'nmbr_page') {
+                                                
+                            var rigtInfoData = { rigt_id : 'IROS_LOGIN_RIGT_CLS_CD', rigt_val : 'B'};
+                            var rigtRsltYn = Pm10ComRigt.gfn_getRigtVal(rigtInfoData);
+                        
+                            // 화면권한에 비회원로그인이 있고 비회원상수세션 존재 경우
+                            if(rigtRsltYn && Pm10ComRigt.gfn_getNmbrSessVal()) {
+                                moveRsltUrl = moveUrl;
+                                
+                            // 화면권한에 비회원로그인이 없거나 비회원상수세션 미존재 경우
+                            } else {
+                                //비회원권한이 없거나 비회원로그인처리 되지 않은 화면입니다.
+                                com.message.openMessage(Pm10ComUtil.gfn_getMesOption('info', 'pm10.message.info.web.p0.0038'), scwin.retrieveHandlRsltCallback);
+                                return null;
+                            }                   
+                        }    
+                    }
+                }    
+                
+                return moveRsltUrl;
+            };
+            
+            
+            /**
+             * 함수명   : scwin.goMainPageCallback
+             * 함수설명 : 메시지 확인 후 메인페이지로 이동 (2026-W00340)
+             * 파라메터 : N/A
+             * 리턴     : N/A
+             * 작성일   : 2026.06.18
+             * 작성자   : 정태명
+             */
+            scwin.goMainPageCallback = function(data) {
+                  
+                if(data.btnType == 'confirm') {
+                    //----------------------------------------------------------------------------------------------
+                    // TO-DO :: 메시지 처리 후 확인을 클릭 할 경우
+                    //      1. 메시지 생성 후 본화면 그대로 있을 경우는 홈페이지로 이동하지 않을 겨우 아래소스를 막는다.
+                    //      2. 메시지 생성 후 메인홈페이지로 이동해야 한다면 아래소스를 푼다.
+                    //----------------------------------------------------------------------------------------------
+                    Pm10ComRigt.gfn_setRigtMenuId(""); //메뉴권한아이디(로케이션정보)를 클리어
+                    com.win.goHome(); //홈페이지 이동               
+                }
+            };
+            
+            
+            /**
+             * 함수명   : scwin.retrieveHandlRsltCallback
+             * 함수설명 : 처리결과콜백조회
+             * 파라메터 : N/A
+             * 리턴     : N/A
+             * 작성일   : 2022.05.04
+             * 작성자   : 장기순
+             */
+            scwin.retrieveHandlRsltCallback = function(data) {
+                  
+                if(data.btnType == 'confirm') {
+                    //----------------------------------------------------------------------------------------------
+                    // TO-DO :: 메시지 처리 후 확인을 클릭 할 경우
+                    //      1. 메시지 생성 후 본화면 그대로 있을 경우는 홈페이지로 이동하지 않을 겨우 아래소스를 막는다.
+                    //      2. 메시지 생성 후 메인홈페이지로 이동해야 한다면 아래소스를 푼다.
+                    //----------------------------------------------------------------------------------------------
+                    //Pm10ComRigt.gfn_setRigtMenuId(""); //메뉴권한아이디(로케이션정보)를 클리어
+                    //com.win.goHome(); //홈페이지 이동               
+                }
+            };
+            
+            /**
+             * 함수명   : scwin.goToBtnClick
+             * 함수설명 : 메인, 해더, 사이드바, 풋터 화면이동
+             * 파라메터 : N/A
+             * 리턴     : N/A
+             * 작성일   : 2022.05.04
+             * 작성자   : 장기순
+             */
+            scwin.goToBtnClick = function(contentCls, clickCls, paramData) {
+                if(contentCls == 'header') {
+                    
+                    // 로그인
+                    if(clickCls == 'login01') { //로그인
+                        Pm10ComMenu.gfn_openMenu('06010100');
+                    } else if(clickCls == 'login02') { //ID/PW 찾기
+                        var param = {mainFindIdPwYn : "Y"};
+                        Pm10ComMenu.gfn_openMenu('06010100', param);
+                    } else if(clickCls == 'login03') { //회원가입(서비스이용동의)
+                        Pm10ComMenu.gfn_openMenu('06010200');
+                    } else if(clickCls == 'login04') { // PC->스마트폰 인증서복사
+                        Pm10ComMenu.gfn_openMenu('06030201');
+                    } else if(clickCls == 'login05') { // 촉탁권한관리
+                        Pm10ComMenu.gfn_openMenu('06020300');
+                    }
+                    
+                    // 로그아웃
+                    if(clickCls == 'logout') {
+                        if(com.util.isNotEmpty(gcm.data.getLocalStorage("IS_NMBR_LOGIN__"))) {
+                            com.sbm.execute(sbm_Pm10ComSessionBaseCtrl_executeNmbrLogout); //비회원로그아웃
+                        } else {
+                            com.sbm.execute(sbm_Pm10ComSessionBaseCtrl_executeLogout); //회원로그아웃
+                        }
+                    }
+                    
+                    // 촉탁권한관리
+                    if(clickCls == 'chocAuthMng') {
+                        Pm10ComMenu.gfn_openMenu('06020300');
+                    }
+                    
+                    // 워크플레이스
+                    if(clickCls == 'workPlace') {
+                        // 20230130 : 워크플레이스 없어졌다고 들었음.
+                        alert("워크플레이스 적용예정");
+                    }
+                    
+                    // 영문/한글페이지
+                    if(clickCls == 'kor') {
+                        Pm10ComRigt.gfn_setRigtMenuId(""); //메뉴권한아이디(로케이션정보)를 클리어
+                        com.win.goHome();  //홈페이지 이동
+                    } else if(clickCls == 'eng') {
+                        
+                        //OTP 배너 popup 종료. 2025.07.03. whjang01(장원호) (2025-W00223) -> (2025-W00599) OTP 배너 팝업 사용 안되도록 수정. 2025.09.30. whjang01(장원호).
+                        /*
+                        if (com.util.isEmpty(scwin.otpMainPopId) == false &&  scwin.otpMainPopId != "") { //팝업이 닫혔는지 열렸는지 확인. 값이 비어있으면 닫힘. 2025.07.03. whjang01(장원호) (2025-W00223) 
+                            wfm_potal_main.getWindow().scwin.popTopAutoClose();
+                        }
+                        */
+                        com.win.openWFrame(wfm_potal_main, "/ui/pm10/p0/potalmain/Pm10P0IrosContent-eng.xml"); //영문페이지
+                    }
+                    
+                    // 사이트맵 내부
+                    if(clickCls == 'sitemap01') {
+                        Pm10ComMenu.gfn_openMenu('06010100'); //로그인
+                    } else if(clickCls == 'sitemap02') {
+                        Pm10ComMenu.gfn_openMenu('06010200'); //회원가입(서비스이용동의)
+                    } else if(clickCls == 'sitemap03') {
+                        Pm10ComMenu.gfn_openMenu('06020100'); //회원수정
+                    } else if(clickCls == 'sitemap04') {
+                        if(com.util.isNotEmpty(gcm.data.getLocalStorage("IS_NMBR_LOGIN__"))) {
+                            com.sbm.execute(sbm_Pm10ComSessionBaseCtrl_executeNmbrLogout); //비회원로그아웃
+                        } else {
+                            com.sbm.execute(sbm_Pm10ComSessionBaseCtrl_executeLogout); //회원로그아웃
+                        }
+                    }
+                                
+                } else if(contentCls == 'home') {
+                    
+                    // 부동산등기
+                    if(clickCls == 'rlrg01') {
+                        Pm10ComMenu.gfn_openMenu('01010100'); // 열람/발급
+                    } else if(clickCls == 'rlrg02') {
+                        Pm10ComMenu.gfn_openMenu('01060200'); //발급확인
+                    } else if(clickCls == 'rlrg03') {
+                        Pm10ComMenu.gfn_openMenu('01060100'); // 열람/발급 내역
+                    } else if(clickCls == 'rlrg04') {
+                        Pm10ComMenu.gfn_openMenu('03030100'); // 등기신청
+                    } else if(clickCls == 'rlrg05') {
+                        Pm10ComMenu.gfn_openMenu('03010100'); // 전자납부
+                    } else if(clickCls == 'rlrg06') {
+                        Pm10ComMenu.gfn_openMenu('01010500'); // 부동산소유현황
+                    }
+                    
+                    // 법인등기
+                    if(clickCls == 'crg01') {
+                        Pm10ComMenu.gfn_openMenu('01020100'); // 열람/발급
+                    } else if(clickCls == 'crg02') {
+                        Pm10ComMenu.gfn_openMenu('01060200'); // 발급확인
+                    }  else if(clickCls == 'crg03') {
+                        Pm10ComMenu.gfn_openMenu('02020502'); // 인감정보 관리
+                    }  else if(clickCls == 'crg04') {
+                        Pm10ComMenu.gfn_openMenu('03020000'); // 등기신청
+                    } else if(clickCls == 'crg05') {
+                        Pm10ComMenu.gfn_openMenu('03010000'); // 전자납부
+                    } else if(clickCls == 'crg06') {
+                        Pm10ComMenu.gfn_openMenu('02020201'); // 간편회사설립
+                    }
+                    
+                    // 동산채권담보등기
+                    if(clickCls == 'movBondSrg01') {
+                        Pm10ComMenu.gfn_openMenu('01030100'); // 열람/발급
+                    } else if(clickCls == 'movBondSrg02') {
+                        Pm10ComMenu.gfn_openMenu('01060200'); // 발급확인
+                    } else if(clickCls == 'movBondSrg03') {
+                        Pm10ComMenu.gfn_openMenu('02030100'); // 등기신청
+                    } else if(clickCls == 'movBondSrg04') {
+                        Pm10ComMenu.gfn_openMenu('03010400'); // 전자납부
+                    } else if(clickCls == 'movBondSrg05') {
+                        Pm10ComMenu.gfn_openMenu('02030202'); // 담보목적물목록 작성
+                    }
+                    
+                    // 등기신청사건 처리현황
+                    if(clickCls == 'rgsApplCase01') {
+                        Pm10ComMenu.gfn_openMenu('03030100'); // 부동산
+                    } else if(clickCls == 'rgsApplCase02') {
+                        Pm10ComMenu.gfn_openMenu('03030200'); // 법인
+                    } else if(clickCls == 'rgsApplCase03') {
+                        Pm10ComMenu.gfn_openMenu('03030300'); // 동산/채권담보
+                    } else if(clickCls == 'rgsApplCase04') {
+                        Pm10ComMenu.gfn_openMenu('03030400'); // 기타
+                    }
+                    
+                    // 전자확정일자
+                    if(clickCls == 'dgFd01') {
+                        Pm10ComMenu.gfn_openMenu('02040100'); // 확정일자 신청
+                    } else if(clickCls == 'dgFd02') {
+                        Pm10ComMenu.gfn_openMenu('01040200'); // 계약증서 발급
+                    }
+                    
+                    // 추천등기서비스
+                    if(clickCls == 'rgsSvc01') {
+                        Pm10ComMenu.gfn_openMenu('01050100'); // 신청정보 및 첨부정보 열람 신청
+                    } else if(clickCls == 'rgsSvc02') {
+                        Pm10ComMenu.gfn_openMenu('04040000'); // 등록면허세 정액분 신고
+                    } else if(clickCls == 'rgsSvc03') {
+                        Pm10ComMenu.gfn_openMenu('01020500'); // 인감증명발급확인서 발급 신청
+                    } else if(clickCls == 'rgsSvc04') {
+                        Pm10ComMenu.gfn_openMenu('03010600'); // 온라인환급 신청
+                    }
+                               
+                    // 법인전자증명서발급
+                    if(clickCls == 'corpElecCert') {
+                        Pm10ComMenu.gfn_openMenu('02020505'); // 법인전자증명서발급
+                    }
+                    
+                    // 사용자지원
+                    if(clickCls == 'userSubCourt01') {
+                        Pm10ComMenu.gfn_openMenu('05070100'); // 등기소소개
+                    } else if(clickCls == 'userSubCourt02') {
+                        Pm10ComMenu.gfn_openMenu('05050400'); // 등기용어해설
+                    } else if(clickCls == 'userSubCourt03') {
+                        Pm10ComMenu.gfn_openMenu('05020000'); // TOP FAQ(자주묻는질문)
+                    } else if(clickCls == 'userSubCourt04') {
+                        Pm10ComMenu.gfn_openMenu('05040000'); // 공지사항
+                    } else if(clickCls == 'userSubCourt04Dtl') {
+                        // Pm10ComRigt.gfn_setRigtMenuId(입력아이디) 사용허용제한
+                        //   1. 로케이션 메뉴아이디값을 설정하여 gfn_setRigtMenuId(입력아이디)을 호출할경우 사용제한!!!!
+                        //   2. PM10 등기외부포털 메인 홈페이지(Pm10P0IrosMain.xml) 및 PM10 공통 JS에서만 허용만 사용허용!!!!
+                        //   3. PM10 등기외부포털을 제외한 타 시스템에서는 사용불가!!!!
+                        Pm10ComRigt.gfn_setRigtMenuId("05040000"); //공지사항목록 로케이션(권한)설정
+                        Pm10ComMenu.gfn_movePage('/ui/pm10/p0/regtinfo/Pm10P0NoticDetl.xml', paramData); //공지사항 상세이동
+                    } else if(clickCls == 'userSubCourt05') {
+                        Pm10ComMenu.gfn_openMenu('05050200'); // 등기신청양식
+                    } else if(clickCls == 'userSubCourt06') {
+                        Pm10ComMenu.gfn_openMenu('05050300'); // 첨부서면예시
+                    } else if(clickCls == 'userSubCourt07') {
+                        Pm10ComMenu.gfn_openMenu('05050600'); // 소액임차인안내
+                    } else if(clickCls == 'userSubCourt08'){ //등기예규(2026-W00243)
+                        
+                        var data = {"irosEnvType": Pm10ComGlobal.IROS_ENV_TYPE};    //서버환경에 따라 등기예규 파일 ObjectId가 다르기 때문에 서버환경을 파라메터로 넘김
+                        var options = {
+                            type      : "browserPopup",
+                            id        : "Pm10P0RgsAdminRule.xml",
+                            popupName : "등기예규검색",
+                            modal     : false,
+                            top       : 10,
+                            left      : 10,
+                            width     : 490,
+                            height    : 410,
+                            resizable : false
+                        };
+                        var passLoginCheck = true;
+                        com.win.openPopup("/ui/pm10/p0/dgcvapctr/Pm10P0RgsAdminRule.xml", options, data, passLoginCheck);                                           
+                    }
+                                
+                } else if(contentCls == 'sidebar') {
+                    
+                    // 사이드바메뉴
+                    if(clickCls == 'utnHrs') {
+                       Pm10ComMenu.gfn_openMenu('05060000'); // 이용시간
+                    } else if(clickCls == 'regtFind') {
+                       Pm10ComMenu.gfn_openMenu('05070100'); // 등기소찾기
+                    } else if(clickCls == 'rgsCost') {
+                        Pm10ComMenu.gfn_openMenu('05050101'); // 등기비용
+                    } else if(clickCls == 'rgsFrmt') {
+                        Pm10ComMenu.gfn_openMenu('05050200'); // 등기양식
+                    //인터넷등기소 메인화면 UI 개선  TOP FAQ 위치변경  2025.09.18 박준표 (2025-W00580)                       
+                    } else if(clickCls == 'topFaq') {
+                        Pm10ComMenu.gfn_openMenu('05020000'); // TOP FAQ(자주묻는질문)
+                    } else if(clickCls == 'smplMenual') {
+                        // 간편길라잡이
+                        var data = {};
+                        var options = {
+                            type      : "browserPopup",
+                            id        : "SC-P0-050",
+                            popupName : "간편길잡이",
+                            modal     : false,
+                            top       : 10,
+                            left      : 10,
+                            width     : 1280,
+                            height    : 780,
+                            resizable : false
+                        };
+                        var passLoginCheck = true;
+                        com.win.openPopup("/ui/pm10/p0/easyguide/eg-main.xml", options, data, passLoginCheck);
+                        //
+                        
+                        /*// 팝업 테스트 ====== Start
+                        var vPgmlId  = "SC-CM-347";//SC-CM-002
+                        var param  = {
+                            w2xp :  '05080000'//'02020101'  //'03010100' //'05080000'-프로그램 설치
+                        };
+                    
+                        var option = {
+                            id        : "SC-P0-050",
+                            popupName : "프로그램 설치",
+                            modal     : false,
+                            top       : 10,
+                            left      : 10,
+                            width     : 1280,
+                            height    : 780,
+                            resizable : false,
+                            location : 0,
+                            directories : 0
+                        };
+                    
+                        var url = document.location.origin +'/index.jsp';
+                    
+                        console.log(url);
+                        
+                        com.win.openFixPopup(url, option, param);                    
+                        //팝업 테스트 ============= End /*/
+                    
+                    
+                    
+                    //--------------------------------------------------------------------
+                    // TO-DO : 테스트용 페이지로 전체 개발완료 후 삭제요망 start
+                    //     Pm10ComRigt.gfn_setRigtMenuId(입력아이디) 는 PM10 등기외부포털 메인 홈페이지(Pm10P0IrosMain.xml) 및 공통 JS에서만 허용만 사용허용!!!!
+                    //     Pm10ComRigt.gfn_setRigtMenuId(입력아이디) 는 타 시스템에서 사용금지!!
+                    } else if(clickCls == 'sample1') {
+                        Pm10ComRigt.gfn_setRigtMenuId("06000000");
+                        Pm10ComMenu.gfn_movePage('/ui/pm10/sampleMenuIndex.xml');
+                    } else if(clickCls == 'sample2') {
+                        Pm10ComRigt.gfn_setRigtMenuId("06000000");
+                        Pm10ComMenu.gfn_movePage('/ui/pm10/sampleTestIndex.xml');
+                    } else if(clickCls == 'sample3') {
+                        Pm10ComRigt.gfn_setRigtMenuId("06000000");
+                        Pm10ComMenu.gfn_movePage('/ui/pm10/sampleFnDesc.xml');
+                    //TO-DO : 테스트용 페이지로 전체 개발완료 후 삭제요망 end
+                    //---------------------------------------------------------------------
+                    }  else if(clickCls == 'remoteSupport') {
+                        window.open("http://remote.iros.go.kr");
+                    }
+                    
+                } else if(contentCls == 'footer') {
+                    
+                    var mainUrl = "";
+                    var bannerYn = "Y";
+                    if(clickCls == 'banner01') { // 법원경매정보
+                        mainUrl = "http://www.courtauction.go.kr";
+                    } else if(clickCls == 'banner02') { // 도로명 주소
+                        mainUrl = "http://www.juso.go.kr";
+                    } else if(clickCls == 'banner03') { // 등기정보광장
+                        mainUrl = "https://data.iros.go.kr";
+                    } else if(clickCls == 'banner04') { // 대한민국 법원
+                        mainUrl = "http://www.scourt.go.kr";
+                    } else if(clickCls == 'banner05') { // 전자소송
+                        mainUrl = "http://ecfs.scourt.go.kr";
+                    } else if(clickCls == 'banner06') { // 전자공탁
+                        mainUrl = "http://ekt.scourt.go.kr";
+                    } else if(clickCls == 'banner07') { // 등기소출입증신청관리
+                        mainUrl = "https://www.iros.go.kr/b933/index.jsp";
+                    } else if(clickCls == 'banner08') { // 전자가족관계등록
+                        mainUrl = "http://efamily.scourt.go.kr/";
+                    } else if(clickCls == 'profile') { // 상단뉴스 이미지 새창
+                        mainUrl = paramData;
+                        bannerYn = "N";
+                    } else { //footer 법원웹사이트 연결
+                        mainUrl = clickCls;
+                    }
+                    
+                    if(bannerYn == "Y") {
+                        window.open(mainUrl);
+                    } else {
+                        //홈페이지호출
+                        var option = {};
+                        var optionStr   = com.util.jsonToQueryString($.extend({
+                                width   : 1000,
+                                height  : 1200,
+                            }, option), ',');
+                        
+                        var win = window.open(mainUrl , "popWin", optionStr);
+                    }
+                    // TO-DO :: 법원웹사이트 및 메인페이지 하단에 있는 사이트 연결 추가
+                    // TO-DO :: 이용약관, 개인정보처리방침, 링크시 전제조건 기타등등 팝업화면 연결추가
+                }       
+            };
+            
+            /**
+             * 함수명   : scwin.egPageOpen
+             * 함수설명 : 간편길라잡이 팝업에서 함수호출 페이지 이동
+             * 파라메터 : N/A
+             * 리턴     : N/A
+             * 작성일   : 2023.04.20
+             * 작성자   : 한남현
+             */
+            scwin.egPageOpen = function (data) {
+                if(data == "hearder1") { //등기부보는법
+                    var paramData = {menu_id : '001005001002002'}; //콘텐츠 서비스안내페이지 menu_id 셋팅
+                    Pm10ComMenu.gfn_openMenu('05010200', paramData); //부동산등기 페이지 호출후 등기부보는법 html 호출
+                } else if(data == "hearder2") { //용어검색
+                    Pm10ComMenu.gfn_openMenu('05050400');
+                } else if(data == "hearder3") { //자주 묻는 질문
+                    Pm10ComMenu.gfn_openMenu('05020000'); //TOP FAQ(자주묻는질문)
+                } else if(data == "hearder4") { //오류시 조치 방안
+                    Pm10ComMenu.gfn_openMenu('06040500'); //오류시조치방안
+                } else if(data == "hearder5") { //원격지원
+                    com.page.getMainPage().wfm_potal_main.scope.wf_sidebar.scope.scwin.moveRemoteSupportPage();
+                } else if(data == "footer001") { //메인 footer > e-form 신청
+                    Pm10ComMenu.gfn_openMenu('06040500'); //
+                } else if(data == "footer002") { //메인 footer > 전자납부 신청
+                    moveSPm10ComMenu.gfn_openMenu('06040500'); //
+                } else if(data == "footer003") { //메인 footer > 확정일자 > 신청
+                    Pm10ComMenu.gfn_openMenu('06040500'); //
+                } else if(data == "footer004") { //메인 footer > 확정일자 > 발급
+                    Pm10ComMenu.gfn_openMenu('06040500'); //
+                } else if(data == "footer005") { //메인 footer > 확정일자 > 정보제공
+                    Pm10ComMenu.gfn_openMenu('06040500'); //
+                } else {
+                    var moveScreenId = "";
+                    //moveScreenId = data;  // 간편길잡이에서 전달한 메뉴ID
+                    
+                    if(data == "001001003001") { //열람·발급 > 부동산 > 간편 열람·발급  > 부동산 검색
+                        moveScreenId = "01010200"; //열람·발급 > 열람·발급 신청
+                    } else if(data == "001001003002") { //열람·발급 > 부동산 > 간편 열람·발급 > 열람발급정보 입력
+                        moveScreenId = "01010200"; //
+                    } else if(data == "001001003003") { //열람·발급 > 부동산 > 간편 열람·발급 > 수수료 결제
+                        moveScreenId = "01010200"; //
+                    } else if(data == "001001004001") { //열람·발급 > 부동산 > 일괄등록 열람·발급 > 부동산 검색
+                        moveScreenId = "01010300"; //
+                    } else if(data == "001001004002") { //열람·발급 > 부동산 > 일괄등록 열람·발급 > 발급정보 입력
+                        moveScreenId = "01010300"; //
+                    } else if(data == "001001004003") { //열람·발급 > 부동산 > 일괄등록 열람·발급 > 수수료 결제
+                        moveScreenId = "01010300"; //
+                    } else if(data == '001001005001') { //열람·발급 > 부동산 > 이미지폐쇄등기부 열람 > 부동산 검색
+                        moveScreenId = "01010400"; //
+                    } else if(data == '001001005002') { //열람·발급 > 부동산 > 이미지폐쇄등기부 열람 > 발급정보 입력
+                        moveScreenId = "01010400"; //
+                    } else if(data == '001001005003') { //열람·발급 > 부동산 > 이미지폐쇄등기부 열람 > 수수료 결제
+                        moveScreenId = "01010400"; //
+                    } else if(data == "001001005") { //열람/발급 > 부동산 > 미열람/미발급 보기
+                        moveScreenId = "01010702"; //
+                    } else if(data == "001001006") { //열람/발급 > 부동산 > 열람/발급내역 보기
+                        moveScreenId = ""; //
+                    } else if(data == "001001010001") { //열람·발급 > 부동산 > 전자발급(전송) > 발급하기(전송) > 부동산 검색
+                        moveScreenId = "01010701"; //
+                    } else if(data == "001001010001002") { //열람·발급 > 부동산 > 전자발급(전송) > 발급하기(전송) > 발급정보입력
+                        moveScreenId = ""; //
+                    } else if(data == "001001010001003") { //열람·발급 > 부동산 > 전자발급(전송) > 발급하기(전송) > 수수료결제
+                        moveScreenId = ""; //
+                    } else if(data == "001001010002") { //열람·발급 > 부동산 > 전자발급(전송) > 미발급 보기
+                        moveScreenId = ""; //
+                    } else if(data == "001001010003") { //열람·발급 > 부동산 > 전자발급(전송) > 발급내역 보기
+                        moveScreenId = "01010704"; //
+                    } else if(data == "001001007") { //열람·발급 > 부동산 > 발급 확인하기
+                        moveScreenId = ""; //
+                    } else if(data == "001001008") { //열람·발급 > 부동산 > 등기신청사건 처리현황
+                        moveScreenId = ""; //
+                    } else if(data == "001001011001") { //열람·발급 > 부동산 > 폐쇄등기부 등 발급예약 
+                        moveScreenId = "01010600"; //
+                    } else if(data == "001001012") { //열람·발급 > 부동산 > 부동산거래체크리스트
+                        moveScreenId = "05050700"; //
+                    } else if(data == "001001013") { //열람·발급 > 부동산 > 소유현황 열람
+                        moveScreenId = "01010500"; //
+                    } else if(data == "001002002001") { //열람·발급 > 법인 > 열람·발급 > 법인 검색
+                        moveScreenId = "01020100"; //
+                    } else if(data == "001002002002") { //열람·발급 > 법인 > 열람·발급 > 열람발급정보 입력
+                        moveScreenId = "01020100"; //
+                    } else if(data == "001002002003") { //열람·발급 > 법인 > 열람·발급 > 수수료 결제
+                        moveScreenId = "01020100"; //
+                    } else if(data == "001002003001") { //열람·발급 > 법인 > 열람·발급 > 법인 검색
+                        moveScreenId = "01020200"; //
+                    } else if(data == "001002003002") { //열람·발급 > 법인 > 열람·발급 > 열람발급정보 입력
+                        moveScreenId = "01020200"; //
+                    } else if(data == "001002003003") { 
+                        moveScreenId = "01020200"; //
+                    } else if(data == "001002004") {
+                        moveScreenId = "01020600"; //
+                    } else if(data == "001002005001") { 
+                        moveScreenId = "01020300"; //
+                    } else if(data == "001002005002") { 
+                        moveScreenId = "01020300"; //
+                    } else if(data == "001002005003") { 
+                        moveScreenId = "01020300"; //
+                    } else if(data == "001002006001") {
+                        moveScreenId = "01020400"; //
+                    } else if(data == "001002006002") {
+                        moveScreenId = "01020400"; //
+                    } else if(data == "001002007001") { 
+                        moveScreenId = "01020500"; //
+                    } else if(data == "001002007002") { 
+                        moveScreenId = "01020500"; //
+                    } else if(data == "001002011001") { 
+                        moveScreenId = "01020701"; //
+                    } else if(data == "001002011002") {
+                        moveScreenId = "01020702"; //
+                    } else if(data == "001002011003") {
+                        moveScreenId = "01020705"; //
+                    } else if(data == "001002011004") {
+                        moveScreenId = "01020703"; //
+                    } else if(data == "001002011005") {
+                        moveScreenId = "01020704"; //
+                    } else if(data == "001002012001") {
+                        moveScreenId = "01020801"; //
+                    } else if(data == "001002012002") {
+                        moveScreenId = "01020802"; //
+                    } else if(data == "001002012003") {
+                        moveScreenId = "01020803"; //
+                    } else if(data == "001003002001") {
+                        moveScreenId = "01030100"; //
+                    } else if(data == "001003002002") {
+                        moveScreenId = "01030100"; //
+                    } else if(data == "001003002003") {
+                        moveScreenId = "01030100"; //
+                    } else if(data == "001003003001") {
+                        moveScreenId = "01030200"; //
+                    } else if(data == "001003003002") {
+                        moveScreenId = "01030200"; //
+                    } else if(data == "001003003003") {
+                        moveScreenId = "01030200"; //
+                    } else if(data == "001003010001") {
+                        moveScreenId = "01030301"; //
+                    } else if(data == "001003010002") {
+                        moveScreenId = "01030302"; //
+                    } else if(data == "001004002001") {
+                        moveScreenId = "01050100"; //
+                    } else if(data == "001004003001") {
+                        moveScreenId = "01050200"; //
+                    } else if(data == "001004004001001") {
+                        moveScreenId = "01050301"; //
+                    } else if(data == "001004004002001") {
+                        moveScreenId = "01050302"; //
+                    } else if(data == "001005001001") {
+                        moveScreenId = "01060101"; //
+                    } else if(data == "001005001002") {
+                        moveScreenId = "01060102"; //
+                    } else if(data == "001005001003") {
+                        moveScreenId = "01060103"; //
+                    } else if(data == "001005001005") {
+                        moveScreenId = "01060105"; //
+                    } else if(data == "001005002") {
+                        moveScreenId = "01060200"; //
+                    } else if(data == "002004003001") {
+                        moveScreenId = "02010101"; //
+                    } else if(data == "002004004001") {
+                        moveScreenId = "03020100"; //
+                    } else if(data == "002004005001") {
+                        moveScreenId = "02010101"; //
+                    } else if(data == "002004006001") {
+                        moveScreenId = "02010103"; //
+                    } else if(data == "002004006002") {
+                        moveScreenId = "02010103"; //
+                    } else if(data == "002002003001001") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "002002003001002") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "002002003001003") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "002002003001004") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "002002005002") {
+                        moveScreenId = "02020102"; //
+                    } else if(data == "002002007001001") {
+                        moveScreenId = "02020103"; //
+                    } else if(data == "002002007001002") {
+                        moveScreenId = "02020103"; //
+                    } else if(data == "002002007001003") {
+                        moveScreenId = "02020103"; //
+                    } else if(data == "002003003001") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "002003003002") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "002003003003") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "002003003004") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "002003006001") {
+                        moveScreenId = "02030103"; //
+                    } else if(data == "002003006002") {
+                        moveScreenId = "02030103"; //
+                    } else if(data == "003004002001001") { //e-form신청 > 부동산(통합전자등기) > 신청서 작성 > 신청서 신규 작성
+                        moveScreenId = "02010101"; //
+                    } else if(data == "003004002001002") { //e-form신청 > 부동산(통합전자등기) > 신청서 작성 > 신청서 신규 작성
+                        moveScreenId = "02010101"; //
+                    } else if(data == "003004002001003") { //e-form신청 > 부동산(통합전자등기) > 신청서 작성 > 신청서 신규 작성
+                        moveScreenId = "02010101"; //
+                    } else if(data == "003004002001004") { //e-form신청 > 부동산(통합전자등기) > 신청서 작성 > 신청서 신규 작성
+                        moveScreenId = "02010101"; //
+                    } else if(data == "003004002001005") { //e-form신청 > 부동산(통합전자등기) > 신청서 작성 > 신청서 신규 작성
+                        moveScreenId = "02010101"; //
+                    } else if(data == "003004002002") {
+                        moveScreenId = "02010101"; //
+                    } else if(data == "003004004") { 
+                        moveScreenId = "02010103"; //
+                    } else if(data == "003002002001") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "003002002002") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "003002002003") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "003002002004") {
+                        moveScreenId = "02020101"; //
+                    } else if(data == "003002004") {
+                        moveScreenId = "02020103"; //
+                    } else if(data == "003003002001") {
+                        moveScreenId = "02030202"; //
+                    } else if(data == "003003002002001") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "003003002002002") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "003003002002003") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "003003002002004") {
+                        moveScreenId = "02030101"; //
+                    } else if(data == "003003004") {
+                        moveScreenId = "02030103"; //
+                    } else if(data == "004001002001") {
+                        moveScreenId = "03010100"; //
+                    } else if(data == "004002002001") {
+                        moveScreenId = "03010200"; //
+                    } else if(data == "004002002002") {
+                        moveScreenId = "03010300"; //
+                    } else if(data == "004003002001") {
+                        moveScreenId = "03010400"; //
+                    } else if(data == "004004002001") {
+                        moveScreenId = "03010500"; //
+                    } else if(data == "005002") { //편리한 기능 > 영구보존문서 등록
+                        moveScreenId = "02010202"; //
+                    } else if(data == "006001003001") {
+                        moveScreenId = "02040100"; //
+                    } else if(data == "006001003002") {
+                        moveScreenId = "02040100"; //
+                    } else if(data == "006001003003") {
+                        moveScreenId = "02040100"; //
+                    } else if(data == "006001004001") {
+                        moveScreenId = "02040100"; //
+                    } else if(data == "006001005001") {
+                        moveScreenId = "02040200"; //
+                    } else if(data == "006001006001") {
+                        moveScreenId = "04020200"; //
+                    } else if(data == "006002002001") {
+                        moveScreenId = "01040100"; //
+                    } else if(data == "006002002002") {
+                        moveScreenId = "01040100"; //
+                    } else if(data == "006002002003") {
+                        moveScreenId = "01040100"; //
+                    } else if(data == "006002002003") {
+                        moveScreenId = "01040100"; //
+                    } else if(data == "006002003001") {
+                        moveScreenId = "01040200"; //
+                    } else if(data == "006002003002") {
+                        moveScreenId = "01040200"; //
+                    } else if(data == "006002003003") {
+                        moveScreenId = "01040200"; //
+                    } else if(data == "006002004001") {
+                        moveScreenId = "01040301"; //
+                    } else if(data == "006002005001") {
+                        moveScreenId = "01040302"; //
+                    } else if(data == "006002006001") {
+                        moveScreenId = "01060104"; //
+                    } else if(data == "005005_1") { //편리한 기능 > 인증서 복사하기 > PC > 스마트폰 인증서복사
+                        moveScreenId = "06030201"; //기타 > 인증센터 > 인증서관리 > PC>스마트폰 인증서복사
+                    } else if(data == "005005_2") { //편리한 기능 > 인증서 복사하기 > 스마트폰 > PC 인증서 복사
+                        moveScreenId = "06030202"; //기타 > 인증센터 > 인증서관리 > 스마트폰>PC 인증서복사
+                    } else if (data == "002002008005") { //법인정보관리
+                        moveScreenId = "02020402";  //법인정보관리 > 정관관리
+                    } else if (data == "002004006003") { //당사자의 등기필정보 전자수령
+                        moveScreenId = "";  //
+                    } else if (data == "004002002003") { //기기형 OTP 납부정보 신규 작성
+                        moveScreenId = "";  //
+                    } else if (data == "004002003003") { //기기형 OTP 발급수수료 출력 및 결제
+                        moveScreenId = "";  //
+                    } else {
+                        moveScreenId = data;
+                    }
+                    
+                    
+                    if(com.util.isNotEmpty(moveScreenId)) {
+                        //Pm10ComRigt.gfn_setRigtMenuId(moveScreenId);
+                        Pm10ComMenu.gfn_openMenu(moveScreenId);
+                    }
+                }
+            };
+            
+            /**
+             * 함수명   : scwin.btnClose_onclick
+             * 함수설명 : 챗봇 숨김 처리
+             * 파라메터 : N/A
+             * 리턴     : N/A
+             * 작성일   : 2023.04.20
+             * 작성자   : 한남현
+             */
+            scwin.btnClose_onclick = function() {
+                chatbotBox.addClass('hide');
+            };
+            
+            /**
+             * 함수명   : scwin.OTPPopupRunOnOff
+             * 함수설명 : OTP 배너의 ID 값을 전달 받음으로 OTP 배너의 On/Off 확인용  2025.07.03. whjang01(장원호) (2025-W00223)
+             * 파라메터 : popId - OTP 배너 ID  (예 : 'otp__popup__id__1233' : on, '' : off)
+             * 리턴     : N/A
+             * 작성일   : 2025.07.03
+             * 작성자   : 장원호
+             */
+            /* (2025-W00599) OTP 배너 팝업 사용 안되도록 수정. 2025.09.30. whjang01(장원호).
+            scwin.OTPPopupRunOnOff = function(popId) {
+                scwin.otpMainPopId = popId;
+            };
+            */
+        ]]></script>
+    </head>
+    <body ev:onpageload="scwin.onpageload" ev:onpageunload="scwin.onpageunload" class="main notice" style="">
+        <form accept-Charset="utf-8" method="post" name="popPost" id="popPost" target="postPopup">
+            <xf:input id="w2xPath" name="w2xPath" style="" type="hidden"></xf:input>
+            <xf:input id="linkParam" name="linkParam" style="" type="hidden"></xf:input>
+        </form>
+        <form accept-Charset="utf-8" method="post" name="merchanPost" id="merchanPost" target="merchanPost">
+            <xf:input id="merchantNo" name="merchantNo" style="" type="hidden"></xf:input>
+            <xf:input id="mallId" name="mallId" style="" type="hidden"></xf:input>
+        </form>
+        <xf:group style="" id="">
+            <w2:wframe style="" id="wfm_potal_main" src=""></w2:wframe>
+        </xf:group>
+        <xf:group class="chatbot_box hide" id="chatbotBox" style="">
+            <w2:anchor class="btn_close" ev:onclick="scwin.btnClose_onclick" id="btnClose" outerDiv="false" style="">
+                <xf:label><![CDATA[닫기]]></xf:label>
+            </w2:anchor>
+            <w2:iframe id="iframeChat" src="" style="" title="등기절차 안내봇"></w2:iframe>
+        </xf:group>
+    </body>
+</html>
