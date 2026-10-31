@@ -109,7 +109,7 @@ function check(birth,plan,method,place){
 var b=ymd(birth),r=ymd(plan);if(!b)return {error:'출생일을 입력해 주세요.'};if(!r)return {error:'신고 예정일을 입력해 주세요.'};if(r<b)return {error:'신고 예정일이 출생일보다 빠릅니다.'};
 var D=deadline(b),E=D;while(off(E)){E=new Date(E.getTime()+DAY)}
 var res={deadline:D,extended:E,daysLeft:Math.round((D-r)/DAY),late:r>D,lateDays:r>D?Math.round((r-D)/DAY):0,fine:fine(D,r),sixty:new Date(b.getTime()+59*DAY),docs:[],svc:[],notes:[]};
-res.sixtyOk=r<=res.sixty;
+res.sixtyOk=r<=res.sixty;res.inExt=r<=E;
 var bdoc=place==='outside'?'출생증명서를 대신할 서면(분만 관여자가 쓴 출생사실 증명 서면과 출산 증명 자료, 또는 119 구조·구급활동상황일지). 없으면 가정법원 출생확인서 등본':'의사나 조산사가 작성한 출생증명서';
 var m=method;
 if(m==='online'){if(place==='outside'){res.notes.push('의료기관 밖에서 태어났다면 온라인 신고 대상(의사·조산사 출생증명서를 붙인 부·모의 신고)이 아니어서 방문 신고로 준비하는 편이 맞다.');m='dong'}}
@@ -132,7 +132,7 @@ out.innerHTML='';
 if(r.error){line(r.error,true);return}
 line('신고 마감일: '+fmt(r.deadline),true);
 if(r.extended.getTime()!==r.deadline.getTime()){line('마감일이 주말·공휴일이라 민법 제161조로는 '+fmt(r.extended)+'까지 늘어난다. 음력 명절·대체공휴일은 계산에 넣지 않았다.')}
-if(r.late){line('예정일은 마감일보다 '+r.lateDays+'일 늦다. 과태료 예상: '+won(r.fine)+' (가족관계등록규칙 별표 3, 정당한 사유가 있으면 부과되지 않을 수 있고 2분의 1 감경 가능)',true)}
+if(r.late){if(r.inExt){line('달력상 마감일은 지났지만 민법 제161조로 늘어난 기한 안이다. 이 연장이 출생신고에 적용되는지 공식 해석은 확인하지 못했다.')}line('예정일은 마감일보다 '+r.lateDays+'일 늦다. 과태료 예상: '+won(r.fine)+' (가족관계등록규칙 별표 3, 정당한 사유가 있으면 부과되지 않을 수 있고 2분의 1 감경 가능)',true)}
 else{line('예정일 기준 마감까지 '+r.daysLeft+'일 남았다. 과태료 없음.',true)}
 r.notes.forEach(function(s){line('참고: '+s)});
 line('챙길 서류',true);
