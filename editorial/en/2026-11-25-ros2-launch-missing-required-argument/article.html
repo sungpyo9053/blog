@@ -1,0 +1,208 @@
+<pre><code>[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Included launch description missing required argument 'x' (description: 'the x value'), given: []</code></pre>
+
+<p>The process exits with code 1. You get this exact text in two situations: you ran a launch file with a required argument and didn't set it, or a parent file included that file and didn't pass the argument. The word "Included" shows up in both cases. When you run a file directly, <code>ros2 launch</code> still includes it internally.</p>
+
+<p>Short answer: a <code>DeclareLaunchArgument</code> with no <code>default_value</code> only counts as given when the <code>IncludeLaunchDescription</code> that loads its file passes it in <code>launch_arguments</code>. The parent declaring the same name doesn't count, and neither does putting <code>x:=...</code> on the command line of the parent. Pass it explicitly:</p>
+
+<pre><code class="language-python">IncludeLaunchDescription(
+    PythonLaunchDescriptionSource(child_path),
+    launch_arguments={'x': LaunchConfiguration('x')}.items(),   # .items() is required
+)</code></pre>
+
+<p>In XML, put an <code>&lt;arg name="x" value="..."/&gt;</code> inside the <code>&lt;include&gt;</code>. Both forms worked on Humble, Jazzy and Lyrical. Optional arguments behave the other way round. An argument that has a default quietly picks up whatever value the parent or the command line already set, even when nobody passed it. Most of the surprises below come from those two rules.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row behaved the same on all three distros unless the row says otherwise. Exit codes are from <code>ros2 launch</code>.</p>
+
+<table>
+<thead><tr><th>What you did</th><th>What you got</th></tr></thead>
+<tbody>
+<tr><td>Ran a file with a required <code>x</code>, no <code>x:=</code></td><td><code>Included launch description missing required argument 'x' (description: 'the x value'), given: []</code>, exit 1</td></tr>
+<tr><td>Same, from an XML (<code>&lt;arg name="x"/&gt;</code>) or YAML launch file</td><td>Same text, exit 1</td></tr>
+<tr><td>Parent includes the child without <code>launch_arguments</code></td><td>Same text, exit 1</td></tr>
+<tr><td>Same parent, run with <code>x:=cli</code></td><td>Same text, <code>given: []</code>, exit 1</td></tr>
+<tr><td>Parent declares <code>x</code> with a default, includes the child without passing it</td><td>Same text, exit 1</td></tr>
+<tr><td>Wrong case on the CLI: <code>X:=1</code> for <code>x</code></td><td>Same text, but <code>given: [X]</code>, exit 1</td></tr>
+<tr><td><code>launch_arguments={'x': 'from_dict'}</code> (no <code>.items()</code>), child arg required</td><td>Humble, Jazzy: <code>'NoneType' object is not iterable</code>. Lyrical: <code>Included launch description missing required argument 'x' ... given: []</code>. Exit 1</td></tr>
+<tr><td>Same dict without <code>.items()</code>, child arg has a default</td><td><code>not enough values to unpack (expected 2, got 1)</code>, exit 1</td></tr>
+<tr><td><code>launch_arguments={'x': 5}.items()</code> (an int)</td><td><code>'int' object is not iterable</code>, exit 1</td></tr>
+<tr><td><code>use_sim_tme:=true</code> (typo) for <code>use_sim_time</code></td><td>No error, no warning, exit 0. <code>use_sim_time</code> stayed <code>false</code></td></tr>
+<tr><td><code>IfCondition</code> on <code>yes</code> or <code>on</code></td><td><code>invalid condition expression, expected one of [true, 1, false, 0] but got 'yes', expanded from '&lt;launch.substitutions.launch_configuration.LaunchConfiguration object at 0x...&gt;'</code>, exit 1</td></tr>
+</tbody>
+</table>
+
+<p>The <code>given: [...]</code> list is not a list of the values the child can see. With <code>x:=cli</code> on the parent it was empty, and with the misspelled <code>X:=1</code> it showed <code>X</code>. So don't read an empty list as "my CLI argument never arrived". It only tells you what the include itself passed.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-10-31 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images. I built one <code>ament_cmake</code> package that installs only launch files and a tiny Python node. The core pieces:</p>
+
+<ul>
+<li><code>child.launch.py</code>: <code>DeclareLaunchArgument('x', description='the x value')</code> with no default, then <code>LogInfo</code> prints <code>x</code>. The same in <code>child.launch.xml</code> and <code>child.launch.yaml</code>.</li>
+<li>Parents that include it with no arguments, with <code>{...}.items()</code>, with a list of tuples, with a bare dict, with an int value, and with <code>LaunchConfiguration('x')</code>.</li>
+<li><code>child_y.launch.py</code>: declares <code>y</code> (default <code>child_default</code>) and <code>z</code> (default <code>child_z</code>), and prints <code>y</code> and an undeclared <code>u</code>. Parents declare <code>y</code> (default <code>parent_default</code>), include it plainly, inside <code>GroupAction(scoped=True)</code>, and inside <code>GroupAction(scoped=True, forwarding=False)</code>, then print <code>z</code> after the include.</li>
+<li><code>bool.launch.py</code>: one argument <code>b</code> used in <code>IfCondition</code>, <code>UnlessCondition</code>, and as the node parameter <code>flag</code>. The node prints the parameter's value and type.</li>
+</ul>
+
+<p>I ran 44 <code>ros2 launch</code> commands per distro, one distro after another. The results were the same on all three except for the bare-dict error and one warning on Lyrical (see Version notes).</p>
+
+<h2>Required arguments are checked against launch_arguments only</h2>
+
+<p>This is the case behind most "missing required argument" questions. My parent file declared <code>x</code> with a default of <code>parent_x</code> and included the child without passing anything. It failed. Running the bare parent with <code>x:=cli</code> also failed. The required check only looks at what the include passes, so both values were invisible to it. The same thing is reported in <a href="https://github.com/ros2/launch/issues/907">ros2/launch#907</a> and <a href="https://github.com/ros2/launch/issues/749">ros2/launch#749</a>, both still open.</p>
+
+<p>Passing it explicitly fixed every case:</p>
+
+<table>
+<thead><tr><th>Parent passes</th><th>Child printed</th></tr></thead>
+<tbody>
+<tr><td><code>launch_arguments={'x': 'from_items'}.items()</code></td><td><code>CHILD x=from_items</code></td></tr>
+<tr><td><code>launch_arguments=[('x', 'from_tuples')]</code></td><td><code>CHILD x=from_tuples</code></td></tr>
+<tr><td><code>{'x': LaunchConfiguration('x')}.items()</code>, parent declares <code>x</code>, run with <code>x:=cli</code></td><td><code>CHILD x=cli</code></td></tr>
+<tr><td>XML <code>&lt;include&gt;</code> with <code>&lt;arg name="x" value="from_xml"/&gt;</code></td><td><code>CHILD x=from_xml</code></td></tr>
+<tr><td><code>{'x': 'from_items'}.items()</code>, run with <code>x:=cli</code></td><td><code>CHILD x=from_items</code></td></tr>
+</tbody>
+</table>
+
+<p>The last row matters. A value written into <code>launch_arguments</code> beats the command line. If you want the user to be able to override it, pass <code>LaunchConfiguration('x')</code> and declare <code>x</code> in the parent, as in the third row.</p>
+
+<h2>launch_arguments needs pairs</h2>
+
+<p>The <a href="https://robotics.stackexchange.com/questions/107698">launch_arguments doesn't work</a> question uses <code>.items()</code> correctly, and the code samples you copy from usually do too. But if you drop <code>.items()</code>, the error doesn't mention it. Iterating a dict gives only the keys, and launch expects <code>(name, value)</code> pairs. What you see depends on the child and the distro:</p>
+
+<ul>
+<li>Child argument required, Humble or Jazzy: <code>'NoneType' object is not iterable</code>. With <code>ros2 launch -d</code> the traceback ends in <code>launch/actions/include_launch_description.py</code> at <code>argument_names.extend(ild_action._try_get_arguments_names_without_context())</code>.</li>
+<li>Child argument required, Lyrical: the normal <code>missing required argument 'x'</code> message with <code>given: []</code>. That makes it look like you never passed anything.</li>
+<li>Child argument has a default, all three: <code>not enough values to unpack (expected 2, got 1)</code>.</li>
+</ul>
+
+<p>A list of tuples works the same as <code>.items()</code>. Values have to be strings or substitutions. An int (<code>{'x': 5}.items()</code>) failed with <code>'int' object is not iterable</code>. Write <code>'5'</code> or <code>str(5)</code>.</p>
+
+<h2>Optional arguments leak in both directions</h2>
+
+<p>The <a href="https://robotics.stackexchange.com/questions/98997">launch argument scope when nesting launch files</a> question and <a href="https://github.com/ros2/launch/issues/689">ros2/launch#689</a> both describe values crossing file boundaries. I measured it with <code>child_y.launch.py</code>. Here's what the child printed for <code>y</code> and <code>u</code>, and what the parent printed for <code>z</code> after the include:</p>
+
+<table>
+<thead><tr><th>Include style</th><th>CLI</th><th>Child <code>y</code></th><th>Child <code>u</code></th><th>Parent <code>z</code> after</th></tr></thead>
+<tbody>
+<tr><td>Plain <code>IncludeLaunchDescription</code></td><td>none</td><td><code>parent_default</code></td><td><code>u_unset</code></td><td><code>child_z</code></td></tr>
+<tr><td>Plain</td><td><code>y:=cli_y u:=cli_u</code></td><td><code>cli_y</code></td><td><code>cli_u</code></td><td><code>child_z</code></td></tr>
+<tr><td><code>GroupAction(scoped=True)</code></td><td>none</td><td><code>parent_default</code></td><td><code>u_unset</code></td><td><code>z_unset</code></td></tr>
+<tr><td><code>GroupAction(scoped=True)</code></td><td><code>y:=cli_y u:=cli_u</code></td><td><code>cli_y</code></td><td><code>cli_u</code></td><td><code>z_unset</code></td></tr>
+<tr><td><code>scoped=True, forwarding=False</code></td><td>none</td><td><code>child_default</code></td><td><code>u_unset</code></td><td><code>z_unset</code></td></tr>
+<tr><td><code>scoped=True, forwarding=False</code></td><td><code>y:=cli_y u:=cli_u</code></td><td><code>child_default</code></td><td><code>u_unset</code></td><td><code>z_unset</code></td></tr>
+<tr><td><code>forwarding=False, launch_configurations={'y': 'via_group'}</code></td><td>none</td><td><code>via_group</code></td><td><code>u_unset</code></td><td><code>z_unset</code></td></tr>
+</tbody>
+</table>
+
+<p>Three things follow from this:</p>
+
+<ul>
+<li><strong>Down:</strong> a parent's value overrides the child's <code>default_value</code>. The child's default is only used when nothing above it set the name. A CLI value even reached <code>u</code>, which neither file declared.</li>
+<li><strong>Up:</strong> with a plain include, the child's declared <code>z</code> was still set in the parent afterwards. <code>GroupAction(scoped=True)</code> stopped that and nothing else.</li>
+<li><strong>Isolation:</strong> only <code>forwarding=False</code> stopped values from flowing down, and then the CLI values didn't reach the child either. <code>launch_configurations={...}</code> on the same <code>GroupAction</code> is how you pass selected values through.</li>
+</ul>
+
+<p>A required argument behind <code>forwarding=False</code> still needs explicit passing. The parent declared <code>x</code>, and the child inside the non-forwarding group failed with the usual <code>missing required argument 'x'</code>. The XML case in #689, where the child has no <code>&lt;arg&gt;</code> at all and still sees the parent's value, matches the plain-include rows above. I measured it with Python launch files, not that exact XML pair.</p>
+
+<h2>A misspelled argument is silently ignored</h2>
+
+<p><code>ros2 launch larg sim.launch.py use_sim_tme:=true</code> exited 0 with no warning. The file printed <code>SIM use_sim_time=false</code>, its default. <code>ros2 launch</code> accepted the unknown name and set a configuration nobody reads. The spelling only gets checked when the misspelled name leaves a required argument unset. Then you see the stray name in <code>given:</code>, as with <code>X:=1</code>. Argument names are case-sensitive. To catch typos, run <code>--show-args</code> first and compare the names.</p>
+
+<h2>LaunchConfiguration default vs DeclareLaunchArgument default</h2>
+
+<p>I declared <code>w</code> with <code>default_value='from_declare'</code> and read it with <code>LaunchConfiguration('w', default='from_lc_default')</code> once before the declaration and once after it:</p>
+
+<table>
+<thead><tr><th>Run</th><th>Read before declare</th><th>Read after declare</th><th>Undeclared <code>v</code> with <code>default='from_lc_only'</code></th></tr></thead>
+<tbody>
+<tr><td>no CLI</td><td><code>from_lc_default</code></td><td><code>from_declare</code></td><td><code>from_lc_only</code></td></tr>
+<tr><td><code>w:=cli</code></td><td><code>cli</code></td><td><code>cli</code></td><td><code>from_lc_only</code></td></tr>
+</tbody>
+</table>
+
+<p>The order is CLI, then <code>DeclareLaunchArgument</code> default, then the <code>LaunchConfiguration</code> default. But the declare default only applies once that action has run, so the position in the list matters. The <code>LaunchConfiguration</code> default is a fallback for "not set yet". It isn't an argument, and <code>--show-args</code> doesn't know about it:</p>
+
+<pre><code>$ ros2 launch larg defaults.launch.py --show-args
+Arguments (pass arguments as '&lt;name&gt;:=&lt;value&gt;'):
+
+    'w':
+        w arg
+        (default: 'from_declare')</code></pre>
+
+<p><code>v</code> isn't listed. A required argument is listed with no <code>(default: ...)</code> line. <code>--show-args</code> on a parent also lists the arguments of the files it includes. For the parent that includes the required-<code>x</code> child without passing it, the output listed <code>'x'</code> as if you could set it from the command line, and setting it there still failed. That's the question in <a href="https://robotics.stackexchange.com/questions/91627">what is different between DeclareLaunchArgument and LaunchConfiguration</a>. Both read the same value, but only the declaration makes it an argument.</p>
+
+<h2>Boolean strings</h2>
+
+<table>
+<thead><tr><th><code>b:=</code></th><th><code>IfCondition</code></th><th><code>parameters=[{'flag': LaunchConfiguration('b')}]</code></th><th><code>ParameterValue(..., value_type=str)</code></th></tr></thead>
+<tbody>
+<tr><td><code>true</code>, <code>True</code>, <code>TRUE</code></td><td>taken</td><td><code>True</code>, BOOL</td><td>STRING, text kept</td></tr>
+<tr><td><code>1</code></td><td>taken</td><td><code>1</code>, INTEGER</td><td>STRING <code>'1'</code></td></tr>
+<tr><td><code>false</code>, <code>False</code></td><td>not taken (<code>UnlessCondition</code> taken)</td><td><code>False</code>, BOOL</td><td>STRING, text kept</td></tr>
+<tr><td><code>0</code></td><td>not taken</td><td><code>0</code>, INTEGER</td><td>STRING <code>'0'</code></td></tr>
+<tr><td><code>yes</code>, <code>on</code></td><td>launch aborts, exit 1</td><td>never started</td><td>never started</td></tr>
+</tbody>
+</table>
+
+<p><code>IfCondition</code> ignores case for <code>true</code> and <code>false</code> and accepts <code>1</code> and <code>0</code>. As a node parameter, <code>1</code> doesn't become a bool. It arrives as an INTEGER, so a node that declared <code>flag</code> as a bool would reject it. Use <code>true</code> or <code>false</code> for anything that ends up as a parameter. For the related problem of numbers arriving as strings, see <a href="https://huntlab.app/en/ros-2-launchconfiguration-value-as-int-python-launch/">LaunchConfiguration value as int</a>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Result in my run</th><th>Catch</th></tr></thead>
+<tbody>
+<tr><td>Pass <code>launch_arguments={'x': LaunchConfiguration('x')}.items()</code> and declare <code>x</code> in the parent</td><td>Worked, CLI <code>x:=cli</code> reached the child</td><td>The parent needs its own <code>DeclareLaunchArgument</code> to show it in <code>--show-args</code></td></tr>
+<tr><td>Pass a fixed string in <code>launch_arguments</code></td><td>Worked</td><td>Overrides the CLI</td></tr>
+<tr><td>List of tuples instead of <code>.items()</code></td><td>Worked</td><td>None found</td></tr>
+<tr><td>Give the child argument a <code>default_value</code></td><td>Error gone</td><td>The child silently takes the parent's or CLI value with the same name</td></tr>
+<tr><td>XML <code>&lt;arg&gt;</code> inside <code>&lt;include&gt;</code></td><td>Worked</td><td>None found</td></tr>
+<tr><td>Declare <code>x</code> in the parent only</td><td>Still failed</td><td>Doesn't satisfy the required check</td></tr>
+<tr><td><code>GroupAction(scoped=True, forwarding=False, launch_configurations={...})</code></td><td>Child saw only what was listed</td><td>Required args still need <code>launch_arguments</code></td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The message text, exit codes, leak behavior, <code>--show-args</code> output and boolean handling matched on Humble (launch 1.0.15), Jazzy (launch 3.4.12) and Lyrical (launch 3.9.8). Two things differed:</p>
+
+<ul>
+<li>A bare dict in <code>launch_arguments</code> with a required child argument gave <code>'NoneType' object is not iterable</code> on Humble and Jazzy, and <code>Included launch description missing required argument 'x' (description: 'the x value'), given: []</code> on Lyrical. With <code>-d</code>, the error came from <code>include_launch_description.py</code> line 171 (Humble), 229 (Jazzy) and 240 (Lyrical).</li>
+<li>On Lyrical, the XML and YAML files using <code>&lt;log message=.../&gt;</code> printed <code>UserWarning: The action log now expects a log level. Either provide one or switch to using the log_info action</code>. Humble and Jazzy printed nothing. It's only a warning, and the run continued.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>The exact XML-only case from #689 (child with no <code>&lt;arg&gt;</code>), <code>ParameterValue(..., value_type=bool)</code>, <code>OpaqueFunction</code> and <code>perform()</code>, <code>SetLaunchConfiguration</code>, <code>choices=</code> on <code>DeclareLaunchArgument</code>, composable nodes, YAML or XML parents including XML children, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does "Included launch description missing required argument" appear when I pass the argument on the command line?</h3>
+<p>Because the file that declares it is included by another launch file, and that include didn't pass it. In my run <code>x:=cli</code> on the parent didn't satisfy the child's required <code>x</code>. Add <code>launch_arguments={'x': LaunchConfiguration('x')}.items()</code> to the include and declare <code>x</code> in the parent.</p>
+
+<h3>What happens if I forget .items() on launch_arguments?</h3>
+<p>Launch gets the dict's keys instead of name and value pairs. On Humble and Jazzy that gave <code>'NoneType' object is not iterable</code>. On Lyrical it gave the missing required argument error. When the child argument had a default, all three gave <code>not enough values to unpack (expected 2, got 1)</code>.</p>
+
+<h3>Do launch arguments from the parent leak into included files?</h3>
+<p>Yes. A parent or CLI value overrode the child's <code>default_value</code>, and the child's declared values were visible in the parent after a plain include. <code>GroupAction(scoped=True)</code> stopped the upward leak only. <code>forwarding=False</code> stopped the downward one too.</p>
+
+<h3>Does ros2 launch warn about a misspelled argument name?</h3>
+<p>No. <code>use_sim_tme:=true</code> exited 0 with no message, and <code>use_sim_time</code> kept its default <code>false</code>. Check names with <code>--show-args</code>.</p>
+
+<h3>Which strings count as true for IfCondition?</h3>
+<p><code>true</code>, <code>True</code>, <code>TRUE</code> and <code>1</code>. <code>yes</code> and <code>on</code> aborted the launch with <code>invalid condition expression</code>. As a node parameter, <code>1</code> became an INTEGER, not a bool.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does Included launch description missing required argument appear when I pass the argument on the command line?", "acceptedAnswer": {"@type": "Answer", "text": "Because the file that declares it is included by another launch file, and that include didn't pass it. In my run x:=cli on the parent didn't satisfy the child's required x. Add launch_arguments={'x': LaunchConfiguration('x')}.items() to the include and declare x in the parent."}},
+{"@type": "Question", "name": "What happens if I forget .items() on launch_arguments?", "acceptedAnswer": {"@type": "Answer", "text": "Launch gets the dict's keys instead of name and value pairs. On Humble and Jazzy that gave 'NoneType' object is not iterable. On Lyrical it gave the missing required argument error. When the child argument had a default, all three gave not enough values to unpack (expected 2, got 1)."}},
+{"@type": "Question", "name": "Do launch arguments from the parent leak into included files?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. A parent or CLI value overrode the child's default_value, and the child's declared values were visible in the parent after a plain include. GroupAction(scoped=True) stopped the upward leak only. forwarding=False stopped the downward one too."}},
+{"@type": "Question", "name": "Does ros2 launch warn about a misspelled argument name?", "acceptedAnswer": {"@type": "Answer", "text": "No. use_sim_tme:=true exited 0 with no message, and use_sim_time kept its default false. Check names with --show-args."}},
+{"@type": "Question", "name": "Which strings count as true for IfCondition?", "acceptedAnswer": {"@type": "Answer", "text": "true, True, TRUE and 1. yes and on aborted the launch with invalid condition expression. As a node parameter, 1 became an INTEGER, not a bool."}}
+]}
+</script>
+
+<p>Measured on 2026-10-31 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, launch 1.0.15, launch_ros 0.19.14, ros2cli 0.18.20, rclpy 3.3.22, rclcpp 16.0.21, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, launch 3.4.12, launch_ros 0.26.13, ros2cli 0.32.13, rclpy 7.1.12, rclcpp 28.1.22, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, launch 3.9.8, launch_ros 0.29.9, ros2cli 0.40.9, rclpy 10.0.11, rclcpp 32.0.3, rmw 7.10.2), default RMW. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-25-ros2-launch-missing-required-argument/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/98997">Python launch argument scope when nesting launch files</a>, <a href="https://robotics.stackexchange.com/questions/107698">Launch_arguments doesn't work</a>, <a href="https://robotics.stackexchange.com/questions/91627">what is different between DeclareLaunchArgument and LaunchConfiguration</a>, <a href="https://github.com/ros2/launch/issues/689">XML launch include can pass implicit arguments</a>, <a href="https://github.com/ros2/launch/issues/907">Include required arguments passed from commandline are not recognized</a>, <a href="https://github.com/ros2/launch/issues/749">Bug when setting launch arguments of included descriptions</a>.</p>
