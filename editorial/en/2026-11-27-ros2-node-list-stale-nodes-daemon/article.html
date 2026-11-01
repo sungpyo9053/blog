@@ -1,0 +1,157 @@
+<pre><code>$ kill -9 12345          # the talker is gone
+$ ros2 node list
+/talker                  # still listed
+$ ros2 node list --no-daemon
+                         # empty</code></pre>
+
+<p>The same happens the other way round: you start a node, run <code>ros2 node list</code> right away, and the node isn't there yet. A topic from a dead node stays in <code>ros2 topic list</code> the same way.</p>
+
+<p>Short answer: the stale entry comes from the ros2 daemon's cache, not from a live process. A node that shuts down cleanly (Ctrl-C, <code>kill</code>, <code>docker stop</code>) disappeared from <code>ros2 node list</code> within a second in my runs. A node killed with <code>kill -9</code> or <code>docker kill</code> stayed listed for about 20 seconds with the default Fast DDS, and about 6 seconds with Cyclone DDS. Use one of these, all measured on Humble:</p>
+
+<pre><code>ros2 node list --no-daemon                 # asks the network directly, no cache
+ros2 daemon stop &amp;&amp; ros2 daemon start      # throws the cache away (0.85 s)</code></pre>
+
+<p>Or wait about 20 seconds. Adding <code>--spin-time</code> doesn't help while the daemon is running: it was ignored. And <code>--no-daemon</code> has its own catch: with a running node, it missed that node in 2 of 5 calls.</p>
+
+<h2>Find your symptom</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my runs</th><th>What helped</th></tr></thead>
+<tbody>
+<tr><td>Node still listed after <code>kill -9</code>, <code>docker kill</code> or a crash</td><td>Daemon keeps the entry until the DDS participant times out: about 20 s (Fast DDS), about 6 s (Cyclone DDS)</td><td><code>--no-daemon</code>, daemon restart, or wait</td></tr>
+<tr><td>Topic still in <code>ros2 topic list</code> after the publisher died</td><td>Same cache, same timeout</td><td><code>ros2 topic list --no-daemon</code></td></tr>
+<tr><td>Node missing right after <code>ros2 daemon stop</code> or after the daemon started</td><td>A new daemon has an empty cache for a second or two</td><td>Run the command again after a few seconds</td></tr>
+<tr><td>Node just started is missing</td><td>Discovery takes about 1 to 3 s; the daemon can miss it on the first call</td><td>Run again, or <code>--no-daemon</code></td></tr>
+<tr><td>Node missing with <code>--no-daemon</code></td><td>The default discovery wait is short; it missed a running node in 2 of 5 calls</td><td><code>--no-daemon --spin-time 1</code> or more (see below)</td></tr>
+<tr><td>Nodes from another terminal don't show at all</td><td>Different <code>ROS_DOMAIN_ID</code> in that shell</td><td>Use the same domain id in both shells</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-01 I used the official <code>ros:humble-ros-base</code> Docker image on a 2 vCPU Linux host. The node was a small rclpy talker, written like the tutorials: it publishes on its own topic every 0.5 s, and on <code>KeyboardInterrupt</code> it calls <code>destroy_node()</code> and <code>rclpy.try_shutdown()</code>. I started it directly with <code>python3</code>, not with <code>ros2 run</code>, so each signal reached the node itself.</p>
+
+<p>For each case I started a fresh daemon, started the talker, waited until it showed up, then sent the signal. After that a loop ran <code>ros2 node list</code> (daemon), <code>ros2 node list --no-daemon</code> and <code>ros2 topic list -v</code> about once a second, for up to 60 seconds, and logged the time since the signal. One loop pass took about 1.7 s because each <code>ros2</code> call starts a Python process, so the times below have that resolution: "gone at 20.75 s" means it was still listed at the previous check, 19.04 s.</p>
+
+<p>Cross-container tests used a second container on the same Docker bridge network, with the talker as the container's main process. For Cyclone DDS I installed <code>ros-humble-rmw-cyclonedds-cpp</code> with apt and set <code>RMW_IMPLEMENTATION=rmw_cyclonedds_cpp</code> for both the daemon and the talker.</p>
+
+<h2>How long a killed node stays listed</h2>
+
+<table>
+<thead><tr><th>How the node ended</th><th>Process exit</th><th><code>ros2 node list</code> (daemon)</th><th><code>--no-daemon</code></th><th><code>ros2 topic list</code> (daemon)</th></tr></thead>
+<tbody>
+<tr><td><code>kill -INT</code> (same as Ctrl-C)</td><td>0.22 s</td><td>gone at first check, 0.58 s</td><td>gone, 1.56 s</td><td>gone, 1.90 s</td></tr>
+<tr><td><code>kill -TERM</code></td><td>0.22 s</td><td>gone at first check, 0.59 s</td><td>gone, 1.57 s</td><td>gone, 1.92 s</td></tr>
+<tr><td><code>kill -9</code>, run 1</td><td>0.11 s</td><td>listed at 19.04 s, gone at 20.75 s</td><td>gone at first check, 1.46 s</td><td>listed at 17.67 s, gone at 19.38 s</td></tr>
+<tr><td><code>kill -9</code>, run 2</td><td>0.11 s</td><td>listed at 18.63 s, gone at 20.35 s</td><td>gone, 1.47 s</td><td>listed at 18.97 s, gone at 20.69 s</td></tr>
+<tr><td><code>docker stop</code> (other container)</td><td>returned after 0.33 s</td><td>gone, 0.89 s</td><td>gone, 1.86 s</td><td>gone, 2.20 s</td></tr>
+<tr><td><code>docker kill</code> (other container)</td><td>-</td><td>listed at 17.54 s, gone at 19.25 s</td><td>gone, 1.71 s</td><td>listed at 17.88 s, gone at 19.59 s</td></tr>
+<tr><td><code>kill -9</code>, Cyclone DDS, run 1</td><td>0.01 s</td><td>listed at 4.90 s, gone at 6.62 s</td><td>gone, 1.45 s</td><td>listed at 5.24 s, gone at 6.96 s</td></tr>
+<tr><td><code>kill -9</code>, Cyclone DDS, run 2</td><td>0.11 s</td><td>listed at 5.01 s, gone at 6.72 s</td><td>gone, 1.57 s</td><td>listed at 5.35 s, gone at 7.06 s</td></tr>
+<tr><td>Ctrl-C and <code>kill -TERM</code>, Cyclone DDS</td><td>0.32 s</td><td>gone at first check, 0.69 s</td><td>gone, 1.76 s</td><td>gone, 2.11 s</td></tr>
+</tbody>
+</table>
+
+<p>The split is clean. If the node gets to run its shutdown code, it tells the other participants it's leaving, and the daemon drops it at once. If the process dies without that, nobody tells the daemon. It keeps the entry until the DDS participant's lease runs out, which was close to 20 seconds with Fast DDS and close to 6 seconds with Cyclone DDS here. A crash, an out-of-memory kill or a power cut on another machine behaves like <code>kill -9</code>. I didn't test those directly.</p>
+
+<p>Two details from the logs. With SIGINT the talker didn't get a <code>KeyboardInterrupt</code>: rclpy's own signal handler shut the context down first, so <code>rclpy.spin()</code> raised <code>ExternalShutdownException</code>. SIGTERM did the same on Humble. The <code>finally</code> block still ran and the log ended with my "clean exit" line. And <code>docker stop</code> didn't hang for the 10-second grace period, even though the talker was PID 1 in its container. rclpy handled the SIGTERM, so the container stopped in 0.33 s and the node left the list normally.</p>
+
+<p>The <code>--no-daemon</code> column never showed a stale node. A new process starts its own DDS participant, and a dead participant isn't announcing itself any more, so the new one never learns about it.</p>
+
+<h2>A node that just started, or a daemon that just started</h2>
+
+<p>Without a daemon running, the first <code>ros2 node list</code> took 0.96 s. It starts the daemon in the background and answers that one call itself. The next calls went through the daemon and took 0.30 to 0.31 s. Each <code>--no-daemon</code> call took 0.94 to 0.95 s, every time, because it does the discovery from scratch. <code>ros2 daemon status</code> printed "The daemon is not running" or "The daemon is running" and exited with 0 in both cases, so don't use its exit code in a script.</p>
+
+<p>The "my node isn't listed" case showed up right after the daemon started. With the talker already running, I stopped the daemon and called <code>ros2 node list</code> every 0.5 s:</p>
+
+<pre><code>rep 1 call 1 at +0.96 s after daemon stop, took 0.97 s -&gt; [/talker_pre ]
+rep 1 call 2 at +1.79 s after daemon stop, took 0.32 s -&gt; []
+rep 1 call 3 at +2.63 s after daemon stop, took 0.33 s -&gt; [/talker_pre ]</code></pre>
+
+<p>The first call found the node because it did its own discovery. The second call asked the new daemon, whose cache was still empty, and printed nothing. In the second repetition the second call was empty too, and the node was back by the third call at 2.65 s. So if you restart the daemon and the list is empty, wait a few seconds before you conclude the node is down.</p>
+
+<p>A node that starts while the daemon is already running needs to be discovered too. The first daemon check, about 0.5 s after start, missed the node in 1 of 4 starts, and it was there on the next check at 2.37 s. A talker in another container wasn't in the daemon's list at 1.09 s, was in <code>--no-daemon</code> at 2.14 s and in the daemon's list at 2.99 s.</p>
+
+<h2>--no-daemon and --spin-time</h2>
+
+<p><code>--no-daemon</code> always gave a fresh view, but not always a complete one. With one talker running the whole time, five <code>--no-daemon</code> calls in a row printed the node, then nothing, then the node twice, then nothing. Each call waited less than a second for discovery, and sometimes that wasn't enough.</p>
+
+<p><code>--spin-time</code> sets how long the CLI waits for discovery when it does the discovery itself. With the daemon stopped:</p>
+
+<table>
+<thead><tr><th>Command (daemon stopped)</th><th>Time</th><th>Talker listed?</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 node list --spin-time 0</code></td><td>0.85 s</td><td>no</td></tr>
+<tr><td><code>ros2 node list --spin-time 1</code></td><td>2.07 s</td><td>yes</td></tr>
+<tr><td><code>ros2 node list --spin-time 3</code></td><td>3.78 s</td><td>yes</td></tr>
+</tbody>
+</table>
+
+<p>With the daemon running, the option did nothing. Right after a <code>kill -9</code>, <code>ros2 node list --spin-time 5</code> returned in 0.30 s and still listed the dead node. This matches <a href="https://github.com/ros2/ros2cli/issues/164">ros2cli issue #164</a>, which reports that <code>--spin-time</code> behaves differently with the daemon started or stopped. If you want a slower, more complete look, combine it with <code>--no-daemon</code>.</p>
+
+<h2>ROS_DOMAIN_ID and RMW mismatches</h2>
+
+<p>The daemon is per domain. With a talker on domain 0 and a daemon already running for domain 0, the shell with <code>ROS_DOMAIN_ID=5</code> printed an empty list, with and without <code>--no-daemon</code>, and <code>ros2 daemon status</code> said "The daemon is running" in both shells. When I then started a second talker on domain 5, each shell listed only its own talker: <code>/talker_d0</code> on domain 0 and <code>/talker_d5</code> on domain 5. So the daemon never showed nodes from another domain, and changing the domain id in your shell doesn't make the CLI read the old domain's cache. If a node is missing, compare <code>echo $ROS_DOMAIN_ID</code> in both terminals first.</p>
+
+<p>For RMW I tried one mismatch. A daemon started with the default Fast DDS listed a talker running on Cyclone DDS, and so did a shell set to Cyclone, with and without the daemon. In this setup the RMW mismatch didn't hide anything.</p>
+
+<h2>Fix options compared</h2>
+
+<p>Each row starts from the same state: a talker killed with <code>kill -9</code> half a second earlier, Fast DDS, Humble.</p>
+
+<table>
+<thead><tr><th>What I did</th><th>Cost</th><th>Dead node gone?</th></tr></thead>
+<tbody>
+<tr><td>Nothing, <code>ros2 node list</code> at 0.8 s</td><td>0.31 s</td><td>no, gone after about 20 s</td></tr>
+<tr><td><code>ros2 node list --no-daemon</code></td><td>0.94 s</td><td>yes</td></tr>
+<tr><td><code>ros2 daemon stop</code> then <code>ros2 daemon start</code>, then <code>ros2 node list</code> three times</td><td>0.85 s for the restart</td><td>yes, all three calls</td></tr>
+<tr><td><code>ros2 node list --spin-time 5</code> (daemon running)</td><td>0.30 s</td><td>no</td></tr>
+<tr><td><code>ros2 topic list --no-daemon</code></td><td>about 1 s</td><td>yes, topic not listed</td></tr>
+<tr><td>Stop the node with Ctrl-C or <code>kill</code> instead of <code>kill -9</code></td><td>-</td><td>yes, at the first check</td></tr>
+</tbody>
+</table>
+
+<p>Pick by what you need. For a quick look after a crash, <code>--no-daemon</code> is the simplest. In a script that must not miss a live node, use <code>--no-daemon --spin-time 1</code> or more and accept the extra second. Restarting the daemon clears dead entries, but the next few calls can come back empty until discovery has run again. The best fix is upstream of the CLI: shut nodes down with SIGINT or SIGTERM so they announce they're leaving, and leave <code>kill -9</code> for processes that don't respond.</p>
+
+<p>Restarting the daemon is also the most common answer on the forums, for example in <a href="https://robotics.stackexchange.com/questions/96132">ROS2 topic list only working once</a> and <a href="https://robotics.stackexchange.com/questions/110924">ros2 humble to kill the zombie node</a>. If a node is still listed long after 20 seconds and a restart doesn't clear it, the process is probably still running somewhere, on another machine or in another container in the same domain. A stale cache alone never lasted longer than the timeouts above in my runs.</p>
+
+<h2>Version notes</h2>
+
+<p>All numbers on this page are from Humble (ros2cli 0.18.20, rclpy 3.3.22, rmw_fastrtps_cpp 6.2.10 with Fast DDS 2.6.12, rmw_cyclonedds_cpp 1.3.5 with Cyclone DDS 0.10.5). Jazzy and Lyrical: not tested yet, see below.</p>
+
+<h2>Not tested</h2>
+
+<p>Jazzy and Lyrical. Nodes started with <code>ros2 run</code> or <code>ros2 launch</code>, where Ctrl-C reaches a wrapper process too. C++ nodes. Nodes on another physical machine, a network cable pulled, a real crash or out-of-memory kill. Changed lease durations in a Fast DDS XML profile or Cyclone DDS config. Discovery Server, <code>ROS_LOCALHOST_ONLY</code> and <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code>. The daemon's 2-hour inactivity timeout.</p>
+
+<p>If nodes on different machines or containers don't see each other at all, that's a discovery range problem rather than a cache problem. I measured it in <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">ROS 2 nodes can't see each other</a>.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 node list still show a node I killed?</h3>
+<p>The ros2 daemon caches the graph. A node killed with <code>kill -9</code> or <code>docker kill</code> can't announce that it's leaving, so the daemon keeps it until the DDS lease times out: about 20 s with Fast DDS and about 6 s with Cyclone DDS on Humble. A node stopped with Ctrl-C or <code>kill</code> was gone at the first check.</p>
+
+<h3>How do I remove a stale node from ros2 node list?</h3>
+<p>Run <code>ros2 node list --no-daemon</code> for a view without the cache, or <code>ros2 daemon stop</code> and <code>ros2 daemon start</code> to clear it. Both removed a <code>kill -9</code>'d node in my run. Waiting about 20 seconds works too.</p>
+
+<h3>Why is my node missing from ros2 node list right after I start it?</h3>
+<p>Discovery takes time. The daemon missed a new node in 1 of 4 starts at the first check, about 0.5 s after start, and had it by 2.4 s. Right after a daemon restart, the next call printed an empty list. Run the command again after a few seconds.</p>
+
+<h3>Does --spin-time fix stale entries?</h3>
+<p>No, not while the daemon is running. <code>ros2 node list --spin-time 5</code> returned in 0.30 s and still listed the dead node. With the daemon stopped or with <code>--no-daemon</code>, <code>--spin-time 1</code> made discovery reliable; <code>--spin-time 0</code> missed a running node.</p>
+
+<h3>Is --no-daemon always correct?</h3>
+<p>It never showed a dead node, but it missed a live one in 2 of 5 calls because its discovery wait is short. Use <code>--no-daemon --spin-time 1</code> when the list has to be complete.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 node list still show a node I killed?", "acceptedAnswer": {"@type": "Answer", "text": "The ros2 daemon caches the graph. A node killed with kill -9 or docker kill can't announce that it's leaving, so the daemon keeps it until the DDS lease times out: about 20 s with Fast DDS and about 6 s with Cyclone DDS on Humble. A node stopped with Ctrl-C or kill was gone at the first check."}},
+{"@type": "Question", "name": "How do I remove a stale node from ros2 node list?", "acceptedAnswer": {"@type": "Answer", "text": "Run ros2 node list --no-daemon for a view without the cache, or ros2 daemon stop and ros2 daemon start to clear it. Both removed a kill -9'd node in my run. Waiting about 20 seconds works too."}},
+{"@type": "Question", "name": "Why is my node missing from ros2 node list right after I start it?", "acceptedAnswer": {"@type": "Answer", "text": "Discovery takes time. The daemon missed a new node in 1 of 4 starts at the first check, about 0.5 s after start, and had it by 2.4 s. Right after a daemon restart, the next call printed an empty list. Run the command again after a few seconds."}},
+{"@type": "Question", "name": "Does --spin-time fix stale entries?", "acceptedAnswer": {"@type": "Answer", "text": "No, not while the daemon is running. ros2 node list --spin-time 5 returned in 0.30 s and still listed the dead node. With the daemon stopped or with --no-daemon, --spin-time 1 made discovery reliable; --spin-time 0 missed a running node."}},
+{"@type": "Question", "name": "Is --no-daemon always correct?", "acceptedAnswer": {"@type": "Answer", "text": "It never showed a dead node, but it missed a live one in 2 of 5 calls because its discovery wait is short. Use --no-daemon --spin-time 1 when the list has to be complete."}}
+]}
+</script>
+
+<p>Measured on 2026-11-01 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, ros2cli 0.18.20, rclpy 3.3.22, rclcpp 16.0.21, rmw_fastrtps_cpp 6.2.10, Fast DDS 2.6.12, rmw_cyclonedds_cpp 1.3.5, Cyclone DDS 0.10.5) on a 2 vCPU Linux host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-27-ros2-node-list-stale-nodes-daemon/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/110924">ros2 humble to kill the "zombie" node</a>, <a href="https://robotics.stackexchange.com/questions/96132">ROS2 topic list only working once (or any other command)</a>, <a href="https://robotics.stackexchange.com/questions/98939">How do you kill the "zombie" node in ROS2 on local?</a>, <a href="https://github.com/ros2/ros2cli/issues/582">Nodes missing from ros2 node list after relaunch</a>, <a href="https://github.com/ros2/ros2cli/issues/164">ros2 node list --spin-time inconsistent behavior if daemon is started or stopped</a>.</p>
