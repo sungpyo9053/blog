@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-ros2-python-transform-pointcloud2-frame-keep-fields",
+  "title": "ROS 2에서 PointCloud2 메시지를 다른 프레임으로 변환하려면: Python으로 xyz만 꺼내 회전·이동한 뒤 create_cloud로 다시 만들 때 intensity와 frame_id가 남는지 바이트 수로 확인하기",
+  "slug": "ros2-python-transform-pointcloud2-frame-keep-fields",
+  "reader_question": "Robotics Stack Exchange의 'Transform PointCloud message'(https://robotics.stackexchange.com/questions/104522/transform-pointcloud-message, 조회 799회)와 같은 상황이다. 레이저나 깊이 카메라 프레임으로 들어온 PointCloud2를 base_link 같은 다른 프레임으로 옮기려 한다. Python에서 sensor_msgs_py로 xyz를 읽어 변환을 적용하고 create_cloud로 다시 만들면 되는가? 그렇게 만든 메시지에서 intensity 같은 다른 필드와 header.frame_id는 어떻게 되는가?",
+  "target_reader": "rclpy로 PointCloud2 구독 콜백을 작성해 봤고 read_points_numpy로 xyz 배열을 꺼낼 수는 있지만, 그 점들을 다른 프레임으로 옮긴 뒤 메시지를 다시 발행하는 과정은 처음인 ROS 2 입문자.",
+  "learning_outcome": "tf2의 source/target 규칙대로 점 하나에 회전과 이동을 적용해 대상 프레임 좌표를 손으로 계산하고, 회전을 빠뜨렸을 때 생기는 오차의 크기를 확인한다. 다시 만든 PointCloud2의 width×height×point_step을 원본과 비교해 필드가 빠졌는지 판정하고, 옛 offset으로 intensity를 읽으면 다음 점의 x를 읽게 되는 경계도 계산한다. 실천 항목은 세 가지다. 변환한 클라우드를 발행하기 전에 원본 fields·point_step을 그대로 넘겨 다시 만들고, header.frame_id를 target 프레임으로 바꾸고, len(data)를 원본과 비교하는 검사를 넣는다.",
+  "unique_takeaway": "좌표 변환이 맞아도 메시지는 틀릴 수 있다. sensor_msgs_py의 create_cloud는 point_step을 주지 않으면 전달한 fields로 크기를 계산하므로, x·y·z 필드만 넘기면 점 하나가 16바이트에서 12바이트로 줄고 intensity가 조용히 사라진다. 옛 offset 12로 intensity를 읽으면 다음 점의 x가 나온다. tf2 문서는 transform(target_frame, ...) 계열 메서드가 결과에 target frame_id를 써 넣는다고 설명하는데, 직접 변환할 때는 이 일을 스스로 해야 한다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros2/ros2_documentation/rolling/source/ROS-Framework/interfaces/About-Tf2/About-Tf2.rst",
+      "publisher": "ROS 2 Documentation",
+      "claim_scope": "Time-dependent coordinate-frame relationships and transformations",
+      "checked_at": "2026-11-02T02:02:09.493320+09:00"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/ros2/common_interfaces/jazzy/sensor_msgs_py/sensor_msgs_py/point_cloud2.py",
+      "publisher": "ROS 2 common_interfaces maintainers",
+      "claim_scope": "How sensor_msgs_py reads and creates PointCloud2 in Jazzy (read_points, read_points_numpy, create_cloud, field offsets, skip_nans); source code, not performance",
+      "checked_at": "2026-11-02T02:02:09.493320+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261101T170201Z-13ce52be25-ros2-python-transform-pointcloud2-frame-keep-fields/example.py",
+    "sha256": "8e2f9b9b8853b692874e75aa8e2d8cadc69c6d9a586c81a94e49db2490d588fc",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/b1360cf58057b487d7ec3e90ab496d5f85dc08fd/editorial/generated-foundations/20261101T170201Z-13ce52be25-ros2-python-transform-pointcloud2-frame-keep-fields/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261101T170201Z-13ce52be25-ros2-python-transform-pointcloud2-frame-keep-fields/verification.json",
+    "sha256": "8e29870329ab0c86280ecc2bb896540824158c272369196d646a8fa9ceed348e",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/b1360cf58057b487d7ec3e90ab496d5f85dc08fd/editorial/generated-foundations/20261101T170201Z-13ce52be25-ros2-python-transform-pointcloud2-frame-keep-fields/verification.json"
+  },
+  "author_id": "discovery-writer-fa338c3dd1954a458d4152a6a65ece47"
+}
