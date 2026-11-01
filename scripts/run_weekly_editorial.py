@@ -222,8 +222,9 @@ def notify_result(result, directory, sender=send):
     publication_summary = f'자동 발행 기록 {count}편' if count is not None else '발행 집계 확인 필요'
     ad = result.get('ad_revenue_4w')
     # 4-week window ~ one month; goal set by the owner on 2026-10-03.
-    revenue = (f"광고 4주: ${ad['revenue']} (목표 $200의 {round(ad['revenue'] / 200 * 100, 1)}%) / 조회 "
-               f"{int(ad['page_views'])} / RPM {ad['rpm']}\n") if ad else ''
+    # GA4 totalAdRevenue is in the property currency (KRW), not USD — 11/01 the "$984.94 (492%)" alert was 984원.
+    revenue = (f"광고 4주(GA4): {ad['revenue']:,.0f}원 / 조회 "
+               f"{int(ad['page_views'])} / RPM {ad['rpm'] or 0:,.0f}원\n") if ad else ''
     rs = result.get('reader_signals')
     if rs:
         revenue += (f"실측 {rs['measured']['posts']}편 참여율 {rs['measured']['engagement_rate']} vs 기타 "
@@ -343,7 +344,7 @@ def run(root=ROOT, *, now=None, apply=False, notify=False, client=None,
                     result['wp_write_count'] = result['update'].get('wp_write_count', 0)
                     result['failed'] = result['update']['status'] in {'rejected', 'update_unconfirmed'}
         except Exception as exc:
-            result.update(failed=True, error_type=type(exc).__name__, reason='weekly_execution_failed')
+            result.update(failed=True, error_type=type(exc).__name__, error=str(exc)[:200], reason='weekly_execution_failed')
         result = clean(result)
         save(result_path, result)
         # Markdown is an independently readable view of the same sanitized record.
