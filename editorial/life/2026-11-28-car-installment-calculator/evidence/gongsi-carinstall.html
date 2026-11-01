@@ -1,0 +1,3371 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- beadnet.20190604 -->
+
+
+
+
+<!-- beadnet.20190604 -->
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1200px, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>여신금융협회</title>
+
+	<!-- FAVICONS -->
+	<link rel="shortcut icon" href="/static/preimages/portal/common/favicon.ico" type="image/x-icon">
+	
+  	<link rel="stylesheet" href="/assets/portal/css/reset.css">
+  	<link rel="stylesheet" href="/assets/portal/css/common.css">
+  	<link rel="stylesheet" href="/assets/portal/css/content.css">
+  	<link rel="stylesheet" href="/assets/portal/css/swiper.min.css">
+  	
+
+	<script src="/assets/js/jquery.min.js"></script>
+	<script src="/assets/js/jquery-ui.min.js"></script>
+	<script src="/assets/portal/js/ui.js"></script>	
+	<script src="/assets/js/common.js"></script>	
+	<script src="/assets/js/plugin/jsrender/jsrender.min.js"></script>
+	
+	<script src="/assets/js/plugin/moment/moment.js"></script>
+
+	<!-- add validation -->	
+	<script src="/static/js/validation.js"></script>
+
+	<!-- chart -->
+	<!-- 운영서버/개발서버 배포시에 반용 하세요.-->
+	 
+	<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+	
+	
+	<!-- <script src="/assets/gstatic/loader.js"></script> -->	
+	<!-- <script src="/assets/gstatic/chart/loader.js"></script> -->
+				
+	<!-- print -->	
+	<script src="/assets/js/print/printThis.js"></script>
+
+	<!--공통 말풍선 Preload (초기 데이터 우선 사용, 없으면 ajax 조회) 	-->
+	<script>
+		var g_preloadedSpeechBubbleList =[];
+	</script>
+
+	<!--공통 말풍선 스크립트 -->
+	<script src="/assets/portal/js/commonSpeechBubble.js"></script>
+
+	<script>
+		// 테이블 스크롤 전역변수
+	    var $pathCon;
+	    var $fixTableEle;
+	    
+	    var winH;
+	    var tableH;
+	    var fixP;
+    
+		// tr 표시시 empty tr 제공.
+		function emptyTr(trcnt){
+			if(trcnt == undefined || trcnt == "") trcnt = 3;
+			var tr = "<tr><td colspan='"+trcnt+"'>조회된 결과가 없습니다.</td></tr>";
+			return tr ;	
+		}
+		
+		
+		// 이용시 유의사항 조회.
+ 		function fn_pageInfoSelect(progrmId){
+			
+			var params ={};
+
+			if(progrmId){
+				// 프로그램ID
+				params['progrmId'] = progrmId;
+			}
+			else {
+				if($("#progrmId").length == 0) {
+					return;
+				}
+				// 프로그램ID
+				params['progrmId'] = $("#progrmId").val();
+			}
+			
+			$.ajax({
+				url: "/portal/site/selectPageInfo",
+				type: "POST",
+				dataType: "JSON",
+				data: params,
+				success : function(data){
+				    if(data.info) {
+				    	$(".info-list:visible").not(".blue .info-list").html(data.info.NOTICE);
+				    }
+				}
+				// error 처리.
+				,error : function( xhr, status, error ) {
+				}
+			});
+		} 
+		
+		function escapeXml(unsafe){
+			return unsafe.replace(/[<>&'"]/g, function(c){
+				switch(c){
+					case '<': return '&lt;';
+					case '>': return '&gt;';
+					case '&': return '&amp;';
+					case '\'': return '&apos;';
+					case '"': return '&quot;';
+				}
+			});
+		}
+		
+	    function tableHeight(){
+	    	tableH = $('#fixHeader').height();
+	    	$fixTableEle = $('#fixHeader');
+	    	
+	    	if($('#fixHeader').length > 0){
+		    	fixP = $fixTableEle.offset().top;			    
+	    	}
+	    }
+	    
+	    function tableHeight2(){
+	    	tableH = $('#fixHeader2').height();
+	    	$fixTableEle = $('#fixHeader2');
+	    	
+	    	if($('#fixHeader2').length > 0){
+		    	fixP = $fixTableEle.offset().top;			    
+	    	}
+	    }
+	    
+		function cardCheckArea(checkboxnmName){
+			var checkboxnm = "mcSeqChecked";
+			if(checkboxnmName != ''){
+				checkboxnm = checkboxnmName;
+			}
+			// 최초 1회만 호출되야 함.
+			//if($("input[name="+checkboxnm+"][type=checkbox]").length > 0) return;
+			
+	 		/* 회원사 선택 */
+	 		var cardList = "";
+	 		var cardTotalList = [];
+	 		
+	 		
+	 		$("[name="+checkboxnm+"]").map(function(){
+	 			cardTotalList.push($(this).val());
+	 		});
+	 		
+	 		var currStr = ",";
+			$("[name=checkcompany]").each(function(index, item){				
+				if($.inArray($(this).data('code')+'', cardTotalList) == -1){
+					if(currStr.indexOf(','+$(this).data('code')+',') < 0){
+						var name = $(this).data('name').length >= 10 ? $(this).data('name').substring(0, 9) + '..' : $(this).data('name');    
+						$(".checkbox-con").append('<div class="checkbox" title="' +$(this).data('name') + '"><input type="checkbox" id="che-'+index+'" name="'+checkboxnm+'" value="'+$(this).data('code')+'" checked><label for="che-'+index+'">'+name+'</label></div>');
+					}
+				}
+				currStr += $(this).data('code') + ",";
+			});
+		}
+
+		function interCardCheckArea(checkboxnmName){
+			var checkboxnm = "mcSeqChecked";
+			if(checkboxnmName != ''){
+				checkboxnm = checkboxnmName;
+			}
+
+			// 최초 1회만 호출되야 함.
+			//if($("input[name="+checkboxnm+"][type=checkbox]").length > 0) return;
+			
+	 		/* 회원사 선택 */
+	 		var cardList = "";
+	 		var cardTotalList = [];
+	 		
+	 		
+	 		$("[name="+checkboxnm+"]").map(function(){
+	 			cardTotalList.push($(this).val());
+	 		});
+	 		
+	 		var currStr = ",";
+			$("[name=intercheckcompany]").each(function(index, item){				
+				if($.inArray($(this).data('code')+'', cardTotalList) == -1){
+					if(currStr.indexOf(','+$(this).data('code')+',') < 0){
+						var name = $(this).data('name').length >= 10 ? $(this).data('name').substring(0, 9) + '..' : $(this).data('name');    
+						$(".checkbox-con").append('<div class="checkbox ' + $(this).data('gubun') + '" title="' +$(this).data('name') + '"><input type="checkbox" id="che-'+index+'" name="'+checkboxnm+'" value="'+$(this).data('code')+'" checked><label for="che-'+index+'">'+name+'</label></div>');
+					}
+				}
+				currStr += $(this).data('code') + ",";
+			});
+		}
+		
+		
+		
+
+		function depthControl2(val){
+			
+			
+	    	$("#2depth_"+val).html($.templates("#template2depth").render(val));
+	    	depthControl3(val == "01" ? "01" : val == "02" ? "06" : "11",val);
+	    }
+
+		function depthControl3(val,subId){
+			var url = "";
+			var params = {};
+			
+			switch(val){
+				/*신용카드*/
+				case "01":
+					url = "/portal/creditcard/creditcardDisclosureDetail2/ajax";
+					$('#fastSearchForm').attr('action','/portal/creditcard/creditcardDisclosureDetail2');
+					params['cgcMode'] = '2';
+					$('#headerCgcMode').val('2');
+					$('#headerCgcMode').prop('disabled','');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "02":
+					url = "/portal/creditcard/creditcardDisclosureDetail20Ajax";
+					$('#fastSearchForm').attr('action','/portal/creditcard/creditcardDisclosureDetail20');
+					params['cgcMode'] = '20';
+					$('#headerCgcMode').val('20');
+					$('#headerCgcMode').prop('disabled','');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "03":
+					url = "/portal/creditcard/creditcardDisclosureDetail25Ajax";
+					$('#fastSearchForm').attr('action','/portal/creditcard/creditcardDisclosureDetail20');
+					params['cgcMode'] = '25';
+					$('#headerCgcMode').val('25');
+					$('#headerCgcMode').prop('disabled','');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "04":
+					url = "/portal/creditcard/creditcardDisclosureDetail10/ajax";
+					$('#fastSearchForm').attr('action','/portal/creditcard/creditcardDisclosureDetail10');
+					params['cgcMode'] = '10';
+					$('#headerCgcMode').val('10');
+					$('#headerCgcMode').prop('disabled','');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "05":
+					url = "/portal/creditcard/creditcardDisclosureDetail21/ajax";
+					$('#fastSearchForm').attr('action','/portal/creditcard/creditcardDisclosureDetail10');
+					params['cgcMode'] = '11';
+					$('#headerCgcMode').val('11');
+					$('#headerCgcMode').prop('disabled','');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				/*리스할부*/
+				case "06":
+					$("#depth3").html('<option value="">회원사 전체</option>');
+					$('#fastSearchForm').attr('action','/portal/quota/quotaFinancingDisclosureDetail1');
+					params['ifgcMode'] = '1';
+					$('#headerIfgcMode').val('1');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "07":
+					url = "/portal/quota/quotaFinancingDisclosureDetailAjax";
+					$('#fastSearchForm').attr('action','/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=5');
+					params['ifgcMode'] = '5';
+					$('#headerIfgcMode').val('5');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "08":
+					url = "/portal/quota/quotaFinancingDisclosureDetailAjax";
+					$('#fastSearchForm').attr('action','/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=3');
+					params['ifgcMode'] = '3';
+					$('#headerIfgcMode').val('3');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "09":
+					url = "/portal/quota/quotaFinancingDisclosureDetailAjax";
+					$('#fastSearchForm').attr('action','/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=6');
+					params['ifgcMode'] = '6';
+					$('#headerIfgcMode').val('6');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				case "10":
+					$("#depth3").html('<option value="">회원사 전체</option>');
+					$('#fastSearchForm').attr('action','/portal/quota/quotaFinancingDisclosureDetail60');
+					params['ifgcMode'] = '60';
+					$('#headerIfgcMode').val('60');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','');
+					$('#headerClgcMode').prop('disabled','true');
+					break;
+				/*신용대출*/
+				case "11":
+					url = "/portal/creditloan/creditloanDisclosureDetail11/ajax";
+					$('#fastSearchForm').attr('action','/portal/creditloan/creditloanDisclosureDetail11');
+					params['clgcMode'] = '11';
+					$('#headerClgcMode').val('11');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','');
+					break;
+				case "12":
+					url = "/portal/creditloan/creditloanDisclosureDetail12Ajax";
+					$('#fastSearchForm').attr('action','/portal/creditloan/creditloanDisclosureDetail12');
+					params['clgcMode'] = '13';
+					$('#headerClgcMode').val('13');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','');
+					break;
+				case "13":
+					url = "/portal/creditloan/creditloanDisclosureDetail12Ajax";
+					$('#fastSearchForm').attr('action','/portal/creditloan/creditloanDisclosureDetail12');
+					params['clgcMode'] = '12';
+					$('#headerClgcMode').val('12');
+					$('#headerCgcMode').prop('disabled','true');
+					$('#headerIfgcMode').prop('disabled','true');
+					$('#headerClgcMode').prop('disabled','');
+					break;
+			}
+
+			if(url != ''){
+				$.ajax({
+					url: url,
+					type: "GET",
+					dataType: "JSON",
+					data: params,
+					success : function(data){
+						var list = null;
+						switch(val){
+							/*신용카드*/
+							case "01":
+								list = data;
+								break;
+							case "02":
+								list = data.cardList;
+								break;
+							case "03":
+								list = data.cardList;
+								break;
+							case "04":
+								list = data.cardList;
+								break;
+							case "05":
+								list = data.cardList;
+								break;
+							/*리스할부*/
+							case "06":
+								list = {mcSeq:'',mcCompany:''};
+								break;	
+							case "07":
+								list = data.compList;
+								break;
+							case "08":
+								list = data.compList;
+								break;
+							case "09":
+								list = data.compList;
+								break;
+							case "10":
+								list = {mcSeq:'',mcCompany:''};
+								break;
+							/*신용대출*/
+							case "11":
+								list = data.resultList;
+								break;
+							case "12":
+								list = data.compList;
+								break;
+							case "13":
+								list = data.compList;
+								break;
+						}
+						$("#depth3_"+subId).html('<option value="">회사 전체</option>' + $.templates("#template3depth").render(list));
+					}
+				});
+			} else{
+				$("#depth3_"+subId).html('<option value="">회사 전체</option>');
+			}
+		}
+		
+		// 2026.04.08 첫 데이터 인덱스 찾기
+		var firstIdx = -1;
+    	
+    	function resetFirstIdx(){
+    		firstIdx =-1;	
+    	}
+   
+	    $(function () {
+	        var token = $("input[name='_csrf']").val();
+	        var header = "X-CSRF-TOKEN";
+	        $(document).ajaxSend(function(event, xhr, options) {
+	            xhr.setRequestHeader(header, token);
+	            xhr.setRequestHeader('X-Request-Id', $(event).uniqueId());
+	        });
+	
+	//        $(document).ajaxSuccess(function(event, xhr, settings) {
+	//        });
+	
+	        $.views.helpers({
+	        	zeroToDash: function(val) {
+	        		var rtnVal = $.trim(val);
+	        		if(rtnVal == '0' || rtnVal == '0.0' || rtnVal == '0.00' || rtnVal == '.00' || rtnVal == '' || rtnVal == null){
+	        			rtnVal = '-';
+	        		}
+	        		return rtnVal;
+	        	},
+	        	zeroToDashGrade: function(val) {
+	        		var rtnVal = $.trim(val);
+	        		if(rtnVal == '0' || rtnVal == '0.0' || rtnVal == '0.00' || rtnVal == '.00' || rtnVal == '' || rtnVal == null){
+	        			rtnVal = '-';
+	        		}else{
+	        			rtnVal = rtnVal + '등급';
+	        		}
+	        		return rtnVal;
+	        	},
+	        	escapeXml: function(val){
+    				val = val.replace('&lt;','<');
+    				val = val.replace('&gt;','>');
+    				val = val.replace('&amp;','&');
+    				val = val.replace('&apos;','\'');
+    				val = val.replace('&quot;','"');
+    				return val;
+	    		},
+	            addComma: function(val) {
+	            	var result = "";
+	            	val = $.trim(val);
+	                if(val == "" || val == "undefined") {
+	                	result = "";
+	                } else {
+	                	result = val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+	                }
+	                return result;
+	            },
+	            split: function(val, delims) {
+	            	var valArr = val.split(delims);
+	                return valArr;
+	            },
+	            replace: function(val, fromStr, toStr) {
+	            	var valArr = val.replace(fromStr, toStr);
+	                return valArr;
+	            },
+	            replaceEnter: function(val) {
+					var changedVal = val.replace(/\r\n/g,'<br>');
+					return changedVal;
+		        },
+	            formatDateFromString: function(val, fromFormat, toFromat) {
+	                return moment(val, fromFormat).format(toFromat);
+	            },
+	            convdate: function(src) {
+	                var result = "";
+	                src = $.trim(src);
+	                formatter = "YYYY-MM-DD HH:mm:ss";
+	                if(src == "") {
+	                	result = "";
+	                } else {
+	                    result = moment(src, "YYYYMMDDHHmmss").format(formatter);
+	                }
+	                return result;
+	            },
+	            convdate2: function(src) {
+	                var result = "";
+	                src = $.trim(src);
+	                formatter = "YYYY-MM-DD";
+	                if(src == "") {
+	                	result = "";
+	                } else {
+	                    result = moment(src, "YYYYMMDDHHmmss").format(formatter);
+	                }
+	                return result;
+	            },
+	            dateFormatter: function(src, formatter, nvl) {
+	                var result = "";
+	                src = $.trim(src);
+	                if(src == "") {
+	                	result = nvl;
+	                } else {
+	                    result = moment(src, "YYYYMMDDHHmmss").format(formatter);
+	                }
+	                return result;
+	            },
+	            
+				hideAccount : function( accountNo ) {
+				    var result = "";
+				    if( accountNo.length > 5 ) {
+						result = accountNo.substring( 0, 5 );
+						for( var i = 5 ; i<accountNo.length ; i++ ) {
+						  	result += "*";
+						}
+				    }
+				    else {
+				      	result = accountNo;
+				    }
+				    return result;
+	            },
+	            
+	            parseFloat : function( src, nvl ) {
+	                var result = "";
+	                src = $.trim( src );
+	                if( src == "" ) {
+	                    result = ( typeof( nvl ) != "undefined" ) ? nvl : "";
+	                }
+	                else {
+	                	result = isNaN( src ) ? src : parseFloat( src );
+	                }
+	                return result;
+	            },
+	            
+	            parseInt : function( src ) {
+	                var result = "";
+	                src = $.trim( src );
+	                if( src == "" ) {
+	                  	result = src;
+	                } else {
+	                	result = isNaN( src ) ? src : parseInt( src, 10 );
+	                }
+	                return result;
+	            },
+	            
+	            buzNoFormatter : function( src, nvl ) {
+	              	var result = "";
+	              	src = $.trim( src );
+					if( src == null  || src == "" ) {
+					    if( typeof( nvl ) == "undefined" ) {
+	                		result = "";
+					    } else {
+					        result = nvl;
+					    }
+					} else {
+	              	    if( src.length < 10 ) {
+	              	      	result = src;
+	              	    }
+	              	    else {
+	              	        result = src.substring( 0, 3 ) + "-" + src.substring( 3, 5 ) + "-" + src.substring( 5 );
+	              	    }
+	              	}
+					return result;
+	            },
+	            
+	            
+				phoneFormatter  :  function( num, type ) {
+				    var formatNum = "";
+				    if( typeof( num ) == "undefined" || num == null || num == "" ) {
+				        formatNum = "";
+				    } else {
+						type = typeof( type ) == "undefined" ? 1 : type;
+					    if( num.length == 11 ) {	
+					        if( type == 0 ) {
+					            formatNum = num.replace( /(\d{3})(\d{4})(\d{4})/, "$1-****-$3" );
+					        } else {
+					            formatNum = num.replace( /(\d{3})(\d{4})(\d{4})/, "$1-$2-$3" );
+					        }
+					    }
+					    else if( num.length == 8 ) {	
+							formatNum = num.replace( /(\d{4})(\d{4})/, "$1-$2" );
+					    } else {
+							if( num.indexOf( "2" ) == 0 ) {	
+								if( type == 0 ) {
+						            formatNum = num.replace( /(\d{2})(\d{4})(\d{4})/, "$1-****-$3" );
+						        } else {
+						            formatNum = num.replace( /(\d{2})(\d{4})(\d{4})/, "$1-$2-$3" );
+						        }
+							}
+							else {	
+					        	if( type == 0 ) {
+						            formatNum = num.replace( /(\d{3})(\d{3})(\d{4})/, "$1-****-$3" );
+					        	} else {
+									formatNum = num.replace( /(\d{3})(\d{3})(\d{4})/, "$1-$2-$3" );
+								}
+							}
+						}
+					}
+				    return formatNum;
+				},
+	            
+	            subString : function( src, str, end ) {
+	
+	                var result = "";
+	
+	                src = $.trim( src );
+	
+	                if( src == "" || str < 0 || src.length < end) {
+	                  	result = src;
+	                } else {
+	                	result = src.substring( str, end );
+	                }
+	                return result;
+	            },
+	            
+	            decimalFormat : function( src , fix) {
+	                var result = "";
+	                src = $.trim( src );
+	                if( src == "" || isNaN( src )) {
+	                  	result = src;
+	                } else if(src == "00.00"){
+	                	result = "0.00";
+	                } else if(Number(src) > 0){
+	                	result = Number(src).toFixed(fix);
+	                }
+	                return result;
+	            },
+	            changeCalc : function(val1, val2) {
+		            var result = "-";
+		            val1 = val1 == '' || val1 == null ? 0 : val1;
+		            val2 = val2 == '' || val2 == null ? 0 : val2;
+					val1 = parseFloat(val1);
+					val2 = parseFloat(val2);
+					if(val2 != 0){
+						result = ((val1 - val2) / (val2 == 0 ? 1 : val2) * 100).toFixed(1);
+					}
+					return result;
+		        },
+	            
+	            
+	    		isFirstData: function(idx){
+	    			if(firstIdx === -1){
+	    				firstIdx = idx;
+	    			}
+	    			return firstIdx === idx;
+	    		}
+	        });
+	        
+			/* ajax param */
+			$.ajaxSettings.traditional = true;
+	
+			$.ajaxSetup({
+	            beforeSend: function(xhr) {
+		            xhr.setRequestHeader("AJAX", true);
+					//showProgressbar();
+		            //waitingDialog.show();
+		        },
+		        error: function(xhr, status, err) {
+		        	//waitingDialog.hide();
+		        	var errorData = xhr.responseJSON;
+					var statusCode = xhr.status;
+					
+					switch (statusCode) {
+						case 400:
+							if ( errorData && errorData.msg ){
+								alert(errorData.msg);
+							} else {
+								alert("잘못된 요청입니다. 입력값을 확인해주세요.")
+							}
+							break;
+						case 401:
+							 alert("권한이 없습니다.");
+							location.href = "/";
+							break;
+						case 403:
+							alert("권한이 없습니다.");
+							location.href = "/";
+							break;	
+						case 404:
+							alert("요청하신 서비스를 찾을 수 없습니다.");
+							break;	
+						case 405:
+							alert("요청하신 서비스를 찾을 수 없습니다.");
+							break;				                
+						case 500:
+							alert("예외가 발생했습니다. 관리자에게 문의하세요.");
+							location.href = "/";
+							break;				                
+						default:
+							alert("예외가 발생했습니다. 관리자에게 문의하세요.");
+							location.href = "/";
+							break;
+					}
+		        	
+		            // if (xhr.status == 401) {
+		            //     alert("권한이 없습니다.");
+		            // } else {
+					//	alert("예외가 발생했습니다. 관리자에게 문의하세요.");
+		           	// }
+		            //location.href = "/error";
+		            //location.href = "/";
+		        },
+			    complete : function() {
+			    },
+			    always : function(){
+			    }
+	    	});
+			
+			
+			if($(".info-list").length > 0){
+	    		//fn_pageInfoSelect();
+	    	} else {
+	    	}
+	    });
+	    
+	    var fixTableEleCnt = 0;
+	    
+       	$(window).on('scroll',function(){
+    	   if(fixTableEleCnt){
+	        	var scrollTop = $(window).scrollTop();
+	        	/* 탑 버튼 위치 설정 */
+	        	topBtnPosition(scrollTop + 10);
+
+	        	/* 상단 패스 & 테이블 헤더영역 고정 */
+	        	if( scrollTop <= 120) {
+	          		$pathCon.removeClass("fixed");
+	          		$fixTableEle.removeClass("fixed");
+	        	}
+	
+	        	if(scrollTop >= 120){
+	          		$pathCon.addClass("fixed");
+	          		$fixTableEle.removeClass("fixed");
+	        	}
+	
+	        	if( tableH >= winH - 250 && scrollTop >= fixP - 150  ){
+	          		$pathCon.addClass("fixed");
+	          		$fixTableEle.addClass("fixed");
+	        	}
+	        	
+				/* 	            
+ 				var checkboxConH = $('#checkCon').height();
+
+	            if( tableH >= winH - 250 && scrollTop >= tableH + 380 + checkboxConH ){
+	              $pathCon.addClass("fixed");
+	              $fixTableEle.removeClass("fixed");
+	              $fixTableEle.addClass('scrollBottom');
+	            } 
+	            */
+    	   	}
+      	});
+
+		
+       
+		$(document).ready(function(){
+			    	
+			$pathCon = $('#path');
+	        
+	        $fixTableEle = $('#fixHeader');
+	        
+	        var winS = $('html').scroll();
+
+	        winH = $(window).height();
+	        tableH = $('.table-con table').height();
+	       
+	        fixTableEleCnt = $fixTableEle.length; 
+
+	        // fixTableEle 못찾는 error 처리.
+	        if(fixTableEleCnt){
+	        	 
+		       	fixP = $fixTableEle.offset().top;
+
+		        if( winS > 0 ){
+		           winS = winS + 165;
+		           topBtnPosition(winS);
+		        }
+
+		        // 상단 패스 & 테이블 헤더영역 고정
+		        if( winS <= 120) {
+		           $pathCon.removeClass("fixed");
+		           $fixTableEle.removeClass("fixed");
+		        }
+
+		        if(winS >= 120){
+		           $pathCon.addClass("fixed");
+		           $fixTableEle.removeClass("fixed");
+		        }
+
+		        if( tableH >= winH - 250 && winS >= fixP - 150 ){
+		           $pathCon.addClass("fixed");
+		           $fixTableEle.addClass("fixed");
+		    	} 
+		        
+// 		        var checkboxConH = $('#checkCon').height();
+
+// 		        if( tableH >= winH - 250 && scrollTop >= tableH + 380 + checkboxConH ){
+// 		          $pathCon.addClass("fixed");
+// 		          $fixTableEle.removeClass("fixed");
+// 		          $fixTableEle.addClass('scrollBottom');
+// 		        }
+			}
+	          
+			// 전체선택 체크박스.	          
+	    	$("body").on("click", "#che-all", function(){
+		        $("body .checkbox-con input[type=checkbox]").prop("checked", $(this).prop("checked"));
+		    });
+			
+			
+	    	$("body").on("click", "#che-new-all", function(){
+	    		$("input:checkbox[id='checkAllCard']").prop("checked", false);
+	    		$("input:checkbox[id='checkAllLease']").prop("checked", false);
+		        $("body .checkbox-con input[type=checkbox]").prop("checked", $(this).prop("checked"));
+		    });
+	    	
+	    	// beadnet
+	    	// section height 문제로 navi 영역이 보일 때 스크롤이 생김.
+	    	//$("section#container").css("height","1600px");
+	    	
+	    	
+	    	// 프린트 기능.
+	    	$(document).on("click","button.print",function(e){
+	    		//$(".table-con:visible").printThis();
+	    		var w = cfn_comPopup("/portal/print/popup/print", "여신금융협회", 1240, 920, 'yes');
+	    	});
+	    	
+	    	
+	    	// 메뉴 addClass.
+	    	fn_addSelectMenuClass();
+	    	
+	    	/**
+	    	// 상단select
+	    	$(".path-menu.depth02 [id^=pathDepth] ul li").each(function(){
+	    		
+	    	    var currUrl = location.pathname + location.search;
+	    		
+	    	    $(this).removeClass("on");
+	    	    
+	    	    var hrefTemp = $(this).find("a").attr("href");
+	    	    var gubunparamTemp = $(this).find("a").attr("gubunparam");
+	    	    
+	    	    
+	    	    var tabCheckYn = false;
+	    	    if(gubunparamTemp != undefined && gubunparamTemp != ''){
+	    	    	
+	    	    	var tabsnoTemp = $(this).find("a").attr("tabsno"); // tabs
+	    	    	var paramIndx = currUrl.lastIndexOf("=") + 1;		// 해당 tab index
+	    	    	var tempTabNo = currUrl.substring(paramIndx);		// 해당 tab no
+
+	    	    	var tabsnoTempArr = tabsnoTemp.split(",");
+	    	    	
+	    	    	// url이 속하고, tab no가 속하는 경우.
+	    	    	if(hrefTemp.indexOf(location.pathname) > -1 && $.inArray(tempTabNo, tabsnoTempArr) > -1){
+	    	    		tabCheckYn = true;
+	    	    	}
+	    	    }
+	    	    
+	    	    
+	    	    if((currUrl == hrefTemp || currUrl.indexOf(hrefTemp) > -1)         || tabCheckYn) { 
+	    			
+	    			// 상단메뉴
+	    			var topMenuId = $(this).closest("div").attr("id");
+	    			
+					
+	    			$("[data-id='#"+topMenuId+"']").trigger("click");
+	    			$("[data-id='#"+topMenuId+"']").closest("li").addClass("on");
+	    			
+	    			// 선택메뉴
+					$(this).siblings().removeClass("on");
+	    			$(this).addClass("on"); 
+	    			
+	    			$(".path-menu.depth02 a.path-menu-tit").html($(this).text());
+	    			
+	    			return ;
+	    		}
+	    		else {
+	    			$(this).removeClass("on");
+	    		}
+	    	});
+	    	**/
+	    	
+
+	    	
+
+	    	depthControl2("01","01");
+			
+	    	$('#pathFormTabs a').on('click', function(){
+		    	var data_id = $(this).attr("data-id");
+	    		depthControl2(data_id.substr(data_id.length - 2,2));
+	    	});
+	    	 
+	    	$("#depth2_01, #depth2_02, #depth2_03 ").on("change",function(){
+	 			depthControl3($(this).val(),$(this).attr("id").split("_")[1]);
+	 		});
+
+	    	$("#depth3_01, #depth3_02, #depth3_03 ").on("change",function(){
+		 		$("#depth3").val($(this).val());
+		 	});
+
+		 	$("#detail01Btn, #detail02Btn, #detail03Btn").click("",function(){
+				$('#fastSearchForm').submit();
+			 });
+	    	
+	    });
+	    
+		function selectDepth2(selectedText){
+	    	
+			var ongnbid = $("#gnb li.on a").data("id");
+
+	    	var menuIdx = ongnbid.substr(10);
+
+	    	$("[data-id='#pathDepth"+menuIdx+"']").trigger("click");
+	    	
+	    	var h3name = selectedText;
+	    	
+	    	
+			$("[id=pathDepth"+menuIdx+"] ul li").each(function(){
+	    	    var selectName = $.trim($(this).find("a").text()) ;     	    
+	    	    
+	    	    $(this).removeClass("on");
+	    	    if(h3name == selectName){
+	    	        $(this).siblings().removeClass("on");
+	    	        $(this).addClass("on");
+	    	        $(".path-menu.depth02 a.path-menu-tit").html(h3name);
+	    	    }
+	    	});
+		}
+		
+		function fn_addSelectMenuClass() {
+	    	// 메뉴 addClass.
+	    	$(".gnb-sub-list .menuList>ul>li").each(function(){
+	    	    
+	    		var currUrl = location.pathname;
+	    		
+	    		var currSearch = location.search;
+	    	    
+	    		var hrefUrl = ($(this).find("a").attr("href")).split("?");
+	    		
+	    		var gubunparam = $(this).find("a").attr("gubunparam");
+	    		
+	    		var tabsno = $(this).find("a").attr("tabsno");
+	    		
+	    		var selectMenuOn = false;
+	    		
+	    		var selectParamOn = false;
+	    		
+	    		if(currUrl == hrefUrl[0]){
+	    			selectMenuOn = true;
+	    		}
+
+	    		if(gubunparam && tabsno){
+	    			var paramMenus = []; 
+	    			paramMenus = currSearch.split("&");
+	    			
+	    			$.each(paramMenus, function(idx, item){
+						// 조합 가능 파라미터.
+						var tabsnoarr = tabsno.split(",");
+						$.each(tabsnoarr, function(idxsub, itemsub){
+							var tmp = gubunparam +"="+ itemsub;
+							if(tmp == item.replace("?","")){
+		    					selectParamOn = true;
+		    					return;
+		    				}
+						});
+	    			});
+	    		}
+	    		else if(hrefUrl.length > 1){
+	    			if(currSearch != undefined){
+	    				var paramMenus = []; 
+		    			paramMenus = currSearch.split("&");
+		    			$.each(paramMenus, function(idx, item){
+							// 조합 가능 파라미터.
+							if(hrefUrl[1] == item.replace("?","")){
+		    					selectParamOn = true;
+		    					return;
+		    				}
+		    			});
+	    			}
+	    		}
+	    		else {
+	    			selectParamOn = true;
+	    		}
+	    		
+	    		//if(currUrl == $(this).find("a").attr("href")) { 
+	    		if(selectMenuOn && selectParamOn) {	
+	    			// 선택메뉴
+	    			$(this).addClass("on"); 
+	    			// 상단메뉴
+	    			var topMenuId = $(this).closest(".gnb-detail-con").attr("id");
+	    			$("[data-id='#"+topMenuId+"']").closest("li").addClass("on");
+	    			
+	    			selectDepth2($.trim($(this).find("a").text()));
+	    			return ;
+	    		}
+	    	});
+		}
+		
+		// 상단 select box 선택.
+/* 		$(window).on("load", function(){
+	    	// section name 
+	    	var h3name = $.trim($("section h3").text());
+	    	
+	    	// selected 
+	    	$("[id^=pathDepth] ul li").each(function(){
+	    		
+	    	    var selectName = $.trim($(this).find("a").text()) ; 
+	    	    
+	    	    $(this).removeClass("on");
+	    	    
+	    	    
+	    	    if(h3name == selectName){
+	    	    	
+	    	        // 상단메뉴
+	    		    var topMenuId = $(this).closest("div").attr("id");
+
+	    	        $("[data-id='#"+topMenuId+"']").trigger("click");
+	    		    $("[data-id='#"+topMenuId+"']").closest("li").addClass("on");
+	    		    
+	    	        $(this).siblings().removeClass("on");
+	    	        $(this).addClass("on");
+	    	        $(".path-menu.depth02 a.path-menu-tit").html(h3name);
+	    	    }
+	    	});
+		}); */
+		
+		$(window).on("load", function(){
+	/*     	var ongnbid = $("#gnb li.on a").data("id");
+
+	    	var menuIdx = ongnbid.substr(10);
+
+	    	$("[data-id='#pathDepth"+menuIdx+"']").trigger("click");
+	    	
+	    	var h3name = $.trim($("section h3").text());
+	    	
+			$("[id=pathDepth"+menuIdx+"] ul li").each(function(){
+	    	    var selectName = $.trim($(this).find("a").text()) ; 
+	    	    $(this).removeClass("on");
+	    	    if(h3name == selectName){
+	    	        $(this).siblings().removeClass("on");
+	    	        $(this).addClass("on");
+	    	        $(".path-menu.depth02 a.path-menu-tit").html(h3name);
+	    	    }
+	    	}); */
+		});
+		
+
+	</script>
+	
+	<!-- 화면 확대/축소 -->
+	<script>
+		var scale = 1;
+		function setCookie(name, value){
+			document.cookie = name + "=" + encodeURIComponent(value) + "; path=/";
+		}
+				
+		function getCookie(name){
+			try{
+				var nameEQ = name + "=";
+				var ca     = document.cookie.split(";");
+				for (var i in ca){
+					var c = ca[i].trim();
+					if (c.indexOf(nameEQ) ===0) return decodeURIComponent(c.substring(nameEQ.length));
+				}
+			} catch(error){
+				return NaN;
+			}
+		}
+		function zoom_change(ORI){
+			scale = isNaN(getCookie("scale")) ? 1 : parseFloat(getCookie("scale"));
+			scale = ORI != 'R' && ORI=="I"? scale *= 1.2 : scale /= 1.2;
+			if (ORI == 'R')scale = 1;
+			if (scale<0.57)scale = 0.57;
+			if (scale>1.7)scale = 1.7;
+			setCookie("scale",scale);
+			zoom();		
+		}		
+		
+		function zoom(){
+			scale = isNaN(getCookie("scale")) ? 1 : parseFloat(getCookie("scale"));
+			document.body.style.zoom = scale; 
+			
+			document.body.style.webKitTransform = 'scale('+scale+')'; // Webkit 
+			
+			document.body.style.webKitTransformOrigin = '0 0';
+			
+			document.body.style.MozTransform = 'scale('+scale+')'; // Mozilla(firefox)
+			
+			document.body.style.MozTransformOrigin = '0 0';
+			
+			document.body.style.OTransform = 'scale('+scale+')'; // Opera
+				
+			document.body.style.OTransformOrigin = '0 0';
+		}
+		
+		// 통합검색 처리
+		function fn_totalSearch() {
+			$('#keywordFrm').attr("action", "/portal/common/totalSearch");
+			$('#keywordFrm').submit();
+		}
+	</script>
+	
+<script id="template2depth" type="text/x-jsrender">
+{{if #data == "01"}}
+<option value="01" selected>카드대출∙리볼빙 금리 한눈에 보기</option>
+<option value="02">- 카드대출∙리볼빙 신용점수별 금리</option>
+{{else #data == "02"}}
+<option value="07" selected>- 현금서비스</option>
+<option value="08">중금리대출 운영현황</option>
+{{else #data == "03"}}
+<option value="03" selected>주택할부</option>
+<option value="04">가전할부</option>
+<option value="05">기계류할부</option>
+<option value="06">기타할부</option>
+{{/if}}
+</script>
+<script id="template3depth" type="text/x-jsrender">
+<option value="{{:mcSeq}}">{{:mcCompany}}</option>
+</script>		
+</head>
+
+<body>
+  <div id="wrap">
+
+    <!-- 상단 퀵 메뉴 -->
+    <div class="quick-nav">
+      <ul>
+		<li class="search_btn">
+		     <form id="keywordFrm" name="keywordFrm" method="get">
+		         <input type="text" name="searchWord" id="searchWord" placeholder="검색어를 입력해주세요." maxlength="100" onkeypress="if(event.keyCode==13) {fn_totalSearch(1); return false;}">
+		         <button type="button" id="keywordBtn" onclick="fn_totalSearch();">
+		            <img src="/static/img/layout/hd_search_ic.svg" alt="검색">
+		        </button>
+		    </form>
+		</li>
+		<li><a href="javascript:void(0);" onclick="zoom_change('O')"style="display:block; margin-right:-22px; width:24px; text-align:center;font-size:20px;">-</a></li>
+      	<li><a href="javascript:void(0);" onclick="zoom_change('R')">글자크기</a></li>
+      	<li><a href="javascript:void(0);" onclick="zoom_change('I')"style="display:block; margin-left:-22px; width:24px; text-align:center;font-size:20px;">+</a></li>
+        <li><a href="/">HOME</a></li>
+        
+        
+        <li><a href="javascript:void(0);" onClick="loginOn();">직원회원사PLAZA</a></li>
+        
+        <li><a href="/siteMap"><span></span><span class="sr-only">사이트 맵 바로가기</span></a></li>
+      </ul>
+    </div>
+
+    
+
+    <!-- 헤더 영역 -->
+    
+
+
+
+
+
+
+<!-- 헤더 영역 -->
+    <header>
+
+      <h1><a href="/"><img src="/assets/portal/images/common/logo.jpg" alt="여신금융협회 공시정보포털 로고"></a></h1>
+
+      
+
+
+
+
+
+	<ul id="gnb">
+        <li><a href="javascript:void(0);" data-id="#gnbDetail01">금융상품정보</a></li>
+        <li class=""><a href="javascript:void(0);" data-id="#gnbDetail02">신용카드상품 비교공시</a></li>
+        <li><a href="javascript:void(0);" data-id="#gnbDetail03">리스할부상품 비교공시</a></li>
+        <li><a href="javascript:void(0);" data-id="#gnbDetail04">신용대출상품 비교공시</a></li>
+        <li><a href="javascript:void(0);" data-id="#gnbDetail05">경영공시</a></li>
+        <li><a href="javascript:void(0);" data-id="#gnbDetail06">지배구조공시</a></li>
+        <li><a href="javascript:void(0);" data-id="#gnbDetail07">소비자공시</a></li>
+        <li><a href="javascript:void(0);" data-id="#gnbDetail08">금융소비자정보</a></li>
+      </ul>
+
+      <div id="gnbDetail">
+
+        <div class="gnb-detail-con" id="gnbDetail01">
+          <div class="gnb-main">
+            <div>
+              <h3>금융상품정보</h3>
+              <p>카드상품(신용∙체크카드), 카드대출상품, 리스할부상품, 신용대출<br>상품별 특징과 주요사항에 대한 설명을 담고 있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+          	<div class="pathDepth01 menuList">
+	            <ul>
+	              <li><a href="/portal/financialProdInfo/cardProd">카드상품</a></li>
+	              <li><a href="/portal/financialProdInfo/cardLendingProd">카드대출상품</a></li>
+	              <li><a href="/portal/financialProdInfo/leaseProd">리스할부상품</a></li>
+	              <li><a href="/portal/financialProdInfo/creditLendingProd">신용대출상품</a></li>
+	              <li><a href="/portal/financialProdInfo/finanGlossary">용어정리 및 해설</a></li>
+	            </ul>
+	            <ul>
+	              <li><a href="/portal/faq/faqList">주요 FAQ</a></li>
+	            </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="gnb-detail-con" id="gnbDetail02">
+          <div class="gnb-main">
+            <div>
+              <h3>신용카드상품 공시</h3>
+              <p>금융소비자가 신용카드상품을 이해하고 선택하는데 유용한 정보를 제공하기 위한 금리, 수수료율 및 카드 이용현황 등의 정보를 담고<br> 있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+		     <div class="pathDepth02 menuList">	             
+	             <ul>
+	             <li><a href="/portal/creditcard/creditcardDisclosureDetail31?cgcMode=31" gubunparam="cgcMode" tabsno="31,">카드대출∙리볼빙 금리 한눈에 보기</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail20?cgcMode=20" gubunparam="cgcMode" tabsno="20,25,">카드대출∙리볼빙 신용점수별 금리</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail20?cgcMode=20" gubunparam="cgcMode" tabsno="20,25,">&emsp;- 현금서비스</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail32?cgcMode=28" gubunparam="cgcMode" tabsno="28,29,">&emsp;- 카드론</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail30?cgcMode=30" gubunparam="cgcMode" tabsno="30,">&emsp;- 결제성리볼빙</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail2?cgcMode=2">상품별 수수료율</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail2?cgcMode=2">&emsp;- 신용카드상품별 수수료율(최저~최고)</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail3?cgcMode=3" gubunparam="cgcMode" tabsno="3,4,">&emsp;- 분기별 수수료등 수입비율</a></li>
+	              </ul>
+	             <ul>
+				  <li><a href="/portal/creditcard/creditcardDisclosureDetail1?cgcMode=1">신용카드회원 분포현황</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail1?cgcMode=1">&emsp;- 회원 등급별 분포현황</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail7?cgcMode=6" gubunparam="cgcMode" tabsno="6,7,8,9,">&emsp;- 적용금리대별 회원분포현황</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail10?cgcMode=10" gubunparam="cgcMode" tabsno="10,11,">신용∙체크카드 이용현황</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail22?cgcMode=22" gubunparam="cgcMode" tabsno="22,23,">채무면제∙유예상품</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail11?cgcMode=11" gubunparam="cgcMode" tabsno="11,12,13,14,">가맹점 수수료율</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail15?cgcMode=15">대형가맹점 명단</a></li>
+	            </ul>
+	         </div>
+          </div>
+        </div>
+
+        <div class="gnb-detail-con" id="gnbDetail03">
+          <div class="gnb-main">
+            <div>
+              <h3>리스할부상품 공시</h3>
+              <p>금융소비자가 리스할부상품을 이해하고 선택하는데 유용한 정보를 제공하기 위한 자동차리스 및 자동차/주택/가전/기계류할부 등의<br> 정보를 담고 있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+            <div class="pathDepth03 menuList">
+	            <ul>
+	              <li><a href="/portal/quota/quotaFinancingDisclosureDetail1?ifgcMode=1" gubunparam="ifgcMode" tabsno="1,2,13,99,">자동차할부</a></li>
+	              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=5">주택할부</a></li>
+	              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=3">가전할부</a></li>
+	              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=6">기계류할부</a></li>
+	              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=7">기타할부</a></li>
+	            </ul>
+	            <ul>
+	              <li><a href="/portal/quota/quotaFinancingDisclosureDetail60?ifgcMode=60">자동차리스</a></li>
+	            </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="gnb-detail-con" id="gnbDetail04">
+          <div class="gnb-main">
+            <div>
+              <h3>신용대출상품 공시</h3>
+              <p>금융소비자가 신용대출상품을 이해하고 선택하는데 유용한 정보를 제공하기 위한 신용점수별 평균금리, 중금리 신용대출 현황 등의<br> 정보를 담고있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+            <div class="pathDepth04 menuList">
+	            <ul>
+	              <li><a href="/portal/creditloan/creditloanDisclosureDetail11">신용점수별 평균금리현황</a></li>
+	              <li><a href="/portal/creditloan/creditloanDisclosureDetail2">적용금리대별 회원분포현황</a></li>
+	              <li><a href="/portal/creditloan/creditloanDisclosureDetail12?clgcMode=13" gubunparam="clgcMode" tabsno="13,12,14,">중금리 신용대출 현황</a></li>
+	            </ul>
+	         </div>
+          </div>
+        </div>
+
+        <div class="gnb-detail-con" id="gnbDetail05">
+          <div class="gnb-main">
+            <div>
+              <h3>경영공시</h3>
+              <p>책임경영체계 확립 및 경영의 투명성 제고를 위해 「여신전문금융<br>회사 통일경영공시 기준」에 따라 여신금융회사의 경영상황 관련<br> 주요 정보에 대한 공시사항을 담고 있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+          	<div class="pathDepth05 menuList">
+	            <ul>
+	              <!--<li><a href="/portal/membership/membershipDisclosure?mcMemberCompanyType=1">신용카드사</a></li>
+	              <li><a href="/portal/membership/membershipDisclosure?mcMemberCompanyType=2">리스할부사</a></li>
+	              <li><a href="/portal/membership/membershipDisclosure?mcMemberCompanyType=4">신기술금융사</a></li>-->
+	              <li><a href="/portal/membership/membershipDisclosure2?companyType=1">신용카드사</a></li>
+	              <li><a href="/portal/membership/membershipDisclosure2?companyType=2">리스할부사</a></li>
+	              <li><a href="/portal/membership/membershipDisclosure2?companyType=4">신기술금융사</a></li>
+	            </ul>
+	        </div>
+          </div>
+        </div>
+
+        <div class="gnb-detail-con" id="gnbDetail06">
+          <div class="gnb-main">
+            <div>
+              <h3>지배구조공시</h3>
+              <p>책임경영체계 확립 및 경영의 투명성 제고를 위해 「금융회사의<br> 지배 구조에 관한 법률」등에 따라 여신금융회사의 지배구조 관련<br> 주요정보에 대한 공시사항을 담고 있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+           	<div class="pathDepth06 menuList">
+	            <ul>
+	              <li><a href="/portal/governance/governanceDisclosure1">신용카드사</a></li>
+	              <li><a href="/portal/governance/governanceDisclosure2">리스할부사</a></li>
+	              <li><a href="/portal/governance/governanceDisclosure3">신기술금융사</a></li>
+	            </ul>
+	        </div>
+          </div>
+        </div>
+
+        <div class="gnb-detail-con" id="gnbDetail07">
+          <div class="gnb-main">
+            <div>
+              <h3>소비자공시</h3>
+              <p>금융소비자 권익보호를 위한 신용카드사 민원 건수, 여신금융회사의 분쟁중 소제기 건수 등 소비자 관련 공시사항을 담고 있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+            <div class="pathDepth07 menuList">
+	            <ul>
+	              <li><a href="/portal/dispute/disputeCurrentStateDetail1?udgcMode=1">분쟁중 소제기현황</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail24?cgcMode=24">여신금융회사 민원건수</a></li>
+	              <li><a href="/portal/creditcard/creditcardDisclosureDetail27?cgcMode=27">금융소비자보호 실태평가</a></li>
+	              <li><a href="/portal/interest/interestRateDetail1?rccMode=1">금리인하요구권 운영현황</a></li>
+	              <li><a href="/portal/loanpif/rpayDetail?cgcMode=36">대출∙할부금융 상품 중도상환수수료율</a></li>
+	              <li><a href="/portal/indvBizLoan/indvBizLoanSearch">개인사업자대출상품 비교공시</a></li>
+	            </ul>
+	         </div>
+          </div>
+        </div>
+
+        <div class="gnb-detail-con" id="gnbDetail08">
+          <div class="gnb-main">
+            <div>
+              <h3>금융소비자정보</h3>
+              <p>금융소비자가 유용하게 활용할 수 있는 여신금융업권의 주요 서비스 <br>관련 사항을 담고 있습니다.</p>
+            </div>
+          </div>
+          <div class="gnb-sub-list">
+            <div class="pathDepth08 menuList">
+	            <ul>
+	              <li><a href="/portal/financialConInfo/branchCards">가맹점 카드매출 조회</a></li>
+	              <li><a href="/portal/financialConInfo/cardPoint">카드포인트 통합조회</a></li>
+	              <li><a href="/portal/financialConInfo/cardLoanRec?tabGb=01" gubunparam="tabGb" tabsno="01,02,">신용카드∙대출모집인</a></li>
+	              <!-- <li><a href="/portal/financialConInfo/cardLoanRec?tabGb=02">대출 모집인</a></li> -->
+	              <li><a href="/portal/financialConInfo/reportLostCards">신용카드분실일괄신고</a></li>
+	              <li><a href="/portal/financialConInfo/heirFinancial">상속인 금융거래 조회</a></li>
+	            </ul>
+	            <ul>
+	              <li><a href="/portal/financialConInfo/finanEdu">금융교육</a></li>
+	              <li><a href="/portal/financialConInfo/cardsPackage">내카드 한눈에</a></li>
+	              <li><a href="/portal/carddamoa/carddamoaList">카드다모아</a></li>
+	              <li><a href="/portal/reference/referenceList">자료실</a></li>
+	              <li><a href="/portal/site/consumerCorner">소비자코너</a></li>
+	            </ul>
+	        </div>
+          </div>
+        </div>
+
+        <div class="bg"></div>
+      </div>
+      
+<script>
+selectPortalMenu();
+function selectPortalMenu(){
+	var params = {};
+	$.ajax({
+		url: "/portal/common/selectPortalMenu",
+		type: "GET",
+		dataType: "JSON",
+		data: params,
+		success : function(data){
+			var menuList = data.menuList;
+			var menuHtml = "<ul>";
+			var pthId = "pathDepth01";
+			for (var i in menuList){
+				var memuInfo = menuList[i];
+				if (pthId == memuInfo.pthId){
+					var ulStr = "";
+					if (memuInfo.ulYn == 'Y' ){ulStr = "</ul><ul>";}
+					var gubunparam = memuInfo.gubunParam==null||memuInfo.gubunParam==undefined?"":"' gubunparam='"+memuInfo.gubunParam;
+					var tabsno = memuInfo.tabSno==null||memuInfo.tabSno==undefined?"":"' tabsno='"+memuInfo.tabSno;
+					menuHtml += ulStr+"<li><a href='"+memuInfo.menuPth+gubunparam+tabsno+"'>"+memuInfo.menuNm+"</a></li>";
+					ulStr = "";
+				}
+				if (pthId != memuInfo.pthId){
+					menuHtml += "</ul>"
+					$("."+pthId).html(menuHtml);
+					pthId = memuInfo.pthId;
+					menuHtml ="<ul>";
+					var gubunparam = memuInfo.gubunParam==null||memuInfo.gubunParam==undefined?"":"' gubunparam='"+memuInfo.gubunParam;
+					var tabsno = memuInfo.tabSno==null||memuInfo.tabSno==undefined?"":"' tabsno='"+memuInfo.tabSno;
+					menuHtml += ulStr+"<li><a href='"+memuInfo.menuPth+gubunparam+tabsno+"'>"+memuInfo.menuNm+"</a></li>";
+				}
+			}
+			if (pthId != "")$("."+pthId).html(menuHtml);
+			
+			// 메뉴 addClass.
+			if( typeof fn_addSelectMenuClass === "function" ){
+				fn_addSelectMenuClass();
+			}
+		}
+	});
+}	
+</script>
+
+    </header>
+
+
+<!-- 서브페이지 카테고리 및 퀵서치 영역 -->
+    <div id="path">
+
+      <div class="path-con">
+
+        <div class="path-menu depth01">
+          <a href="javascript:void(0);" class="path-menu-tit"></a>
+          <ul>
+            <li class="on"><a href="javascript:void(0);" data-id="#pathDepth01">금융상품정보</a></li>
+            <li><a href="javascript:void(0);" data-id="#pathDepth02">신용카드상품 비교공시</a></li>
+            <li><a href="javascript:void(0);" data-id="#pathDepth03">리스할부상품 비교공시</a></li>
+            <li><a href="javascript:void(0);" data-id="#pathDepth04">신용대출상품 비교공시</a></li>
+            <li><a href="javascript:void(0);" data-id="#pathDepth05">경영공시</a></li>
+            <li><a href="javascript:void(0);" data-id="#pathDepth06">지배구조공시</a></li>
+            <li><a href="javascript:void(0);" data-id="#pathDepth07">소비자공시</a></li>
+            <li><a href="javascript:void(0);" data-id="#pathDepth08">금융소비자정보</a></li>
+          </ul>
+        </div>
+
+        <div class="path-menu depth02">
+
+          <a href="javascript:void(0);" class="path-menu-tit"></a>
+
+          <div id="pathDepth01" class="act">
+            <ul>
+              <li class="on"><a href="/portal/financialProdInfo/cardProd">카드상품</a></li>
+              <li><a href="/portal/financialProdInfo/cardLendingProd">카드대출상품</a></li>
+              <li><a href="/portal/financialProdInfo/leaseProd">리스할부상품</a></li>
+              <li><a href="/portal/financialProdInfo/creditLendingProd">신용대출상품</a></li>
+              <li><a href="/portal/financialProdInfo/finanGlossary">용어정리 및 해설</a></li>
+              <li><a href="/portal/faq/faqList">주요 FAQ</a></li>
+            </ul>
+          </div>
+
+          <div id="pathDepth02">
+            <ul>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail31?cgcMode=31" gubunparam="cgcMode" tabsno="31,">카드대출∙리볼빙 금리 한눈에 보기</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail20?cgcMode=20" gubunparam="cgcMode" tabsno="20,25,">카드대출∙리볼빙 신용점수별 금리</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail20?cgcMode=20" gubunparam="cgcMode" tabsno="20,25,">&emsp;- 현금서비스</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail32?cgcMode=28" gubunparam="cgcMode" tabsno="28,29,">&emsp;- 카드론</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail30?cgcMode=30" gubunparam="cgcMode" tabsno="30,">&emsp;- 결제성리볼빙</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail2?cgcMode=2">상품별 수수료율</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail2?cgcMode=2">&emsp;- 신용카드상품별 수수료율(최저~최고)</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail3?cgcMode=3" gubunparam="cgcMode" tabsno="3,4,">&emsp;- 분기별 수수료등 수입비율</a></li>
+			  <li><a href="/portal/creditcard/creditcardDisclosureDetail1?cgcMode=1">신용카드회원 분포현황</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail1?cgcMode=1">&emsp;- 회원 등급별 분포현황</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail7?cgcMode=6" gubunparam="cgcMode" tabsno="6,7,8,9,">&emsp;- 적용금리대별 회원분포현황</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail10?cgcMode=10" gubunparam="cgcMode" tabsno="10,11,">신용∙체크카드 이용현황</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail22?cgcMode=22" gubunparam="cgcMode" tabsno="22,23,">채무면제∙유예상품</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail11?cgcMode=11" gubunparam="cgcMode" tabsno="11,12,13,14,">가맹점 수수료율</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail15?cgcMode=15">대형가맹점 명단</a></li>
+            </ul>
+          </div>
+
+          <div id="pathDepth03">
+            <ul>
+              <li><a href="/portal/quota/quotaFinancingDisclosureDetail1?ifgcMode=1" gubunparam="ifgcMode" tabsno="1,2,13,99,">자동차할부</a></li>
+              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=5">주택할부</a></li>
+              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=3">가전할부</a></li>
+              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=6">기계류할부</a></li>
+              <li><a href="/portal/quota/quotaFinancingDisclosureDetail?ifgcMode=7">기타할부</a></li>
+              <li><a href="/portal/quota/quotaFinancingDisclosureDetail60?ifgcMode=60">자동차리스</a></li>
+            </ul>
+          </div>
+
+          <div id="pathDepth04">
+            <ul>
+              <li><a href="/portal/creditloan/creditloanDisclosureDetail11">신용점수별 평균금리현황</a></li>
+              <li><a href="/portal/creditloan/creditloanDisclosureDetail2">적용금리대별 회원분포현황</a></li>
+              <li><a href="/portal/creditloan/creditloanDisclosureDetail12?clgcMode=13" gubunparam="clgcMode" tabsno="13,12,14,">중금리 신용대출 현황</a></li>
+            </ul>
+          </div>
+
+          <div id="pathDepth05">
+            <ul>
+              <!--<li><a href="/portal/membership/membershipDisclosure?mcMemberCompanyType=1">신용카드사</a></li>
+              <li><a href="/portal/membership/membershipDisclosure?mcMemberCompanyType=2">리스할부사</a></li>
+              <li><a href="/portal/membership/membershipDisclosure?mcMemberCompanyType=4">신기술금융사</a></li>-->
+              <li><a href="/portal/membership/membershipDisclosure2?companyType=1">신용카드사</a></li>
+              <li><a href="/portal/membership/membershipDisclosure2?companyType=2">리스할부사</a></li>
+              <li><a href="/portal/membership/membershipDisclosure2?companyType=4">신기술금융사</a></li>
+            </ul>
+          </div>
+
+          <div id="pathDepth06">
+            <ul>
+              <li><a href="/portal/governance/governanceDisclosure1">신용카드사</a></li>
+              <li><a href="/portal/governance/governanceDisclosure2">리스할부사</a></li>
+              <li><a href="/portal/governance/governanceDisclosure3">신기술금융사</a></li>
+            </ul>
+          </div>
+
+          <div id="pathDepth07">
+            <ul>
+              <li><a href="/portal/dispute/disputeCurrentStateDetail1?udgcMode=1">분쟁중 소제기현황</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail24?cgcMode=24">여신금융회사 민원건수</a></li>
+              <li><a href="/portal/creditcard/creditcardDisclosureDetail27?cgcMode=27">금융소비자보호 실태평가</a></li>
+              <li><a href="/portal/interest/interestRateDetail1?rccMode=1">금리인하요구권 운영현황</a></li>
+              <li><a href="/portal/loanpif/rpayDetail?cgcMode=36">대출∙할부금융 상품 중도상환수수료율</a></li>
+              <li><a href="/portal/indvBizLoan/indvBizLoanSearch">개인사업자대출상품 비교공시</a></li>
+            </ul>
+          </div>
+
+          <div id="pathDepth08">
+            <ul>
+              <li><a href="/portal/financialConInfo/branchCards">가맹점 카드매출 조회</a></li>
+              <li><a href="/portal/financialConInfo/cardPoint">카드포인트 통합조회</a></li>
+              <li><a href="/portal/financialConInfo/cardLoanRec?tabGb=01" gubunparam="tabGb" tabsno="01,02,">신용카드∙대출모집인</a></li>
+              <!-- <li><a href="/portal/financialConInfo/cardLoanRec?tabGb=02">대출 모집인</a></li> -->
+              <li><a href="/portal/financialConInfo/reportLostCards">신용카드분실일괄신고</a></li>
+              <li><a href="/portal/financialConInfo/heirFinancial">상속인 금융거래 조회</a></li>
+              <li><a href="/portal/financialConInfo/finanEdu">금융교육</a></li>
+              <li><a href="/portal/financialConInfo/cardsPackage">내카드 한눈에</a></li>
+              <li><a href="/portal/carddamoa/carddamoaList">카드다모아</a></li>
+              <li><a href="/portal/reference/referenceList">자료실</a></li>
+              <li><a href="/portal/site/consumerCorner">소비자코너</a></li>
+            </ul>
+          </div>
+        </div>
+
+		<div class="path-menu depth03" align="right">
+			<button type="button" id="compareGongsi" onclick="comparePopupOpen()"style="margin-right:20px; display:none"><a>공시비교</a></button>
+			<button type="button" id="zoomIn" style="margin-right:-5px;"><a><i style="font-size:18px;">&#8853;</i> 확대</a></button>
+			<button type="button" id="zoomOut" style="margin-right:15px;"><a><i style="font-size:18px;">&#8854;</i> 축소</a></button>
+		</div>
+		
+        <div class="path-form">
+          <a href="javascript:void(0);" id="pathSearchBtn">상품공시 빠른 검색</a>
+        </div>
+      </div>
+
+      <div class="path-form-act" id="pathFormDetail">
+        <form name="fastSearchForm" action="">
+          <h5>상품공시 빠른 검색</h5>
+          <ul id="pathFormTabs">
+            <li class="on" style="width:33%"><a href="javascript:void(0);" data-id="#formDetail01">신용카드</a></li>
+            <li style="width:33%"><a href="javascript:void(0);" data-id="#formDetail02">리스ㆍ할부</a></li>
+            <li style="width:33%"><a href="javascript:void(0);" data-id="#formDetail03">신용대출</a></li>
+            <!-- <li><a href="javascript:void(0);" data-id="#formDetail04">금리/수수료</a></li> -->
+          </ul>
+
+          <div id="formDetail01" class="quick-form-con on">
+            <select name="depth2_01" id="depth2_01">
+              <option value="01">상품별 수수료율</option>
+			  <option value="02">현금서비스 신용점수별 수수료율</option>
+			  <option value="03">카드론 신용점수별 수수료율</option>
+			  <option value="04">휴면 신용카드 수 및 비중</option>
+			  <option value="05">체크카드 발급실적 및 이용현황</option>
+            </select>
+            <select name="depth3_01" id="depth3_01">
+            </select>
+            <button type="button" id="detail01Btn"><span class="sr-only">제출하기</span></button>
+          </div>
+
+          <div id="formDetail02" class="quick-form-con">
+            <select name="depth2_02" id="depth2_02">
+              <option value="06" selected>자동차 할부</option>
+			  <option value="07">주택할부</option>
+			  <option value="08">가전할부</option>
+			  <option value="09">기계류할부</option>
+			  <option value="10">자동차 리스</option>
+            </select>
+            <select name="depth3_02" id="depth3_02">
+            </select>
+            <button type="button" id="detail02Btn"><span class="sr-only">제출하기</span></button>
+          </div>
+
+          <div id="formDetail03" class="quick-form-con">
+            <select name="depth2_03" id="depth2_03">
+              <option value="11" selected>신용점수별 평균금리 현황</option>
+			  <option value="12">중금리 대출상품 운영현황</option>
+			  <option value="13">중금리 대출상품 연간 운영 현황</option>
+            </select>
+            <select name="depth3_03" id="depth3_03">
+            </select>
+            <button type="button" id="detail03Btn"><span class="sr-only">제출하기</span></button>
+          </div>
+
+          <!-- <div id="formDetail04" class="quick-form-con">
+            <select class="" name="">
+              <option value="">금리/수수료</option>
+              <option value="">금리</option>
+              <option value="">수수료</option>
+            </select>
+            <select name="" id="">
+              <option value=""> ~ 2%</option>
+              <option value="">2 ~ 5%</option>
+              <option value="">5 ~ 8%</option>
+              <option value="">8% ~</option>
+            </select>
+            <button type="submit"><span class="sr-only">제출하기</span></button>
+          </div> -->
+		</form>
+        
+        <div class="bg"></div>
+      </div>
+		<form id="fastSearchForm">
+			<input type="hidden" name="cgcMode" id="headerCgcMode"/>
+            <input type="hidden" name="ifgcMode" id="headerIfgcMode"/>
+            <input type="hidden" name="clgcMode" id="headerClgcMode"/>
+            <input type="hidden" name="depth3" id="depth3"/>
+		</form>
+    </div>
+
+	<!-- 화면 확대/축소 -->
+	<script>
+		var gongsiType = "P";
+		$(function(){
+			
+			$("#zoomIn").click(function(){
+				updateZoom(0.1);
+			});
+			
+			$("#zoomOut").click(function(){
+				updateZoom(-0.1);
+			});
+			
+			zoomLevel = 1;
+			
+			var updateZoom = function(zoom){
+				zoomLevel += zoom;
+				$("#container, #container1, #container2, #container3, #container4").css({ zoom : zoomLevel, '-moz-transform':'scale(' + zoomLevel + ')'});
+// 				$("#container, #container1, #container2, #container3, #container4").css({ zoom : zoomLevel, '-ms-transform':'scale(' + zoomLevel + ')'});
+			}
+			
+		});
+		/* 2026.03.27 추가 - 비교 공시 팝업 시작 */
+		var pop;
+		function comparePopupOpen(){
+			var basUrl = '/common/';
+			var callPageNm = $("#callPageNm").val();
+			cfn_comPopup('about:blank', 'popUp', '1200', '800', 'yes');
+			var url = basUrl+callPageNm;
+			cfn_comFrm('comparePopupFrm', url, 'popUp', 'post');
+			pop= window.open("","popUp");
+
+		}
+		function closePopup(){
+			if(pop && !pop.closed){
+				pop.close();
+				pop=null;
+			}
+		}
+		$(document).on("click",".tab-con li a", function() {
+			closePopup();
+		});
+		$(document).on("click",".tab-con li a span", function() {
+			closePopup();
+		});
+		/* 2026.03.27 추가 - 비교 공시 팝업 종료 */
+
+	</script>
+
+    
+    
+     <!-- 컨텐츠 영역 -->
+    <!-- <section id="container" class="con-sub" style="height: 1600px;"> -->
+		
+		<!-- 컨텐츠 영역 -->
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- beadnet.20190604 -->
+
+
+
+
+<!-- beadnet.20190604 -->
+
+
+
+
+
+
+<!-- 이용시 유의사항 -->
+<input type="hidden" name="progrmId" id="progrmId" value="PAN0000000086" />
+
+<!-- 자동차 중고 금융상품  적용금리대별 분포현황 - 유의사항 확인 여부 -->
+<input type="hidden" name="ifgcMode13CkYn" id="ifgcMode13CkYn" value="N" />
+
+<!-- 법정최고금리(24->20) 변경으로 인한 게시일  -->
+<input type="hidden" name="oriIfgcPubDate" id="oriIfgcPubDate" value="" />
+
+<section id="container" class="con-sub lease-cars tab01">
+
+	<h3>자동차할부</h3>
+
+    <!-- 상단 탭 메뉴 영역 -->
+    <ul class="tab-con">
+    	<li><a href="#!" id="tab1" onclick="javascript:fn_showTab('1');" class="on">자동차 신차 금융상품</a></li>
+		<li><a href="#!" id="tab2" onclick="javascript:fn_showTab('2');">자동차 중고 금융상품</a></li>
+		<li><a href="#!" id="tab13" onclick="javascript:fn_showTab('13');">자동차 중고 금융상품<br>적용금리대별 분포현황</a></li>
+		<li><a href="#!" id="tab99" onclick="javascript:fn_showTab('99');">자동차 수입 금융상품</a></li>
+	</ul>
+
+	<!-- 상단 옵션 영역 -->
+	<div class="form-con">
+
+		<form name="frm" id="frm" method="post">
+			<input type="hidden" id="ifgcMode" name="ifgcMode" value="1" />
+		</form>
+	</div>
+
+
+	<div class="info-con double" id="infoCon">
+		<h5>
+			<a href="#!" onClick="infoView();" class="on">이용시 유의사항</a>
+		</h5>
+		<div class="info-list">
+			<p id="infoListDetail1"></p>
+		</div>
+	</div>
+
+
+	<!-- 테이블 영역 -->
+	<div class="table-con dn" id="detail1TableArea">
+	</div>
+
+	<!-- 자동차 중고 금융상품 적용금리대별 분포현황 유의사항 확인 영역 -->
+	<div class="ifgcMode13Info-con">
+		<div class="custom-sub" style="margin: 0px 55px;">
+			<br /> <br />
+			<h4>유의사항</h4>
+			<br />
+			<p>
+				동 공시는 직전 3개월(7~9월) 동안의 신규 취급실적을 기준으로 공시하고 있으므로<br /> 
+				20%이상 구간 분포가 나타날 수 있습니다.<br />
+			</p>
+		</div>
+
+   	  	<div class="search_box" style="border: none; text-align:center; margin:0px 65px;">
+  	  		<button type="button" name="ifgcMode13CkBtn" style="width:200px";>
+  	  			<span style="width:200px";>유의사항을 확인했습니다.</span>
+  	  		</button>
+   	  </div>
+      </div>
+
+	<!-- 정보 영역 -->
+	<div class="info-con blue dn" id="detail1GuideTxt">
+	
+	</div>
+
+	<div class="info-con blue double custom dn" id="infoConIfgcMode2">
+		<p>신용점수는 각 신용평가사에서 개별적으로 조회하셔야합니다.<br>
+			각 신용평가사에서는 신용점수조회 서비스를 연1회 무료로 제공하고 있습니다.</p>
+		<div class="link">
+			<p>신용평가사 바로가기</p>
+			<a href="http://www.mycredit.co.kr" target="_blank">NICE(마이크레딧)</a>
+			<a href="http://www.creditbank.co.kr/" target="_blank">KIS(크레딧뱅크)</a>
+			<a href="http://www.allcredit.co.kr/" target="_blank">KCB(올크레딧)</a>
+		</div>
+		<div class="table-con">
+			<table>
+				<thead>
+					<tr>
+						<th>회사명</th>
+						<th>취급신용정보회사</th>
+						<th>회사명</th>
+						<th>취급신용정보회사</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>롯데캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+						<td>효성캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+					<tr>
+						<td>메리츠캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+						<td>BMW파이낸셜</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+					<tr>
+						<td>JT캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+						<td>BNK캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+					<tr>
+						<td>신한카드</td>
+						<td>KCB(올크레딧)</td>
+						<td>JB우리캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+					<tr>
+						<td>우리금융캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+						<td>KB캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+					<tr>
+						<td>애큐온캐피탈</td>
+						<td>KCB(올크레딧)</td>
+						<td>NH농협캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+					<tr>
+						<td>하나캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+						<td>RCI파이낸셜</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+					<tr>
+						<td>현대캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+						<td>산은캐피탈</td>
+						<td>NICE(마이크레딧)</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
+
+	<div id=comparePopuphtml style="display:none;">
+		<div class="table-con" id="compareHtml"></div>
+    </div>
+
+</section>
+
+
+
+
+
+		<input type="hidden" name="_csrf" value="43397fef-45ef-4dd2-a840-2ebcee522a42" />
+    <!-- </section> -->
+    
+    
+
+    <!-- 푸터 영역 -->
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- beadnet.20190604 -->
+
+
+
+
+<!-- beadnet.20190604 -->
+
+
+	<!-- 푸터 영역 -->
+    <footer>
+      <div class="footer-con">
+        <div>
+          <ul>
+            <li><a href="/">HOME</a></li>
+            <li><a href="https://www.crefia.or.kr/common/forward.xx?url=/portal/company/crefiaInfo/location"  target="_blank">오시는길</a></li>
+            <li><a href="#!" onclick="window.open('https://www.crefia.or.kr/portal/main/personalInformation.xx','popup_pi', 'width=1300,height=900,left=20,top=20,scrollbars=yes'); return false;" style="font-weight:bold">개인정보처리방침</a></li>
+            <li><a href="#!" style="cursor: default;">대표전화 02 2011 0700</a></li>
+          </ul>
+          <p>서울특별시 중구 다동길 43(다동70번지) 한외빌딩13층 여신금융협회(04521)</p>
+          <p>copyright &#169; the credit finance association all rights reserved</p>
+        </div>
+        <a href="https://www.crefia.or.kr/"><img src="/assets/portal/images/common/logo_b.jpg" alt="여신금융협회 공시정보포털 로고"></a>
+      </div>
+    </footer>
+
+    <div id="scrollTop">
+      <a href="javascript:void(0);" onClick="scrollEffect();">TOP</a>
+    </div>
+
+
+		
+    <div id="login">
+      <div class="bg"></div>
+
+      <div class="login-con login-main">
+        <div class="login-tit">
+          <h4>로그인</h4>
+          <button type="button" onClick="loginClose();"><span class="sr-only">창 닫기</span></button>
+        </div>
+        <form action="/authentication" name="loginForm" id="loginForm"	method="post" onsubmit="return checkAndSubmit();">
+          <div class="inputbox">
+	          <input type="text" placeholder="아이디" id="j_username"	name="j_username">
+	          <input type="password" placeholder="비밀번호" id="j_password"	name="j_password">
+          </div>
+          <button class="login-btn" type="button" onclick="checkAndSubmit()">로그인</button>
+          <div class="checkbox">
+            <input type="checkbox" id="saveId" name="saveId">
+            <label for="saveId">아이디 저장하기</label>
+          </div>
+          <ul>
+            <li><a href="javascript:void(0);" onClick="loginFindid();">아이디찾기</a></li>
+            <li><a href="javascript:void(0);" onClick="loginFindpw();">비밀번호찾기</a></li>
+          </ul>
+        </form>
+        <a href="/portal/join/joinStep1" class="join-link">회원가입</a>
+      </div>
+
+      <div class="login-con find-id">
+        <div class="login-tit">
+          <h4>아이디찾기</h4>
+          <button type="button" onClick="loginClose();"><span class="sr-only">창 닫기</span></button>
+        </div>
+        <form id="findMyIdFrm">
+          <div class="inputbox">
+          	<input type="text" id="mberNmFindId" name="mberNm" placeholder="이름">
+          	<input type="text" id="emailFindId" name="email" placeholder="이메일">
+          </div>
+          <button class="login-btn" type="button" onclick="fn_findMyId();">확인</button>
+        </form>
+        <p>회원가입 시 등록한 이름과 이메일을 입력하신 후 확인 버튼을 누르시기 바랍니다. 회원님의 아이디를 찾아드립니다.</p>
+      </div>
+
+      <div class="login-con find-pw">
+        <div class="login-tit">
+          <h4>비밀번호찾기</h4>
+          <button type="button" onClick="loginClose();"><span class="sr-only">창 닫기</span></button>
+        </div>
+        <form id="findMyPwdFrm">
+          <div class="inputbox">
+	          <input type="text" id="mberIdFindPwd" name="mberId" placeholder="아이디"><input type="text" id="mberNmFindPwd" name="mberNm" placeholder="이름">
+	          <input type="text" id="emailFindPwd" name="email" placeholder="이메일">
+          </div>
+          <button class="login-btn" type="button"  onclick="fn_findMyPwd();">확인</button>
+        </form>
+        <p>회원가입 시 등록한 아이디,이름과 이메일을 입력하신 후<br> 확인 버튼을 누르시기 바랍니다.</p><br>
+        <p>회원가입 시 등록한 정보를 모르는 경우 관리자에게 문의하세요.<p>
+      </div>
+    </div>
+  </div>
+
+
+<script language="javascript">
+
+	// enter key event
+	$(document).ready(function(){
+		$("#j_username,#j_password").keydown(function(key){
+			if(key.keyCode == 13){
+				checkAndSubmit();
+			}
+		});	
+	});
+	
+	function checkAndSubmit() {
+		$('input[type=text], input[type=password]', '#loginForm').each(
+				function() {
+					$(this).val($.trim($(this).val()));
+				});
+		if(emptyCheck("j_username", "아이디를 입력해 주시기 바랍니다.")) {$('#j_username').focus(); return}
+		if(emptyCheck("j_password", "비밀번호를 입력해 주시기 바랍니다.")) {$('#j_password').focus(); return}
+		
+		// ID 저장
+		var isChkYn = $("input:checkbox[id='saveId']").is(":checked");
+
+		if(isChkYn){
+			var saveId = $("#j_username").val();
+			setCookie('saveBIdCookie',saveId);
+		}else{
+			removeCookie("saveBIdCookie");
+		}
+		
+		document.loginForm.submit();
+	}
+
+	function removeCookie(cookieName){
+	   var expireDate = new Date();
+	  
+	   //어제 날짜를 쿠키 소멸 날짜로 설정한다.
+	   expireDate.setDate( expireDate.getDate() - 1 );
+	   document.cookie = cookieName + "= " + "; expires=" + expireDate.toGMTString() + "; path=/";
+	}
+	
+	function emptyCheck( domId, msg ) {
+		  var result = false;
+		  if( $.trim( $( "#" + domId ).val() ) == "" ) {
+				alert( msg );
+				$( "#" + domId ).focus();
+				result = true;
+		  }
+		  return result;
+	}
+	function emptyCheckNm( domId, msg ,formName) {
+		  var result = false;
+		  
+		  if( $.trim( $( "#" + formName ).find( $( "[name='" + domId +"']" )).val() ) == "" ) {
+				alert( msg );
+				$( "[name='" + domId +"']" ).focus();
+				result = true;
+		  }
+		  return result;
+	}
+	
+	function fn_findMyId() {
+		var mberNm = $('#mberNmFindId').val();
+		var email = $('#emailFindId').val();
+		
+		if(!fn_spaceChk(mberNm) || mberNm=="") {
+			alert("이름을 확인해주세요.");
+			$("#mberNmFindId").focus();
+			return;
+		}
+		
+		if(email.length>1){
+			if(!fn_emailChk(email)) {
+				alert("이메일을 확인해주세요.");
+				$("#emailFindId").focus();
+				return false;
+			}
+		}else{
+			alert("이메일을 확인해주세요.");
+			$("#emailFindId").focus();
+			return false;
+		}
+		
+		var data = $('#findMyIdFrm').serialize();
+		
+		$.ajax({
+			url: "/login/searchId",
+			type: "POST",
+			dataType: "JSON",
+			data: data,
+			success : function(data){
+				if(data.result=='FAIL') {
+					if(data.msg=='nonMathchingInfo') {
+						alert('해당정보에 해당하는 ID가 없습니다.');
+					}
+				} else {
+					alert('회원님의 ID는 '+data.srchId+'입니다.');
+				}
+			}
+			,error : function(re, sts, err) {
+				alert(err);
+			}
+		});
+	};
+	
+	function fn_findMyPwd() {
+		var mberId = $('#mberIdFindPwd').val();
+		var mberNm = $('#mberNmFindPwd').val();
+		var email = $('#emailFindPwd').val();
+		
+		if(!fn_spaceChk(mberId) || mberId=="") {
+			alert("아이디를 확인해주세요.");
+			$("#mberIdFindPwd").focus();
+			return false;
+		}
+
+		if(!fn_spaceChk(mberNm) || mberNm=="") {
+			alert("이름을 확인해주세요.");
+			$("#mberNmFindPwd").focus();
+			return false;
+		}
+		
+		if(email.length<1){
+			alert("이메일을 확인해주세요.");
+			$("#emailFindPwd").focus();
+			return false;
+		}
+		
+		if(!fn_emailChk(email)) {
+			alert("이메일을 확인해주세요.");
+			$("#emailFindPwd").focus();
+			return false;
+		}
+		
+		var data = $('#findMyPwdFrm').serialize();
+		
+		$.ajax({
+			url: "/login/searchPwd",
+			type: "POST",
+			dataType: "JSON",
+			data: data,
+			success : function(data){
+				if(data.result=='FAIL') {
+					if(data.msg=='nonMathchingInfo') {
+						alert('해당하는 정보가 존재하지 않습니다.');
+					} else if(data.msg=='nonExistentId') {
+						alert('해당하는 ID가 존재하지 않습니다.');
+					}
+				} else {
+					alert('임시비밀번호가 email로 전송되었습니다.');
+				}
+			}
+			,error : function(re, sts, err) {
+				alert(err);
+			}
+		});
+	};
+	
+</script>
+
+
+	<!-- script area s -->
+    
+    <script language="javascript">
+var params = '{ifgcMode=1, uri=/portal/quota/quotaFinancingDisclosureDetail1?ifgcMode=1}';
+
+		var isExcelBtnEnable = false;
+	
+		$(document).ready(function() {
+			/* 2026.04.07 추가 - 비교 공시 팝업 시작 */
+			/* 2026.04.07 추가 - 비교 공시 팝업 종료 */
+			// 		$("#frm").html($.templates("#schConIfgcMode1Template").render());
+			// 		$("#detail1TableArea").html($.templates("#tableAreaIfgcMode12Template").render());
+			// // 		$("#infoListDetail1").html($.templates("#infoListIfgcMode1Template").render());
+			// 		$("#detail1GuideTxt").html($.templates("#ifgcMode12GuideTxtTemplate").render());
+			// 		$("#ifgcMode").val("1");
+			// 		fn_searchConditionIfgcMode1();
+
+			// 자동차 중고 금융상품 적용금리대별 분포현황 유의사항 확인 event 
+			$('button[name=ifgcMode13CkBtn]').on('click', function(e) {
+				$('#ifgcMode13CkYn').val('Y');
+				fn_showTab('13');
+			});
+
+			fn_showTab('1');
+			
+		});
+
+		/* 페이지 초기화 */
+		function fn_init() {
+			$("#detail1TableArea").addClass("dn");
+			$("#detail1GuideTxt").addClass("dn");
+			$("#infoConIfgcMode2").addClass("dn");
+			$("input:checkbox[id='che-all']").prop("checked", true);
+			if ("13" == $("#ifgcMode").val() || "99" == $("#ifgcMode").val()) {
+				fn_search();
+			}
+		};
+
+		/* tab 메뉴 클릭 */
+		function fn_showTab(pVal) {
+
+			switch (pVal) {
+			case '2':
+				$("#container").removeClass("tab01");
+				$("#container").addClass("tabs02");
+				$("#container").removeClass("tab03");
+				$("#container").removeClass("tab04");
+				comparePopupFormAdd("checkCon", "N","chkComp", "ifgcMode=2");
+
+				$("#tab1").removeClass("on");
+				$("#tab2").addClass("on");
+				$("#tab13").removeClass("on");
+				$("#tab99").removeClass("on");
+				$("#frm").html($.templates("#schConIfgcMode2Template").render());
+				$("#detail1TableArea").html($.templates("#tableAreaIfgcMode12Template").render());
+				$("#detail1GuideTxt").html($.templates("#ifgcMode12GuideTxtTemplate").render());
+// 				$("#infoListDetail1").html($.templates("#infoListIfgcMode1Template").render());
+			
+				fn_searchConditionIfgcMode2();
+// 				fn_pageInfoSelect('PAN0000000087');
+				
+				// 자동차 중고 금융상품 적용금리대별 분포현황 유의사항 처리
+				$('.form-con').show();
+				$('.table-con').show();
+				$('.info-con').show();
+				$('.ifgcMode13Info-con').hide();
+				
+				break;
+
+			case '13':
+				$("#container").removeClass("tab01");
+				$("#container").removeClass("tabs02");
+				$("#container").addClass("tab03");
+				$("#container").removeClass("tab04");
+
+				$("#tab1").removeClass("on");
+				$("#tab2").removeClass("on");
+				$("#tab13").addClass("on");
+				$("#tab99").removeClass("on");
+				$("#frm").html($.templates("#schConIfgcMode13Template").render());
+				comparePopupFormAdd("checkCon", "N","chkComp", "ifgcMode=13");
+				$("#queryString").val("ifgcMode=13");
+				$("#detail1TableArea").html($.templates("#tableAreaIfgcMode13Template").render());
+				$("a[onclick='fn_getExcel();']").not(":first").hide();
+				$("#detail1GuideTxt").html($.templates("#ifgcMode12GuideTxtTemplate").render());
+// 				$("#infoListDetail1").html("");
+// 				fn_pageInfoSelect('PAN0000000088');
+
+				$('.form-con').show();
+				$('.table-con').show();
+				$('.info-con').show();
+				$('.ifgcMode13Info-con').hide();
+
+				// 자동차 중고 금융상품 적용금리대별 분포현황 유의사항
+				/*
+				if($('#ifgcMode13CkYn').val()!='Y'){
+					// 확인사항 버튼 체크하지 않았을 경우 
+					$('.form-con').hide();
+					$('.table-con').hide();
+					$('.info-con').hide();
+					$('.ifgcMode13Info-con').show();
+				} else{
+					// 확인사항 버튼 체크했을 경우
+					$('.form-con').show();
+					$('.table-con').show();
+					$('.info-con').show();
+					$('.ifgcMode13Info-con').hide();
+				}
+				 */
+
+				// 법정최고금리(24->20) 변경으로 인한 게시일 기준 분기처리
+				var pubDate = $("#oriIfgcPubDate").val();
+
+				if (pubDate >= '20211101') {
+					// 일반
+					$("#hide13Col1").hide();
+					$("#hide13Th20241").hide();
+					$("#hide13Th16201 .thTitleTbody1").text("16~20% 이하");
+					// 다이렉트
+					$("#hide13Col2").hide();
+					$("#hide13Th20242").hide();
+					$("#hide13Th16202 .thTitleTbody2").text("16~20% 이하");
+				} else {
+					// 일반
+					$("#hide13Col1").show();
+					$("#hide13Th20241").show();
+					$("#hide13Th16201 .thTitleTbody1").text("16~20% 미만");
+					// 다이렉트
+					$("#hide13Col2").show();
+					$("#hide13Th20242").show();
+					$("#hide13Th16202 .thTitleTbody2").text("16~20% 미만");
+				}
+
+				break;
+
+			case '99':
+				$("#container").removeClass("tab01");
+				$("#container").removeClass("tabs02");
+				$("#container").removeClass("tab03");
+				$("#container").addClass("tab04");
+				comparePopupFormAdd("checkCon", "N","chkComp", "ifgcMode=99");
+
+				$("#tab1").removeClass("on");
+				$("#tab2").removeClass("on");
+				$("#tab13").removeClass("on");
+				$("#tab99").addClass("on");
+				$("#frm").html($.templates("#schConIfgcMode99Template").render());
+				$("#detail1TableArea").html($.templates("#tableAreaIfgcMode99Template").render());
+				$("#detail1GuideTxt").html("");
+// 				$("#infoListDetail1").html($.templates("#infoListIfgcMode1Template").render());
+// 				fn_pageInfoSelect('PAN0000000089');
+
+				// 자동차 중고 금융상품 적용금리대별 분포현황 유의사항 처리
+				$('.form-con').show();
+				$('.table-con').show();
+				$('.info-con').show();
+				$('.ifgcMode13Info-con').hide();
+
+				break;
+
+			default:
+				$("#container").addClass("tab01");
+				$("#container").removeClass("tabs02");
+				$("#container").removeClass("tab03");
+				$("#container").removeClass("tab04");
+				comparePopupFormAdd("checkCon", "N","chkComp", "ifgcMode=1");
+
+				$("#tab1").addClass("on");
+				$("#tab2").removeClass("on");
+				$("#tab13").removeClass("on");
+				$("#tab99").removeClass("on");
+				$("#frm").html($.templates("#schConIfgcMode1Template").render());
+				$("#detail1TableArea").html($.templates("#tableAreaIfgcMode12Template").render());
+				$("#detail1GuideTxt").html($.templates("#ifgcMode12GuideTxtTemplate").render());
+// 				$("#infoListDetail1").html($.templates("#infoListIfgcMode1Template").render());
+				fn_searchConditionIfgcMode1();
+				fn_goodsChangeIfgcMode1();
+// 				fn_pageInfoSelect('PAN0000000086');
+
+				// 자동차 중고 금융상품 적용금리대별 분포현황 유의사항 처리
+				$('.form-con').show();
+				$('.table-con').show();
+				$('.info-con').show();
+				$('.ifgcMode13Info-con').hide();
+
+				break;
+			}
+			$("#ifgcMode").val(pVal);
+			
+			getExcelBtnEnable('ifgcMode', pVal , 'P');
+			fn_init();
+		};
+
+		/* tab1 검색조건 조회 */
+		function fn_searchConditionIfgcMode1() {
+
+			$.ajax({
+				url: "/portal/quota/quotaFinancingDisclosureDetail1/schCondition",
+				type: "POST",
+				dataType: "JSON",
+				data: "",
+				success : function(data){
+					$("#ifgCompany").html("<option value=''>제조사</option>");
+					$("#ifgCompany").append($.templates("#ifgCompanyTemplate").render(data.dataList));
+					$("#ifgPreRate").html("<option value=''>현금구매비율</option>");
+					$("#ifgPreRate").append($.templates("#selectCodeTemplate").render(data.preRateList));
+					$("#ifgPeriod").html("<option value=''>대출기간</option>");
+					$("#ifgPeriod").append($.templates("#selectCodeTemplate").render(data.periodList));
+				}
+			});
+		};
+
+		/* tab1 제조사 선택시 차종 조회 */
+		function fn_goodsChangeIfgcMode1(id) {
+
+			var frmData = $("#frm").serialize();
+			
+			$.ajax({
+				url: "/portal/quota/quotaFinancingDisclosureCarList",
+				type: "POST",
+				dataType: "JSON",
+				data: {'ifgcMode':1,'ifgCompany':$("#ifgCompany").val()},
+				success : function(data){
+					$("#ifgGoods").html("<option value=''>차종</option>");
+					$("#ifgGoods").append($.templates("#ifgGoodsTemplate").render(data.resultList));
+					$("#infoListDetail1").html($.templates("#ifgcMode1GuideTxtTemplate").render(data.quotaMap));
+					tableHeight();
+				}
+			});
+		};
+
+		/* tab2 검색조건 조회 */
+		function fn_searchConditionIfgcMode2() {
+			
+			$.ajax({
+				url: "/portal/quota/quotaFinancingDisclosureDetail2/schCondition",
+				type: "POST",
+				dataType: "JSON",
+				data: {ifgcMode:2},
+				success : function(data){
+					$("#infoListDetail1").html($.templates("#ifgcMode99GuideTxtTemplate").render(data.quotaMap));
+					$("#ifgCreditCompany").html("<option value=''>신용평가사</option>");
+					$("#ifgCreditCompany").append($.templates("#selectCodeTemplate").render(data.creditCompanyList));
+					$("#ifgCreditRating").html("<option value=''>신용점수</option>");
+					$("#ifgCreditRating").append($.templates("#selectCodeTemplate").render(data.creditRatingList));
+					$("#ifgPeriod").html("<option value=''>대출기간</option>");
+					$("#ifgPeriod").append($.templates("#selectCodeTemplate").render(data.periodList));
+					tableHeight();
+				}
+			});
+		};
+
+		function fn_validationChk() {
+			var ifgcMode = $("#ifgcMode").val();
+
+			switch (ifgcMode) {
+			case '1':
+				if ($("#ifgCompany").val().trim() == "") {
+					alert("제조사를 선택하여 주세요.");
+					$("#ifgCompany").focus();
+					return false;
+				}
+
+				if ($("#ifgGoods").val().trim() == "") {
+					alert("차종을 선택하여 주세요.");
+					$("#ifgGoods").focus();
+					return false;
+				}
+
+				if ($("#ifgPreRate").val().trim() == "") {
+					alert("현금구매비율을 선택하여 주세요.");
+					$("#ifgPreRate").focus();
+					return false;
+				}
+
+				if ($("#ifgPeriod").val().trim() == "") {
+					alert("대출기간을 선택하여 주세요.");
+					$("#ifgPeriod").focus();
+					return false;
+				}
+
+				return true;
+				break;
+
+			case '2':
+				//if($("#ifgCreditCompany").val().trim() == ""){
+				//	alert("신용평가사를 선택하여 주세요.");
+				//	$("#ifgCreditCompany").focus();
+				//	return false;
+
+				if ($("#ifgCreditRating").val().trim() == "") {
+					alert("신용점수를 선택하여 주세요.");
+					$("#ifgCreditRating").focus();
+					return false;
+				}
+
+				if ($("#ifgPeriod").val().trim() == "") {
+					alert("대출기간을 선택하여 주세요.");
+					$("#ifgPeriod").focus();
+					return false;
+				}
+
+				return true;
+				break;
+
+			case '13':
+
+				return true;
+				break;
+
+			case '99':
+
+				return true;
+				break;
+
+			default:
+				return true;
+				break;
+			}
+		};
+		/* 2026.04.07 추가 - 비교 공시 팝업 로직추가*/
+		function search(callback) {
+			fn_search("",callback);
+		}
+		/* 2026.04.07 추가 - 비교 공시 팝업 로직추가 */
+		function fn_search(flag, callback) {
+
+			if(!fn_validationChk()) return;
+			
+			var ifgcMode = $("#ifgcMode").val();
+
+			if (flag == 'Y') {
+				if (!$('input[name=chkComp]').is(":checked")) {
+					alert("금융회사를 선택해 주십시오.");
+					return;
+				}
+			}
+			
+			getExcelBtnEnable('ifgcMode', ifgcMode , 'P');
+
+			switch (ifgcMode) {
+				case '1':
+	
+					var frmData = $("#frm").serialize();
+
+					$.ajax({
+						url: "/portal/quota/quotaFinancingDisclosureDetail1/detail1",
+						type: "POST",
+						dataType: "JSON",
+						data: frmData,
+						success : function(data){
+							applyExcelBtnEnable();
+							if( !cfn_isEmpty(data.quotaMap) ) {
+								$("#schCondInfoDetail1").html($.templates("#schCondInfoIfgcMode1Template").render(data.params));
+								$("#fixHeader").html($.templates("#tableHeadIfgcMode1Template").render());
+								if(data.resultList.length > 0) {
+									$("#ifgcMode1Tbody").html($.templates("#ifgcMode1TbodyTemplate").render(data.resultList));
+								} else {
+						    		$("#ifgcMode1Tbody").html(emptyTr(7));
+								}
+								$("#detail1TableArea").removeClass("dn");
+								$("#detail1GuideTxt").removeClass("dn");
+						    }
+						    else {
+						    	$("#ifgcMode1Tbody").html(emptyTr(7));
+								$("#detail1GuideTxt").addClass("dn");
+						    }
+							tableH = $("#fixHeader").height();
+							$fixTableEle = $('#fixHeader');
+							fixP = $fixTableEle.offset().top;
+							fixTableEleCnt = 1;
+						},
+						complete : function(){
+							fn_speechBubbleApply('ifgcMode',$('#ifgcMode').val());
+						}
+					});
+					
+					break;
+
+				case '2':
+					
+					var ifgCreditCompanyNm = $("#ifgCreditCompany > option:selected").text();
+					var ifgCreditRatingNm = $("#ifgCreditRating > option:selected").text();
+					var ifgPeriodNm = $("#ifgPeriod > option:selected").text();
+					$("#ifgCreditCompanyNm").val(ifgCreditCompanyNm);
+					$("#ifgCreditRatingNm").val(ifgCreditRatingNm);
+					if (ifgCreditCompanyNm!="신용평가사") $("#ifgCreditCompany").prop("disabled",false);
+					else $("#ifgCreditCompany").prop("disabled",true);
+					$("#ifgPeriodNm").val(ifgPeriodNm);
+
+					var frmData = $("#frm").serialize();
+
+					$.ajax({
+						url: "/portal/quota/quotaFinancingDisclosureDetail2/detail2",
+						type: "POST",
+						dataType: "JSON",
+						data: frmData,
+						success : function(data){
+							applyExcelBtnEnable();
+							if( !cfn_isEmpty(data.quotaMap) ) {
+								$("#schCondInfoDetail1").html($.templates("#schCondInfoIfgcMode2Template").render(data.params));
+								$("#fixHeader").html($.templates("#tableHeadIfgcMode2Template").render());
+								if(data.resultList.length > 0) {
+									$("#ifgcMode2Tbody").html($.templates("#ifgcMode2TbodyTemplate").render(data.resultList));
+								} else {
+						    		$("#ifgcMode2Tbody").html(emptyTr(8));
+								}
+								$("#detail1TableArea").removeClass("dn");
+								$("#detail1GuideTxt").removeClass("dn");
+								$("#infoConIfgcMode2").removeClass("dn");
+								$("#ifgCreditCompany").prop("disabled",false);
+						    }
+						    else {
+						    	$("#ifgcMode2Tbody").html(emptyTr(8));
+								$("#detail1GuideTxt").addClass("dn");
+						    }
+						},
+						complete : function(){
+//	 						tableHeight();
+							tableH = $("#fixHeader").height();
+							$fixTableEle = $('#fixHeader');
+							fixP = $fixTableEle.offset().top;
+							fixTableEleCnt = 1;
+							fn_speechBubbleApply('ifgcMode',$('#ifgcMode').val());
+						}
+					});
+					
+					break;
+					
+				case '13':
+					var frmData = $("#frm").serialize();
+					var skip = false;
+					$.ajax({
+						url: "/portal/quota/quotaFinancingDisclosureDetail2/detail13",
+						type: "POST",
+						dataType: "JSON",
+						data: frmData,
+						success : function(data){
+							applyExcelBtnEnable();
+							if(typeof callback === "function"){
+								skip = true;
+								setTimeout(function(){//111111
+									if (data.resultMap.directList.length > 0 || data.resultMap.generalList.length > 0){
+										$("#compareHtml").html($.templates("#tableAreaIfgcMode13TemplateComparePopup").render());
+										if (data.resultMap.generalList.length > 0){
+											$("#tbody1").html($.templates("#ifgcMode13TbodyTemplate2ComparePopup").render(data.resultMap.generalList));
+										}
+										else $("#tbody1").html(emptyTr(5));
+										if (data.resultMap.directList.length > 0){
+											$("#tbody2").html($.templates("#ifgcMode13TbodyTemplate2ComparePopup").render(data.resultMap.directList));
+										}
+										else $("#tbody2").html(emptyTr(5));
+										callback($("#comparePopuphtml").html());
+									}
+									else{
+								   		$("#tbody1").html(emptyTr(5));
+								   		$("#tbody2").html(emptyTr(5));
+										callback($("#comparePopuphtml").html());
+
+									}
+								},200);
+							}
+							else{
+								// 법정최고금리(24->20) 변경으로 인한 게시일 기준 분기처리
+								$("#oriIfgcPubDate").val(data.quotaMap.oriIfgcPubDate);
+								var pubDate = data.quotaMap.oriIfgcPubDate;		
+								var stdDate = "20211101";
+
+									if (pubDate >= stdDate) {
+										// 일반
+										$("#hide13Col1").hide();
+										$("#hide13Th20241").hide();
+										$("#hide13Th16201 .thTitleTbody1").text("16~20% 이하");
+										// 다이렉트
+										$("#hide13Col2").hide();
+										$("#hide13Th20242").hide();
+										$("#hide13Th16202 .thTitleTbody2").text("16~20% 이하");
+									} else {
+										// 일반
+										$("#hide13Col1").show();
+										$("#hide13Th20241").show();
+										$("#hide13Th16201 .thTitleTbody1").text("16~20% 미만");
+										// 다이렉트
+										$("#hide13Col2").show();
+										$("#hide13Th20242").show();
+										$("#hide13Th16202 .thTitleTbody2").text("16~20% 미만");
+									}
+
+									$("#dateP").html($.templates("#templateDateP").render(data.quotaMap));
+								    if( !cfn_isEmpty(data.quotaMap) ) {
+										if(data.resultMap.generalList.length > 0) {
+											if(pubDate < stdDate){
+												// 11월 이전
+												$("#ifgcMode13Tbody1").html($.templates("#ifgcMode13TbodyTemplate1").render(data.resultMap.generalList));
+												applyExcelBtnEnable()
+											} else{
+												// 11월 이후
+												$("#ifgcMode13Tbody1").html($.templates("#ifgcMode13TbodyTemplate2").render(data.resultMap.generalList));
+												applyExcelBtnEnable()
+											}
+
+										} else {
+											if(pubDate < stdDate){
+									    		$("#ifgcMode13Tbody1").html(emptyTr(8));
+											} else{
+												$("#ifgcMode13Tbody1").html(emptyTr(7));
+											}
+										}
+										
+										if(data.resultMap.directList.length > 0) {
+											if(pubDate < stdDate){
+												// 11월 이전
+												$("#ifgcMode13Tbody2").html($.templates("#ifgcMode13TbodyTemplate1").render(data.resultMap.directList));
+												applyExcelBtnEnable()
+											} else{
+												// 11월 이후
+												$("#ifgcMode13Tbody2").html($.templates("#ifgcMode13TbodyTemplate2").render(data.resultMap.directList));
+												applyExcelBtnEnable()
+											}
+										} else {
+											if(pubDate < stdDate){
+									    		$("#ifgcMode13Tbody2").html(emptyTr(8));
+											} else{
+												$("#ifgcMode13Tbody2").html(emptyTr(7));
+											}
+										}
+										
+										if('' != data.quotaMap.ifgcNotice || 'undefined' != data.quotaMap.ifgcNotice) {
+											$("#infoListDetail1").html($.templates("#infoListIfgcMode13Template").render(data.quotaMap));
+										}
+										$("#detail1TableArea").removeClass("dn");
+								    }
+								    else {
+										$("#detail1GuideTxt").addClass("dn");
+								    }
+								}							
+							}
+							, // 회원사 체크박스 영역(최초 조회가 완료되면 조회된 회원사를 이용 체크박스 영역을 생성한다.)
+							complete : function(){
+								cardCheckArea('chkComp'); // mcSeqChecked 이 체크박스 명이 됨.
+								fn_speechBubbleApply('ifgcMode',$('#ifgcMode').val());
+							}
+						});
+						
+						break;
+			
+				case '99':
+
+					var frmData = $("#frm").serialize();
+					
+					$.ajax({
+						url: "/portal/quota/quotaFinancingDisclosureDetail99/detail99",
+						type: "POST",
+						dataType: "JSON",
+						data: frmData,
+						success : function(data){
+							applyExcelBtnEnable();
+							//$("#dateP").html($.templates("#templateDateP").render(data.quotaMap));
+						    if( !cfn_isEmpty(data.quotaMap) ) {
+						    	$("#infoListDetail1").html($.templates("#infoListIfgcMode13Template").render(data));
+								if(data.resultList.length > 0) {
+									$("#ifgcMode99Tbody").html($.templates("#ifgcMode99TbodyTemplate").render(data));
+								} else {
+									$("#ifgcMode99Tbody").html(emptyTr(8));
+								}
+								$("#detail1TableArea").removeClass("dn");
+								if('' != data.quotaMap.ifgcNotice || 'undefined' != data.quotaMap.ifgcNotice) {
+									$("#infoListDetail1").html($.templates("#ifgcMode99GuideTxtTemplate").render(data.quotaMap));
+									$("#detail1GuideTxt").addClass("dn");
+								}
+						    }
+						    else {
+								$("#detail1GuideTxt").addClass("dn");
+							}
+					}
+					, // 회원사 체크박스 영역(최초 조회가 완료되면 조회된 회원사를 이용 체크박스 영역을 생성한다.)
+					complete : function(){
+						cardCheckArea('chkComp'); // mcSeqChecked 이 체크박스 명이 됨.
+						tableH = $("#fixHeader").height();
+						$fixTableEle = $('#fixHeader');
+						fixP = $fixTableEle.offset().top;
+						fixTableEleCnt = 1;
+						fn_speechBubbleApply('ifgcMode',$('#ifgcMode').val());
+					}
+				});
+				
+				break;
+	
+			default:
+				break;
+		}
+		
+		$("#colName").val("");
+		$("#orderby").val("");
+		$("#ifgOrder").val("");
+		
+	};
+	
+	function fn_getExcel(){
+		var ifgcMode = $("#ifgcMode").val();
+						
+		var form = document.createElement("form");
+		form.setAttribute("method" , "GET");
+		
+		switch (ifgcMode) {
+			case '1':
+				form.setAttribute("action" , "/portal/quota/quotaFinancingDisclosureDetail1Excel");
+				break;
+			case '2':
+				form.setAttribute("action" , "/portal/quota/quotaFinancingDisclosureDetail2Excel");
+				break;
+			case '13' :
+				form.setAttribute("action" , "/portal/quota/quotaFinancingDisclosureDetail2/detail13Excel");
+				break;
+			case '99' :
+				form.setAttribute("action" , "/portal/quota/quotaFinancingDisclosureDetail99Excel");
+				break;
+			default:
+				break;
+		}
+		
+		var frmData = $("#frm").serializeArray();
+		
+		$.each(frmData, function(index, field) {
+			var input = document.createElement("input");
+			input.setAttribute("type", "hidden");
+			input.setAttribute("name", field.name);
+			input.setAttribute("value", field.value);
+			form.appendChild(input);
+		})
+		
+		document.body.appendChild(form);
+		form.submit();
+		document.body.removeChild(form);
+	}
+	
+	function fn_sortingSearch(colNum,orderby,tbNum) {
+
+		$("#ifgOrder").val(colNum);
+		$("#tbNum").val(tbNum);
+		$("#colName").val(colNum);
+		$("#orderby").val(orderby);
+
+
+		fn_search();
+	}
+	
+	function applyExcelBtnEnable() {
+		if (isExcelBtnEnable) {
+			$('#excelDownloadBtn').show();
+		} else {
+			$('#excelDownloadBtn').hide();
+		}
+	}
+	
+</script>
+<script id="schConIfgcMode1Template" type="text/x-jsrender">
+<input type="hidden" name="ifgcMode" id="ifgcMode" value=""/>
+<input type="hidden" name="ifgOrder" id="ifgOrder" value="mcCompany"/>
+<input type="hidden" name="colName"  id="colName"  value=""/>
+<input type="hidden" name="orderby"  id="orderby"  value=""/>
+
+<div class="search-con">
+	<div class="left">
+		<p class="tit">검색조건</p>
+		<select onchange="fn_goodsChangeIfgcMode1();" name="ifgCompany" id="ifgCompany">
+			<option selected value="">제조사</option>
+		</select>
+		<select name="ifgGoods" id="ifgGoods">
+			<option selected value="">차종</option>
+		</select>
+		<select name="ifgPreRate" id="ifgPreRate">
+			<option selected value="">현금구매비율</option>
+		</select>
+		<select name="ifgPeriod" id="ifgPeriod">
+			<option selected value="">대출기간</option>
+		</select>
+	</div>
+
+</div>
+
+<div class="submit-con">
+	<button type="button" onclick="fn_search();">조회</button>
+</div>
+</script>
+<script id="schConIfgcMode2Template" type="text/x-jsrender">
+<input type="hidden" name="ifgcMode" id="ifgcMode" value=""/>
+
+<div class="search-con">
+	<input type="hidden" name="ifgCreditCompanyNm" id="ifgCreditCompanyNm"/>
+	<input type="hidden" name="ifgCreditRatingNm" id="ifgCreditRatingNm" value=""/>
+	<input type="hidden" name="ifgPeriodNm" id="ifgPeriodNm" value=""/>
+	<input type="hidden" name="ifgOrder" id="ifgOrder" value="mcCompany"/>
+	<input type="hidden" name="colName"  id="colName"  value=""/>
+	<input type="hidden" name="orderby"  id="orderby"  value=""/>
+
+	<div class="left">
+		<p class="tit">검색조건</p>
+		<select name="ifgCreditCompany" id="ifgCreditCompany">
+			<option selected value="">신용평가사</option>
+		</select>
+		<select name="ifgCreditRating" id="ifgCreditRating">
+			<option selected value="">신용점수</option>
+		</select>
+		<select name="ifgPeriod" id="ifgPeriod">
+			<option selected value="">대출기간</option>
+		</select>
+	</div>
+
+</div>
+
+<div class="submit-con">
+	<button type="button" onclick="fn_search();">조회</button>
+</div>
+</script>
+<script id="schConIfgcMode13Template" type="text/x-jsrender">
+<input type="hidden" name="ifgcMode" id="ifgcMode" value=""/>
+<input type="hidden" name="colName"  id="colName"  value=""/>
+<input type="hidden" name="orderby"  id="orderby"  value=""/>
+<input type="hidden" name="tbNum"    id="tbNum"    value=""/>
+<input type="hidden" name="splitYN"  id="splitYN"  value="Y"/>
+<input type="hidden" name="split"    id="split"    value="|"/>
+<input type="hidden" name="splitDataColName" id="splitDataColName" value="ifgRateTotal"/>
+
+<div class="checkbox-con" id="checkCon">
+
+</div>
+
+<div class="submit-con">
+	<div class="checkbox">
+		<input type="checkbox" id="che-all">
+		<label for="che-all">전체선택</label>
+	</div>
+	<button type="button" onclick="fn_search('Y');">검색</button>
+</div>
+</script>
+<script id="schConIfgcMode99Template" type="text/x-jsrender">
+<input type="hidden" name="ifgcMode"    id="ifgcMode" value=""/>
+
+<div class="checkbox-con check-L" id="checkCon">
+	<a href="javascript:void(0);" onClick="formMoreBtn();" class="check-more-btn"></a>
+</div>
+
+<div class="submit-con">
+	<div class="checkbox">
+		<input type="checkbox" id="che-all">
+		<label for="che-all">전체선택</label>
+	</div>
+	<button type="button" onclick="fn_search('Y');">검색</button>
+</div>
+
+</script>
+<script id="tableAreaIfgcMode12Template" type="text/x-jsrender">
+<div class="excel-con">
+	<a href="#" onclick="fn_getExcel();" class="link-button-style" id="excelDownloadBtn" style="display: none">엑셀출력</a>
+</div>
+<!-- 테이블 상단 옵션 영역 -->
+<div class="top-option" id="schCondInfoDetail1">
+</div>
+
+<table id="fixHeader">
+
+</table>
+
+<!-- 테이블 하단 옵션 영역 -->
+<div class="bot-option">
+	<button type="button" class="print">프린트</button>
+</div>
+</script>
+<script id="tableAreaIfgcMode13Template" type="text/x-jsrender">
+<div class="excel-con">
+	<a href="#" onclick="fn_getExcel();" class="link-button-style" id="excelDownloadBtn" style="display: none">엑셀출력</a>
+</div>
+<!-- 테이블 상단 옵션 영역 -->
+<div class="top-option">
+	<h6><span class="js-sb" data-sb-title="일반상품(다이렉트 상품 제외)">일반상품(다이렉트 상품 제외)</span></h6>
+	<p>[단위:%]</p>
+</div>
+
+<table id="">
+	<colgroup>
+		<col width="16%">
+		<col width="12%">
+		<col width="12%">
+		<col width="12%">
+		<col width="12%">
+		<col id="hide13Col1" width="12%">
+		<col width="12%">
+		<col width="12%">
+	</colgroup>
+	<thead>
+		<tr>
+			<th>회사명</th>
+			<th>8% 미만<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol1','asc','1' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol1','desc','1' )">▼</button></th>
+			<th>8~12% 미만<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol2','asc','1' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol2','desc','1' )">▼</button></th>
+			<th>12~16% 미만<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol3','asc','1' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol3','desc','1' )">▼</button></th>
+			<th id="hide13Th16201"><span class="thTitleTbody1">16~20% 미만</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol4','asc','1' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol4','desc','1' )">▼</button></th>
+			<th id="hide13Th20241"><span class="thTitleTbody1">20~24% 이하</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol5','asc','1' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol5','desc','1' )">▼</button></th>
+			<th>합계<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol6','asc','1' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol6','desc','1' )">▼</button></th>
+			<th>평균금리<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol7','asc','1' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol7','desc','1' )">▼</button></th>
+		</tr>
+	</thead>
+	<tbody id="ifgcMode13Tbody1">
+		
+	</tbody>
+</table>
+
+<div class="excel-con">
+	<a href="#" onclick="fn_getExcel();" class="link-button-style" id="excelDownloadBtn" style="display: none">엑셀출력</a>
+</div>
+
+<!-- 테이블 상단 옵션 영역 -->
+<div class="top-option">
+	<h6><span class="js-sb" data-sb-title="다이렉트 상품">다이렉트 상품</span></h6>
+	<p>[단위:%]</p>
+</div>
+
+<table class="recreate" id="">
+	<colgroup>
+		<col width="16%">
+		<col width="12%">
+		<col width="12%">
+		<col width="12%">
+		<col width="12%">
+		<col id="hide13Col2" width="12%">
+		<col width="12%">
+		<col width="12%">
+	</colgroup>
+	<thead>
+		<tr>
+			<th>회사명</th>
+			<th>8% 미만<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol1','asc','2' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol1','desc','2' )">▼</button></th>
+			<th>8~12% 미만<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol2','asc','2' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol2','desc','2' )">▼</button></th>
+			<th>12~16% 미만<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol3','asc','2' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol3','desc','2' )">▼</button></th>
+			<th id="hide13Th16202"><span class="thTitleTbody2">16~20% 미만</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol4','asc','2' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol4','desc','2' )">▼</button></th>
+			<th id="hide13Th20242"><span class="thTitleTbody2">20~24% 이하</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol5','asc','2' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol5','desc','2' )">▼</button></th>
+			<th>합계<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol6','asc','2' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol6','desc','2')">▼</button></th>
+			<th>평균금리<br/><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol7','asc','2' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'sortCol7','desc','2' )">▼</button></th>
+		</tr>
+	</thead>
+	<tbody id="ifgcMode13Tbody2">
+		
+	</tbody>
+</table>
+
+<!-- 테이블 하단 옵션 영역 -->
+<div class="bot-option">
+    <p id="dateP"></p>
+	<button type="button" class="print">프린트</button>
+</div>
+</script>
+
+<script id="tableAreaIfgcMode13TemplateComparePopup" type="text/x-jsrender">
+<!-- 테이블 상단 옵션 영역 -->
+<div class="top-option">
+	<h6><span class="js-sb" data-sb-title="일반상품(다이렉트 상품 제외)">일반상품(다이렉트 상품 제외)</span></h6>
+	<p>[단위:%]</p>
+</div>
+<table>
+	<colgroup>
+		<col width="15%">
+		<col width="15%">
+		<col width="10%">
+		<col width="10%">
+		<col width="10%">
+		<col width="10%">
+		<col width="10%">
+		<col width="auto">
+	</colgroup>
+	<thead>
+		<tr>
+			<th>회사명</th>
+			<th>구분</th>
+			<th>8% 미만</th>
+			<th>8~12% 미만</th>
+			<th>12~16% 미만</th>
+			<th>16~20% 미만</th>
+			<th>합계</th>
+			<th>평균금리</th>
+		</tr>
+	</thead>
+	<tbody id="tbody1"></tbody>
+</table>
+
+<!-- 테이블 상단 옵션 영역 -->
+<div class="top-option">
+	<h6><span class="js-sb" data-sb-title="다이렉트 상품">다이렉트 상품</span></h6>
+	<p>[단위:%]</p>
+</div>
+
+<table class="recreate">
+	<colgroup>
+		<col width="15%">
+		<col width="15%">
+		<col width="10%">
+		<col width="10%">
+		<col width="10%">
+		<col width="10%">
+		<col width="10%">
+		<col width="auto">
+	</colgroup>
+	<thead>
+		<tr>
+			<th>회사명</th>
+			<th>구분</th>
+			<th>8% 미만</th>
+			<th>8~12% 미만</th>
+			<th>12~16% 미만</th>
+			<th>16~20% 미만</th>
+			<th>합계</th>
+			<th>평균금리</th>
+		</tr>
+	</thead>
+	<tbody id="tbody2"></tbody>
+</table>
+</script>
+
+<script id="tableAreaIfgcMode99Template" type="text/x-jsrender">
+
+<!-- 테이블 상단 옵션 영역 -->
+<div class="top-option">
+	<p>[단위:%]</p>
+	<a href="#" onclick="fn_getExcel();" class="link-button-style" id="excelDownloadBtn" style="display: none">엑셀출력</a>
+</div>
+
+<table id="fixHeader">
+	<thead>
+		<tr>
+			<th rowspan="2">회사명</th>
+			<th rowspan="2">상품명</th>
+			<th colspan="2"><span class="js-sb" data-sb-title="금리">금리</span></th>
+			<th rowspan="2"><span class="js-sb" data-sb-title="전분기 평균 실제금리">전분기 평균<br/>실제금리</span></th>
+			<th rowspan="2">기준일자</th>
+			<th rowspan="2"><span class="js-sb" data-sb-title="중도상환수수료율">중도상환수수료율</span></th>
+			<th rowspan="2"><span class="js-sb" data-sb-title="연체이자율">연체이자율</span></th>
+		</tr>
+		<tr>
+			<th>최저</th>
+			<th>최고</th>
+		</tr>
+	</thead>
+	<tbody id="ifgcMode99Tbody">
+		
+	</tbody>
+	<colgroup>
+		<col width="160px">
+		<col width="120px">
+		<col width="140px">
+		<col width="140px">
+		<col width="160px">
+		<col width="160px">
+		<col width="160px">
+		<col width="160px">
+	</colgroup>
+</table>
+
+<!-- 테이블 하단 옵션 영역 -->
+<div class="bot-option">
+    <p id="dateP"></p>
+	<button type="button" class="print">프린트</button>
+</div>
+</script>
+	<script id="tableHeadIfgcMode1Template" type="text/x-jsrender">
+<colgroup>
+  <col width="260px">
+  <col width="140px">
+  <col width="140px">
+  <col width="165px">
+  <col width="165px">
+  <col width="165px">
+  <col width="165px">
+</colgroup>
+<thead>
+	<tr>
+	  <th rowspan="2">회사명</th>
+      <th colspan="2"><span class="js-sb" data-sb-title="금리">금리</span></th>
+      <th rowspan="2"><span class="js-sb" data-sb-title="전분기 평균 실제금리">전분기 평균<br/>실제금리</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'ifgResult','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgResult','desc' )">▼</button></th>
+      <th rowspan="2"><span class="js-sb" data-sb-title="중도상환수수료율">중도상환수수료율</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'ifgRefundFeeRate','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgRefundFeeRate','desc' )">▼</button></th>
+      <th rowspan="2"><span class="js-sb" data-sb-title="연체이자율">연체이자율</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'ifgOverdueInterestRate','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgOverdueInterestRate','desc' )">▼</button></th>
+      <th rowspan="2">기준일자</th>
+	</tr>
+	<tr>
+	  <th>최저<button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate1','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate1','desc' )">▼</button></th>
+	  <th>최고<button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate2','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate2','desc' )">▼</button></th>
+	</tr>
+</thead>
+<tbody id="ifgcMode1Tbody">
+	
+</tbody>
+</script>
+	<script id="tableHeadIfgcMode2Template" type="text/x-jsrender">
+<colgroup>
+	<col width="245px">
+	<col width="140px">
+	<col width="140px">
+	<col width="135px">
+	<col width="135px">
+	<col width="135px">
+	<col width="135px">
+	<col width="135px">
+</colgroup>
+<thead>
+  <tr>
+    <th rowspan="2">회사명</th>
+    <th colspan="2"><span class="js-sb" data-sb-title="금리">금리</span></th>
+    <th rowspan="2"><span class="js-sb" data-sb-title="전분기 평균 실제금리">전분기 평균<br/>실제금리</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'ifgResult','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgResult','desc' )">▼</button></th>
+    <th rowspan="2"><span class="js-sb" data-sb-title="신용평가회사">신용평가회사</span></th>
+    <th rowspan="2"><span class="js-sb" data-sb-title="중도상환수수료율">중도상환<br/>수수료율</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'ifgRefundFeeRate','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgRefundFeeRate','desc' )">▼</button></th>
+    <th rowspan="2"><span class="js-sb" data-sb-title="연체이자율">연체이자율</span><br/><button class="noPrint" onclick="fn_sortingSearch ( 'ifgOverdueInterestRate','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgOverdueInterestRate','desc' )">▼</button></th>
+    <th rowspan="2">기준일자</th>
+  </tr>
+  <tr>
+    <th>최저<button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate1','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate1','desc' )">▼</button></th>
+    <th>최고<button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate2','asc' )">▲</button><button class="noPrint" onclick="fn_sortingSearch ( 'ifgInterestRate2','desc' )">▼</button></th>
+  </tr>
+</thead>
+<tbody id="ifgcMode2Tbody">
+
+</tbody>
+</script>
+	<script id="ifgCompanyTemplate" type="text/x-jsrender">
+<option value="{{:company}}">{{:company}}</option>
+</script>
+	<script id="ifgGoodsTemplate" type="text/x-jsrender">
+<option value="{{:goods}}">{{:goods}}</option>
+</script>
+	<script id="selectCodeTemplate" type="text/x-jsrender">
+<option value="{{:detailCode}}">{{:detailCodeNm}}</option>
+</script>
+	<script id="schCondInfoIfgcMode1Template" type="text/x-jsrender">
+<h6 class="thin"><span class="orange">{{:ifgCompany}} {{:ifgGoods}}</span>(신차), 현금구매비율 <span class="orange">{{:ifgPreRate}}%</span>,
+대출기간 <span class="orange">{{:ifgPeriod}}개월</span>로 조회하여 <span class="orange">
+{{if ifgOrder == "mcCompany"}}
+회사명
+{{else ifgOrder == "ifgResult"}}
+전분기 평균실제금리
+{{else ifgOrder == "ifgInterestRate1"}}
+최저금리
+{{else ifgOrder == "ifgInterestRate2"}}
+최고금리
+{{else ifgOrder == "ifgRefundFeeRate"}}
+중도상환 수수료율
+{{else ifgOrder == "ifgOverdueInterestRate"}}
+연체이자율
+{{else}}
+회사명
+{{/if}}
+</span>을(를) 
+<span class="orange">
+{{if orderby == "asc"}}
+오름차순
+{{else orderby == "desc"}}
+내림차순
+{{else}}
+내림차순
+{{/if}}
+</span>
+으로 정렬한 결과입니다.</h6>
+<p>[단위:%]</p>
+<a href="#" onclick="fn_getExcel();" class="link-button-style" id="excelDownloadBtn" style="display : none">엑셀출력</a> 
+</script>
+	<script id="schCondInfoIfgcMode2Template" type="text/x-jsrender">
+<h6 class="thin"><span class="orange">{{:ifgCreditCompanyNm}}</span> 평가 <span class="orange">{{:ifgCreditRatingNm}}</span>,
+대출기간 <span class="orange">{{:ifgPeriodNm}}</span>으로 조회하여 <span class="orange">
+{{if ifgOrder == "mcCompany"}}
+회사명
+{{else ifgOrder == "ifgResult"}}
+전분기 평균실제금리
+{{else ifgOrder == "ifgInterestRate1"}}
+최저금리
+{{else ifgOrder == "ifgInterestRate2"}}
+최고금리
+{{else ifgOrder == "ifgRefundFeeRate"}}
+중도상환 수수료율
+{{else ifgOrder == "ifgOverdueInterestRate"}}
+연체이자율
+{{else}}
+회사명
+{{/if}}
+</span>을(를) 
+<span class="orange">
+{{if orderby == "asc"}}
+오름차순
+{{else orderby == "desc"}}
+내림차순
+{{else}}
+내림차순
+{{/if}}
+</span>
+으로 정렬한 결과입니다.</h6>
+
+<p>[단위:%]</p>
+<a href="#" onclick="fn_getExcel();" class="link-button-style" id="excelDownloadBtn" style="display : none">엑셀출력</a> 
+</script>
+	<script id="ifgcMode1TbodyTemplate" type="text/x-jsrender">
+<tr>
+	<td class="link"><a href="{{:mcWebsite}}" target="_blank">{{:mcCompany}}{{if 2 == ifgDiv}} <span class="blue">(D)<sup>*</sup></span>{{/if}}</a></td>
+	<td>{{: ~addComma(ifgInterestRate1)}}</td>
+	<td>{{: ~addComma(ifgInterestRate2)}}</td>
+	<td>{{: ~addComma(~zeroToDash(ifgResult))}}</td>
+	<td>{{: ~addComma(~zeroToDash(ifgRefundFeeRate))}}</td>
+	<td>{{: ~addComma(~zeroToDash(ifgOverdueInterestRate))}}</td>
+	<td>{{: ~dateFormatter(ifgStandardDate, "YYYY-MM-DD", "")}}</td>
+</tr>
+</script>
+	<script id="ifgcMode2TbodyTemplate" type="text/x-jsrender">
+<tr>
+	<td class="link"><a href="{{:mcWebsite}}" target="_blank">{{:mcCompany}}{{if 2 == ifgDiv}} <span class="blue">(D)<sup>*</sup></span>{{/if}}</a></td>
+	<td>{{: ~addComma(~zeroToDash(ifgInterestRate1))}}</td>
+	<td>{{: ~addComma(~zeroToDash(ifgInterestRate2))}}</td>
+	<td>{{:~zeroToDash(ifgResult)}}</td>
+	<td>{{:ifgCreditCompanyNm}}</td>
+	<td>{{: ~addComma(~zeroToDash(ifgRefundFeeRate))}}</td>
+	<td>{{: ~addComma(~zeroToDash(ifgOverdueInterestRate))}}</td>
+	<td>{{: ~dateFormatter(ifgStandardDate, "YYYY-MM-DD", "")}}</td>
+</tr>
+</script>
+
+	<script id="ifgcMode13TbodyTemplate1" type="text/x-jsrender">
+<tr>
+	<td class="link"><a href="{{:mcReferWebPage16}}" target="_blank">{{:mcCompany}}</a></td>
+	{{for ~split(ifgRateTotal, "|")}}
+		{{if #getIndex() < 7}}
+			<td>{{: ~addComma(~zeroToDash(#data))}}</td>
+		{{/if}}
+	{{/for}}
+</tr>
+	<!-- 회원사 선택 영역 생성 -->
+	<input type="hidden" name="checkcompany" data-name='{{:mcCompany}}' data-code='{{:mcSeq}}'/>
+</script>
+
+	<script id="ifgcMode13TbodyTemplate2" type="text/x-jsrender">
+<tr>
+	<td class="link"><a href="{{:mcReferWebPage16}}" target="_blank">{{:mcCompany}}</a></td>
+	{{for ~split(ifgRateTotal, "|")}}
+		{{if #getIndex() < 7}}
+			{{if #getIndex() != 4}}
+				<td>{{: ~addComma(~zeroToDash(#data))}}</td>
+			{{/if}}
+		{{/if}}
+	{{/for}}
+</tr>
+	<!-- 회원사 선택 영역 생성 -->
+	<input type="hidden" name="checkcompany" data-name='{{:mcCompany}}' data-code='{{:mcSeq}}'/>
+</script>
+
+<script id="ifgcMode13TbodyTemplate2ComparePopup" type="text/x-jsrender">
+<tr>
+	{{if ROWSPAN =="1"}}
+		<td rowspan="3" style="border:1px solid #ddd;">{{:mcCompany}}</td>
+	{{/if}}
+		<td>{{:COMPAREDATE}}</td>
+	{{for ~split(ifgRateTotal, "|")}}
+		{{if #getIndex() < 7}}
+			{{if #getIndex() != 4}}
+				<td>{{: ~addComma(~zeroToDash(#data))}}</td>
+			{{/if}}
+		{{/if}}
+	{{/for}}
+</tr>
+
+</script>
+
+	<script id="ifgcMode99TbodyTemplate" type="text/x-jsrender">
+{{for companyList}}
+	{{for ~root.resultList ~pMcCompany=mcCompany ~pMcReferWebPage19=mcReferWebPage19 ~pCgType=cgType}}
+		{{if ~pMcCompany == #data.mcCompany}}
+			<tr>
+				{{if (#getIndex() % 2) == 0}}
+					<td rowspan="2"><a href="{{if ~pMcReferWebPage19.indexOf('http') == -1}}http://{{/if}}{{:~pMcReferWebPage19}}" target="_blank">{{:mcCompany}}</a>{{if ~pCgType != 'All'}}&nbsp;{{:~pCgType}}{{/if}}</td>
+					<td class="">{{:ifgGoods}}</td>
+					{{else }}
+					<td class="merged-cell">{{:ifgGoods}}</td>
+				{{/if}}
+				{{if ifgInterestRate1 != null && ifgInterestRate1 != ""}}
+				<td>{{: ~addComma(ifgInterestRate1)}}</td>
+				{{else}}
+				<td>{{: ~addComma(~zeroToDash(ifgInterestRate1))}}</td>
+				{{/if}}
+				{{if ifgInterestRate2 != null && ifgInterestRate2 != ""}}
+				<td>{{: ~addComma(ifgInterestRate2)}}</td>
+				{{else}}
+				<td>{{: ~addComma(~zeroToDash(ifgInterestRate2))}}</td>
+				{{/if}}
+				<td>{{if 0 < ifgResult.length}}{{:ifgResult}}{{else}}-{{/if}}</td>
+				<td>{{: ~dateFormatter(ifgStandardDate, "YYYY-MM-DD", "-")}}</td>
+				<td>{{if 0 < ifgRefundFeeRate1.length}}{{:ifgRefundFeeRate1}} ~ {{:ifgRefundFeeRate2}}{{else}}-{{/if}}</td>
+				<td>{{if 0 < ifgOverdueInterestRate1.length}}{{:ifgOverdueInterestRate1}} ~ {{:ifgOverdueInterestRate2}}{{else}}-{{/if}}</td>
+			</tr>
+			<!-- 회원사 선택 영역 생성 -->
+			<input type="hidden" name="checkcompany" data-name='{{:mcCompany}}' data-code='{{:mcSeq}}'/>
+		{{/if}}
+	{{/for}}
+{{/for}}
+</script>
+	<script id="ifgcMode1GuideTxtTemplate" type="text/x-jsrender">
+<p>{{:ifgcNotice}}</p>
+</script>
+	<script id="ifgcMode12GuideTxtTemplate" type="text/x-jsrender">
+<p>회사명 <span class="blue">(D)<sup>*</sup></span>는 회사가 고객과 직접 상담하여 판매하는 상품으로 금융거래시 발생할 수 있는 중개 수수료를 최소화한 상품입니다.</p>
+</script>
+	<script id="ifgcMode99GuideTxtTemplate" type="text/x-jsrender">
+<p>{{:ifgcNotice}}</p>
+</script>
+	<script id="infoListIfgcMode13Template" type="text/x-jsrender">
+<p> {{:ifgcNotice}}</p>
+</script>
+	<script id="templateDateP" type="text/x-jsrender">
+	* &nbsp;{{:~dateFormatter(ifgcPubDate,'YYYY.MM.DD','')}} 게시
+</script>
+ 	<!-- script area e -->
+ 	<script>
+    //IE console error
+    var console = window.console || {log:function(){}};
+    </script>
+
+</body>
+</html>
+<script>
+	$(function(){zoom()});
+</script>
