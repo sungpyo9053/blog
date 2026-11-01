@@ -1,0 +1,2043 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE HTML>
+<!--[if gt ie 8]>-->
+<html lang="ko">
+<!--<![endif]-->
+<!--[if lte IE 8]> 
+	<html lang="ko" id="ie8">
+<![endif]-->
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="한국천문연구원의 코스모스 허브 KASI COSMOS HUB(카시 코스모스 허브)로, 천문우주과학 관련 정보와 데이터를 제공합니다.">
+
+<meta property="og:title" content="코스모스 허브">
+<meta property="og:site_name" content="코스모스 허브">
+<meta property="og:description" content="한국천문연구원의 코스모스 허브 KASI COSMOS HUB(카시 코스모스 허브)로, 천문우주과학 관련 정보와 데이터를 제공합니다.">
+<link rel="shortcut icon" href="/resources/images/favicon.ico">
+
+<title>코스모스 허브</title>
+
+<link href="/resources/css/bootstrap.css" rel="stylesheet">
+<link href="/resources/css/datepicker.css" rel="stylesheet">
+<link href="/resources/css/common.css" rel="stylesheet">
+
+<link href="/resources/css/font-awesome.min.css" rel="stylesheet">
+<link href="/resources/css/fontawesome.min.css" rel="stylesheet">
+
+<!-- 새로추가 -->
+<link href="/resources/css/bootstrap-icons.css" rel="stylesheet">
+<link href="/resources/css/theme-setting.css" rel="stylesheet">
+
+<link href="/resources/css/print.css" rel="stylesheet">  
+
+<!-- <script type="text/javascript" src="/resources/js/jquery-latest.js"></script> -->
+<script type="text/javascript" src="/resources/js/jquery.min.js"></script>
+<script type="text/javascript" src="/resources/js/jquery.easing.js"></script>
+<script type="text/javascript" src="/resources/js/nav.js"></script>
+<script type="text/javascript" src="/resources/js/jquery.matchHeight-min.js"></script>
+<script type="text/javascript" src="/resources/js/main.js"></script>
+<script type="text/javascript" src="/resources/js/pop_rolling.js"></script> 
+<script type="text/javascript" src="/resources/js/validateCommon.js"></script>
+
+
+<!-- slick slider -->
+<script type="text/javascript" src="/resources/css/slick_slider/slick.min.js"></script>
+<link href="/resources/css/slick_slider/slick.min.css" rel="stylesheet">
+<link href="/resources/css/slick_slider/slick-theme.min.css" rel="stylesheet">
+
+<!--[if gt ie 8]>-->
+<link href="/resources/css/kr_layout.css" rel="stylesheet">
+<link href="/resources/css/kr_layout-responsive.css" rel="stylesheet">
+<link href="/resources/css/kr_access.css" rel="stylesheet">
+
+<link href="/resources/css/kr_main.css" rel="stylesheet">
+  
+
+<script type="text/javascript">
+
+$(document).ready(function () {
+	
+	const isPopupAllowed = getCookie("divpop");
+	if (isPopupAllowed == "Y") {
+		$('#popupzone').hide();
+	} else {
+		$('#popupzone').show();		
+	}
+	
+	// 일식 월식 링크 추출
+	var seMenuLnk = $(".nav_depth_con_txt a:contains('일식')").attr("href");
+	var leMenuNM = $(".nav_depth_con_txt a:contains('월식')").attr("href");
+	
+	$("#seMenuLnk").attr("href", seMenuLnk);
+	$("#leMenuLnk").attr("href", leMenuNM);
+	  
+	//좌표 추출
+	navigator.geolocation.getCurrentPosition(
+		    function(position) {
+		        var lat = position.coords.latitude;
+		        var lng = position.coords.longitude;
+		        getRegionName(lat, lng);
+		    },
+		    function(error) {
+		        console.log("좌표 실패:", error);
+		        sendSunmoon("", "", "서울특별시", "");
+		    }
+		);
+	
+	//도시명추출 accessToken 발급
+	function getSgisToken(callback){
+	    $.ajax({
+	        url: "/sgis/accessToken",
+	        type: "GET",
+	        timeout: 3000,
+	        dataType: "json",
+	        success: function(res){
+
+	            if(res != null && res.accessToken != null){
+	                callback(res.accessToken);
+	            }else{
+	                callback(null);
+
+	            }
+	        },error: function(xhr){
+	            console.log("토큰 조회 실패");
+	            console.log(xhr.status);
+	            callback(null);
+	        }
+	    });
+	}
+	
+	//도시명 추출
+	function getRegionName(lat, lng) {
+		
+		getSgisToken(function(accessToken){
+			if(accessToken == null){
+	            sendSunmoon("", "", "서울특별시", "");
+	            return;
+	        }
+	        
+	    	$.ajax({
+	        	url: "https://sgisapi.mods.go.kr/OpenAPI3/addr/rgeocodewgs84.json",
+	        	type: "GET",
+	        	timeout: 3000,
+	        	data: {
+	            	accessToken: accessToken, 
+	            	x_coor: lng, // 경도
+	            	y_coor: lat, // 위도
+	            	addr_type: "20"//행정동
+	        	},
+	        	success: function(res) {
+	            	if (res.result && res.result.length > 0) {
+	                	var region = res.result[0];
+						
+	                	var city = region.sido_nm;     // 시/도
+	                	var district = region.sgg_nm; // 구/군
+	                	//var dong = region.emdong_nm;  // 동
+						
+	                	sendSunmoon(lat, lng, city, district);
+	            	} else {
+	                	console.log("주소 변환 결과 없음");
+	                	sendSunmoon("", "", "서울특별시", "");
+	            	}
+	        	},
+	        	error: function(xhr) {
+	            	console.log("도시명 추출 상태코드:", xhr.status);
+	            	console.log("응답:", xhr.responseText);
+	            
+	            	sendSunmoon("", "", "서울특별시", "");
+	        	}
+	    	});
+		});
+
+	}
+	
+	//일출일몰 월출월몰 데이터 추출
+	function sendSunmoon(lat, lng, city, district){
+	    $.ajax({
+	        url: "/getEphemerisByLocation",
+	        type: "GET",
+	        dataType: "json",
+	        data: {
+	            lat: lat,
+	            lng: lng,
+	            city: city,
+	            district : district
+	        },
+	        success: function(res) {
+	            
+	         	// 위치명
+	            var place_txt = "";
+	
+	            if (res.location != null && res.location !== '') {
+	            	place_txt = res.location;
+	            } else {
+	            	place_txt = res.cityName;
+	            }
+	            var parts = place_txt.split(" ");
+	            if (parts.length >= 2) {
+	                place_txt = parts[0] + " " + parts[1];
+	            } else {
+	                place_txt = parts[0];
+	            }
+
+	            $('.place_txt .place_Nm').text(place_txt);
+	            
+	            //일출일몰 월출월몰 데이터
+	            var ephemerisDataJson = res.ephemerisData;
+	            
+	            var today = new Date();
+	            var yyyy = today.getFullYear();
+	            var mm = String(today.getMonth() + 1).padStart(2, '0');
+	            var dd = String(today.getDate()).padStart(2, '0');
+	
+	            let todayDateString = yyyy + mm + dd;
+	            
+	            const todayData = $.grep(ephemerisDataJson, function(entry) {
+	                return entry.RGON_DATE === todayDateString;
+	            })[0];
+	            
+	            if (todayData) {
+	                var sunriseTime  = todayData.SUNRISE_TM  ? $.trim(todayData.SUNRISE_TM)  : "";
+	                var sunsetTime   = todayData.SUNSET_TM   ? $.trim(todayData.SUNSET_TM)   : "";
+	                var moonriseTime = todayData.MOONRISE_TM ? $.trim(todayData.MOONRISE_TM) : "";
+	                var moonsetTime  = todayData.MOONSET_TM  ? $.trim(todayData.MOONSET_TM)  : "";
+	                var luncAge      = (todayData.LUNC_AGE === "NULL" || todayData.LUNC_AGE == null) ? "" : $.trim(todayData.LUNC_AGE);
+	                var lunc         = todayData.LUNC_DD ? $.trim(todayData.LUNC_DD) : "";
+	
+	                function formatHHMM(time) {
+	                    if (!time || time.length < 4) return "정보 없음";
+	                    return time.slice(0, 2) + ":" + time.slice(2, 4);
+	                }
+	
+	                function convertTo12HourFormat(time24) {
+	                    if (!time24 || time24.length < 4) return "정보 없음";
+	
+	                    let hours = parseInt(time24.slice(0, 2), 10);
+	                    let minutes = time24.slice(2, 4);
+	                    let period = hours >= 12 ? "오후" : "오전";
+	
+	                    hours = hours % 12;
+	                    hours = hours ? hours : 12;
+	
+	                    return period + " " + hours + ":" + minutes;
+	                }
+	
+	                var formattedSunriseTime = convertTo12HourFormat(sunriseTime);
+	                var formattedSunsetTime  = convertTo12HourFormat(sunsetTime);
+	                var formattedMoonriseTime = convertTo12HourFormat(moonriseTime);
+	                var formattedMoonsetTime  = convertTo12HourFormat(moonsetTime);
+	
+	                // 일출 / 일몰
+	                $('.main_con_sun_txt .sun_txt').eq(0).html('<span>일출</span> ' + formattedSunriseTime);
+	                $('.main_con_sun_txt .sun_txt').eq(1).html('<span>일몰</span> ' + formattedSunsetTime);
+	
+	                // 월출 / 월몰
+	                $('.main_con_moon_txt .moon_txt').eq(0).html('<span>월출</span> ' + formattedMoonriseTime);
+	                $('.main_con_moon_txt .moon_txt').eq(1).html('<span>월몰</span> ' + formattedMoonsetTime);
+	
+	                // 달 이미지
+	                if (lunc) {
+	                    $('.main_con_moon_img img').attr('src', '/resources/images/content/new_calendar_moon' + lunc + '.png');
+	                }
+	                
+	                var sunrise24 = formatHHMM(sunriseTime);
+	                var sunset24  = formatHHMM(sunsetTime);
+	                 
+	              	const partsMonth = today.getMonth(); 
+	         	    const partsYear = today.getFullYear();
+	         	    const partsDay = today.getDate();       
+	         	    
+	              	var totalParts = 16;  // 구간의 개수
+	              	var sunParts = divideTimeIntoParts(sunrise24, sunset24, totalParts, partsYear, partsMonth, partsDay);
+	              	
+	              	getCurrentPart(sunParts);
+	              	
+	              	//getCurrentPart(sunParts, useTestTime ? testTime : null);
+	              	
+	              	// 일출 일몰 16개 구간으로 나누기
+	              	function divideTimeIntoParts(startTime, endTime, totalParts, year, month, day) {
+	              		var startDate = new Date(year, month, day, startTime.split(":")[0], startTime.split(":")[1]);
+	              		var endDate = new Date(year, month, day, endTime.split(":")[0], endTime.split(":")[1]);
+	              		
+	              		//endDate 날짜 다음날로 출력
+	              		if (startDate > endDate) {
+	              			endDate.setDate(endDate.getDate() + 1);
+	              		}
+	              		var interval = (endDate - startDate) / totalParts;
+	
+	              		var parts = [];
+	              		for (let i = 0; i < totalParts; i++) {
+	              			var partTime = new Date(startDate.getTime() + interval * i);
+	              		    var hours = String(partTime.getHours()).padStart(2, "0");
+	              		    var minutes = String(partTime.getMinutes()).padStart(2, "0");
+	              		    parts.push(hours+':'+minutes);
+	              		}
+	              		
+	              		return parts;
+	              	}
+	                     
+	              	function getCurrentPart(parts, testTime) {
+		              	var currentDate = new Date(); 
+		              	var currentHours = String(currentDate.getHours()).padStart(2, "0");
+		              	var currentMinutes = String(currentDate.getMinutes()).padStart(2, "0");
+		              	var currentTime = currentHours + ":" + currentMinutes;  // 실제 현재 시간 사용
+
+	              		// 시간을 분으로 변경
+	              		function convertToMinutes(time) {
+	              			var hours = parseInt(time.slice(0, 2), 10);
+	              		    var minutes = parseInt(time.slice(3, 5), 10);
+	              		    return (hours * 60) + minutes;
+	              		}
+	
+	              		var currentTimeInMinutes = convertToMinutes(currentTime);
+	              		var firstPartTimeInMinutes = convertToMinutes(parts[0]);
+	              		var lastPartTimeInMinutes = convertToMinutes(parts[parts.length - 1]);
+	
+	              		// 현재 시간이 첫 번째 시간보다 작으면 첫 번째 part 반환
+	              		if (currentTimeInMinutes < firstPartTimeInMinutes) {
+	              			var partNo = 0;
+	              		    var className = 'sun_chart part' + partNo;
+	              			var $element = $('.sun_chart');
+	              			if ($element.length > 0) {
+	              				$element.removeClass().addClass(className);
+	              			}
+	              			return className;
+	              		}
+	
+	              		// 현재 시간이 마지막 시간보다 크면 마지막 part 반환
+	              		if (currentTimeInMinutes > lastPartTimeInMinutes) {
+	              			var partNo = parts.length;
+	              		    var className = 'sun_chart part' + partNo;
+	              			var $element = $('.sun_chart');
+	              			if ($element.length > 0) {
+	              				$element.removeClass().addClass(className);
+	              			}
+	              		    
+	              			return className;
+	              		}
+	              		
+	              		// 현재 시간이 범위 내에 있을 경우 가장 가까운 part 계산
+	              		for (let i = 0; i < parts.length - 1; i++) {
+	              			var startPartTimeInMinutes = convertToMinutes(parts[i]);
+	              			var endPartTimeInMinutes = convertToMinutes(parts[i + 1]);
+	
+	              			if (currentTimeInMinutes >= startPartTimeInMinutes && currentTimeInMinutes < endPartTimeInMinutes) {
+	              				var partNo = i + 1;
+	              				var className = 'sun_chart part' + partNo;
+	              				var $element = $('.sun_chart');
+	              				if ($element.length > 0) {
+	              					$element.removeClass().addClass(className);
+	              				}
+	              				return className;
+	              			}
+	              		}
+	              		return null;
+	              	}
+	
+	            }else{
+	            	//도시명
+	            	var shortDistrict = "";
+					if (district) {
+					    shortDistrict = district.split(" ")[0];
+					}
+					$('.place_txt .place_Nm').text($.trim(city + " " + shortDistrict));
+	            	
+	            	//일출 / 일몰
+	            	$('.main_con_sun_txt .sun_txt').eq(0).html('<span>등록된 정보가 없습니다.</span> ');
+	                $('.main_con_sun_txt .sun_txt').eq(1).html('');
+	
+	                // 월출 / 월몰
+	                $('.main_con_moon_txt .moon_txt').eq(0).html('<span>등록된 정보가 없습니다.</span> ');
+	                $('.main_con_moon_txt .moon_txt').eq(1).html('');
+	            	
+	            }
+	        },
+	        error: function(xhr, status, error) {
+	            $('.place_txt .place_Nm').text("서울특별시");
+
+	            $('.main_con_sun_txt .sun_txt').eq(0).html('<span>데이터를 불러올 수 없습니다.</span>');
+	            $('.main_con_sun_txt .sun_txt').eq(1).html('');
+
+	            $('.main_con_moon_txt .moon_txt').eq(0).html('<span>데이터를 불러올 수 없습니다.</span>');
+	            $('.main_con_moon_txt .moon_txt').eq(1).html('');
+	            
+	            console.log("AJAX 실패");
+	            console.log("status:", status);
+	            console.log("error:", error);
+	            console.log("responseText:", xhr.responseText);
+	        }
+	    });
+	}
+});
+
+
+
+
+	function popupClose() {
+		$('#popupzone').hide();
+	}
+	
+  	function popupCloseDay() {    
+       	setCookie('divpop', 'Y' , 1 );
+       	$('#popupzone').hide();
+    }
+  	
+  	function setCookie( name, value, expiredays ) {
+	    var todayDate = new Date();
+	    todayDate.setDate( todayDate.getDate() + expiredays );
+	    document.cookie = name + '=' + escape( value ) + '; path=/; expires=' + todayDate.toGMTString() + ';'
+    }
+	
+    //쿠키 불러오기
+    function getCookie(name) 
+    { 
+        var obj = name + "="; 
+        var x = 0; 
+        while ( x <= document.cookie.length ) 
+        { 
+            var y = (x+obj.length); 
+            if ( document.cookie.substring( x, y ) == obj ) 
+            { 
+                if ((endOfCookie=document.cookie.indexOf( ";", y )) == -1 ) 
+                    endOfCookie = document.cookie.length;
+                return unescape( document.cookie.substring( y, endOfCookie ) ); 
+            } 
+            x = document.cookie.indexOf( " ", x ) + 1; 
+            
+            if ( x == 0 ) break; 
+        } 
+        return ""; 
+    }
+
+</script>
+</head>
+<body>
+	<div id="popupzone" class="popupzone" tabindex="-1" style="display: none;">
+		<div class="popup_zone_wr">
+            <div class="popupzone_con">
+            	<div class="popupzone_tit">티커서비스 종료 및 개인정보 파기 안내</div>
+            	<div class="popupzone_txt">
+            		<p>코스모스 허브 포털 개편에 따라<br> <b>기존 티커 서비스가 종료</b>되었으며,</p>
+            		<p>서비스 신청·운영을 위해 수집한<br> <b>개인정보는 모두 파기하여 현재 보유하고 있지 않음</b>을 알려 드립니다.</p>
+            	</div>
+			</div>
+            <div class="popupzone_bt_list">
+			  <a href="#" class="poopup_btn btn btn-sm btn-sky" role="button" tabindex="0" onclick="popupCloseDay(); return false;">오늘하루열지않기 <i class="fa-solid fa-x"></i></a>
+<!-- 			  <a href="#" class="poopup_btn btn btn-lg btn-blue-deep btn_close" role="button" tabindex="0" onclick="popupClose(); return false;">닫기 <i class="fa-solid fa-x"></i></a> -->
+			</div>
+		</div>
+		<div class="popupzone_bt_close"><a href="#" class="btn_close" role="button" tabindex="0" onclick="popupClose(); return false;"><i class="fa-solid fa-x"></i></a></div>	
+	</div>
+        
+	<div id="accessibility" class="main_accessibility">
+		<a class="accId"  data-value="visual" href="#visualarea">본문 바로가기</a>
+		<a class="accId" data-value="gnb" href="#gnb">대메뉴 바로가기</a>
+	</div>
+	<!-- wrap -->
+	<div id="wrap">
+		
+		<!-- header start -->
+		<div class="home_header" id="home_header">
+		 
+
+
+<script type="text/javascript" src="/resources/js/search/search.js"></script>
+<script type="text/javascript">
+	$(function(){
+		if($(".depth_3").length || $(".tab").length || $(".step").length){
+			$(".depth_3 li a, .tab li a, .step li .cont").matchHeight({
+	    	    byRow: true,
+	    	    property: 'height',
+	    	    target: null,
+	    	    remove: false
+	    	});
+		}
+	
+		// 전체메뉴
+		$('.header_btn_menu').on('click', function (e) {
+	        e.stopPropagation();
+	        $('.all_menu_wr').toggleClass('active');
+	    });
+	    $('#header_wrap').on('mouseleave', function () {
+	        $('.all_menu_wr').removeClass('active');
+	    });
+	    $('.nav-menu > a').on('mouseenter focus', function () {
+	        $('.all_menu_wr').removeClass('active');
+	    });
+
+    });
+	
+	$(window).on('scroll', function () {
+	    if ($(window).scrollTop() > 200) {
+	        $('#header_wrap').addClass('active');
+	    } else {
+	        $('#header_wrap').removeClass('active');
+	    }
+	});
+</script>
+
+
+    
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+
+<!-- header start -->
+<header id="header_wrap">
+    <div class="header grab">
+        <h1>
+        	<a class="navbar-brand" href="/index">
+        		<img class="header_logo_b" src="/resources/images/kas_astro_logo_new.png?ver=261012" alt="KASI 한국천문연구원 코스모스 허브" />
+        		<img class="header_logo_w" src="/resources/images/kas_astro_logo_new_w.png?ver=261012" alt="KASI 한국천문연구원 코스모스 허브" />
+       		</a>
+      	</h1>
+
+        <nav id="gnb">
+            <h2 class="sr-only">주메뉴</h2> 
+            <!-- nav -->
+            <div id="nav" class="nav">
+				
+					
+					<div class="nav-menu" >
+						<a  href="/kor/life/pageView/9" onfocus="menuMouseOver(this, 1)" onmouseover="menuMouseOver(this, 1)" >
+							천문우주정보
+							<span class="line"></span>
+						</a>
+						<div class="nav_depth">
+							<div class="nav_depth_wr">
+								<div class="nav_depth_con_tit">천문우주정보</div>
+								<div class="nav_depth_con">
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/life/pageView/9">일출일몰시각계산</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/life/pageView/6">월별 해/달 출몰시각</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/life/pageView/8">음양력변환계산</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/life/pageView/5">월별음양력</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/life/post/calendarData">달력자료(월력요항)</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/life/pageView/7">월별천문현상</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/life/pageView/10">태양고도/방위각계산</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/almanac/pageView/26">역서</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/almanac/pageView/6472">고천문기록 검색</a></div>
+											
+										
+									
+								
+								</div>
+							</div>
+						</div>
+					</div>
+                
+					
+					<div class="nav-menu" >
+						<a  href="/kor/pageView/6453" onfocus="menuMouseOver(this, 2)" onmouseover="menuMouseOver(this, 2)" >
+							천문우주지식
+							<span class="line"></span>
+						</a>
+						<div class="nav_depth">
+							<div class="nav_depth_wr">
+								<div class="nav_depth_con_tit">천문우주지식</div>
+								<div class="nav_depth_con">
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6453">별자리</a></div>
+											
+										
+									
+								
+									
+										
+											
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												
+							               			
+							               			<div class="nav_depth_con_txt"><a href="/kor/post/se2021_2030">일식</a></div>
+							               		 
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												 
+											
+										
+										
+									
+								
+									
+										
+											
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												
+							               			
+							               			<div class="nav_depth_con_txt"><a href="/kor/post/le2021_2030">월식</a></div>
+							               		 
+											
+												
+													
+													
+													
+												 
+											
+												
+													
+													
+													
+												 
+											
+										
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/post/solarSystemOverview">천문우주과학</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6460">천문우주 뉴스</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6461">천문 갤러리</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6462">천문우주 영상</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6463">천문용어 검색</a></div>
+											
+										
+									
+								
+								</div>
+							</div>
+						</div>
+					</div>
+                
+					
+					<div class="nav-menu" >
+						<a  href="/kor/post/eventCalender" onfocus="menuMouseOver(this, 3)" onmouseover="menuMouseOver(this, 3)" >
+							시민천문학
+							<span class="line"></span>
+						</a>
+						<div class="nav_depth">
+							<div class="nav_depth_wr">
+								<div class="nav_depth_con_tit">시민천문학</div>
+								<div class="nav_depth_con">
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/post/eventCalender">천문이벤트캘린더</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6464">우리나라 천문대</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6471">은하분류 프로젝트</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/post/suggestions">천문현상 제보</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/post/amateur_guide">아마추어 천문학 가이드</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6465">천문커리어 가이드</a></div>
+											
+										
+									
+								
+								</div>
+							</div>
+						</div>
+					</div>
+                
+					
+					<div class="nav-menu" >
+						<a  href="/kor/pageView/6467" onfocus="menuMouseOver(this, 4)" onmouseover="menuMouseOver(this, 4)" >
+							모두의 우주
+							<span class="line"></span>
+						</a>
+						<div class="nav_depth">
+							<div class="nav_depth_wr">
+								<div class="nav_depth_con_tit">모두의 우주</div>
+								<div class="nav_depth_con">
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/pageView/6467">지금, 하늘</a></div>
+											
+										
+									
+								
+									
+										
+										
+											
+												<div class="nav_depth_con_txt"><a href="/kor/post/researchData">연구 데이터</a></div>
+											
+										
+									
+								
+								</div>
+							</div>
+						</div>
+					</div>
+                
+            </div>
+        </nav>
+        <div class="header_btn_wr">
+        	
+            <!-- 통합검색 
+            <form name="searchForm_main" id="searchForm_main" class="form-horizontal" method="post">
+				<div class="head-search">
+					<label for="head-search-input" class="sr-only">통합검색</label>
+					<input class="form-control" type="text" name="keyword" id="search_txt" placeholder="검색어를 입력하세요">
+					<a tabindex="0" id="head-search-i" onclick="allSearch('main','header');" onkeypress="this.onclick;" class="head-search-btn"><i class="bi bi-search"></i><span class="sr-only">검색</span></a>
+				</div>
+				<input type="hidden" id="searchTerm_main" name="searchTerm_main" value=""/>
+			</form>
+			 //통합검색 -->
+			
+			<!-- 전체 메뉴 -->
+			<button type="button" class="header_btn header_btn_menu">
+                <span class="sr-only">Toggle navigation</span>
+                <i class="bi bi-list"></i>
+            </button>
+            
+			<!-- 소셜미디어 -->
+			<span class="header_btn_list">
+		    	<a class="header_btn youtube" href="https://youtube.com/@kasi9184?si=X-jL7l3K9FNZb0OC" target="_blank" title="천문연 유튜브로 이동(새창)"><img src="/resources/images/sns_youtube.png" alt="유튜브"></a>
+		    	<a class="header_btn twit" href="https://www.instagram.com/kasi__star" target="_blank" title="천문연 인스타그램으로 이동(새창)"><img src="/resources/images/sns_insta.png" alt="인스타그램"></a>
+		    	<a class="header_btn face" href="https://www.facebook.com/kasipr" target="_blank" title="천문연 페이스북으로 이동(새창)"><img src="/resources/images/sns_facebook.png" alt="페이스북"></a>
+	    	</span>
+	    	
+	    	<!-- 관련사이트 -->
+	    	<div class="header_btn_dropdown dropdown">
+        		<button class="dropdown-toggle" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">관련 사이트</button>
+        		<ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
+	        		 
+				        <li>
+				            <a class="dropdown-item"
+				               href="http://www.moi.go.kr"
+				               target="_blank">
+				               
+				               행정자치부 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+				        <li>
+				            <a class="dropdown-item"
+				               href="http://www.nia.or.kr"
+				               target="_blank">
+				               
+				               NIA 한국정보문화진흥원 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+				        <li>
+				            <a class="dropdown-item"
+				               href="https://www.kasi.re.kr"
+				               target="_blank">
+				               
+				               KASI 한국천문연구원 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+				        <li>
+				            <a class="dropdown-item"
+				               href="http://www.data.go.kr"
+				               target="_blank">
+				               
+				               DATE.GO.KR 공공데이터포털 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+				        <li>
+				            <a class="dropdown-item"
+				               href="http://www.ntis.go.kr"
+				               target="_blank">
+				               
+				               ntis 국가과학기술지식정보서비스 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+				        <li>
+				            <a class="dropdown-item"
+				               href="http://www.moe.go.kr"
+				               target="_blank">
+				               
+				               교육과학기술부 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+				        <li>
+				            <a class="dropdown-item"
+				               href="http://www.nst.re.kr"
+				               target="_blank">
+				               
+				               nst 국가과학기술연구회 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+				        <li>
+				            <a class="dropdown-item"
+				               href="http://www.zeus.go.kr/cloud?organCd=200702080212"
+				               target="_blank">
+				               
+				               ZEUS 장비활용서비스 <i class="bi bi-box-arrow-up-right"></i>
+				            </a>
+				        </li>
+				    
+			    </ul>
+        		<!-- <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
+        			<li><a class="dropdown-item" href="#">관련 사이트명 01</a></li>
+       				<li><a class="dropdown-item" href="#">관련 사이트명 02</a></li>
+       				<li><a class="dropdown-item" href="#">관련 사이트명 03</a></li>
+     			</ul> -->
+    		</div>
+    		
+    		
+			<button type="button" class="header_btn header_btn_mobile" data-bs-toggle="modal" data-bs-target="#mobileMenu">
+                <span class="sr-only">Toggle navigation</span>
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+    </div>
+
+    
+    
+        
+    
+        
+    
+        
+    
+        
+    
+	
+    
+    
+    <!-- 전체메뉴 -->
+    <div class="all_menu_wr">
+    	<div class="all_menu_con">
+    		
+	    	<div class="all_menu_nav">
+	    		<div class="all_menu_tit">천문우주정보</div>
+	    		<div class="all_menu_dept">
+	    		
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/life/pageView/9">일출일몰시각계산</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/life/pageView/6">월별 해/달 출몰시각</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/life/pageView/8">음양력변환계산</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/life/pageView/5">월별음양력</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/life/post/calendarData">달력자료(월력요항)</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/life/pageView/7">월별천문현상</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/life/pageView/10">태양고도/방위각계산</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/almanac/pageView/26">역서</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/almanac/pageView/6472">고천문기록 검색</a></div>
+							
+						
+					
+				
+	    		</div>
+    		</div>
+			
+	    	<div class="all_menu_nav">
+	    		<div class="all_menu_tit">천문우주지식</div>
+	    		<div class="all_menu_dept">
+	    		
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6453">별자리</a></div>
+							
+						
+					
+				
+	    			
+						
+							
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								
+			               			
+			               			<div class="all_menu_dept_txt"><a href="/kor/post/se2021_2030">일식</a></div>
+			               		 
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								 
+							
+						
+						
+					
+				
+	    			
+						
+							
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								
+			               			
+			               			<div class="all_menu_dept_txt"><a href="/kor/post/le2021_2030">월식</a></div>
+			               		 
+							
+								
+									
+									
+									
+								 
+							
+								
+									
+									
+									
+								 
+							
+						
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/post/solarSystemOverview">천문우주과학</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6460">천문우주 뉴스</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6461">천문 갤러리</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6462">천문우주 영상</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6463">천문용어 검색</a></div>
+							
+						
+					
+				
+	    		</div>
+    		</div>
+			
+	    	<div class="all_menu_nav">
+	    		<div class="all_menu_tit">시민천문학</div>
+	    		<div class="all_menu_dept">
+	    		
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/post/eventCalender">천문이벤트캘린더</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6464">우리나라 천문대</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6471">은하분류 프로젝트</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/post/suggestions">천문현상 제보</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/post/amateur_guide">아마추어 천문학 가이드</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6465">천문커리어 가이드</a></div>
+							
+						
+					
+				
+	    		</div>
+    		</div>
+			
+	    	<div class="all_menu_nav">
+	    		<div class="all_menu_tit">모두의 우주</div>
+	    		<div class="all_menu_dept">
+	    		
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/pageView/6467">지금, 하늘</a></div>
+							
+						
+					
+				
+	    			
+						
+						
+							
+								<div class="all_menu_dept_txt"><a href="/kor/post/researchData">연구 데이터</a></div>
+							
+						
+					
+				
+	    		</div>
+    		</div>
+			
+		</div>
+    </div>
+    <!-- //전체메뉴 -->
+
+</header>
+<!-- header end -->
+
+
+<!-- Phones&Tablets menu -->
+<div class="modal fade mobile-menu-modal" id="mobileMenu" tabindex="-1" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-slide">
+		<div class="modal-content">
+      		<div class="modal-header">
+      			<h2><a class="navbar-brand" href="/index"><img src="/resources/images/kas_astro_logo_new.png" alt="KASI 한국천문연구원 코스모스 허브"></a></h2>
+        		<!-- <div class="head-search">
+	            	<label for="head-search-input" class="sr-only">통합검색</label>
+	            	<input class="form-control" type="text" name="keyword" id="head-search-input" placeholder="검색어를 입력하세요">
+	            	<a tabindex="0" id="head-search-i" onclick="javascript:fnSearch();" onkeypress="this.onclick;" class="head-search-btn"><i class="bi bi-search"></i><span class="sr-only">검색</span></a>
+	            </div> -->
+        		<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+      		</div>
+      		<div class="modal-body">
+      			<div class="accordion">
+	      			
+	      			<div class="mobile-menu-list accordion-item">
+	      				<h2 class="accordion-header"><button class="mobile-menu-tit accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-menu-0">천문우주정보</button></h2>
+		    			<div class="mobile-menu-dept accordion-collapse collapse" id="mobile-menu-0">
+	    				
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/life/pageView/9">일출일몰시각계산</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/life/pageView/6">월별 해/달 출몰시각</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/life/pageView/8">음양력변환계산</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/life/pageView/5">월별음양력</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/life/post/calendarData">달력자료(월력요항)</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/life/pageView/7">월별천문현상</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/life/pageView/10">태양고도/방위각계산</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/almanac/pageView/26">역서</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/almanac/pageView/6472">고천문기록 검색</a></div>
+							
+						
+		    			</div>
+	      			</div>
+	      			
+	      			<div class="mobile-menu-list accordion-item">
+	      				<h2 class="accordion-header"><button class="mobile-menu-tit accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-menu-1">천문우주지식</button></h2>
+		    			<div class="mobile-menu-dept accordion-collapse collapse" id="mobile-menu-1">
+	    				
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6453">별자리</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/post/se1991_2000">일식</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/post/le1991_2000">월식</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/post/solarSystemOverview">천문우주과학</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6460">천문우주 뉴스</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6461">천문 갤러리</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6462">천문우주 영상</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6463">천문용어 검색</a></div>
+							
+						
+		    			</div>
+	      			</div>
+	      			
+	      			<div class="mobile-menu-list accordion-item">
+	      				<h2 class="accordion-header"><button class="mobile-menu-tit accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-menu-2">시민천문학</button></h2>
+		    			<div class="mobile-menu-dept accordion-collapse collapse" id="mobile-menu-2">
+	    				
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/post/eventCalender">천문이벤트캘린더</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6464">우리나라 천문대</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6471">은하분류 프로젝트</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/post/suggestions">천문현상 제보</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/post/amateur_guide">아마추어 천문학 가이드</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6465">천문커리어 가이드</a></div>
+							
+						
+		    			</div>
+	      			</div>
+	      			
+	      			<div class="mobile-menu-list accordion-item">
+	      				<h2 class="accordion-header"><button class="mobile-menu-tit accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-menu-3">모두의 우주</button></h2>
+		    			<div class="mobile-menu-dept accordion-collapse collapse" id="mobile-menu-3">
+	    				
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/pageView/6467">지금, 하늘</a></div>
+							
+						
+							
+								<div class="accordion-body mobile-menu-dept-txt"><a href="/kor/post/researchData">연구 데이터</a></div>
+							
+						
+		    			</div>
+	      			</div>
+	      			
+      			</div>
+      		</div>
+      		<div class="modal-footer">
+      			<!-- 관련사이트 -->
+      			<div class="header_btn_dropdown dropdown">
+	        		<button class="dropdown-toggle" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">관련 사이트</button>
+	        		<ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
+		        		 
+					        <li>
+					            <a class="dropdown-item"
+					               href="http://www.moi.go.kr"
+					               target="_blank">
+					               
+					               행정자치부 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+					        <li>
+					            <a class="dropdown-item"
+					               href="http://www.nia.or.kr"
+					               target="_blank">
+					               
+					               NIA 한국정보문화진흥원 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+					        <li>
+					            <a class="dropdown-item"
+					               href="https://www.kasi.re.kr"
+					               target="_blank">
+					               
+					               KASI 한국천문연구원 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+					        <li>
+					            <a class="dropdown-item"
+					               href="http://www.data.go.kr"
+					               target="_blank">
+					               
+					               DATE.GO.KR 공공데이터포털 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+					        <li>
+					            <a class="dropdown-item"
+					               href="http://www.ntis.go.kr"
+					               target="_blank">
+					               
+					               ntis 국가과학기술지식정보서비스 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+					        <li>
+					            <a class="dropdown-item"
+					               href="http://www.moe.go.kr"
+					               target="_blank">
+					               
+					               교육과학기술부 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+					        <li>
+					            <a class="dropdown-item"
+					               href="http://www.nst.re.kr"
+					               target="_blank">
+					               
+					               nst 국가과학기술연구회 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+					        <li>
+					            <a class="dropdown-item"
+					               href="http://www.zeus.go.kr/cloud?organCd=200702080212"
+					               target="_blank">
+					               
+					               ZEUS 장비활용서비스 <i class="bi bi-box-arrow-up-right"></i>
+					            </a>
+					        </li>
+					    
+				    </ul>
+	    		</div>
+      			<!-- //관련사이트 -->
+	    		<!-- 소셜미디어 -->
+	    		<div class="header_btn_list">
+			    	<a class="header_btn youtube" href="https://youtube.com/@kasi9184?si=X-jL7l3K9FNZb0OC" target="_blank" title="천문연 유튜브로 이동(새창)"><img src="/resources/images/sns_youtube.png" alt="유튜브"></a>
+			    	<a class="header_btn twit" href="https://www.instagram.com/kasi__star" target="_blank" title="천문연 인스타그램으로 이동(새창)"><img src="/resources/images/sns_insta.png" alt="인스타그램"></a>
+			    	<a class="header_btn face" href="https://www.facebook.com/kasipr" target="_blank" title="천문연 페이스북으로 이동(새창)"><img src="/resources/images/sns_facebook.png" alt="페이스북"></a>
+		    	</div>
+		    	<!-- //소셜미디어 -->
+      		</div>
+    	</div>
+	</div>
+</div>
+<!-- //Phones&Tablets menu --> 
+		</div>
+		<!-- header end -->
+		
+		<!-- 메인 -->
+		<div class="main_wr">
+			<div class="main_block_01">
+				<div class="main_container">
+					<div class="main_tit">
+						<p class="tit_md">일상과 우주를 연결하는 지식의 허브</p>
+						<p class="tit_lg">KASI <span>COSMOS</span> HUB</p>
+						<p class="tit_sm">Connection Our Sky, Meeting Outer Space <br>- everyday, everywhere</p>
+					</div>
+					<div class="main_link_wr">
+						<a href="/kor/life/pageView/9" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico01.png" alt=""></div>
+							<p>일출일몰시각계산</p>
+						</a>
+						<a href="/kor/life/pageView/10" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico02.png" alt=""></div>
+							<p>태양 고도/방위각 계산</p>
+						</a>
+						<a href="/kor/life/pageView/8" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico03.png" alt=""></div>
+							<p>음양력변환계산</p>
+						</a>
+						<a href="/kor/life/pageView/6" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico04.png" alt=""></div>
+							<p>월별 해/달 출몰시각</p>
+						</a>
+						<a href="/kor/life/pageView/7" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico05.png" alt=""></div>
+							<p>월별 천문현상</p>
+						</a>
+						<a href="/kor/citizen/post/eventCalender" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico06.png" alt=""></div>
+							<p>천문이벤트캘린더</p>
+						</a>
+						<a href="/kor/pageView/6464" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico07.png" alt=""></div>
+							<p>우리나라 천문대</p>
+						</a>
+						<a href="/kor/pageView/6467" class="main_link_con">
+							<div class="main_link_ico"><img src="/resources/images/main/main-link-ico08.png?20260720" alt=""></div>
+							<p>지금, 하늘</p>
+						</a>
+					</div>
+				</div>
+			</div>
+			
+			<div class="main_block_02">
+				<div class="main_container">
+					<div class="main_contents_wr">
+						<div class="main_contents main_contents_sun border-radius-20">
+							<div class="place_txt"><img src="/resources/images/main/place_ico.png" alt=""/><span class="place_Nm"></span></div>
+							<div class="main_con_sun"  onclick="location.href='/kor/life/pageView/9'">
+								<div class="con_sun_tit">일출 일몰</div>
+								
+								<div class="sun_panel sun_info_wr">
+									<!-- 해 움직임 -->
+						            <div class="sun_chart">
+						                <div class="move_sun"></div>
+						                <div class="progress_bar">
+					                       	<div class="base_bar"></div>
+					                        <div class="fill_bar"></div>
+						                </div>
+					                </div>
+					                <!-- //해 움직임 -->
+						        </div>
+								<div class="main_con_sun_txt">
+									<div class="sun_txt">일출<span>오전 </span></div>
+									<div class="sun_txt">일몰<span>오후 </span></div>
+								</div>
+							</div>
+							<div class="main_con_moon"  onclick="location.href='/kor/life/pageView/9'">
+								<div class="con_sun_tit">월출 월몰</div>
+								<div class="main_con_moon_con">
+									<div class="main_con_moon_img"><img src="/resources/images/content/new_calendar_moon08.png" alt=""></div>
+									<div class="main_con_moon_txt">
+										<div class="moon_txt">월출<span>오전 </span></div>
+										<div class="moon_txt">월몰<span>오후 </span></div>
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="main_link_wr main_link_wr_mo">
+							<a href="/kor/life/pageView/9" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico01-1.png" alt=""></div>
+								<p>일출일몰시각계산</p>
+							</a>
+							<a href="/kor/life/pageView/10" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico02-1.png" alt=""></div>
+								<p>태양 고도/방위각 계산</p>
+							</a>
+							<a href="/kor/life/pageView/8" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico03-1.png" alt=""></div>
+								<p>음양력변환계산</p>
+							</a>
+							<a href="/kor/life/pageView/6" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico04-1.png" alt=""></div>
+								<p>월별 해/달 출몰시각</p>
+							</a>
+							<a href="/kor/life/pageView/7" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico05-1.png" alt=""></div>
+								<p>월별 천문현상</p>
+							</a>
+							<a href="/kor/citizen/post/eventCalender" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico06-1.png" alt=""></div>
+								<p>천문이벤트캘린더</p>
+							</a>
+							<a href="/kor/pageView/6460" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico07-1.png" alt=""></div>
+								<p>우리나라 천문대</p>
+							</a>
+							<a href="/kor/pageView/6467" class="main_link_con">
+								<div class="main_link_ico"><img src="/resources/images/main/main-link-ico08-1.png?20260720" alt=""></div>
+								<p>지금, 하늘</p>
+							</a>
+						</div>
+						<div class="main_contents main_contents01 border-radius-20">
+							
+								<a href="/kor/life/pageView/9" class="main_con_tit">천문우주정보<span>실시간 천문 데이터와 계산 도구</span></a>
+							
+							<ul class="main_con_list">
+								
+									<li><a href="/kor/life/post/calendarData">달력자료(월력요항)</a></li>
+								
+								
+									<li><a href="/kor/life/pageView/5">월별음양력</a></li>
+								
+								
+									<li><a href="/kor/almanac/pageView/26">역서</a></li>
+								
+								
+									<li><a href="/kor/almanac/pageView/6472">고천문기록 검색</a></li>
+								
+							</ul>
+						</div>
+						<div class="main_contents main_contents02 border-radius-20">
+							
+								<a href="/kor/pageView/6460" class="main_con_tit">천문우주지식<span>우주를 이해하는 다양한 콘텐츠</span></a>
+							
+							<ul class="main_con_list">
+								
+									<li><a href="/kor/pageView/6453">별자리</a></li>
+								
+								
+									<li><a href="#" id="seMenuLnk">일식</a></li>
+								
+								
+									<li><a href="#" id="leMenuLnk">월식</a></li>
+								
+								
+									<li><a href="/kor/post/solarSystemOverview">천문우주과학</a></li>
+								
+							</ul>
+						</div>
+						<div class="main_contents main_contents_slide border-radius-20">
+							<div class="main_con_slide_wr">
+								
+		 							
+										
+										
+										<div class="main_con_slide"><a href="https://www.kasi.re.kr/kor/education/post/astronomy-contest/32229" target="_blank" title="2026 천체사진전 서울"><img src="/file/thumbnail/sm_20261014155950307.jpg" alt="2026 천체사진전 서울" onerror="this.src='/resources/images/main/main-event-img.png'"></a></div>
+									
+								
+								
+							</div>
+							
+								<div class="main_con_slide_paging"><span class="slide_paging"></span><button class="slide-toggle" type="button"><i class="bi bi-pause"></i></button></div>
+							
+						</div>
+						
+							<script>
+								let isPlaying = true;
+			
+								$('.main_con_slide_wr')
+								  .on('init reInit afterChange', function (event, slick, currentSlide) {
+								    let i = (currentSlide ? currentSlide : 0) + 1;
+								    $('.slide_paging').text(i + ' / ' + slick.slideCount);
+								    
+								 	// slick이 자동 생성한 재생/정지 버튼 제거
+								    $(this).find('.slick-autoplay-toggle-button').remove();
+								 	
+								    //슬라이드 하나일 때
+								    if (slick.slideCount <= 1) {
+								        $(this).addClass('is-single');
+									    $('.main_con_slide_paging').hide();
+								        slick.slickPause();
+								        isPlaying = false;
+		
+								      } else {
+								        $(this).removeClass('is-single');
+									    $('.main_con_slide_paging').show();
+									    $('.slide-toggle').html('<i class="bi bi-pause"></i>');
+								        isPlaying = true;
+								      }
+								  })
+								  .slick({
+								    slidesToShow: 1,
+								    slidesToScroll: 1,
+								    infinite: true,
+								    dots: false,
+								    speed: 400,
+								    autoplay: true,
+								    autoplaySpeed: 3000,
+								    pauseOnHover: false,
+								    prevArrow: '<button class="slick-prev custom-arrow prev" type="button"><i class="bi bi-chevron-left"></i></button>',
+								    nextArrow: '<button class="slick-next custom-arrow next" type="button"><i class="bi bi-chevron-right"></i></button>'
+								  });
+			
+								$('.slide-toggle').on('click', function () {
+								  if (isPlaying) {
+								    $('.main_con_slide_wr').slick('slickPause');
+								    $(this).html('<i class="bi bi-play"></i>');
+								  } else {
+								    $('.main_con_slide_wr').slick('slickPlay');
+								    $(this).html('<i class="bi bi-pause"></i>');
+								  }
+								  isPlaying = !isPlaying;
+								});
+							</script>
+						
+					</div>
+					<div class="main_news_wr border-radius-20">
+						<div class="main_news_tit"><a href="/kor/pageView/6460">천문우주 뉴스 <span class="bi bi-plus-circle"></span></a></div>
+						<div class="main_news_con">
+							<div class="main_news_slide">
+							
+								
+									
+									<div class="main_news_list"><a href="https://www.kasi.re.kr/kor/post/newsMaterial/32486" target="_blank">암흑물질은 정말 우리가 생각하는 ‘물질’일까?</a></div>
+								
+									
+									<div class="main_news_list"><a href="https://www.kasi.re.kr/kor/post/newsMaterial/32472" target="_blank">천문연, 유럽과 손잡고 목성 탐사선 정밀 추적 나선다</a></div>
+								
+									
+									<div class="main_news_list"><a href="https://www.kasi.re.kr/kor/post/newsMaterial/32470" target="_blank">미항공우주국(NASA) 차세대 원적외선 우주망원경 미션 ‘프리마(PRIMA)’ 참여</a></div>
+								
+									
+									<div class="main_news_list"><a href="https://www.kasi.re.kr/kor/post/newsMaterial/32461" target="_blank">한가위 보름달 9월 25일 오후 5시 34분에 뜬다</a></div>
+								
+									
+									<div class="main_news_list"><a href="https://www.kasi.re.kr/kor/post/newsMaterial/32456" target="_blank">은하 사이를 떠도는 희미한 별빛으로 암흑물질의 정체를 묻다</a></div>
+								
+							
+							
+							
+							</div>
+							
+								<div class="main_news_control"><span class="paging"></span></div>
+							
+						</div>
+						<script>
+						$('.main_news_slide')
+						  .on('init reInit afterChange', function (event, slick, currentSlide) {
+						    let i = (currentSlide ? currentSlide : 0) + 1;
+						    $(this).closest('.main_news_con').find('.main_news_control .paging').text(i + ' / ' + slick.slideCount);
+						  })
+						  .slick({
+						    slidesToShow: 1,
+						    slidesToScroll: 1,
+						    infinite: true,
+						    dots: false,
+						    speed: 400,
+						    autoplay: false,
+						    pauseOnHover: false,
+						    appendArrows: $('.main_news_control'),
+						    prevArrow: '<button class="slick-prev news-arrow news-prev" type="button"><i class="bi bi-chevron-left"></i></button>',
+						    nextArrow: '<button class="slick-next news-arrow news-next" type="button"><i class="bi bi-chevron-right"></i></button>'
+						  });
+						</script>
+					</div>
+				</div>
+			</div>
+		</div>
+		<!-- //메인 -->
+		
+		<!--footer start-->
+		<div class="kr_main_footer">
+<!-- 
+<div class="quick_wr">
+	<div class="quick_con box-shadow-blue border-gray">
+		<div class="quick_btn_wr"><div class="quick_btn"><i class="bi bi-arrow-right-short"></i></div></div>
+		<div class="quick_tit">Quick Menu</div>
+		<div class="guick_list guick_list_img"><a href="/kor/pageView/6467"><img src="/resources/images/quick_ico.png" alt="">지금, 하늘</a></div>
+	</div>
+	
+	<button class="btn-top" type="button"><i class="bi bi-arrow-up"></i><span>TOP</span></button>
+</div>
+<script>
+	//스크롤 내리면 버튼 보이기
+	$(window).on('scroll', function () {
+	  if ($(this).scrollTop() > 200) {
+	    $('.btn-top').fadeIn();
+	  } else {
+	    $('.btn-top').fadeOut();
+	  }
+	});
+	
+	// 클릭하면 맨 위로 이동
+	$('.btn-top').on('click', function () {
+	  $('html, body').animate({ scrollTop: 0 }, 300);
+	});
+	
+	$(function () {
+	  const QuickMenu = document.querySelector('.quick_wr');
+	  const QuickBtn = document.querySelector('.quick_btn');
+
+	  // 버튼 클릭 (토글)
+	  QuickBtn.addEventListener('click', () => {
+		  QuickMenu.classList.toggle('active');
+	  });
+
+	  // 화면 크기 체크 함수
+	  function checkWidth() {
+	    if (window.innerWidth <= 1200) {
+	    	QuickMenu.classList.add('active');
+	    } else {
+	    	QuickMenu.classList.remove('active');
+	    }
+	  }
+
+	  // 최초 실행 (페이지 로드시)
+	  checkWidth();
+
+	  // 리사이즈 될 때마다 실행
+	  window.addEventListener('resize', checkWidth);
+	});
+</script>
+ -->
+<button class="btn-top" type="button"><i class="bi bi-arrow-up"></i><span>TOP</span></button> 
+<script>
+	//스크롤 내리면 버튼 보이기
+	$(window).on('scroll', function () {
+	  if ($(this).scrollTop() > 200) {
+	    $('.btn-top').fadeIn();
+	  } else {
+	    $('.btn-top').fadeOut();
+	  }
+	});
+	// 클릭하면 맨 위로 이동
+	$('.btn-top').on('click', function () {
+	  $('html, body').animate({ scrollTop: 0 }, 300);
+	});
+	
+</script>
+
+<!--footer start-->
+<footer class="footer">
+	<div class="grab">
+		<div class="footer_wr">
+			<a class="ft_logo color-basic" href="/index" target="_blank"><img src="/resources/images/kas_astro_logo_new.png" alt="한국천문연구원 코스모스 허브"></a>
+			<div class="txt color-basic">
+				<p class="add">(34055) 대전광역시 유성구 대덕대로 776, 한국천문연구원</p>
+				<p><b>전화</b>080-373-3333(무료) / 042-865-3333(유료)</p>
+				<p><b>천문정보 ARS</b>042-865-3332</p>
+				<p><b>팩스</b>042-861-5610</p>
+			</div>
+		</div>
+		<div class="footer_bottom">
+			<div class="link color-basic">
+				<a class="color-blue" href="https://www.kasi.re.kr/kor/post/privacy" target="_blank" title="새창으로 열림">개인정보처리방침 <i class="bi bi-box-arrow-up-right"></i></a>
+				<a href="https://www.kasi.re.kr/kor/pageView/134" target="_blank" title="새창으로 열림">저작권정책 <i class="bi bi-box-arrow-up-right"></i></a>
+				<a href="/kor/post/suggestions">천문현상 제보</a>
+				<a href="https://www.kasi.re.kr/" target="_blank" title="새창으로 열림">한국천문연구원 홈페이지 바로가기 <i class="bi bi-box-arrow-up-right"></i></a>
+			</div>
+			<p class="copyright color-gray">Copyright (C) Korea Astronomy and Space Science Institute. All Rights Reserved.</p>
+		</div>
+	</div>
+</footer>
+<!--footer end-->
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-98871218-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- <script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-71702148-6', 'auto');
+  ga('send', 'pageview');
+</script> -->
+
+
+<!-- familySiteModal -->
+<!-- <div class="modal Submodal familySiteModal fade" id="familySiteModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true"> -->
+<!--   <div class="modal-dialog"> -->
+<!-- 	 <h3 class="h3_title_noimg">관련 사이트</h3> -->
+<!--      <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button> -->
+<!-- 	    <ul> -->
+<!-- 	     <li><a href="http://www.mopas.go.kr" target="_blank"><img src="/resources/images/content/footer_site_1.jpg" alt="행정안전부"></a></li> -->
+<!-- 	     <li><a href="http://www.nia.or.kr" target="_blank"><img src="/resources/images/content/footer_site_2.jpg"  alt="한국정보문화진흥원"></a></li> -->
+<!-- 	     <li><a href="http://www.kasi.re.kr" target="_blank"><img src="/resources/images/content/footer_site_3.jpg"  alt="한국천문연구원"></a></li> -->
+<!-- 	     <li><a href="http://www.data.go.kr" target="_blank"><img src="/resources/images/content/footer_site_4.jpg"  alt="공공데이터포털"></a></li> -->
+<!-- 	     <li><a href="http://www.ntis.go.kr" target="_blank"><img src="/resources/images/content/footer_site_5.jpg"  alt="국가과학기술 종합정보서비스"></a></li> -->
+<!-- 	     <li><a href="http://www.mest.go.kr" target="_blank"><img src="/resources/images/content/footer_site_6.jpg"  alt="교육과학기술부"></a></li> -->
+<!-- 	     <li><a href="http://www.nst.re.kr" target="_blank"><img src="/resources/images/content/footer_site_7.jpg"  alt="국가과학기술연구회"></a></li> -->
+<!-- 	     <li><a href="http://www.zeus.go.kr/cloud?organCd=200702080212" target="_blank"><img src="/resources/images/content/footer_site_1.jpg"  alt="ZEUS"></a></li> -->
+<!-- 	    </ul> -->
+<!--   </div> -->
+<!-- </div> -->
+<!-- //familySiteModal -->
+
+<!-- siteMapModal -->
+<!-- <div class="modal Submodal siteMapModal fade" id="siteMapModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true"> -->
+<!--   <div class="modal-dialog"> -->
+<!--      <h3 class="h3_title_noimg">사이트맵</h3> -->
+<!--      <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button> -->
+	 
+<!--   </div> -->
+<!-- </div>	 -->
+<!-- //siteMapModal --></div>
+		<!--footer end-->
+	</div>
+	<!-- //wrap -->
+	<script type="text/javascript" src="/resources/js/bootstrap.bundle.min.js"></script>
+
+	<!-- <script>
+	  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+	  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+	  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+	  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+	
+	  ga('create', 'UA-98871218-1', 'auto');
+	  ga('send', 'pageview');
+	
+	</script> -->
+
+</body>
+</html>
