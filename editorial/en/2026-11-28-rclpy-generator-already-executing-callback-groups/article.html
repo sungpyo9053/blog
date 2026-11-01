@@ -1,0 +1,212 @@
+<pre><code>Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 323, in spin
+    self.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 867, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 848, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 784, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+ValueError: generator already executing</code></pre>
+
+<p>On Jazzy and Lyrical the same mistake gives a different error, raised in the call you just made:</p>
+
+<pre><code>  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning</code></pre>
+
+<p>Short answer: both errors mean one executor is being spun from two places at once. On Humble that was a second <code>rclpy.spin()</code> on the global executor from another thread, a <code>rclpy.spin_once()</code> without a timeout from another thread, or <code>executor.spin_once()</code> without a timeout inside a callback of a <code>MultiThreadedExecutor</code>. Don't spin again to wait for a service. Spin once, in one place, and wait in a way the executor can still serve:</p>
+
+<pre><code class="language-python">from std_srvs.srv import Trigger
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+
+# in __init__
+self.cli = self.create_client(Trigger, 'trig',
+                              callback_group=MutuallyExclusiveCallbackGroup())
+self.create_timer(0.2, self.on_timer)        # stays in the default group
+
+def on_timer(self):
+    resp = self.cli.call(Trigger.Request())  # blocking call, now safe
+
+# in main
+ex = MultiThreadedExecutor(num_threads=4)
+ex.add_node(node)
+ex.spin()</code></pre>
+
+<p>The client has its own callback group and the executor has more than one thread. That combination completed 10 of 10 calls on Humble, Jazzy and Lyrical, with a median of 1.4 to 1.5 ms per call. A blocking <code>call()</code> in the default group never completed, whatever the executor. If you would rather not block a thread, <code>call_async()</code> with <code>add_done_callback()</code> worked in every executor and group I tried.</p>
+
+<h2>Find your symptom</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>What I measured as the cause</th><th>Fix that worked</th></tr></thead>
+<tbody>
+<tr><td><code>ValueError: generator already executing</code> (Humble)</td><td>Two threads spinning the same executor: two <code>rclpy.spin()</code> calls, <code>rclpy.spin()</code> plus <code>rclpy.spin_once()</code> with no timeout, or <code>ex.spin_once()</code> inside an MTE callback</td><td>Spin once, from one thread</td></tr>
+<tr><td><code>RuntimeError: Executor is already spinning</code> (Jazzy, Lyrical)</td><td>Any second spin call on an executor that is already spinning, including from inside its own callback</td><td>Same</td></tr>
+<tr><td>Timer callback calls <code>client.call()</code> and never returns</td><td>Client in the same mutually exclusive group as the callback, or a <code>SingleThreadedExecutor</code></td><td>Client in a separate group or Reentrant group, plus an MTE with 2+ threads</td></tr>
+<tr><td><code>async def</code> callback, <code>await client.call_async()</code> never returns</td><td>Callback and client both in the node's default group</td><td>Client in a separate group (works with an STE too)</td></tr>
+<tr><td>Timer runs once and never again</td><td><code>rclpy.spin_until_future_complete(node, future)</code> called inside a callback</td><td><code>call_async</code> + <code>add_done_callback</code></td></tr>
+<tr><td>10 Hz timer runs at about 5.9 Hz with 1 s gaps</td><td>A slow callback in the same group, or an executor with 1 thread</td><td>Separate group plus 4 threads: 10.00 Hz</td></tr>
+<tr><td><code>TypeError: Client.call() got an unexpected keyword argument 'timeout_sec'</code></td><td>Humble's <code>call()</code> has no timeout</td><td>Use <code>call_async</code> on Humble</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-01 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host, one distro at a time. A <code>std_srvs/srv/Trigger</code> server ran in its own process and answered at once. A second process held the node under test. Each case ran in a fresh process, and the main thread waited with a deadline, so a deadlock showed up as "0 of 10 calls within 8 s" instead of a hung test. Before each case, the node made one warm-up call on a throwaway executor. The reason is in the section on the first request below. The cases were:</p>
+
+<ul>
+<li>A 5 Hz timer calls the service 10 times with <code>call()</code>, <code>call_async()</code> plus <code>add_done_callback()</code>, or <code>await call_async()</code> in an <code>async def</code> callback. The executor was a <code>SingleThreadedExecutor</code> (STE) or a <code>MultiThreadedExecutor(num_threads=4)</code> (MTE). The callback and client shared the node's default group, sat in separate <code>MutuallyExclusiveCallbackGroup</code>s, or shared one <code>ReentrantCallbackGroup</code>.</li>
+<li>Nested spinning: <code>spin_once</code>, <code>spin_until_future_complete</code> and <code>rclpy.spin</code> called from inside a callback or from a second thread.</li>
+<li>A 10 Hz timer next to a 2 s timer whose callback sleeps 1 s, measured over 10 s.</li>
+</ul>
+
+<h2>A blocking call() inside a callback</h2>
+
+<p>Completed calls out of 10 within 8 s. All three distros gave the same counts:</p>
+
+<table>
+<thead><tr><th>Executor</th><th>Default group</th><th>Client in its own group</th><th>One Reentrant group</th></tr></thead>
+<tbody>
+<tr><td>SingleThreadedExecutor</td><td>0 (deadlock)</td><td>0 (deadlock)</td><td>0 (deadlock)</td></tr>
+<tr><td>MultiThreadedExecutor, 4 threads</td><td>0 (deadlock)</td><td>10, median 1.42 to 1.51 ms</td><td>10, median 1.45 to 1.59 ms</td></tr>
+</tbody>
+</table>
+
+<p><code>call()</code> blocks the thread that runs your callback until the response is processed. The response is processed by a callback too, and it needs a free thread and a callback group that isn't busy. An STE has one thread, and your callback holds it, so callback groups make no difference there. An MTE has free threads, but the node's default group is mutually exclusive, so the response waits until your callback returns, and your callback waits for the response. The <a href="https://docs.ros.org/en/humble/How-To-Guides/Using-callback-groups.html">Using Callback Groups</a> guide says it plainly: "every node's default callback group is a Mutually Exclusive Callback Group", and if everything uses it, "that node essentially acts as if it was handled by a Single-Threaded Executor, even if a multi-threaded one is specified!"</p>
+
+<p>Both fixes worked. A separate mutually exclusive group for the client still keeps the timer from overlapping itself. A Reentrant group lets the timer callback run again while an earlier call is still waiting. Pick the separate group unless you want that overlap.</p>
+
+<p>Jazzy and Lyrical accept <code>call(request, timeout_sec=2.0)</code>. In a deadlocked setup that doesn't fix anything, it only ends the wait. Jazzy returned <code>None</code> after 2.00 s, and Lyrical raised <code>TimeoutError()</code>. Humble raised <code>TypeError("Client.call() got an unexpected keyword argument 'timeout_sec'")</code>. If your code runs on several distros, don't rely on either behavior.</p>
+
+<h2>await in an async callback still holds the group</h2>
+
+<p>I expected <code>await self.cli.call_async(req)</code> in an <code>async def</code> timer callback to be safe, because the coroutine yields while it waits. With the callback and client in the default group it deadlocked: 0 of 10 calls on all three distros, with both an STE and an MTE. While the coroutine waits, the executor still counts the callback as running in its mutually exclusive group, so the client's response can't run in that group. My test showed it, and the result fits that explanation. When I moved the client to its own group, or used one Reentrant group, it completed 10 of 10 calls, even on an STE:</p>
+
+<table>
+<thead><tr><th><code>await call_async()</code></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>STE, default group</td><td>0/10</td><td>0/10</td><td>0/10</td></tr>
+<tr><td>STE, client in its own group</td><td>10/10, 1.13 ms</td><td>10/10, 1.07 ms</td><td>10/10, 0.93 ms</td></tr>
+<tr><td>STE, Reentrant</td><td>10/10, 1.02 ms</td><td>10/10, 1.21 ms</td><td>10/10, 1.19 ms</td></tr>
+<tr><td>MTE 4, default group</td><td>0/10</td><td>0/10</td><td>0/10</td></tr>
+<tr><td>MTE 4, client in its own group</td><td>10/10, 1.39 ms</td><td>10/10, 1.35 ms</td><td>10/10, 1.26 ms</td></tr>
+<tr><td>MTE 4, Reentrant</td><td>10/10, 1.49 ms</td><td>10/10, 1.45 ms</td><td>10/10, 1.47 ms</td></tr>
+</tbody>
+</table>
+
+<p>Latency is the median of 10 calls. If your awaits hang inside an asyncio event loop rather than in an rclpy callback, that's a different failure, covered in <a href="https://huntlab.app/en/rclpy-asyncio-no-running-event-loop-call-async-hangs/">rclpy asyncio "no running event loop" and call_async hangs</a>.</p>
+
+<h2>Where "generator already executing" comes from</h2>
+
+<p>On Humble, every executor keeps one Python generator that yields ready callbacks, and <code>spin_once</code> pulls the next item from it. If a second thread asks for the next item while the first thread is still inside the generator, Python raises <code>ValueError: generator already executing</code>. Here is what each pattern did on Humble:</p>
+
+<table>
+<thead><tr><th>Pattern (Humble)</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>rclpy.spin(node)</code> in two threads</td><td>Second spin raised <code>ValueError</code>. The 100 Hz timer had fired 30 times before that and never fired again.</td></tr>
+<tr><td><code>rclpy.spin(node)</code> in a thread, <code>rclpy.spin_once(node)</code> in a loop in main</td><td><code>ValueError</code> on the first iteration</td></tr>
+<tr><td>Same, but <code>rclpy.spin_once(node, timeout_sec=0.01)</code></td><td>401 iterations, no exception</td></tr>
+<tr><td>Same, but <code>rclpy.spin_until_future_complete(node, f, timeout_sec=1.0)</code></td><td>656 iterations, no exception</td></tr>
+<tr><td>MTE callback calls <code>ex.spin_once()</code></td><td>The outer <code>ex.spin()</code> raised <code>ValueError</code> (traceback at the top), and the call never returned</td></tr>
+<tr><td>STE callback calls <code>ex.spin_once()</code></td><td>No error, but it never returned. The timer fired once in 4 s.</td></tr>
+<tr><td>STE or MTE callback calls <code>ex.spin_once(timeout_sec=1.0)</code></td><td>Returned after 1.000 s, no error. The timer fired 16 times in 4 s instead of about 20.</td></tr>
+<tr><td>STE or MTE callback calls <code>ex.spin_until_future_complete(f, timeout_sec=3.0)</code></td><td>Returned after 3.000 s with the future still not done. The timer fired 6 times.</td></tr>
+</tbody>
+</table>
+
+<p>Look at the rows with a timeout. The same double spinning didn't raise when the second call passed a timeout. So "no error" on Humble doesn't mean the code is right. The nested calls with a timeout still stalled the timer, and the nested <code>spin_until_future_complete</code> never got its response. The error only shows up in some of these patterns, and the bug is in all of them.</p>
+
+<p>Jazzy and Lyrical check this up front. Every second spin call on an executor that was already spinning raised <code>RuntimeError: Executor is already spinning</code> at once: <code>spin_once</code> with or without a timeout, <code>spin_until_future_complete</code>, from a callback or from another thread. Callbacks that raised it didn't block the executor, and the timer kept firing (20 times in 4 s). If you upgrade from Humble and this error appears, that code was already broken. Humble just didn't tell you.</p>
+
+<p>One effect was the same on all three distros. After a second <code>rclpy.spin(node)</code> failed, the timer stopped for good: 30 ticks before the failure and 30 in total after 4.3 s. The first <code>spin()</code> was still running, but the node's timer no longer fired. When the error comes from a second <code>rclpy.spin</code>, restart the process. Catching the exception doesn't bring the node back.</p>
+
+<h2>spin_until_future_complete inside a callback stops the timer</h2>
+
+<p>A common pattern is <code>rclpy.spin_until_future_complete(self, future)</code> inside a timer callback while the node runs in its own executor. On all three distros, with an STE or an MTE, the call returned after its 3.0 s timeout with <code>future.done()</code> still <code>False</code>. After that the timer never fired again, so it fired once in 4 s. That matches the report in <a href="https://github.com/ros2/rclpy/issues/1018">rclpy issue 1018</a>, where a timer runs once and then hangs. According to the discussion in that issue, the module-level helper uses the global executor, not the one that spins your node, and removes the node from the executor when it returns. Don't call it from a callback. Use <code>call_async</code> and handle the response in a done callback.</p>
+
+<h2>A slow callback and a 10 Hz timer</h2>
+
+<p>A second timer every 2 s ran a callback that slept for 1 s. I counted the 10 Hz timer's ticks over 10 s:</p>
+
+<table>
+<thead><tr><th>Executor, groups</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>STE</td><td>5.90 Hz, max gap 1002 ms</td><td>5.90 Hz, 1001 ms</td><td>5.90 Hz, 1001 ms</td></tr>
+<tr><td>MTE 1 thread, same group</td><td>5.89 Hz, 1002 ms</td><td>5.90 Hz, 1001 ms</td><td>5.90 Hz, 1001 ms</td></tr>
+<tr><td>MTE 1 thread, separate groups</td><td>5.89 Hz, 1001 ms</td><td>5.90 Hz, 1000 ms</td><td>5.90 Hz, 1001 ms</td></tr>
+<tr><td>MTE 1 thread, Reentrant</td><td>5.89 Hz, 1001 ms</td><td>5.90 Hz, 1000 ms</td><td>5.90 Hz, 1000 ms</td></tr>
+<tr><td>MTE 4 threads, same (default) group</td><td>5.89 Hz, 1002 ms</td><td>5.90 Hz, 1001 ms</td><td>5.50 Hz, 1101 ms</td></tr>
+<tr><td>MTE 4 threads, separate groups</td><td>9.99 Hz, 111 ms</td><td>10.00 Hz, 100 ms</td><td>10.00 Hz, 100 ms</td></tr>
+<tr><td>MTE 4 threads, Reentrant</td><td>9.99 Hz, 100 ms</td><td>10.00 Hz, 100 ms</td><td>10.00 Hz, 100 ms</td></tr>
+</tbody>
+</table>
+
+<p>You need both changes. Four threads with one group behaved like one thread, and separate groups with one thread behaved like one thread. Only separate groups with 4 threads kept 10 Hz. In the blocked setups the fast timer fired 59 times in 10 s instead of 100, and each 1 s sleep showed up as a gap of about 1 s.</p>
+
+<h2>Fix options compared</h2>
+
+<p>Median latency of 10 calls from a timer callback to an idle Trigger server in another process:</p>
+
+<table>
+<thead><tr><th>Fix</th><th>Executor needed</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>call()</code>, client in its own MutuallyExclusive group</td><td>MTE, 2+ threads</td><td>1.51 ms</td><td>1.46 ms</td><td>1.42 ms</td></tr>
+<tr><td><code>call()</code>, one ReentrantCallbackGroup</td><td>MTE, 2+ threads</td><td>1.59 ms</td><td>1.54 ms</td><td>1.45 ms</td></tr>
+<tr><td><code>call_async()</code> + <code>add_done_callback()</code>, default group</td><td>STE</td><td>1.24 ms</td><td>1.12 ms</td><td>1.16 ms</td></tr>
+<tr><td><code>call_async()</code> + <code>add_done_callback()</code>, default group</td><td>MTE 4</td><td>1.71 ms</td><td>1.52 ms</td><td>1.51 ms</td></tr>
+<tr><td><code>await call_async()</code>, client in its own group</td><td>STE</td><td>1.13 ms</td><td>1.07 ms</td><td>0.93 ms</td></tr>
+<tr><td><code>await call_async()</code>, default group</td><td>any</td><td colspan="3">deadlock, 0/10</td></tr>
+</tbody>
+</table>
+
+<p>All the working fixes were within a millisecond of each other, so pick by how the code reads, not by speed. <code>call_async</code> with a done callback was the only one that worked with no callback group changes at all. In my done-callback test, the timer skipped its tick while a call was pending, so at most one call was in flight. Without a guard like that, a fast timer and a slow server pile up requests. <code>await</code> reads like blocking code and works on one thread, as long as the client has its own group.</p>
+
+<h2>The first request after wait_for_service can get no reply</h2>
+
+<p>This one cost me a wrong result. In my first Humble run, without the warm-up call, the MTE plus Reentrant setup completed 0 of 10 calls. On the next run, with a warm-up, the same setup completed 10 of 10. The cause was the first request, not the callback group. In the warm-up step, the first request sent right after <code>wait_for_service()</code> returned got no reply within 2 s in 23 of 29 processes on Humble, 28 of 29 on Jazzy and 25 of 29 on Lyrical. A second or third request always got through. If your first <code>call()</code> hangs and later ones work, don't blame the callback groups yet. Retry with <code>call_async</code> and a timeout before you start the real work. I didn't find out where the first reply goes.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (rclpy 3.3.22): the double-spin error is <code>ValueError: generator already executing</code>, and it only appeared in some patterns. Several nested spins with a timeout ran without any error.</li>
+<li>Jazzy (rclpy 7.1.12) and Lyrical (rclpy 10.0.11): <code>RuntimeError: Executor is already spinning</code>, raised from <code>_enter_spin</code> by every second spin call.</li>
+<li><code>Client.call(timeout_sec=...)</code>: <code>TypeError</code> on Humble, returns <code>None</code> on Jazzy, raises <code>TimeoutError</code> on Lyrical.</li>
+<li>The deadlock, await and slow-callback results were the same on all three distros. The only outlier was Lyrical's 5.50 Hz for 4 threads with one group.</li>
+<li>Jazzy nodes needed more threads than Humble's. With <code>--pids-limit 30</code> on the container, every Jazzy node failed with <code>Failed to create std::thread: Resource temporarily unavailable</code>, so I ran all distros with 128.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>rclcpp, action clients, subscriptions as the calling callback, a server inside the same node or process, <code>EventsExecutor</code>, <code>MultiThreadedExecutor</code> with the default thread count, RMWs other than the default, networks with latency, Iron and Rolling. All timings come from one 2 vCPU host with an idle server, so treat the millisecond numbers as relative.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What causes ValueError: generator already executing in rclpy?</h3>
+<p>On Humble, two threads spinning the same executor at once. I got it with two <code>rclpy.spin()</code> calls, with <code>rclpy.spin()</code> plus a <code>rclpy.spin_once()</code> without a timeout, and with <code>ex.spin_once()</code> inside a MultiThreadedExecutor callback. Spin from one thread only.</p>
+
+<h3>Why does client.call() inside a timer callback hang forever?</h3>
+<p>The response needs a free thread and a free callback group. With a SingleThreadedExecutor, or with the client in the node's default group, it had neither, and 0 of 10 calls completed on Humble, Jazzy and Lyrical. Put the client in its own callback group and use a MultiThreadedExecutor with more than one thread.</p>
+
+<h3>Does a ReentrantCallbackGroup fix the deadlock?</h3>
+<p>Yes, with a MultiThreadedExecutor: 10 of 10 calls, median about 1.5 ms. With a SingleThreadedExecutor it still deadlocked, because the only thread was blocked in the callback.</p>
+
+<h3>Why does await client.call_async() hang in an async callback?</h3>
+<p>While the coroutine waits, the callback still holds its mutually exclusive group, and in my test the client's response couldn't run in that group. With both in the default group it deadlocked on every distro. A separate group for the client fixed it, even on a SingleThreadedExecutor.</p>
+
+<h3>What does RuntimeError: Executor is already spinning mean?</h3>
+<p>It replaces the Humble ValueError on Jazzy and Lyrical. Your code called spin, spin_once or spin_until_future_complete on an executor that was already spinning. Remove the nested spin and use call_async with a done callback, or a separate callback group.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What causes ValueError: generator already executing in rclpy?", "acceptedAnswer": {"@type": "Answer", "text": "On Humble, two threads spinning the same executor at once. I got it with two rclpy.spin() calls, with rclpy.spin() plus a rclpy.spin_once() without a timeout, and with ex.spin_once() inside a MultiThreadedExecutor callback. Spin from one thread only."}},
+{"@type": "Question", "name": "Why does client.call() inside a timer callback hang forever?", "acceptedAnswer": {"@type": "Answer", "text": "The response needs a free thread and a free callback group. With a SingleThreadedExecutor, or with the client in the node's default group, it had neither, and 0 of 10 calls completed on Humble, Jazzy and Lyrical. Put the client in its own callback group and use a MultiThreadedExecutor with more than one thread."}},
+{"@type": "Question", "name": "Does a ReentrantCallbackGroup fix the deadlock?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, with a MultiThreadedExecutor: 10 of 10 calls, median about 1.5 ms. With a SingleThreadedExecutor it still deadlocked, because the only thread was blocked in the callback."}},
+{"@type": "Question", "name": "Why does await client.call_async() hang in an async callback?", "acceptedAnswer": {"@type": "Answer", "text": "While the coroutine waits, the callback still holds its mutually exclusive group, and in my test the client's response couldn't run in that group. With both in the default group it deadlocked on every distro. A separate group for the client fixed it, even on a SingleThreadedExecutor."}},
+{"@type": "Question", "name": "What does RuntimeError: Executor is already spinning mean?", "acceptedAnswer": {"@type": "Answer", "text": "It replaces the Humble ValueError on Jazzy and Lyrical. Your code called spin, spin_once or spin_until_future_complete on an executor that was already spinning. Remove the nested spin and use call_async with a done callback, or a separate callback group."}}
+]}
+</script>
+
+<p>Measured on 2026-11-01 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10, Python 3.14.4), with <code>RMW_IMPLEMENTATION</code> unset. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-28-rclpy-generator-already-executing-callback-groups/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105877">Node keeps crashing due to: ValueError: generator already executing</a>, <a href="https://robotics.stackexchange.com/questions/99009">Spinning multiple nodes across multiple threads</a>, <a href="https://robotics.stackexchange.com/questions/94611">How to implement a sync service client in a node?</a>, <a href="https://github.com/ros2/rclpy/issues/1018">Asynchronous client calls in a timer cause the timer to never execute a second time</a>.</p>

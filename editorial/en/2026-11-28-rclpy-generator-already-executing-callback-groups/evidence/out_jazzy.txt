@@ -1,0 +1,359 @@
+=== distro=jazzy
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-rmw 7.3.4-1noble.20260911.050254
+ros-jazzy-rmw-fastrtps-cpp 8.4.4-1noble.20260911.100940
+ros-jazzy-ros2cli 0.32.13-1noble.20261006.033947
+ros-jazzy-std-srvs 5.3.8-1noble.20260911.100759
+Python 3.12.3
+RMW_IMPLEMENTATION=default
+
+##### 1+4: timer callback calls a service (server in another process)
+
+--- svc ste default call
+WARMUP ok on try 1, 1.5ms
+RESULT svc exec=ste group=default method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste sep call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 897.2ms
+RESULT svc exec=ste group=sep method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste reentrant call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1492.8ms
+RESULT svc exec=ste group=reentrant method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 default call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1489.2ms
+RESULT svc exec=mte4 group=default method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 sep call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1494.2ms
+RESULT svc exec=mte4 group=sep method=call completed=10/10 within 8s -> OK ; latency n=10 median=1.46ms max=2.30ms
+exit=0
+
+--- svc mte4 reentrant call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1490.2ms
+RESULT svc exec=mte4 group=reentrant method=call completed=10/10 within 8s -> OK ; latency n=10 median=1.54ms max=2.57ms
+exit=0
+
+--- svc ste default call_timeout
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1483.3ms
+RESULT svc exec=ste group=default method=call_timeout completed=0/10 within 8s -> ERROR ; latency n=0 ; errors: returned None after 2.00s | returned None after 2.00s
+exit=0
+
+--- svc mte4 default call_timeout
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 328.9ms
+RESULT svc exec=mte4 group=default method=call_timeout completed=0/10 within 8s -> ERROR ; latency n=0 ; errors: returned None after 2.00s | returned None after 2.00s
+exit=0
+
+--- svc ste default async_cb
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 10.5ms
+RESULT svc exec=ste group=default method=async_cb completed=10/10 within 8s -> OK ; latency n=10 median=1.12ms max=1.52ms
+exit=0
+
+--- svc ste default await
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 346.1ms
+RESULT svc exec=ste group=default method=await completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste sep await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1624.2ms
+RESULT svc exec=ste group=sep method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.07ms max=1.90ms
+exit=0
+
+--- svc ste reentrant await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1491.7ms
+RESULT svc exec=ste group=reentrant method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.21ms max=1.47ms
+exit=0
+
+--- svc mte4 default async_cb
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1486.1ms
+RESULT svc exec=mte4 group=default method=async_cb completed=10/10 within 8s -> OK ; latency n=10 median=1.52ms max=1.69ms
+exit=0
+
+--- svc mte4 default await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1488.7ms
+RESULT svc exec=mte4 group=default method=await completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 sep await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1492.1ms
+RESULT svc exec=mte4 group=sep method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.35ms max=1.56ms
+exit=0
+
+--- svc mte4 reentrant await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1492.0ms
+RESULT svc exec=mte4 group=reentrant method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.45ms max=1.62ms
+exit=0
+
+##### 2: nested spinning inside a callback
+
+--- gen spin_once_ste
+Traceback (most recent call last):
+  File "/e/cbg.py", line 166, in cb
+    ex.spin_once(timeout_sec=1.0); out['r'] = 'spin_once returned after %.3fs' % (time.monotonic()-t0)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 924, in spin_once
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1490.6ms
+RESULT gen variant=spin_once_ste inner=raised RuntimeError: Executor is already spinning ; outer=still spinning ; timer fired 20 times (expected ~20 in 4 s)
+exit=0
+
+--- gen spin_once_mte4
+Traceback (most recent call last):
+  File "/e/cbg.py", line 166, in cb
+    ex.spin_once(timeout_sec=1.0); out['r'] = 'spin_once returned after %.3fs' % (time.monotonic()-t0)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 1013, in spin_once
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 12.1ms
+RESULT gen variant=spin_once_mte4 inner=raised RuntimeError: Executor is already spinning ; outer=still spinning ; timer fired 20 times (expected ~20 in 4 s)
+exit=0
+
+--- gen spin_once_none_ste
+Traceback (most recent call last):
+  File "/e/cbg.py", line 168, in cb
+    ex.spin_once(); out['r'] = 'spin_once() returned after %.3fs' % (time.monotonic()-t0)
+    ^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 924, in spin_once
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 235.6ms
+RESULT gen variant=spin_once_none_ste inner=raised RuntimeError: Executor is already spinning ; outer=still spinning ; timer fired 20 times (expected ~20 in 4 s)
+exit=0
+
+--- gen spin_once_none_mte4
+Traceback (most recent call last):
+  File "/e/cbg.py", line 168, in cb
+    ex.spin_once(); out['r'] = 'spin_once() returned after %.3fs' % (time.monotonic()-t0)
+    ^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 1013, in spin_once
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 235.6ms
+RESULT gen variant=spin_once_none_mte4 inner=raised RuntimeError: Executor is already spinning ; outer=still spinning ; timer fired 20 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_same_ste
+Traceback (most recent call last):
+  File "/e/cbg.py", line 174, in cb
+    ex.spin_until_future_complete(f, timeout_sec=3.0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 370, in spin_until_future_complete
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 236.7ms
+RESULT gen variant=sufc_same_ste inner=raised RuntimeError: Executor is already spinning ; outer=still spinning ; timer fired 20 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_same_mte4
+Traceback (most recent call last):
+  File "/e/cbg.py", line 174, in cb
+    ex.spin_until_future_complete(f, timeout_sec=3.0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 370, in spin_until_future_complete
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 730.4ms
+RESULT gen variant=sufc_same_mte4 inner=raised RuntimeError: Executor is already spinning ; outer=still spinning ; timer fired 20 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_global_ste
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 346.1ms
+RESULT gen variant=sufc_global_ste inner=returned after 3.001s, future.done()=False ; outer=still spinning ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_global_mte4
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 346.5ms
+RESULT gen variant=sufc_global_mte4 inner=returned after 3.001s, future.done()=False ; outer=still spinning ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen thread_global
+Traceback (most recent call last):
+  File "/e/cbg.py", line 151, in gen
+    rclpy.spin_until_future_complete(node, f, timeout_sec=3.0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 274, in spin_until_future_complete
+    executor.spin_until_future_complete(future, timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 370, in spin_until_future_complete
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 12.5ms
+RESULT gen variant=thread_global inner=call 0 raised RuntimeError: Executor is already spinning ; outer=still spinning ; timer fired 7 times (expected ~20 in 4 s)
+exit=0
+
+--- gen thread_spin_once
+Traceback (most recent call last):
+  File "/e/cbg.py", line 127, in gen
+    rclpy.spin_once(node, timeout_sec=0.01)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 226, in spin_once
+    executor.spin_once(timeout_sec=timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 924, in spin_once
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 12.3ms
+RESULT gen variant=thread_spin_once inner=main-thread iteration 1 raised RuntimeError: Executor is already spinning ; outer=still spinning ; 100 Hz timer fired 30 times by the time the loop ended, 430 in total after 4.3 s
+exit=0
+
+--- gen thread_spin_once_none
+Traceback (most recent call last):
+  File "/e/cbg.py", line 129, in gen
+    rclpy.spin_once(node)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 226, in spin_once
+    executor.spin_once(timeout_sec=timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 924, in spin_once
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 12.5ms
+RESULT gen variant=thread_spin_once_none inner=main-thread iteration 1 raised RuntimeError: Executor is already spinning ; outer=still spinning ; 100 Hz timer fired 30 times by the time the loop ended, 430 in total after 4.3 s
+exit=0
+
+--- gen thread_sufc
+Traceback (most recent call last):
+  File "/e/cbg.py", line 131, in gen
+    rclpy.spin_until_future_complete(node, cli.call_async(Trigger.Request()), timeout_sec=1.0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 274, in spin_until_future_complete
+    executor.spin_until_future_complete(future, timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 370, in spin_until_future_complete
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 234.7ms
+RESULT gen variant=thread_sufc inner=main-thread iteration 1 raised RuntimeError: Executor is already spinning ; outer=still spinning ; 100 Hz timer fired 30 times by the time the loop ended, 430 in total after 4.3 s
+exit=0
+
+--- gen two_spin
+Traceback (most recent call last):
+  File "/e/cbg.py", line 118, in spin2
+    try: rclpy.spin(node)
+         ^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 924, in spin_once
+    self._enter_spin()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 222, in _enter_spin
+    raise RuntimeError('Executor is already spinning')
+RuntimeError: Executor is already spinning
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 12.2ms
+RESULT gen variant=two_spin inner=second rclpy.spin() raised RuntimeError: Executor is already spinning ; outer=still spinning ; 100 Hz timer fired 30 times by the time the loop ended, 30 in total after 4.3 s
+exit=0
+
+##### 3: 10 Hz timer + callback that sleeps 1 s every 2 s
+
+--- slow ste same
+RESULT slow exec=ste group=same fast_ticks=59 in 10.0s -> 5.90 Hz (target 10) ; max gap 1001ms
+exit=0
+
+--- slow mte1 same
+/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py:979: UserWarning: MultiThreadedExecutor is used with a single thread.
+Use the SingleThreadedExecutor instead.
+  warnings.warn(
+RESULT slow exec=mte1 group=same fast_ticks=59 in 10.0s -> 5.90 Hz (target 10) ; max gap 1001ms
+exit=0
+
+--- slow mte1 sep
+/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py:979: UserWarning: MultiThreadedExecutor is used with a single thread.
+Use the SingleThreadedExecutor instead.
+  warnings.warn(
+RESULT slow exec=mte1 group=sep fast_ticks=59 in 10.0s -> 5.90 Hz (target 10) ; max gap 1000ms
+exit=0
+
+--- slow mte1 reentrant
+/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py:979: UserWarning: MultiThreadedExecutor is used with a single thread.
+Use the SingleThreadedExecutor instead.
+  warnings.warn(
+RESULT slow exec=mte1 group=reentrant fast_ticks=59 in 10.0s -> 5.90 Hz (target 10) ; max gap 1000ms
+exit=0
+
+--- slow mte4 same
+RESULT slow exec=mte4 group=same fast_ticks=59 in 10.0s -> 5.90 Hz (target 10) ; max gap 1001ms
+exit=0
+
+--- slow mte4 sep
+RESULT slow exec=mte4 group=sep fast_ticks=100 in 10.0s -> 10.00 Hz (target 10) ; max gap 100ms
+exit=0
+
+--- slow mte4 reentrant
+RESULT slow exec=mte4 group=reentrant fast_ticks=100 in 10.0s -> 10.00 Hz (target 10) ; max gap 100ms
+exit=0
+Traceback (most recent call last):
+  File "/e/cbg.py", line 224, in <module>
+    {'svc': svc, 'gen': gen, 'slow': slow, 'server': server}[t](*sys.argv[2:])
+  File "/e/cbg.py", line 220, in server
+    rclpy.spin(node)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 907, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 877, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 785, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+=== done

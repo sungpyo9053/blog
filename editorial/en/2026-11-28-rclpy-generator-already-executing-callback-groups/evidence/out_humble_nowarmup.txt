@@ -1,0 +1,136 @@
+=== distro=humble
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-std-srvs 4.9.2-1jammy.20260907.204811
+Python 3.10.12
+RMW_IMPLEMENTATION=default
+
+##### 1+4: timer callback calls a service (server in another process)
+
+--- svc ste default call
+RESULT svc exec=ste group=default method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste sep call
+RESULT svc exec=ste group=sep method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste reentrant call
+RESULT svc exec=ste group=reentrant method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 default call
+RESULT svc exec=mte4 group=default method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 sep call
+RESULT svc exec=mte4 group=sep method=call completed=10/10 within 8s -> OK ; latency n=10 median=1.51ms max=1465.00ms
+exit=0
+
+--- svc mte4 reentrant call
+RESULT svc exec=mte4 group=reentrant method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste default call_timeout
+RESULT svc exec=ste group=default method=call_timeout completed=0/10 within 8s -> ERROR ; latency n=0 ; errors: TypeError("Client.call() got an unexpected keyword argument 'timeout_sec'")
+exit=0
+
+--- svc mte4 default call_timeout
+RESULT svc exec=mte4 group=default method=call_timeout completed=0/10 within 8s -> ERROR ; latency n=0 ; errors: TypeError("Client.call() got an unexpected keyword argument 'timeout_sec'")
+exit=0
+
+--- svc ste default async_cb
+RESULT svc exec=ste group=default method=async_cb completed=10/10 within 8s -> OK ; latency n=10 median=1.16ms max=1980.94ms
+exit=0
+
+--- svc ste default await
+RESULT svc exec=ste group=default method=await completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 default async_cb
+RESULT svc exec=mte4 group=default method=async_cb completed=10/10 within 8s -> OK ; latency n=10 median=1.52ms max=2811.85ms
+exit=0
+
+--- svc mte4 default await
+RESULT svc exec=mte4 group=default method=await completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+##### 2: nested spinning inside a callback
+
+--- gen spin_once_ste
+RESULT gen variant=spin_once_ste inner=spin_once returned after 1.000s ; outer=still spinning ; timer fired 16 times (expected ~20 in 4 s)
+exit=0
+
+--- gen spin_once_mte4
+RESULT gen variant=spin_once_mte4 inner=spin_once returned after 1.000s ; outer=still spinning ; timer fired 16 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_same_ste
+RESULT gen variant=sufc_same_ste inner=returned after 3.000s, future.done()=False ; outer=still spinning ; timer fired 6 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_same_mte4
+RESULT gen variant=sufc_same_mte4 inner=returned after 3.000s, future.done()=False ; outer=still spinning ; timer fired 6 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_global_ste
+RESULT gen variant=sufc_global_ste inner=returned after 3.001s, future.done()=False ; outer=still spinning ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_global_mte4
+RESULT gen variant=sufc_global_mte4 inner=returned after 3.001s, future.done()=False ; outer=still spinning ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen thread_global
+RESULT gen variant=thread_global inner=call 4 returned after 0.200s, done=True ; outer=still spinning ; timer fired 22 times (expected ~20 in 4 s)
+exit=0
+
+##### 3: 10 Hz timer + callback that sleeps 1 s every 2 s
+
+--- slow ste same
+RESULT slow exec=ste group=same fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1002ms
+exit=0
+
+--- slow mte1 same
+RESULT slow exec=mte1 group=same fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1002ms
+exit=0
+
+--- slow mte1 sep
+RESULT slow exec=mte1 group=sep fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1001ms
+exit=0
+
+--- slow mte1 reentrant
+RESULT slow exec=mte1 group=reentrant fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1001ms
+exit=0
+
+--- slow mte4 same
+RESULT slow exec=mte4 group=same fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1002ms
+exit=0
+
+--- slow mte4 sep
+RESULT slow exec=mte4 group=sep fast_ticks=100 in 10.0s -> 9.99 Hz (target 10) ; max gap 100ms
+exit=0
+
+--- slow mte4 reentrant
+RESULT slow exec=mte4 group=reentrant fast_ticks=100 in 10.0s -> 9.99 Hz (target 10) ; max gap 111ms
+exit=0
+Traceback (most recent call last):
+  File "/e/cbg.py", line 176, in <module>
+    {'svc': svc, 'gen': gen, 'slow': slow, 'server': server}[t](*sys.argv[2:])
+  File "/e/cbg.py", line 172, in server
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 812, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 801, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 784, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 685, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+=== done

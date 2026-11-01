@@ -1,0 +1,269 @@
+=== distro=humble
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-std-srvs 4.9.2-1jammy.20260907.204811
+Python 3.10.12
+RMW_IMPLEMENTATION=default
+
+##### 1+4: timer callback calls a service (server in another process)
+
+--- svc ste default call
+WARMUP ok on try 1, 1.6ms
+RESULT svc exec=ste group=default method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste sep call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1011.1ms
+RESULT svc exec=ste group=sep method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste reentrant call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1790.1ms
+RESULT svc exec=ste group=reentrant method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 default call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1788.5ms
+RESULT svc exec=mte4 group=default method=call completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 sep call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1541.1ms
+RESULT svc exec=mte4 group=sep method=call completed=10/10 within 8s -> OK ; latency n=10 median=1.51ms max=1.80ms
+exit=0
+
+--- svc mte4 reentrant call
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1539.4ms
+RESULT svc exec=mte4 group=reentrant method=call completed=10/10 within 8s -> OK ; latency n=10 median=1.59ms max=1.87ms
+exit=0
+
+--- svc ste default call_timeout
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1787.0ms
+RESULT svc exec=ste group=default method=call_timeout completed=0/10 within 8s -> ERROR ; latency n=0 ; errors: TypeError("Client.call() got an unexpected keyword argument 'timeout_sec'")
+exit=0
+
+--- svc mte4 default call_timeout
+WARMUP ok on try 1, 1970.9ms
+RESULT svc exec=mte4 group=default method=call_timeout completed=0/10 within 8s -> ERROR ; latency n=0 ; errors: TypeError("Client.call() got an unexpected keyword argument 'timeout_sec'")
+exit=0
+
+--- svc ste default async_cb
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 706.5ms
+RESULT svc exec=ste group=default method=async_cb completed=10/10 within 8s -> OK ; latency n=10 median=1.24ms max=1.45ms
+exit=0
+
+--- svc ste default await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1788.3ms
+RESULT svc exec=ste group=default method=await completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc ste sep await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1791.6ms
+RESULT svc exec=ste group=sep method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.13ms max=1.31ms
+exit=0
+
+--- svc ste reentrant await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1540.2ms
+RESULT svc exec=ste group=reentrant method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.02ms max=1.55ms
+exit=0
+
+--- svc mte4 default async_cb
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1790.1ms
+RESULT svc exec=mte4 group=default method=async_cb completed=10/10 within 8s -> OK ; latency n=10 median=1.71ms max=25.03ms
+exit=0
+
+--- svc mte4 default await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1168.6ms
+RESULT svc exec=mte4 group=default method=await completed=0/10 within 8s -> DEADLOCK/TIMEOUT ; latency n=0
+exit=0
+
+--- svc mte4 sep await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1788.3ms
+RESULT svc exec=mte4 group=sep method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.39ms max=1.66ms
+exit=0
+
+--- svc mte4 reentrant await
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1540.7ms
+RESULT svc exec=mte4 group=reentrant method=await completed=10/10 within 8s -> OK ; latency n=10 median=1.49ms max=1.64ms
+exit=0
+
+##### 2: nested spinning inside a callback
+
+--- gen spin_once_ste
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1536.6ms
+RESULT gen variant=spin_once_ste inner=spin_once returned after 1.000s ; outer=still spinning ; timer fired 16 times (expected ~20 in 4 s)
+exit=0
+
+--- gen spin_once_mte4
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 345.5ms
+RESULT gen variant=spin_once_mte4 inner=spin_once returned after 1.000s ; outer=still spinning ; timer fired 16 times (expected ~20 in 4 s)
+exit=0
+
+--- gen spin_once_none_ste
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 420.8ms
+RESULT gen variant=spin_once_none_ste inner=never returned ; outer=still spinning ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen spin_once_none_mte4
+Traceback (most recent call last):
+  File "/e/cbg.py", line 182, in spin
+    ex.add_node(node); ex.spin()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 323, in spin
+    self.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 867, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 848, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 784, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+ValueError: generator already executing
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 420.9ms
+RESULT gen variant=spin_once_none_mte4 inner=never returned ; outer=ex.spin() raised ValueError: generator already executing ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_same_ste
+WARMUP ok on try 1, 1977.8ms
+RESULT gen variant=sufc_same_ste inner=returned after 3.001s, future.done()=False ; outer=still spinning ; timer fired 6 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_same_mte4
+WARMUP ok on try 1, 1970.8ms
+RESULT gen variant=sufc_same_mte4 inner=returned after 3.000s, future.done()=False ; outer=still spinning ; timer fired 6 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_global_ste
+WARMUP ok on try 1, 1827.6ms
+RESULT gen variant=sufc_global_ste inner=returned after 3.001s, future.done()=False ; outer=still spinning ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen sufc_global_mte4
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 345.9ms
+RESULT gen variant=sufc_global_mte4 inner=returned after 3.001s, future.done()=False ; outer=still spinning ; timer fired 1 times (expected ~20 in 4 s)
+exit=0
+
+--- gen thread_global
+WARMUP ok on try 1, 1645.5ms
+RESULT gen variant=thread_global inner=call 4 returned after 0.001s, done=True ; outer=still spinning ; timer fired 15 times (expected ~20 in 4 s)
+exit=0
+
+--- gen thread_spin_once
+WARMUP try 1: no response in 2 s
+WARMUP try 2: no response in 2 s
+WARMUP ok on try 3, 345.7ms
+RESULT gen variant=thread_spin_once inner=401 main-thread iterations, no exception ; outer=still spinning ; 100 Hz timer fired 431 times by the time the loop ended, 431 in total after 4.3 s
+exit=0
+
+--- gen thread_spin_once_none
+Traceback (most recent call last):
+  File "/e/cbg.py", line 129, in gen
+    rclpy.spin_once(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 208, in spin_once
+    executor.spin_once(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 812, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 801, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 784, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+ValueError: generator already executing
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 428.6ms
+RESULT gen variant=thread_spin_once_none inner=main-thread iteration 1 raised ValueError: generator already executing ; outer=still spinning ; 100 Hz timer fired 30 times by the time the loop ended, 430 in total after 4.3 s
+exit=0
+
+--- gen thread_sufc
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 181.2ms
+RESULT gen variant=thread_sufc inner=656 main-thread iterations, no exception ; outer=still spinning ; 100 Hz timer fired 431 times by the time the loop ended, 431 in total after 4.3 s
+exit=0
+
+--- gen two_spin
+Traceback (most recent call last):
+  File "/e/cbg.py", line 118, in spin2
+    try: rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 812, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 801, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 784, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+ValueError: generator already executing
+WARMUP try 1: no response in 2 s
+WARMUP ok on try 2, 1532.1ms
+RESULT gen variant=two_spin inner=second rclpy.spin() raised ValueError: generator already executing ; outer=still spinning ; 100 Hz timer fired 30 times by the time the loop ended, 30 in total after 4.3 s
+exit=0
+
+##### 3: 10 Hz timer + callback that sleeps 1 s every 2 s
+
+--- slow ste same
+RESULT slow exec=ste group=same fast_ticks=59 in 10.0s -> 5.90 Hz (target 10) ; max gap 1002ms
+exit=0
+
+--- slow mte1 same
+RESULT slow exec=mte1 group=same fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1002ms
+exit=0
+
+--- slow mte1 sep
+RESULT slow exec=mte1 group=sep fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1001ms
+exit=0
+
+--- slow mte1 reentrant
+RESULT slow exec=mte1 group=reentrant fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1001ms
+exit=0
+
+--- slow mte4 same
+RESULT slow exec=mte4 group=same fast_ticks=59 in 10.0s -> 5.89 Hz (target 10) ; max gap 1002ms
+exit=0
+
+--- slow mte4 sep
+RESULT slow exec=mte4 group=sep fast_ticks=100 in 10.0s -> 9.99 Hz (target 10) ; max gap 111ms
+exit=0
+
+--- slow mte4 reentrant
+RESULT slow exec=mte4 group=reentrant fast_ticks=100 in 10.0s -> 9.99 Hz (target 10) ; max gap 100ms
+exit=0
+Traceback (most recent call last):
+  File "/e/cbg.py", line 224, in <module>
+    {'svc': svc, 'gen': gen, 'slow': slow, 'server': server}[t](*sys.argv[2:])
+  File "/e/cbg.py", line 220, in server
+    rclpy.spin(node)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 812, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 801, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 784, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 685, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+=== done
