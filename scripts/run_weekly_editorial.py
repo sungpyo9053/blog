@@ -6,6 +6,7 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -345,7 +346,8 @@ def run(root=ROOT, *, now=None, apply=False, notify=False, client=None,
                     result['wp_write_count'] = result['update'].get('wp_write_count', 0)
                     result['failed'] = result['update']['status'] in {'rejected', 'update_unconfirmed'}
         except Exception as exc:
-            result.update(failed=True, error_type=type(exc).__name__, error=str(exc)[:200], reason='weekly_execution_failed')
+            code = str(exc) if re.fullmatch(r'[a-z_]{3,60}', str(exc)) else None  # internal codes only, never free text (may hold secrets)
+            result.update(failed=True, error_type=type(exc).__name__, reason='weekly_execution_failed', **({'error': code} if code else {}))
         result = clean(result)
         save(result_path, result)
         # Markdown is an independently readable view of the same sanitized record.

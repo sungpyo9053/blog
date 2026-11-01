@@ -195,9 +195,11 @@ class WeeklyTests(unittest.TestCase):
 
     def test_discovery_inventory_omits_full_bodies(self):
         result = weekly.inventory_summary({'metadata': {'complete': True}, 'posts': [
-            {'post_id': 1, 'status': 'draft', 'title': 'title', 'slug': 'slug', 'content': 'PRIVATE BODY', 'excerpt': 'x' * 500}]})
+            {'post_id': 1, 'status': 'draft', 'title': 'title', 'slug': 'slug', 'content': 'PRIVATE BODY', 'excerpt': 'x' * 500},
+            {'post_id': 2, 'status': 'publish', 'title': 't2', 'slug': 's2', 'content': 'PRIVATE BODY', 'excerpt': 'x' * 500}]})
         self.assertNotIn('PRIVATE BODY', json.dumps(result))
-        self.assertEqual(len(result['posts'][0]['excerpt']), 300)
+        self.assertEqual(result['posts'][0]['excerpt'], '')
+        self.assertEqual(len(result['posts'][1]['excerpt']), 200)
 
 
 if __name__ == '__main__':
