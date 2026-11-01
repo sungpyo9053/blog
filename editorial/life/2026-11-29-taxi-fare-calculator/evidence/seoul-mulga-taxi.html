@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <title>택시 | 대중교통 | 공공요금 |  서울시 물가정보</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+	<meta name="robots" content="ALL">
+	<meta name="keywords" content="착한가격업소, 서울시 착한가격업소">
+	<meta name="description" content="서울시 물가정보(개인서비스,식료품,공공요금 등),서울시 착한가격업소 정보 안내">
+
+	<script>
+		// 불변 전역 변수로 등록
+		const contextPath = '/seoul';
+		// 또는 window에 읽기전용 등록
+		Object.defineProperty(window, "contextPath", {
+			value: '/seoul',
+			writable: false,
+			configurable: false
+		});
+	</script>
+    <link rel="stylesheet" href="/seoul/static/mulga/css/popup_modal.css">
+    <script src="/seoul/static/mulga/js/popup_modal.js" defer></script>
+
+	<link rel="stylesheet" href="/seoul/static/mulga/css/loading.css">
+
+	<link href="/seoul/static/mulga/css/import.css?v=2025073001" rel="stylesheet">
+	<link href="/seoul/static/mulga/css/commonxten.css" rel="stylesheet">
+	<link href="/seoul/static/mulga/css/jquery.bxslider.css" rel="stylesheet">
+	<script src="/seoul/static/mulga/js/jquery-1.11.1.min.js"></script>
+
+	<script src="/seoul/static/mulga/js/jquery.bxslider.min.js"></script>
+	<script src="/seoul/static/mulga/js/common.js?ver=20220623"></script>
+	<script src="/seoul/static/mulga/js/main.js?ver=20230405"></script>
+	<script src="/seoul/static/mulga/js/chart.js?ver=20230405"></script>
+	<script>
+		function getCookie(cookieName) {
+			var cookie = document.cookie;
+			if(cookie.length > 0) {
+				startIndex = cookie.indexOf(cookieName);
+				if(startIndex != -1) {
+					startIndex += cookieName.length;
+					endIndex = cookie.indexOf(";", startIndex);
+					if(endIndex == -1) endIndex = cookie.length;
+					return unescape(cookie.substring(startIndex + 1, endIndex));
+				} else {
+					return false;
+				}
+			} else {
+				return false;
+			}
+		}
+		$(function() {
+			
+		});
+
+		// 데스크탑 GNB
+		function desktopGnb(){
+			if ($(window).width() >= 768) {
+				$(".gnb .inc-snb").mouseenter(function(){
+					$(".header .bg-snb").show();
+				});
+				$(".gnb .inc-snb").mouseleave(function(){
+					$(".header .bg-snb").hide();
+				});
+			}
+		}
+
+		// 모바일 GNB
+		function mobileGnb(){
+			if ($(window).width() < 768) {
+				$("body").addClass("mobile-gnb");
+			} else {
+				$("body").removeClass("mobile-gnb");
+			}
+		}
+
+		$(function(){
+			// 데스크탑 메뉴
+			desktopGnb();
+
+			// 모바일 메뉴
+			$(".btn-menu").click(function(){
+				if ($("body").hasClass("mobile-gnb") === true){
+					$("body").removeClass("mobile-gnb");
+					$(window).resize(function(){
+						if($(window).width() >= 768) {
+							$("body").removeClass("mobile-gnb");
+						}
+					});
+				} else {
+					mobileGnb();
+				}
+			});
+
+			// 비주얼 슬라이더
+			$(".main-slide .slide-item").bxSlider({
+				mode: "fade",
+				auto: true,
+				pagerType: "short",
+				pagerShortSeparator: " | "
+			});
+
+			// 주요 품목별 물가동향
+			$(".tab-menu a").click(function(e){
+				e.preventDefault();
+
+				// 탭 버튼 active 클래스 변경
+				$(".tab-menu li").removeClass("active");
+				$(this).parent().addClass("active");
+
+				// 콘텐츠 영역 전환
+				var target = $(this).attr("href");
+				$(".tab-cont .tab").removeClass("active");
+				$(target).addClass("active");
+
+				// 물가동향 슬라이더 초기화
+				weeklySlider.reloadSlider();
+				monthlySlider.reloadSlider();
+
+			});
+
+			var weeklySlider = $("#weekly .card-item").bxSlider({
+				maxSlides: 4,
+				moveSlides: 1,
+//		slideWidth: 278,
+//		slideMargin: 30,
+				auto: true,
+				pager: false,
+				controls: false
+			});
+
+			var monthlySlider = $("#monthly .card-item").bxSlider({
+				maxSlides: 4,
+				moveSlides: 1,
+//		slideWidth: 278,
+//		slideMargin: 30,
+				auto: true,
+				pager: false,
+				controls: false
+			});
+
+			// 커스텀 버튼에 슬라이더 동작 연결
+			$("#weekly .custom-prev").click(function(e){
+				e.preventDefault();
+				weeklySlider.goToPrevSlide();
+			});
+
+			$("#weekly .custom-next").click(function(e){
+				e.preventDefault();
+				weeklySlider.goToNextSlide();
+			});
+
+			$("#monthly .custom-prev").click(function(e){
+				e.preventDefault();
+				monthlySlider.goToPrevSlide();
+			});
+
+			$("#monthly .custom-next").click(function(e){
+				e.preventDefault();
+				monthlySlider.goToNextSlide();
+			});
+		});
+	</script>
+
+	<script>
+
+		const lazyLoadingMenu = [
+			{ service: 'pricesRegist', method: ['insert', 'update']},
+		]
+
+		/*window.addEventListener("pageshow", function (event) {
+			const nav = performance.getEntriesByType("navigation")[0];
+
+			if (event.persisted || nav?.type === "back_forward") { // 뒤/앞으로 이동
+				hideLoading();
+			}
+		});*/
+
+		// --- Loading Bar Logic ---
+		function showLoading(message) {
+			var loadingText = message || "처리 중입니다...";
+			$("#loadingDivTxt").text(loadingText);
+			$("#loadingDiv").show();
+		}
+
+		function hideLoading() {
+			$("#loadingDiv").hide();
+		}
+
+		function extractMenu(urlStr) {
+			const url = new URL(urlStr);
+			const paths = url.pathname.split('/').filter(Boolean);
+
+			const lastIndex = paths.length-1;
+			const service = paths[lastIndex-1];
+			const method = paths[lastIndex].replace('.do', '');
+
+			return {service: service, method: method};
+		}
+
+		function isLazyLoadingMenu(menu) {
+			return lazyLoadingMenu.some(llm => llm.service === menu.service && llm.method.some(m => m === menu.method));
+		}
+
+		$(function(){ // document.ready
+			// Hide loading on initial page load completion
+			hideLoading();
+
+			// Show loading for link clicks that navigate away
+			$(document).on('click', 'a', function() {
+				const href = $(this).attr('href');
+				const target = $(this).attr('target');
+				if (href && href.trim() !== '' && !href.startsWith('#') && !href.startsWith('javascript:') && target !== '_blank') {
+					const menu = extractMenu($(this).prop('href'));
+					if(isLazyLoadingMenu(menu)) {
+						showLoading("페이지를 로드하는 중입니다...");
+					}
+				}
+			});
+
+			// Show loading for form submissions
+			$(document).on('submit', 'form', function() {
+				if ($(this).attr('target') !== '_blank' && $(this).attr('name') !== 'printForm') {
+					const menu = extractMenu($(this).prop('action'));
+					if(isLazyLoadingMenu(menu)) {
+						showLoading("데이터를 처리하는 중입니다...");
+					}
+				}
+			});
+		});
+	</script>
+
+	<style>
+		.bx-wrapper .bx-pager{display:block;}
+
+
+	</style>
+</head>
+<body class="main">
+<div class="loading" id="loadingDiv" style="display:none;">
+	<div class="spinner">
+		<div class="bounce1"></div>
+		<div class="bounce2"></div>
+		<div class="bounce3"></div>
+	</div>
+	<p style="color:#000;"><span id="loadingDivTxt"></span></p>
+</div>
+<!-- 바로가기 -->
+<ul class="skip">
+	<li><a href="#content"><strong>본문 바로가기</strong></a></li>
+</ul>
+<!--// 바로가기 -->
+<div id="wrapper">
+	<!-- header -->
+	<header>
+		<div id="header">
+	<script type="text/javascript" src="//www.seoul.go.kr/seoulgnb/gnb.js" charset="utf-8"></script>
+        <script type="text/javascript" >
+			window.onload = function() {
+				var myCss = {
+					root: {
+						backgroundColor: '',
+						borderColor: '',
+						color: ''
+					},
+					holder: {
+						maxWidth: '1015px',
+					},
+					menu: {
+						backgroundColor: ''
+					}
+				};
+
+				Yjs.Gnb.init('G205', 'seoul-integrated-menu');
+			}
+
+			function openPopup() {
+				url = "/seoul/mulga/member/user/forUpdateMy.do?viewType=CONTBODY&menuNo=100064";
+				window.open(url, "deptName", "resizable=no, status=no, scrollbars=no, toolbar=no, menubar=no, width=1000, height=700");
+			}
+		</script>
+		<div id="seoul-integrated-menu" style="position:relative;z-index:8888;">
+
+		</div>
+	<div class="header">
+		<div class="header_inner">
+
+			<div class="logo">
+				<a href="/seoul/mulga/main/main.do">
+					<img src="/seoul/cmmn/file/imageSrc.do?fileStreCours=b1b098ca174f0d241625d82c40008da11b713fe427163c0d96f5dc48ac89ac10&streFileNm=1e59c0e468f2e5e26bb17ff7a82052131c6118dfc291e8d1dcf21cd3e31a9f7e54ef47f17be083a72adbfab973dda727&thumb=N" alt="서울시 물가정보">
+					</a>
+			</div>
+			<nav class="gnb">
+			<ul class="depth1">
+			<li class="g2 inc-snb "> <!-- 선택 이벤트 없음 -->
+					<a href="/seoul/mulga/pricesInfo/areaPrices/list.do?menuNo=200006" >물가정보</a>
+					<ul class="depth2">
+						<li> <a href="/seoul/mulga/pricesInfo/areaPrices/list.do?menuNo=200006" >지역별 물가</a></li>
+							<li> <a href="/seoul/mulga/pricesCmpr/prdlstFlcts/list.do?menuNo=200008" >품목별 등락현황</a></li>
+							<li> <a href="/seoul/mulga/pricesCmpr/areaFlcts/list.do?aClassCode=001&amp;aSeq=1&amp;menuNo=200009" >지역별 등락현황</a></li>
+							<li> <a href="/seoul/mulga/pricesCmpr/mrktTy/list.do?menuNo=200010" >시장/마트 비교</a></li>
+							<li> <a href="/seoul/mulga/pricesCmpr/detailPrice/list.do?menuNo=200033" >품목세부가격</a></li>
+							<li> <a href="/seoul/mulga/pricesInfo/cnsmrPcindx/list.do?area=1&amp;item=1&amp;menuNo=200007" >소비자 물가지수</a></li>
+							</ul>
+					</li>
+
+				<li class="g3 inc-snb "> <!-- 선택 이벤트 없음 -->
+					<a href="/seoul/mulga/main/contents.do?menuNo=200026" >착한가격업소</a>
+					<ul class="depth2">
+						<li> <a href="/seoul/mulga/main/contents.do?menuNo=200026" >착한가격업소란</a></li>
+							<li> <a href="/seoul/mulga/goodBssh/goodBssh/goodBsshList.do?menuNo=200024" >신규지정 신청</a></li>
+							<li> <a href="/seoul/mulga/goodBssh/areaSttus/list.do?menuNo=200025" >지역별 현황</a></li>
+							</ul>
+					</li>
+
+				<!-- 추후 추가 -->
+					<li class="g4 inc-snb on"> <!-- 선택 이벤트 없음 -->
+					<a href="/seoul/mulga/main/contents.do?menuNo=200021" >공공요금</a>
+					<ul class="depth2">
+						<li> <a href="/seoul/mulga/main/contents.do?menuNo=200021" >대중교통</a></li>
+							<li> <a href="/seoul/mulga/main/contents.do?menuNo=200012" >도시가스</a></li>
+							<li> <a href="/seoul/mulga/main/contents.do?menuNo=200013" >상수도</a></li>
+							<li> <a href="/seoul/mulga/main/contents.do?menuNo=200014" >하수도</a></li>
+							<li> <a href="/seoul/mulga/main/contents.do?menuNo=200015" >쓰레기봉투</a></li>
+							<li> <a href="/seoul/mulga/main/contents.do?menuNo=200016" >정화조</a></li>
+							</ul>
+					</li>
+
+				<li class="g5 inc-snb "> <!-- 선택 이벤트 없음 -->
+					<a href="/seoul/mulga/bbs/B0000001/list.do?menuNo=200029" >알뜰정보</a>
+					<ul class="depth2">
+						<li> <a href="/seoul/mulga/bbs/B0000001/list.do?menuNo=200029" >서울시 새소식</a></li>
+							</ul>
+					</li>
+
+				</ul>
+			</nav>
+			<a href="javascript:;" class="btn-menu">
+				<span><i></i><i></i><i></i></span>
+			</a>
+		</div>
+			<div class="bg-snb"></div>
+	</div></header>
+	<!-- //header -->
+	<!-- wrapper -->
+
+	<!-- Container -->
+
+	<section class="container">
+
+		
+<section id="content" class="charge01">
+	<div class="sub-visual sub4">
+		<div class="grid">
+			<h1>대중교통</h1>
+		</div>
+	</div>
+	<div class="grid">
+		<div class="tabType_3 tabTitle">
+			<ul>
+				<li><a title="지하철" href="/seoul/mulga/main/contents.do?menuNo=200021"><span style="font-size: 17px; font-weight: 700; letter-spacing: -1px;">지하철</span></a></li>
+				<li><a title="버스" href="/seoul/mulga/main/contents.do?menuNo=200022"><span style="font-size: 17px; font-weight: 700; letter-spacing: -1px;">버스</span></a></li>
+				<li class="active"><a title="택시" href="/seoul/mulga/main/contents.do?menuNo=200023"><span style="font-size: 17px; font-weight: 700; letter-spacing: -1px;">택시</span></a></li>
+			</ul>
+		</div>
+
+		<div class="tabCont">
+			<!-- 대중교통 -->
+			<div class="active">
+				<h2>택시</h2>
+				<h3 class="s-tit">중형택시</h3>
+				<div class="tbType_1">
+					<table>
+						<caption>중형택시 요금 상세정보</caption>
+						<colgroup>
+							<col style="width:24%;">
+							<col>
+						</colgroup>
+						<thead>
+							<tr>
+								<th scope="col">구분</th>
+								<th scope="col">신고요금</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>주간</td>
+								<td class="txt_l">
+									- 기본요금 : 1.6km까지 4,800원<br>
+									- 거리요금 : 131m당 100원<br>
+									- 시간요금 : 30초당 100원
+								</td>
+							</tr>
+							<tr>
+								<td>심야</td>
+								<td class="txt_l">
+									- 기본요금 : (22~23시, 02~04시) 1.6km까지 5,800원 / (23~02시) 1.6km까지 6,700원<br>
+									- 거리요금 : (22~23시, 02~04시) 131m당 120원 / (23~02시) 131m당 140원<br>
+									- 시간요금 : (22~23시, 02~04시) 30초당 120원 / (23~02시) 30초당 140원
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div class="info">
+					<div class="tit">공통사항</div>
+					<ul>
+						<li>- 시간&middot;거리 부분 동시병산(15.72㎞/h 미만시)</li>
+						<li>- 시계외 할증 : 20%</li>
+						<li>- 심야 할증(22~04시) : 20%(22~23, 02~04), 40%(23~02)</li>
+						<li>- 심야&middot;시계외 중복할증 : 최대 60%</li>
+						<li>- 최종 지불요금 미터기에서 산정된 요금의 십원단위에서 반올림하여 결정</li>
+					</ul>
+				</div>
+				<div class="sm_txt emp">
+					* 2023.02.01 04시부터 적용
+				</div>
+				<h3 class="s-tit">대형승용 및 모범택시</h3>
+				<div class="tbType_1">
+					<table>
+						<caption>대형승용 및 모범택시 요금 상세정보</caption>
+						<colgroup>
+							<col style="width:24%;">
+							<col>
+						</colgroup>
+						<thead>
+							<tr>
+								<th scope="col">구분</th>
+								<th scope="col">신고요금</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>주간</td>
+								<td class="txt_l">
+									- 기본요금 : 3km까지 7,000원<br>
+									- 거리요금 : 151m당 200원<br>
+									- 시간요금 : 36초당 200원
+								</td>
+							</tr>
+							<tr>
+								<td>심야</td>
+								<td class="txt_l">
+									- 기본요금 : 3km까지 8,400원<br>
+									- 거리요금 : 151m당 240원<br>
+									- 시간요금 : 36초당 240원</p>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div class="info">
+					<div class="tit">공통사항</div>
+					<ul>
+						<li>- 시간&middot;거리 부분 상호병산(15.10㎞/h 미만시 시간만, 이상시 거리만)</li>
+						<li>- 심야 할증(22~04시) : 20%</li>
+						<li>- 시계외 할증 : 20%</li>
+						<li>- 심야&middot;시계외 중복할증 : 최대 40%</li>
+						<li>- 최종 지불요금 미터기에서 산정된 요금의 십원단위에서 반올림하여 결정</li>
+					</ul>
+				</div>
+				<div class="sm_txt emp">
+					* 2023.02.01 04시부터 적용
+				</div>
+				<h3 class="s-tit">고급택시</h3>
+				<div class="tbType_1">
+					<table>
+						<caption>고급택시 요금 상세정보</caption>
+						<colgroup>
+							<col style="width:24%;">
+							<col>
+						</colgroup>
+						<thead>
+							<tr>
+								<th scope="col">구분</th>
+								<th scope="col">신고요금</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>카카오블랙</td>
+								<td class="txt_l">
+									- 기본요금 : 기본거리 없이 6,000원<br>
+									- 거리요금 : 71.4m당 100원<br>
+									- 시간요금 : 15초당 100원<br>
+									- 기타요금<br>
+									　&middot; 시간&middot;거리 완전 동시병산<br>
+									　&middot; 탄력요금제(0.7~4.0배) 적용<br>
+									　&middot; 별도 대절요금제, 공항 구간요금제 운영
+								</td>
+							</tr>
+							<tr>
+								<td>우버블랙</td>
+								<td class="txt_l">
+									- 기본요금 : 기본거리 없이 8,000원<br>
+									- 거리요금 : 71.4m당 100원<br>
+									- 시간요금 : 12초당 100원<br>
+									- 기타요금<br>
+									　&middot; 시간&middot;거리 완전 동시병산, 사전확정요금제<br>
+									　&middot; 탄력요금제(0.8~4.0배) 적용
+								</td>
+							</tr>
+							<tr>
+								<td>리모블랙</td>
+								<td class="txt_l">
+									- 기본요금 : 기본거리 없이 8,000원<br>
+									- 거리요금 : 125m당 200원<br>
+									- 시간요금 : 24초당 200원<br>
+									- 기타요금<br>
+									　&middot; 시간&middot;거리 부분 동시병산, 미터요금 할증 없음<br>
+									　(17.14㎞/h 미만시 시간&middot;거리, 이상시 거리만)<br>
+									　&middot; 별도 대절요금제 운영
+								</td>
+							</tr>
+							<tr>
+								<td>타다 플러스</td>
+								<td class="txt_l">
+									- 기본요금 : 0.75km까지 5,000원<br>
+									- 거리요금 : 123m당 100원<br>
+									- 시간요금 : 35초당 100원<br>
+									- 기타요금<br>
+									　&middot; 시간&middot;거리 완전 동시병산<br>
+									　&middot; 탄력요금제(0.8~4.0배) 적용<br>
+									　&middot; 별도 구간 및 대절요금제 운영
+								</td>
+							</tr>
+							<tr>
+								<td>타다 넥스트</td>
+								<td class="txt_l">
+									- 기본요금 : 0.75km까지 5,000원<br>
+									- 거리요금 : 123m당 100원<br>
+									- 시간요금 : 35초당 100원<br>
+									- 기타요금<br>
+									　&middot; 시간거리 완전 동시병산<br>
+									　&middot; 탄력요금제(0.8~4배) 적용<br>
+									　&middot; 별도 구간 및 대절요금제 운영
+								</td>
+							</tr>
+							<tr>
+								<td>아이엠(I.M)블랙</td>
+								<td class="txt_l">
+									- 기본요금 : 0.75km까지 7,000원<br>
+									- 거리요금 : 85m당 100원<br>
+									- 시간요금 : 24초당 100원<br>
+									- 기타요금<br>
+									　&middot; 시간거리 완전동시병산, 사전확정요금제<br>
+									　&middot; 탄력요금제(0.7~4배) 적용<br>
+									　&middot; 별도 구간 및 대절요금제 운영
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<h3 class="s-tit">대형승합택시</h3>
+				<div class="tbType_1">
+					<table>
+						<caption>대형승합택시 요금 상세정보</caption>
+						<colgroup>
+							<col style="width:24%;">
+							<col>
+						</colgroup>
+						<thead>
+							<tr>
+								<th scope="col">구분</th>
+								<th scope="col">신고요금</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+
+							<tr>
+								<td>카카오벤티</td>
+								<td class="txt_l">
+									- 기본요금 : 0.8km까지 4,000원<br>
+									- 거리요금 : 123m당 100원<br>
+									- 시간요금 : 40초당 100원<br>
+									- 기타요금<br>
+									　&middot; 시간&middot;거리 완전 동시병산<br>
+									　&middot; 탄력요금제(0.8~4.0배) 적용<br>
+									　&middot; 별도 구간 및 대절요금제 운영
+								</td>
+							</tr>
+							<tr>
+								<td>아이엠(I.M)</td>
+								<td class="txt_l">
+									- 기본요금 : 0.75km까지 5,500원 ※ 심야(22~23시, 02~04시) 6,500원, 심야(23~02시) : 7,500원<br>
+									- 거리요금 : 110m당 100원<br>
+									- 시간요금 : 30초당 100원<br>
+									- 기타요금<br>
+									　&middot; 시간거리 완전동시병산, 사전확정요금제<br>
+									　&middot; 심야 할증(22~04시) : 40%(22~23시, 02~04시), 50%(23~02시)<br>
+									　&middot; 탄력요금제(0.7~4.0배) 적용<br>
+									　&middot; 별도 구간 및 대절요금제 적용<br>
+									　&middot; 호출수수료 : 0~5,000원
+									<span class="desc">
+									　※ 탄력요금제, 사전확정요금제는 플랫폼 호출 고객 한정<br>
+									　※ 탄력요금제는 심야할증과 중복 적용
+									</span>
+								</td>
+							</tr>
+							<tr>
+								<td>아이맘택시<br>(은평구)</td>
+								<td class="txt_l">
+									- 정액요금<br>
+									&middot; 이용건당 6,000원 정액(앱 호출만 가능)<br>
+									&middot; 할증 및 부가요금 없음
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div class="sm_txt emp">
+					* 고급택시, 대형승합택시 서비스 유형별 기타 요금 세부내용은 02-2133-2317로 연락 주세요
+				</div>
+				<div class="info2">
+					<div class="tit c-blue">※ 외국인관광택시(인터내셔널택시) 요금제</div>
+					<ul>
+						<li>미터요금제 : 중형, 대형승용, 모범택시와 요금제와 동일</li>
+						<li>- 외국인 승객이 탑승시 외국인 할증 20% 적용 가능</li>
+						<li>- 중형택시는 외국인 할증(20%), 심야 할증(20~40%), 시계외 할증(20%)을 동시에 적용하더라도 최대 60%까지만 할증 가능</li>
+					</ul>
+				</div>
+				<h3>구간요금제 : 인천국제공항 &harr; 서울시</h3>
+				<div class="tbType_1">
+					<table>
+						<caption>구간요금제 : 인천국제공항 &harr; 서울시 상세정보</caption>
+						<colgroup>
+							<col>
+							<col style="width:29%;">
+							<col style="width:29%;">
+						</colgroup>
+						<thead>
+						<tr>
+							<th scope="col">구분: 인천국제공항 &harr; 서울시</th>
+							<th scope="col">중형택시</th>
+							<th scope="col">대형&middot;모범택시</th>
+						</tr>
+						</thead>
+						<tbody>
+						<tr>
+							<td>[A지역] 강서</td>
+							<td>70,000원</td>
+							<td>100,000원</td>
+						</tr>
+						<tr>
+							<td>[B지역] 양천, 구로, 영등포, 마포, 은평, 서대문</td>
+							<td>75,000원</td>
+							<td>110,000원</td>
+						</tr>
+						<tr>
+							<td>[C지역] 금천, 관악, 동작, 용산, 중, 종로</td>
+							<td>85,000원</td>
+							<td>120,000원</td>
+						</tr>
+						<tr>
+							<td>[D지역] 서초, 강남, 성동, 동대문, 성북, 강북</td>
+							<td>90,000원</td>
+							<td>130,000원</td>
+						</tr>
+						<tr>
+							<td>[E지역] 송파, 강동, 광진, 중랑, 노원, 도봉</td>
+							<td>95,000원</td>
+							<td>140,000원</td>
+						</tr>
+						</tbody>
+					</table>
+				</div>
+				<h3>대절요금제</h3>
+				<div class="tbType_1 mb_40 sm">
+					<table>
+						<caption>대절요금제 상세정보</caption>
+						<colgroup>
+							<col>
+							<col style="width:15%;">
+							<col style="width:15%;">
+							<col style="width:15%;">
+							<col style="width:15%;">
+							<col style="width:15%;">
+						</colgroup>
+						<thead>
+						<tr>
+							<th scope="col">구분</th>
+							<th scope="col">3시간</th>
+							<th scope="col">5시간</th>
+							<th scope="col">8시간</th>
+							<th scope="col">10시간</th>
+							<th scope="col">1일</th>
+						</tr>
+						</thead>
+						<tbody>
+						<tr>
+							<td>중형택시</td>
+							<td>70,000원</td>
+							<td>110,000원</td>
+							<td>160,000원</td>
+							<td>190,000원</td>
+							<td>240,000원</td>
+						</tr>
+						<tr>
+							<td>대형&middot;모범택시</td>
+							<td>90,000원</td>
+							<td>130,000원</td>
+							<td>180,000원</td>
+							<td>210,000원</td>
+							<td>260,000원</td>
+						</tr>
+						</tbody>
+					</table>
+				</div>
+				<div class="info2">
+					<div class="tit c-blue">※ 기타 부가요금 및 할증요금</div>
+					<ul>
+						<li>유료도로 통행료 등 : 승객의 요구 등으로 유료도로 등 유료시설을 이용할 경우 실비를 징수</li>
+						<li>시계외할증 : 시내에서 출발하여 시 경계(통합사업구역 광명시, 공동사업구역(위례신도시 포함))를 벗어나는 모든 시계외구간에서 요금 20% 할증 적용(시계외할증이 자동 할증 적용) ※인천국제공항의 경우 인천국제공항을 공동사업구역으로 하는 서울시, 경기도(광명시, 부천시, 김포시, 고양시), 인천시까지는 시계외할증 미적용, 6개시도경계부터 적용 (02-2133-2317로 문의)</li>
+						<li>심야&middot;시계외 중복할증 : 22:00~04:00시 사이 시계외로 운행 시 중복할증 적용(최대 60%)</li>
+						<li>모든 택시는 미터기에 의한 요금만을 징수하여야 하며 위반시 부당요금징수로 행정처분 대상 (다만, 서울시의 승인을 받은 별도 요금체계는 요금미터기가 아니어도 징수 가능)</li>
+						<li>고급택시, 대형승합택시는 자율신고요금제로 사업자가 기준을 정하여 요금을 신고할 수 있으며 수요, 공급에 따라 신고요금 기준으로 할인 및 할증 적용이 가능(사전 신고)함</li>
+						<li>호출료 : 서울시 호출료 기준(주간 1,000원, 야간, 2,000원)은 전화로만 운영되는 호출에 적용되며, 앱을 통한 호출은 국토교통부에 등록하고 호출료를 신고해야 함</li>
+					</ul>
+				</div>
+			</div>
+		</div>
+	</div>
+</section></section><!--// container -->
+	<!-- //Container -->
+
+<!-- footer -->
+<script>
+        var pathStr = "공공요금|대중교통|택시";
+        var pathArr = pathStr.split('|');
+        var $visual = document.querySelector('.sub-visual .grid h1');
+        var $stit =  document.querySelector('.s-tit.inc-desc.flx-wrap360 em');
+
+        if($visual && pathArr.length > 0) {
+            $visual.textContent = pathArr[0];
+        }
+
+        if($stit && pathArr.length > 1) {
+            $stit.textContent = pathArr[1];
+        }
+
+        if(false && $visual && pathArr.length > 1){
+            $visual.textContent = pathArr[1];
+            console.log(pathArr[1]);
+        }
+    </script>
+<footer>
+
+	<div class="footer">
+		<div class="footer_cont">
+			<div class="footer_info">
+				<address>[04514]서울 중구 서소문로 124 (서소문동)</address>
+				<div class="tel"> TEL : 대표전화ㅣ02-2133-5393</div>
+			</div>
+			<div class="footer_call">
+				<span>문의ㅣ120</span>
+				<p>정보를 못찾으셨나요? 120다산콜센터로 물어보세요!</p>
+			</div>
+			<div class="copyright">	Seoul Metropolitan Government All Rights Reserved.</div>
+		</div>
+	</div>
+</footer>
+<script type="text/javascript" src="//weblog.eseoul.go.kr/wlo/js/install.js" ></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-134768106-1"></script>
+<!-- 2019.04.10 마성일 구글 분석 관련 코드 추가  -->
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'UA-134768106-1');
+
+</script>
+
+</div><!--// wrapper -->
+<!-- //footer -->
+
+
+
+
+<!-- 로그기록  -->
+<script>
+
+document.writeln("<span class='sr-only'><img src='/seoul/mulga/singl/siteConectStats/rcord.do?menuNo=200023&amp;conectUrlad=/seoul/mulga/main/contents.do' alt=''></span>");
+</script>
+<!-- 로그기록 END  -->
+</body>
+</html>
