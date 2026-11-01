@@ -1,11 +1,11 @@
 #!/bin/bash
 # Adds the "at a glance" table figure to published posts that don't have one yet (export skips hl-glance posts).
-# usage: scripts/glance_new.sh ko|en   — run daily after the day's publishes (WP host export/insert, runner render+upload)
+# usage: scripts/glance_new.sh ko|en [future]   — run daily after the day's publishes (WP host export/insert, runner render+upload)
 set -e
 L=${1:-ko}; K=~/.ssh/huntlab-lightsail.pem; WP=admin@43.203.28.225; RN=ubuntu@3.35.47.83; T=$(mktemp -d)
 cd "$(dirname "$0")/.."
 scp -q -i $K scripts/glance_export.php scripts/glance_insert.php $WP:/tmp/
-ssh -i $K $WP "cd /var/www/html; sudo -u www-data wp eval-file /tmp/glance_export.php $L" > $T/tables.json
+ssh -i $K $WP "cd /var/www/html; sudo -u www-data wp eval-file /tmp/glance_export.php $L ${2:-publish}" > $T/tables.json
 n=$(python3 -c "import json,sys;print(len(json.load(open(sys.argv[1]))))" $T/tables.json)
 [ "$n" = 0 ] && { echo "nothing new ($L)"; rm -rf $T; exit 0; }
 scp -q -i $K $T/tables.json $RN:/tmp/glance_tables.json
