@@ -9,8 +9,9 @@ ssh -i $K $WP "cd /var/www/html; sudo -u www-data wp eval-file /tmp/glance_expor
 n=$(python3 -c "import json,sys;print(len(json.load(open(sys.argv[1]))))" $T/tables.json)
 [ "$n" = 0 ] && { echo "nothing new ($L)"; rm -rf $T; exit 0; }
 scp -q -i $K $T/tables.json $RN:/tmp/glance_tables.json
-scp -q -i $K scripts/make_glance_figures.py $RN:apps/huntlab-blog/scripts/make_glance_figures.py
-ssh -i $K $RN 'cd ~/apps/huntlab-blog; PYTHONPATH=. .venv/bin/python scripts/make_glance_figures.py /tmp/glance_tables.json /tmp/glance_out --apply | tail -1; rm -rf /tmp/glance_tables.json /tmp/glance_out' > $T/media.json
+# copy to /tmp, never into the runner's git tree (an untracked copy there blocked git pull for 112 commits, 10/31~11/01)
+scp -q -i $K scripts/make_glance_figures.py $RN:/tmp/make_glance_figures.py
+ssh -i $K $RN 'cd ~/apps/huntlab-blog; PYTHONPATH=. .venv/bin/python /tmp/make_glance_figures.py /tmp/glance_tables.json /tmp/glance_out --apply | tail -1; rm -rf /tmp/glance_tables.json /tmp/glance_out /tmp/make_glance_figures.py' > $T/media.json
 scp -q -i $K $T/media.json $WP:/tmp/enfig_media.json
 ssh -i $K $WP 'cd /var/www/html; out=$(sudo -u www-data wp eval-file /tmp/glance_insert.php); echo "$out"; sudo -u www-data wp cache-enabler clear --ids=$(echo "$out" | head -1) >/dev/null; rm -f /tmp/enfig_media.json'
 rm -rf $T

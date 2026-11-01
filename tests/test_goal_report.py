@@ -26,6 +26,12 @@ class GoalReportTests(unittest.TestCase):
             log.write_text("date\tadsense_usd\tcoupang_krw\n2026-10-13\t0.00\t0\n2026-11-02\t1.5\t12300\n")
             self.assertEqual(last_revenue(log), "11/02 확인 애드센스 $1.50·쿠팡 12,300원")
 
+    def test_last_revenue_without_coupang(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "r.tsv"
+            log.write_text("2026-11-01\t0.00\t-\n")
+            self.assertEqual(last_revenue(log), "11/01 확인 애드센스 $0.00")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -153,7 +153,8 @@ def recent_runs(root):
 def inventory_summary(inventory):
     return {'metadata': inventory['metadata'], 'posts': [
         {**{key: row.get(key) for key in ('post_id', 'title', 'slug', 'status')},
-         'excerpt': str(row.get('excerpt', ''))[:300]}
+         # excerpt only for published posts (titles cover scheduled ones): 300-char excerpts for all 336 posts overflowed the 400KB budget on 11/01
+         'excerpt': str(row.get('excerpt', ''))[:200] if row.get('status') == 'publish' else ''}
         for row in inventory['posts']],
         'comparison_scope': 'Discovery summary only. Full bodies remain in private inventory and mandatory Publisher duplicate checks; not proof of independent semantic duplicate review.'}
 

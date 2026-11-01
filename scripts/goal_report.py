@@ -33,7 +33,9 @@ def target_for(today: date) -> tuple[date, int]:
 def last_revenue(path: Path = REVENUE_LOG) -> str:
     """'MM/DD 확인 애드센스 $x·쿠팡 y원' from the newest row, never an estimate."""
     day, adsense, coupang = path.read_text().strip().splitlines()[-1].split("\t")
-    return f"{day[5:7]}/{day[8:]} 확인 애드센스 ${float(adsense):.2f}·쿠팡 {int(coupang):,}원"
+    # "-" = 쿠팡 not tracked (AdSense only since 10/28); int("-") crashed the report.
+    tail = f"·쿠팡 {int(coupang):,}원" if coupang.strip().isdigit() else ""
+    return f"{day[5:7]}/{day[8:]} 확인 애드센스 ${float(adsense):.2f}{tail}"
 
 
 def message(today: date, sessions: int, views: int, organic: int, clicks: int, impressions: int, revenue: str) -> str:
