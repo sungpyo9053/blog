@@ -1,0 +1,201 @@
+<pre><code>[INFO] [1793582923.832702145] [ctor_body]: constructor: calling shared_from_this()
+terminate called after throwing an instance of 'std::bad_weak_ptr'
+  what():  bad_weak_ptr</code></pre>
+
+<p>Run the node with <code>ros2 run</code> and you get one more line, <code>[ros2run]: Aborted</code>, and exit code 250. Inside a component container you get <code>Failed to load component: Component constructor threw an exception: bad_weak_ptr</code> instead.</p>
+
+<p>Short answer: something called <code>shared_from_this()</code> on a node that no <code>std::shared_ptr</code> owned yet. In almost every report that is the node's own constructor, often hidden inside a helper such as <code>image_transport::ImageTransport(shared_from_this())</code> or <code>tf2_ros::TransformBroadcaster(shared_from_this())</code>. <code>std::make_shared</code> only hands the object to a <code>shared_ptr</code> after the constructor returns, so there is nothing to share yet. On Humble, Jazzy and Lyrical, three fixes worked. You can pass <code>this</code> to helpers that accept it, move the code into an <code>init()</code> you call after <code>make_shared</code>, or run it from a one-shot timer. A minimal version of the second fix:</p>
+
+<pre><code class="language-cpp">class MyNode : public rclcpp::Node {
+public:
+  MyNode() : Node("my_node") {}           // no shared_from_this() here
+  void init() {                            // call after make_shared
+    it_pub_ = image_transport::ImageTransport(shared_from_this()).advertise("camera/image", 1);
+  }
+  image_transport::Publisher it_pub_;
+};
+
+int main(int argc, char ** argv) {
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared&lt;MyNode&gt;();
+  node-&gt;init();
+  rclcpp::spin(node);
+  rclcpp::shutdown();
+}</code></pre>
+
+<p>Two common workarounds compile, then fail later. Wrapping <code>this</code> in a new <code>shared_ptr</code> crashed with a double free in 3 of 3 runs on every distro. A <code>shared_ptr</code> with a no-op deleter didn't crash, but it broke <code>shared_from_this()</code> for the rest of the node's life. Details are below.</p>
+
+<h2>Find your cause</h2>
+
+<p>Every row below threw <code>std::bad_weak_ptr</code> with <code>what():  bad_weak_ptr</code> on all three distros. When nothing caught it, the process aborted with exit code 134. The text doesn't name the class or the line, so use the table to find where the call is.</p>
+
+<table>
+<thead><tr><th>Where shared_from_this() ran</th><th>What you see</th></tr></thead>
+<tbody>
+<tr><td>Constructor body of a class derived from <code>rclcpp::Node</code></td><td><code>terminate called after throwing an instance of 'std::bad_weak_ptr'</code>, exit 134</td></tr>
+<tr><td>Member initializer list (<code>helper_(shared_from_this())</code>)</td><td>same</td></tr>
+<tr><td><code>tf2_ros::TransformBroadcaster(shared_from_this())</code> in the constructor</td><td>same</td></tr>
+<tr><td><code>image_transport::ImageTransport it(shared_from_this())</code> in the constructor</td><td>same</td></tr>
+<tr><td>Constructor of an <code>rclcpp_lifecycle::LifecycleNode</code></td><td>same</td></tr>
+<tr><td>Node created on the stack (<code>MyNode n;</code>), then <code>n.shared_from_this()</code></td><td>same</td></tr>
+<tr><td>Node held by <code>std::make_unique</code>, then <code>shared_from_this()</code></td><td>same</td></tr>
+<tr><td>Same constructor case started with <code>ros2 run</code></td><td>same text plus <code>[ros2run]: Aborted</code>, exit 250</td></tr>
+<tr><td>Constructor of a component loaded with <code>ros2 component load</code></td><td><code>Failed to load component: Component constructor threw an exception: bad_weak_ptr</code>, exit 1. The container kept running.</td></tr>
+<tr><td>The node's destructor</td><td>throws too. I caught it, so the process didn't abort.</td></tr>
+</tbody>
+</table>
+
+<p>The stack and <code>unique_ptr</code> rows are the same problem from a different direction: the call came after construction, but the object was never owned by a <code>shared_ptr</code>. That is the cause in <a href="https://github.com/ros-navigation/navigation2/issues/5335">navigation2 issue #5335</a>, where a <code>bond::Bond</code> created with <code>std::make_unique</code> calls <code>shared_from_this()</code>. Moving the <code>unique_ptr</code> into a <code>shared_ptr</code> first fixed it in my run: <code>shared_from_this()</code> then returned normally, with <code>use_count=2</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-02 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images on a 2 vCPU Linux host, one distro at a time. Inside each container I installed <code>ros-&lt;distro&gt;-image-transport</code> with apt, because <code>ros-base</code> doesn't include it. Then I built four small ament_cmake packages with <code>colcon build</code>, one worker and <code>make -j1</code>:</p>
+
+<ul>
+<li><code>bwp</code>: one executable with a mode argument for each cause and fix, plus a component library with a broken and a fixed component.</li>
+<li><code>bwp_it</code>: image_transport in the constructor, in <code>init()</code>, and through the raw-pointer <code>create_publisher(this, ...)</code>.</li>
+<li><code>bwp_it_ifaces</code>: the node-interfaces API that Lyrical's deprecation warnings point to.</li>
+</ul>
+
+<p>The CMake files use <code>target_link_libraries</code> with exported targets, not <code>ament_target_dependencies</code>, so the same files build on all three distros. The reason is in <a href="https://huntlab.app/en/ros-2-lyrical-unknown-cmake-command-ament-target-dependencies/">Unknown CMake command "ament_target_dependencies" in ROS 2 Lyrical</a>. A helper class called <code>NeedsNode</code> stands in for anything whose constructor wants <code>rclcpp::Node::SharedPtr</code>. It keeps that pointer and creates a publisher. For each fix I recorded <code>use_count()</code> after setup, then dropped the owning pointer and checked through a <code>weak_ptr</code> whether the node was destroyed. Components were loaded into <code>ros2 run rclcpp_components component_container</code>.</p>
+
+<h2>Why the constructor can't do it</h2>
+
+<p><code>rclcpp::Node</code> derives from <code>std::enable_shared_from_this&lt;Node&gt;</code>. <code>shared_from_this()</code> doesn't create ownership. It copies the ownership of a <code>shared_ptr</code> that already exists. <code>std::make_shared&lt;MyNode&gt;()</code> creates that <code>shared_ptr</code> only after <code>MyNode()</code> has returned, so during the constructor the hidden weak pointer is still empty. I checked this directly. In the constructor, <code>weak_from_this().expired()</code> returned 1 and <code>weak_from_this().lock()</code> returned a null pointer on all three distros. <code>weak_from_this()</code> doesn't throw, but it can't help you in the constructor either, because it has nothing to give you yet.</p>
+
+<p>The exception is an ordinary C++ exception. Around <code>std::make_shared&lt;MyNode&gt;()</code>, <code>catch (const std::bad_weak_ptr &amp; e)</code> caught it, and <code>e.what()</code> was just <code>bad_weak_ptr</code>. That is why the message is so unhelpful. Catching it doesn't fix anything, because your constructor stopped halfway through.</p>
+
+<h2>Fix 1: pass this, not shared_from_this()</h2>
+
+<p>Many helpers take the node as a template parameter or a raw pointer, not only as a <code>shared_ptr</code>. Where that works, it is the smallest change, because the code can stay in the constructor. In my run these all worked in the constructor on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-cpp">MyNode() : Node("my_node") {
+  br_ = std::make_shared&lt;tf2_ros::TransformBroadcaster&gt;(this);
+  buffer_ = std::make_shared&lt;tf2_ros::Buffer&gt;(get_clock());
+  tl_ = std::make_shared&lt;tf2_ros::TransformListener&gt;(*buffer_, this);
+  img_pub_ = image_transport::create_publisher(this, "camera/image");   // deprecated on Lyrical
+}</code></pre>
+
+<p>Each node built this way had <code>use_count=1</code> and was destroyed as soon as I dropped my pointer. On Lyrical, image_transport 6.4.10 builds the raw-pointer call but warns: <code>'image_transport::Publisher image_transport::create_publisher(rclcpp::Node*, ...)' is deprecated: Use create_publisher(RequiredInterfaces node_interfaces, ..., rclcpp::QoS) instead.</code> The <code>ImageTransport(rclcpp::Node::SharedPtr)</code> constructor got the same kind of warning. The replacement takes the node by reference, and the QoS argument has no default:</p>
+
+<pre><code class="language-cpp">// Lyrical (image_transport 6.4.10): worked in the constructor
+img_pub_ = image_transport::create_publisher(*this, "camera/image", rclcpp::QoS(1));
+it_ = std::make_shared&lt;image_transport::ImageTransport&gt;(*this);</code></pre>
+
+<p>On Lyrical both lines worked in the constructor and the node was destroyed normally. The same file didn't build on Humble (image_transport 3.1.13) or Jazzy (5.1.8): <code>cannot convert 'ItIfaces' to 'rclcpp::Node*'</code> and <code>no matching function for call to 'image_transport::ImageTransport::ImageTransport(ItIfaces&amp;)'</code>. If one source tree has to build on all three, use <code>create_publisher(this, ...)</code> and accept the warning on Lyrical, or use the next fix.</p>
+
+<h2>Fix 2: an init() you call after make_shared</h2>
+
+<p>When a helper only accepts <code>Node::SharedPtr</code>, give the node a second setup step and call it from <code>main</code> right after <code>make_shared</code>, as in the short answer. It worked on every distro, for every helper I tried. There is one catch, and none of the error messages warn you about it. If the helper keeps the <code>shared_ptr</code> you gave it, and the node keeps the helper, the node owns itself and is never destroyed:</p>
+
+<table>
+<thead><tr><th>Created in init() with shared_from_this()</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Helper that stores <code>Node::SharedPtr</code></td><td>use_count 2, never destroyed</td><td>use_count 2, never destroyed</td><td>use_count 2, never destroyed</td></tr>
+<tr><td>Same helper storing <code>Node::WeakPtr</code></td><td>destroyed</td><td>destroyed</td><td>destroyed</td></tr>
+<tr><td><code>tf2_ros::TransformBroadcaster</code></td><td>destroyed</td><td>destroyed</td><td>destroyed</td></tr>
+<tr><td><code>tf2_ros::TransformListener</code></td><td>destroyed</td><td>destroyed</td><td>destroyed</td></tr>
+<tr><td><code>image_transport::ImageTransport</code> kept as a member</td><td>use_count 2, never destroyed</td><td>use_count 2, never destroyed</td><td>destroyed</td></tr>
+</tbody>
+</table>
+
+<p>"Never destroyed" means that after I dropped the only pointer in <code>main</code>, the <code>weak_ptr</code> still wasn't expired and the destructor didn't run. On Jazzy the leaked ImageTransport case also printed <code>class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap!</code> at exit. For a node that lives until the process ends, this costs you only a skipped destructor. For nodes you create and destroy at run time, it is a leak. With image_transport on Humble or Jazzy, keep the <code>image_transport::Publisher</code> it returns, not the <code>ImageTransport</code> object, or use <code>create_publisher(this, ...)</code>. For your own helpers, store <code>Node::WeakPtr</code>, or take the node interfaces you actually need.</p>
+
+<h2>Fix 3: a one-shot timer</h2>
+
+<p>When <code>main</code> isn't yours, as with components and some launch setups, nobody will call <code>init()</code>. You can start a 0 ms wall timer in the constructor and cancel it on its first run:</p>
+
+<pre><code class="language-cpp">MyNode(const rclcpp::NodeOptions &amp; options) : Node("my_node", options) {
+  init_timer_ = create_wall_timer(std::chrono::milliseconds(0), [this]() {
+    init_timer_-&gt;cancel();
+    helper_ = std::make_shared&lt;Helper&gt;(shared_from_this());
+  });
+}</code></pre>
+
+<p>I ran this 20 times per distro with a <code>SingleThreadedExecutor</code>. The callback ran exactly once in 20 of 20 runs. The helper was still unset when the constructor returned, and it was set on the first spin:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>End of constructor to timer callback, median (max)</td><td>31 µs (84)</td><td>53 µs (134)</td><td>47 µs (121)</td></tr>
+<tr><td>Start of spin to timer callback, median (max)</td><td>21 µs (74)</td><td>18 µs (63)</td><td>16 µs (55)</td></tr>
+<tr><td>Runs where it didn't fire exactly once</td><td>0 of 20</td><td>0 of 20</td><td>0 of 20</td></tr>
+</tbody>
+</table>
+
+<p>The delay is tiny, but it isn't zero, and the order matters. Anything that uses the helper before the first spin finds it unset, for example code in <code>main</code> between <code>make_shared</code> and <code>spin</code>. I didn't test whether a message that is already waiting can be handled in the same first spin before the timer, so guard such callbacks with a null check if they use the helper.</p>
+
+<h2>Components and lifecycle nodes</h2>
+
+<p>A component whose constructor called <code>shared_from_this()</code> failed to load on all three distros. The container logged <code>[ERROR] [ComponentManager]: Component constructor threw an exception: bad_weak_ptr</code>, and <code>ros2 component load</code> exited with 1. The container itself kept running. A second component in the same library, written with the one-shot timer, then loaded into the same container and logged <code>init done in one-shot timer, shared_from_this() ok</code>.</p>
+
+<p>For an <code>rclcpp_lifecycle::LifecycleNode</code>, the constructor failed in the same way. The cleaner place is <code>on_configure()</code>. A <code>TransformBroadcaster(shared_from_this())</code> created there worked on every distro, and the node moved to <code>inactive</code>. On Lyrical the destructor also warned <code>LifecycleNode is not shut down: Node still in state(2) in destructor</code>, because my test exited without a shutdown transition. That warning has nothing to do with this error.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Result on Humble, Jazzy, Lyrical</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td>Pass <code>this</code> (tf2_ros, image_transport <code>create_publisher</code>)</td><td>worked in the constructor, node destroyed normally</td><td>deprecated for image_transport on Lyrical; the <code>*this</code> plus QoS form didn't build on Humble or Jazzy</td></tr>
+<tr><td><code>init()</code> after <code>make_shared</code></td><td>worked</td><td>a stored <code>Node::SharedPtr</code> keeps the node alive forever; you must remember to call it</td></tr>
+<tr><td>One-shot 0 ms timer</td><td>worked, also in a component; fired once on the first spin</td><td>members are unset until the first spin</td></tr>
+<tr><td><code>on_configure()</code> in a lifecycle node</td><td>worked</td><td>only for lifecycle nodes</td></tr>
+<tr><td>Move the <code>unique_ptr</code> into a <code>shared_ptr</code> first</td><td>worked</td><td>only for the <code>unique_ptr</code> case</td></tr>
+<tr><td><code>self_ = rclcpp::Node::SharedPtr(this)</code></td><td>crashed every time (3 of 3 runs per distro)</td><td>don't use it</td></tr>
+<tr><td><code>shared_ptr(this, no-op deleter)</code> given to a helper</td><td>no crash, but <code>shared_from_this()</code> broke afterwards</td><td>don't use it</td></tr>
+<tr><td><code>try</code>/<code>catch</code> around construction</td><td>caught <code>std::bad_weak_ptr</code></td><td>doesn't fix anything; the constructor stopped halfway</td></tr>
+</tbody>
+</table>
+
+<h2>Two workarounds that break later</h2>
+
+<p><strong>A new shared_ptr around this.</strong> One <a href="https://robotics.stackexchange.com/questions/92889/what-bad-weak-ptr">question</a> tried to build a fresh <code>shared_ptr</code> from the node. I stored <code>rclcpp::Node::SharedPtr(this)</code> in a member during the constructor. The node constructed without an error and reported <code>use_count=1</code>. Then, when the owner in <code>main</code> went out of scope, the process aborted with exit 134 in 3 of 3 runs on every distro. glibc's message differed: <code>double free or corruption (out)</code> on Humble, <code>free(): invalid pointer</code> on Jazzy and <code>free(): invalid size</code> on Lyrical. Two control blocks each believed they owned the same object.</p>
+
+<p><strong>A non-owning shared_ptr with a no-op deleter.</strong> Here you pass <code>rclcpp::Node::SharedPtr(this, [](rclcpp::Node *) {})</code> to a helper that keeps it. Construction succeeded and nothing crashed. But the no-op pointer took over the node's hidden weak pointer, and <code>make_shared</code> left it in place. After construction, <code>shared_from_this()</code> returned a pointer from the no-op control block, not from the real owner: <code>same_control_block=0</code>, owner <code>use_count=1</code>, and <code>shared_from_this().use_count=2</code>. When I dropped the real owner while still holding that copy, the destructor ran anyway. The copy still reported <code>use_count=1</code> for an object that no longer existed. I didn't dereference it, because that is undefined behavior. Same result on all three distros. Any later code that relies on <code>shared_from_this()</code> keeping the node alive, such as a timer callback that captures it, can then touch a destroyed node.</p>
+
+<h2>Version notes</h2>
+
+<p>The exception, its <code>what()</code> text, exit 134 and the <code>[ros2run]: Aborted</code> line with exit 250 were the same on Humble (g++ 11.4.0), Jazzy (g++ 13.3.0) and Lyrical (g++ 15.2.0). Only these things changed:</p>
+
+<ul>
+<li>image_transport: Lyrical's 6.4.10 deprecates both <code>ImageTransport(Node::SharedPtr)</code> and <code>create_publisher(rclcpp::Node *, ...)</code>, and adds the node-interfaces overloads. Those overloads didn't exist in Humble's 3.1.13 or Jazzy's 5.1.8.</li>
+<li>A stored <code>ImageTransport</code> created with <code>shared_from_this()</code> kept the node alive on Humble and Jazzy, but not on Lyrical.</li>
+<li>My CMakeLists set <code>CMAKE_CXX_STANDARD 17</code>. <code>__cplusplus</code> printed <code>201703</code> on Humble and Jazzy, but <code>202002</code> on Lyrical. The results didn't change.</li>
+<li>The glibc message for the <code>shared_ptr(this)</code> crash was different on each distro, as listed above.</li>
+<li>On Jazzy and Lyrical, the first <code>ros2 component load</code> sometimes printed <code>Unable to find container node '/ComponentManager'</code>, although <code>ros2 component list</code> had just shown the container. The retry worked. This is discovery timing, not this error, but it can look like a failed load.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>MoveIt (<code>MoveGroupInterface</code>), Nav2 and bond, other image_transport classes (<code>CameraPublisher</code>, subscribers), <code>MultiThreadedExecutor</code> and the events executor with the timer fix, launch-file composition (<code>ComposableNodeContainer</code>), other compilers or standard libraries (clang, libc++), RMWs other than the default Fast DDS, and Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "terminate called after throwing an instance of 'std::bad_weak_ptr'" mean in ROS 2?</h3>
+<p><code>shared_from_this()</code> ran on a node that no <code>shared_ptr</code> owned at that moment, and nothing caught the exception. In ROS 2 this is almost always the node's constructor, either directly or through a helper that takes <code>shared_from_this()</code>. It can also be a node created on the stack or held in a <code>unique_ptr</code>.</p>
+
+<h3>How do I use image_transport in a node constructor?</h3>
+<p>Don't build <code>ImageTransport(shared_from_this())</code> there. On Humble, Jazzy and Lyrical, <code>image_transport::create_publisher(this, "camera/image")</code> worked in the constructor. On Lyrical it is deprecated, and <code>create_publisher(*this, "camera/image", rclcpp::QoS(1))</code> also worked there. Otherwise create the ImageTransport in an <code>init()</code> after <code>make_shared</code>.</p>
+
+<h3>Can I call shared_from_this() in a component constructor?</h3>
+<p>No. The load failed with <code>Component constructor threw an exception: bad_weak_ptr</code> on all three distros, although the container kept running. A 0 ms one-shot timer that runs the setup on the first spin worked in the same container.</p>
+
+<h3>Why is my node never destroyed after I fixed bad_weak_ptr with init()?</h3>
+<p>Something you created in <code>init()</code> kept the <code>shared_ptr</code> from <code>shared_from_this()</code>, so the node owns itself. In my run, a helper storing <code>Node::SharedPtr</code> did this on every distro, and so did an <code>ImageTransport</code> member on Humble and Jazzy. Store a <code>Node::WeakPtr</code> instead, or keep only the publisher.</p>
+
+<h3>Is wrapping this in a shared_ptr a valid fix?</h3>
+<p>No. <code>rclcpp::Node::SharedPtr(this)</code> aborted with a double free or invalid pointer error in every run when the node was destroyed. A no-op deleter avoids the crash, but afterwards <code>shared_from_this()</code> no longer keeps the node alive.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does terminate called after throwing an instance of std::bad_weak_ptr mean in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "shared_from_this() ran on a node that no shared_ptr owned at that moment, and nothing caught the exception. In ROS 2 this is almost always the node's constructor, either directly or through a helper that takes shared_from_this(). It can also be a node created on the stack or held in a unique_ptr."}},
+{"@type": "Question", "name": "How do I use image_transport in a node constructor?", "acceptedAnswer": {"@type": "Answer", "text": "Don't build ImageTransport(shared_from_this()) there. On Humble, Jazzy and Lyrical, image_transport::create_publisher(this, camera/image) worked in the constructor. On Lyrical it is deprecated, and create_publisher(*this, camera/image, rclcpp::QoS(1)) also worked there. Otherwise create the ImageTransport in an init() after make_shared."}},
+{"@type": "Question", "name": "Can I call shared_from_this() in a component constructor?", "acceptedAnswer": {"@type": "Answer", "text": "No. The load failed with Component constructor threw an exception: bad_weak_ptr on all three distros, although the container kept running. A 0 ms one-shot timer that runs the setup on the first spin worked in the same container."}},
+{"@type": "Question", "name": "Why is my node never destroyed after I fixed bad_weak_ptr with init()?", "acceptedAnswer": {"@type": "Answer", "text": "Something you created in init() kept the shared_ptr from shared_from_this(), so the node owns itself. In my run, a helper storing Node::SharedPtr did this on every distro, and so did an ImageTransport member on Humble and Jazzy. Store a Node::WeakPtr instead, or keep only the publisher."}},
+{"@type": "Question", "name": "Is wrapping this in a shared_ptr a valid fix?", "acceptedAnswer": {"@type": "Answer", "text": "No. rclcpp::Node::SharedPtr(this) aborted with a double free or invalid pointer error in every run when the node was destroyed. A no-op deleter avoids the crash, but afterwards shared_from_this() no longer keeps the node alive."}}
+]}
+</script>
+
+<p>Measured on 2026-11-02 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, rmw 6.1.4, tf2_ros 0.25.24, image_transport 3.1.13, g++ 11.4.0), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw 7.3.4, tf2_ros 0.36.23, image_transport 5.1.8, g++ 13.3.0) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw 7.10.2, tf2_ros 0.45.10, image_transport 6.4.10, g++ 15.2.0), default RMW (Fast DDS), 2 CPUs. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-30-ros2-rclcpp-bad-weak-ptr-shared-from-this/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/92889/what-bad-weak-ptr">what(): bad_weak_ptr</a>, <a href="https://robotics.stackexchange.com/questions/107443/using-imagetransport-in-a-constructor-throws-stdbad-weak-ptr">Using ImageTransport in a constructor throws std::bad_weak_ptr</a>, <a href="https://robotics.stackexchange.com/questions/110497/a-constructor-needs-nodesharedptr-but-you-cant-run-shared-from-this-in-the">A constructor needs Node::SharedPtr, but you can't run shared_from_this() in the constructor</a>, <a href="https://robotics.stackexchange.com/questions/110759/how-to-migrate-ros1-code-that-passes-rosnodehandle-to-functions-inside-constru">How to migrate ROS1 code that passes ros::NodeHandle to functions inside constructor</a>, <a href="https://github.com/ros-navigation/navigation2/issues/5335">navigation2 #5335: bad_weak_ptr in createBond() due to unique_ptr with shared_from_this()</a>, <a href="https://github.com/swri-robotics/marti_common/issues/660">marti_common #660: bad_weak_ptr with swri_image_util</a>.</p>
