@@ -1,0 +1,203 @@
+<pre><code>Traceback (most recent call last):
+  ...
+    rate.sleep(); rate.sleep()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/timer.py", line 143, in sleep
+    self._event.wait()
+  File "/usr/lib/python3.10/threading.py", line 607, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt</code></pre>
+
+<p>A hung <code>rate.sleep()</code> doesn't print an error. The program just stops. The traceback above is what you get when you press Ctrl-C on it: the main thread was waiting inside <code>threading.Event.wait()</code>, and nothing was ever going to set that event.</p>
+
+<p>Short answer: in rclpy, <code>node.create_rate()</code> creates a timer, and <code>rate.sleep()</code> waits until that timer's callback runs. Timer callbacks only run while an executor is spinning the node. If your loop calls <code>rate.sleep()</code> and nothing spins the node, it blocks forever. I measured this on Humble, Jazzy and Lyrical: at 10 Hz and 100 Hz the first <code>rate.sleep()</code> was still blocked after 5 seconds every time. The fix that worked is to spin the node in a background thread:</p>
+
+<pre><code class="language-python">import threading
+import rclpy
+from rclpy.node import Node
+from rclpy.executors import SingleThreadedExecutor
+
+rclpy.init()
+node = Node('loop')
+executor = SingleThreadedExecutor()
+executor.add_node(node)
+threading.Thread(target=executor.spin, daemon=True).start()
+
+rate = node.create_rate(10)   # 10 Hz
+while rclpy.ok():
+    # do work here
+    rate.sleep()</code></pre>
+
+<p>With that, 200 iterations at 10 Hz took 20.000 s, with a median period of 99.999 ms on Humble. If you don't need a loop, a <code>create_timer</code> callback is simpler and was just as accurate. Two other causes produce the same hang: calling <code>rate.sleep()</code> inside a callback of a <code>SingleThreadedExecutor</code>, and <code>use_sim_time:=true</code> with nothing publishing <code>/clock</code>.</p>
+
+<h2>Find your case</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical.</p>
+
+<table>
+<thead><tr><th>Situation</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td><code>create_rate(10)</code> or <code>create_rate(100)</code>, then <code>rate.sleep()</code>, nothing spinning</td><td>Blocked. Still waiting after 5.0 s.</td></tr>
+<tr><td>Executor spinning in a background thread</td><td>Returns on time. Mean period 100.000 ms at 10 Hz, 10.000 ms at 100 Hz.</td></tr>
+<tr><td><code>rate.sleep()</code> inside a timer callback, <code>SingleThreadedExecutor</code></td><td>Blocked. Still waiting after 5.0 s.</td></tr>
+<tr><td>Same, <code>MultiThreadedExecutor(num_threads=4)</code></td><td>Three sleeps returned in about 0.2 s.</td></tr>
+<tr><td><code>use_sim_time=True</code>, no <code>/clock</code> publisher</td><td><code>now()</code> is 0. Rate, timer and <code>sleep_for</code>: 0 wakeups in 3 s.</td></tr>
+<tr><td>Same, then a <code>/clock</code> publisher starts</td><td>First wakeup 0.20 to 0.38 s after the publisher process started.</td></tr>
+<tr><td><code>/clock</code> publisher stops</td><td>0 wakeups in the next 3 s. Sim time stays frozen.</td></tr>
+<tr><td><code>rate.destroy()</code> from another thread</td><td>Sleeper raises <code>RuntimeError: Rate cannot sleep because it has been destroyed</code> at once.</td></tr>
+<tr><td><code>rclpy.shutdown()</code> from another thread</td><td>Sleeper raises <code>ROSInterruptException: rclpy.shutdown() has been called</code> at once.</td></tr>
+<tr><td><code>node.destroy_node()</code> from another thread</td><td>Sleeper still blocked 12 s later.</td></tr>
+<tr><td>SIGINT (Ctrl-C) while the main thread is in <code>rate.sleep()</code></td><td><code>KeyboardInterrupt</code>. The process ended 0.064 to 0.114 s later.</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-02 I ran one Python script, <code>rate.py</code>, in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images. The host was a 2 vCPU Linux server, and each container was limited to 1.5 CPUs. The distros ran one after another. Each scenario ran in its own process. Any call that could block had a watchdog thread that printed a line and exited the process after a fixed deadline, so a hang shows up as a <code>WATCHDOG</code> line in the output instead of a stuck run.</p>
+
+<p>The scenarios were:</p>
+
+<ul>
+<li><code>rate.sleep()</code> called three times with no executor, at 10 Hz and 100 Hz, with a 5 s deadline.</li>
+<li>200 iterations each of <code>rate.sleep()</code> with a <code>SingleThreadedExecutor</code> or a 4-thread <code>MultiThreadedExecutor</code> spinning in a background thread, a <code>create_timer</code> callback, <code>time.sleep(1/hz)</code>, <code>get_clock().sleep_for(period)</code> and <code>get_clock().sleep_until(next_deadline)</code>. Periods were measured with <code>time.perf_counter()</code>.</li>
+<li><code>rate.sleep()</code> inside a 10 Hz timer callback, under each executor type.</li>
+<li>A node with <code>use_sim_time=True</code>: 3 s with no <code>/clock</code>, then 5 s with a separate process publishing <code>/clock</code> at 100 Hz starting from 1000 s at 1x speed, then 3 s after that process was stopped.</li>
+<li>A thread blocked in <code>rate.sleep()</code> on a 0.2 Hz rate (5 s period) while the main thread called <code>rate.destroy()</code>, <code>node.destroy_node()</code> or <code>rclpy.shutdown()</code>, with and without a spinning executor.</li>
+<li>SIGINT sent to a process 2 s after its main thread entered <code>rate.sleep()</code>. With no spin thread this ran once per distro. With a daemon spin thread it ran 11 times per distro.</li>
+</ul>
+
+<h2>Cause 1: nothing is spinning the node</h2>
+
+<p>The rclpy source explains the hang. <code>Node.create_rate</code> builds a timer with no callback of its own (the comment says "Rate will set its own callback") and wraps it in a <code>Rate</code>. In <code>Rate.__init__</code>:</p>
+
+<pre><code class="language-python"># Set event when timer fires
+self._timer.callback = self._event.set</code></pre>
+
+<p>and <code>sleep()</code> does <code>self._event.wait()</code>. The timer is an ordinary rclpy timer. Its callback runs only when an executor takes it from the wait set, so with no <code>rclpy.spin</code>, <code>spin_once</code> or <code>executor.spin</code> anywhere, the event is never set. This code was the same on all three distros. Lyrical only added type hints and docstrings.</p>
+
+<p>This is the main difference from ROS 1. <code>rospy.Rate.sleep()</code> computed the remaining time and slept. The rclpy version waits for a callback. Code ported line by line from ROS 1, like a <code>while</code> loop in <code>main()</code> followed by <code>rclpy.spin(node)</code> that the loop never reaches, hangs on its first <code>sleep()</code>.</p>
+
+<p>Calling <code>rclpy.spin_once(node, timeout_sec=0.5)</code> first and then <code>rate.sleep()</code> returned in 0.0001 s on every distro. The timer had fired during <code>spin_once</code> and the event was already set. That only covers one sleep. You'd have to call <code>spin_once</code> before every <code>rate.sleep()</code>, and a background spin thread is the cleaner way to do that.</p>
+
+<h2>Cause 2: rate.sleep() inside a callback</h2>
+
+<p>The <code>Rate.sleep</code> docstring warns about this: "This may block forever if called in a callback in a SingleThreadedExecutor." It did block. A 10 Hz timer callback that called <code>rate.sleep()</code> was still blocked after 5 s on all three distros. The single executor thread is busy running your callback, so it can't run the rate's timer.</p>
+
+<p>With <code>MultiThreadedExecutor(num_threads=4)</code>, three <code>rate.sleep()</code> calls inside the callback returned after 0.1994 to 0.2000 s, the expected two periods after the first aligned sleep. This worked even when the calling timer was in the node's default callback group. <code>create_rate</code> puts the rate's timer in a separate group (<code>self._rate_group</code>, "Rates get their own group so timing is not messed up by other callbacks"), so another executor thread can run it. A <code>ReentrantCallbackGroup</code> on the calling timer gave the same result. Still, sleeping inside a callback ties up an executor thread for the whole loop. If the loop exists only to run code at a fixed rate, make that code a timer callback.</p>
+
+<h2>Cause 3: use_sim_time with no /clock</h2>
+
+<p>With <code>use_sim_time=True</code> the node clock is <code>ROS_TIME</code> driven by <code>/clock</code>. Before any <code>/clock</code> message arrived, <code>get_clock().now()</code> returned 0 ns. Over 3 s the rate, the 0.1 s timer and <code>get_clock().sleep_for(0.1 s)</code> each had 0 wakeups. The executor was spinning in a background thread the whole time, so this is a different hang from cause 1, and the spin thread fix doesn't help here.</p>
+
+<p>When a separate process started publishing <code>/clock</code>, everything resumed. The first wakeup came this long after that process was launched, including its Python startup and DDS discovery:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>rate.sleep()</code></td><td>0.241 s</td><td>0.332 s</td><td>0.359 s</td></tr>
+<tr><td><code>create_timer</code></td><td>0.202 s</td><td>0.381 s</td><td>0.347 s</td></tr>
+<tr><td><code>sleep_for</code></td><td>0.238 s</td><td>0.327 s</td><td>0.346 s</td></tr>
+</tbody>
+</table>
+
+<p>After that, the 10 Hz rate and timer woke 47 to 49 times in 5 s, with a mean wall-clock interval of 99.95 to 100.17 ms. Individual intervals ranged from about 92 to 103 ms. My publisher sent a message about every 10 ms, so sim time moved in steps and wakeups landed on those steps. When I stopped the publisher, all three had 0 wakeups in the next 3 s, and <code>now()</code> stayed at about 1004.7 to 1004.8 s. A paused simulator or a finished <code>ros2 bag play</code> without <code>--loop</code> causes the same freeze, though I only tested a stopped publisher.</p>
+
+<p>If your loop hangs only in simulation, check that <code>ros2 topic echo /clock</code> shows messages and that the node really has <code>use_sim_time</code> set. Gazebo, or <code>ros2 bag play --clock</code>, has to be running and not paused.</p>
+
+<h2>Stopping a thread that is blocked in rate.sleep()</h2>
+
+<p>A thread sat in <code>rate.sleep()</code> on a 5 s rate while the main thread tried to stop it. Results were the same with and without a spinning executor, on all three distros:</p>
+
+<ul>
+<li><code>rate.destroy()</code>: the sleeper woke within 1 ms and raised <code>RuntimeError('Rate cannot sleep because it has been destroyed')</code>.</li>
+<li><code>rclpy.shutdown()</code>: the sleeper woke within 3 ms and raised <code>rclpy.exceptions.ROSInterruptException: rclpy.shutdown() has been called</code>. <code>Rate</code> registers <code>context.on_shutdown(self._on_shutdown)</code>, which sets the event.</li>
+<li><code>node.destroy_node()</code>: the call returned, but the sleeper was still blocked 12 s later. Destroying the node doesn't wake rates created from it.</li>
+</ul>
+
+<p>So if a worker thread loops on <code>rate.sleep()</code>, end it with <code>rclpy.shutdown()</code> or <code>rate.destroy()</code> and catch the exception in that thread. Don't rely on <code>destroy_node()</code>.</p>
+
+<h2>Ctrl-C while blocked</h2>
+
+<p>When SIGINT arrived while the main thread was in <code>rate.sleep()</code>, Python raised <code>KeyboardInterrupt</code> from <code>waiter.acquire()</code> (the traceback at the top). With no spin thread the process ended 0.064 s after the signal on Humble and Jazzy and 0.114 s after it on Lyrical. My script let the exception propagate, so the exit status was "killed by SIGINT" (-2).</p>
+
+<p>With a daemon spin thread, most runs ended the same way, but not all of them:</p>
+
+<table>
+<thead><tr><th></th><th>Runs</th><th>Clean <code>KeyboardInterrupt</code> exit</th><th>Abort (status -6)</th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>11</td><td>11</td><td>0</td></tr>
+<tr><td>Jazzy</td><td>11</td><td>10</td><td>1: <code>terminate called without an active exception</code>, 0.165 s after SIGINT</td></tr>
+<tr><td>Lyrical</td><td>11</td><td>10</td><td>1: <code>Fatal Python error: _enter_buffered_busy: could not acquire lock for &lt;_io.BufferedWriter name='&lt;stderr&gt;'&gt; at interpreter shutdown, possibly due to daemon threads</code>, 2.170 s after SIGINT</td></tr>
+</tbody>
+</table>
+
+<p>Both aborts came from the interpreter shutting down while the daemon thread was still inside <code>executor.spin()</code>. The first one matches the crash reported against the daemon spin thread pattern in the question list below. The process still ended, but with an abort instead of a clean exit. For a clean exit, catch <code>KeyboardInterrupt</code> in the main thread, call <code>rclpy.shutdown()</code> and join the spin thread before you return. I didn't measure that pattern, so I can't say it removes the abort. My <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">post on Ctrl-C, SIGTERM and rcl_shutdown already called</a> covers that part of node shutdown.</p>
+
+<h2>Fix options compared</h2>
+
+<p>Periods over 200 iterations on Humble (milliseconds). "Total" is the wall time for all 200; the ideal is 20.000 s at 10 Hz and 2.000 s at 100 Hz.</p>
+
+<table>
+<thead><tr><th>Method</th><th>10 Hz median / p95 / max</th><th>10 Hz total</th><th>100 Hz median / p95 / max</th><th>100 Hz total</th></tr></thead>
+<tbody>
+<tr><td><code>rate.sleep()</code>, <code>SingleThreadedExecutor</code> in a thread</td><td>99.999 / 100.059 / 100.220</td><td>20.000 s</td><td>10.002 / 10.075 / 10.150</td><td>2.000 s</td></tr>
+<tr><td><code>rate.sleep()</code>, <code>MultiThreadedExecutor</code> in a thread</td><td>100.001 / 100.067 / 100.240</td><td>20.000 s</td><td>10.000 / 10.105 / 10.251</td><td>2.000 s</td></tr>
+<tr><td><code>create_timer</code> callback</td><td>99.998 / 100.058 / 100.985</td><td>20.000 s</td><td>10.001 / 10.028 / 10.082</td><td>2.000 s</td></tr>
+<tr><td><code>time.sleep(1/hz)</code></td><td>100.184 / 100.212 / 100.274</td><td>20.037 s</td><td>10.127 / 10.150 / 10.223</td><td>2.026 s</td></tr>
+<tr><td><code>get_clock().sleep_for(period)</code></td><td>100.236 / 100.285 / 100.336</td><td>20.048 s</td><td>10.226 / 10.275 / 10.392</td><td>2.046 s</td></tr>
+<tr><td><code>get_clock().sleep_until(next deadline)</code></td><td>100.001 / 100.088 / 109.127</td><td>20.000 s</td><td>9.999 / 10.060 / 10.599</td><td>2.000 s</td></tr>
+</tbody>
+</table>
+
+<p>What the numbers say:</p>
+
+<ul>
+<li><strong>Spin thread plus rate</strong> and <strong>create_timer</strong> hold a fixed schedule. Both totals matched the ideal to the millisecond on every distro. When one period runs long, the next one is shorter.</li>
+<li><strong>MultiThreadedExecutor</strong> also held the schedule but had more spread on Jazzy and Lyrical. Median absolute error was 0.188 to 0.251 ms there, against 0.019 to 0.046 ms for the single-threaded spin thread. Jazzy's 10 Hz run had one period of 67.510 ms and one of 132.834 ms. It doesn't make <code>rate.sleep()</code> more accurate. It's only needed when a callback must sleep.</li>
+<li><strong>time.sleep</strong> and <strong>sleep_for</strong> don't block, because they don't need an executor (under wall-clock time). But each call sleeps a full period after your work finishes, so the loop drifts. At 100 Hz, <code>time.sleep</code> ran 1.3% slow and <code>sleep_for</code> 2.3% slow, and that's with no work in the loop. Real work adds to every period.</li>
+<li><strong>sleep_until</strong> with a deadline you advance by one period each time (<code>next = next + period</code>) kept the schedule with no executor. <code>Clock.sleep_for</code> and <code>Clock.sleep_until</code> exist in rclpy on Humble, Jazzy and Lyrical. This was the one blocking-loop option that needed no spin thread. Under sim time it still needs <code>/clock</code> messages to be processed, and I only tested that with a spin thread running.</li>
+</ul>
+
+<p>Single spikes showed up in a few runs: a Humble <code>sleep_until</code> period of 109.127 ms, a Lyrical 10 Hz spin thread rate period of 106.953 ms, and a Lyrical 100 Hz timer with a 15.580 ms maximum. The host was shared, so treat the maximums as what a busy machine can do. The medians and totals were consistent across distros.</p>
+
+<p>My order of preference: use <code>create_timer</code> when the work fits in a callback. Use a spin thread plus <code>rate.sleep()</code> when you need a loop in <code>main()</code>. Use <code>sleep_until</code> with an advancing deadline when you can't spin at all. Avoid <code>time.sleep</code> and <code>sleep_for</code> for fixed-rate work.</p>
+
+<h2>Version notes</h2>
+
+<p>Behavior was the same on Humble (rclpy 3.3.22, Python 3.10.12), Jazzy (rclpy 7.1.12, Python 3.12.3) and Lyrical (rclpy 10.0.11, Python 3.14.4). The <code>Rate</code> class has the same logic in all three. Lyrical's docstrings say to use <code>Node.destroy_rate</code> rather than calling <code>Rate.destroy</code> directly, but I only tested <code>rate.destroy()</code>. Lyrical exited about 50 ms later after SIGINT (0.114 s against 0.064 s). <code>Clock.sleep_for</code> and <code>Clock.sleep_until</code> were available in all three.</p>
+
+<h2>Not tested</h2>
+
+<p><code>Node.destroy_rate()</code>, <code>create_rate(hz, clock=...)</code> with a non-default clock, <code>sleep_until</code> or <code>sleep_for</code> under sim time without a spin thread, <code>ros2 bag play --clock</code> and Gazebo as <code>/clock</code> sources, a paused simulator, sim time faster than 1x, joining a non-daemon spin thread on shutdown, SIGTERM, launch files, rclcpp's <code>Rate</code>, Cyclone DDS and other RMWs, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does rate.sleep() block forever in ROS 2 Python?</h3>
+<p>Because nothing is spinning the node. rclpy's <code>Rate</code> waits for its own timer callback, and timer callbacks only run inside an executor. With no executor, the first <code>rate.sleep()</code> was still blocked after 5 s on Humble, Jazzy and Lyrical. Spin the node in a background thread or use <code>create_timer</code>.</p>
+
+<h3>Can I call rate.sleep() inside a callback?</h3>
+<p>Not with a <code>SingleThreadedExecutor</code>. It blocked for at least 5 s, as the rclpy docstring warns. With a <code>MultiThreadedExecutor</code> it returned on time, because rates get their own callback group. A timer callback is usually the better design.</p>
+
+<h3>Why do my rclpy timers never fire with use_sim_time true?</h3>
+<p>With no <code>/clock</code> publisher, <code>now()</code> stays at 0 and the rate, timer and <code>sleep_for</code> had 0 wakeups in 3 s. They resumed 0.20 to 0.38 s after a <code>/clock</code> publisher started and stopped again when it stopped. Make sure the simulator or <code>ros2 bag play --clock</code> is running.</p>
+
+<h3>How do I stop a thread that is blocked in rate.sleep()?</h3>
+<p>Call <code>rclpy.shutdown()</code> or <code>rate.destroy()</code>. The sleeper woke within a few milliseconds with <code>ROSInterruptException</code> or <code>RuntimeError</code>. <code>node.destroy_node()</code> left it blocked for at least 12 s.</p>
+
+<h3>Is time.sleep() a good replacement for rate.sleep()?</h3>
+<p>It doesn't hang, but it drifts. With an empty loop, 200 iterations at 100 Hz took 2.026 s with <code>time.sleep</code> and 2.046 s with <code>get_clock().sleep_for</code>. A spin thread plus rate, <code>create_timer</code> and <code>sleep_until</code> with an advancing deadline all took 2.000 s.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does rate.sleep() block forever in ROS 2 Python?", "acceptedAnswer": {"@type": "Answer", "text": "Because nothing is spinning the node. rclpy's Rate waits for its own timer callback, and timer callbacks only run inside an executor. With no executor, the first rate.sleep() was still blocked after 5 s on Humble, Jazzy and Lyrical. Spin the node in a background thread or use create_timer."}},
+{"@type": "Question", "name": "Can I call rate.sleep() inside a callback?", "acceptedAnswer": {"@type": "Answer", "text": "Not with a SingleThreadedExecutor. It blocked for at least 5 s, as the rclpy docstring warns. With a MultiThreadedExecutor it returned on time, because rates get their own callback group. A timer callback is usually the better design."}},
+{"@type": "Question", "name": "Why do my rclpy timers never fire with use_sim_time true?", "acceptedAnswer": {"@type": "Answer", "text": "With no /clock publisher, now() stays at 0 and the rate, timer and sleep_for had 0 wakeups in 3 s. They resumed 0.20 to 0.38 s after a /clock publisher started and stopped again when it stopped. Make sure the simulator or ros2 bag play --clock is running."}},
+{"@type": "Question", "name": "How do I stop a thread that is blocked in rate.sleep()?", "acceptedAnswer": {"@type": "Answer", "text": "Call rclpy.shutdown() or rate.destroy(). The sleeper woke within a few milliseconds with ROSInterruptException or RuntimeError. node.destroy_node() left it blocked for at least 12 s."}},
+{"@type": "Question", "name": "Is time.sleep() a good replacement for rate.sleep()?", "acceptedAnswer": {"@type": "Answer", "text": "It doesn't hang, but it drifts. With an empty loop, 200 iterations at 100 Hz took 2.026 s with time.sleep and 2.046 s with get_clock().sleep_for. A spin thread plus rate, create_timer and sleep_until with an advancing deadline all took 2.000 s."}}
+]}
+</script>
+
+<p>Measured on 2026-11-02 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2), default RMW (Fast DDS), on a 2 vCPU host with each container limited to 1.5 CPUs. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-29-rclpy-rate-sleep-hangs/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/96684/rate-and-sleep-function-in-rclpy-library-for-ros2">Rate and sleep function in RCLPY library for ROS2</a>, <a href="https://answers.ros.org/question/414785/">rate.sleep() blocks node after first callback function</a>, <a href="https://answers.ros.org/question/350245/">ROS2 Node sleeps forever after setting parameter</a>, <a href="https://robotics.stackexchange.com/questions/114977/ros2-python-what-to-use-instead-of-rate-sleep">ROS2 Python - What to use instead of rate.sleep()</a>, <a href="https://github.com/mikeferguson/ros2_cookbook/issues/10">Thread daemon seems to cause "terminate called without an active exception"</a>.</p>

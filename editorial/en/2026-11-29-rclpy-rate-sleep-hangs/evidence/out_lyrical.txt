@@ -1,0 +1,740 @@
+=== distro=lyrical
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-rosgraph-msgs 2.4.5-1resolute.20260915.050401
+Python 3.14.4
+RMW_IMPLEMENTATION=default
+2
+
+##### 0: API info
+
+--- info
+[  0.007s] rclpy file /opt/ros/lyrical/lib/python3.14/site-packages/rclpy/__init__.py
+[  0.007s] Clock.sleep_for exists: True | Clock.sleep_until exists: True
+[  0.007s] Node.create_rate signature: (self, frequency: 'float', clock: 'Optional[Clock]' = None) -> 'Rate'
+----- rclpy.timer.Rate source -----
+class Rate:
+    """A utility for sleeping at a fixed rate."""
+
+    def __init__(self, timer: Timer, *, context: Context) -> None:
+        """
+        Create a Rate.
+
+        .. warning:: Users should not create a rate with this constructor, instead they
+           should call :meth:`.Node.create_rate`.
+        """
+        # Rate is a wrapper around a timer
+        self._timer = timer
+        self._is_shutdown = False
+        self._is_destroyed = False
+
+        # This event is set to wake sleepers
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._num_sleepers = 0
+
+        # Set event when timer fires
+        self._timer.callback = self._event.set
+
+        # Set event when ROS is shutdown
+        context.on_shutdown(self._on_shutdown)
+
+    def _on_shutdown(self) -> None:
+        self._is_shutdown = True
+        self.destroy()
+
+    def destroy(self) -> None:
+        """
+        Destroy a container for a ROS rate.
+
+        .. warning:: Users should not destroy a rate with this method, instead they should
+           call :meth:`.Node.destroy_rate`.
+        """
+        self._is_destroyed = True
+        self._event.set()
+
+    def _presleep(self) -> None:
+        if self._is_shutdown:
+            raise ROSInterruptException()
+        if self._is_destroyed:
+            raise RuntimeError('Rate cannot sleep because it has been destroyed')
+        if not self._timer.handle:
+            self.destroy()
+            raise InvalidHandle('Rate cannot sleep because the timer has been destroyed')
+        with self._lock:
+            self._num_sleepers += 1
+
+    def _postsleep(self) -> None:
+        with self._lock:
+            self._num_sleepers -= 1
+            if self._num_sleepers == 0:
+                self._event.clear()
+        if self._is_shutdown:
+            self.destroy()
+            raise ROSInterruptException()
+
+    def sleep(self) -> None:
+        """
+        Block until timer triggers.
+
+        Care should be taken when calling this from a callback.
+        This may block forever if called in a callback in a SingleThreadedExecutor.
+        """
+        self._presleep()
+        try:
+            self._event.wait()
+        finally:
+            self._postsleep()
+
+----- end -----
+----- Node.create_rate source -----
+    def create_rate(
+        self,
+        frequency: float,
+        clock: Optional[Clock] = None,
+    ) -> Rate:
+        """
+        Create a Rate object.
+
+        .. warning:: Users should call :meth:`.Node.destroy_rate` to destroy the Rate object.
+
+        :param frequency: The frequency the Rate runs at (Hz).
+        :param clock: The clock the Rate gets time from.
+        """
+        if frequency <= 0:
+            raise ValueError('frequency must be > 0')
+        # Create a timer and give it to the rate object
+        period = 1.0 / frequency
+        # Rate will set its own callback
+        callback = None
+        # Rates get their own group so timing is not messed up by other callbacks
+        group = self._rate_group
+        timer = self.create_timer(period, callback, group, clock)
+        return Rate(timer, context=self.context)
+
+----- end -----
+exit=0
+
+##### 1: rate.sleep with no executor spinning
+
+--- nospin 10
+[  0.050s] calling rate.sleep() #1
+[  5.050s] WATCHDOG: rate.sleep() at 10.0 Hz with no executor still blocked after 5.0 s -> os._exit(3)
+exit=3
+
+--- nospin 100
+[  0.029s] calling rate.sleep() #1
+[  5.029s] WATCHDOG: rate.sleep() at 100.0 Hz with no executor still blocked after 5.0 s -> os._exit(3)
+exit=3
+
+--- nospin_spinonce 10
+[  0.130s] spin_once(timeout_sec=0.5) done, calling rate.sleep()
+[  0.130s] returned after 0.0001 s
+exit=0
+
+##### 2: period and jitter, 200 iterations
+
+--- rate_ste 10 200
+[ 20.130s] rate_ste 10.0 Hz: n=200 nominal=100.00ms median=99.998ms mean=99.999ms p95=100.437ms min=93.164ms max=106.953ms abs_jitter_median=0.046ms abs_jitter_p95=1.412ms total=20.000s (ideal 20.000s)
+exit=0
+
+--- rate_mte 10 200
+[ 20.131s] rate_mte 10.0 Hz: n=200 nominal=100.00ms median=99.992ms mean=99.998ms p95=100.259ms min=99.609ms max=100.373ms abs_jitter_median=0.200ms abs_jitter_p95=0.265ms total=20.000s (ideal 20.000s)
+exit=0
+
+--- timer 10 200
+[ 20.130s] create_timer callback 10.0 Hz: n=200 nominal=100.00ms median=99.999ms mean=99.999ms p95=100.028ms min=99.916ms max=100.074ms abs_jitter_median=0.010ms abs_jitter_p95=0.031ms total=20.000s (ideal 20.000s)
+exit=0
+
+--- timesleep 10 200
+[ 20.135s] time.sleep(1/hz) 10.0 Hz: n=200 nominal=100.00ms median=100.130ms mean=100.142ms p95=100.172ms min=100.052ms max=101.201ms abs_jitter_median=0.130ms abs_jitter_p95=0.172ms total=20.028s (ideal 20.000s)
+exit=0
+
+--- sleep_for 10 200
+[ 20.177s] get_clock().sleep_for(period), no executor, 10.0 Hz: n=200 nominal=100.00ms median=100.234ms mean=100.237ms p95=100.279ms min=100.192ms max=100.306ms abs_jitter_median=0.234ms abs_jitter_p95=0.279ms total=20.047s (ideal 20.000s)
+exit=0
+
+--- sleep_until 10 200
+[ 20.129s] get_clock().sleep_until(next deadline), no executor, 10.0 Hz: n=200 nominal=100.00ms median=99.999ms mean=100.000ms p95=100.027ms min=99.928ms max=100.070ms abs_jitter_median=0.008ms abs_jitter_p95=0.037ms total=20.000s (ideal 20.000s)
+exit=0
+
+--- rate_ste 100 200
+[  2.040s] rate_ste 100.0 Hz: n=200 nominal=10.00ms median=10.000ms mean=10.000ms p95=10.058ms min=9.857ms max=10.134ms abs_jitter_median=0.024ms abs_jitter_p95=0.082ms total=2.000s (ideal 2.000s)
+exit=0
+
+--- rate_mte 100 200
+[  2.040s] rate_mte 100.0 Hz: n=200 nominal=10.00ms median=9.994ms mean=9.997ms p95=10.288ms min=9.182ms max=10.766ms abs_jitter_median=0.205ms abs_jitter_p95=0.305ms total=1.999s (ideal 2.000s)
+exit=0
+
+--- timer 100 200
+[  2.040s] create_timer callback 100.0 Hz: n=200 nominal=10.00ms median=9.999ms mean=9.999ms p95=11.326ms min=4.428ms max=15.580ms abs_jitter_median=0.056ms abs_jitter_p95=2.201ms total=2.000s (ideal 2.000s)
+exit=0
+
+--- timesleep 100 200
+[  2.042s] time.sleep(1/hz) 100.0 Hz: n=200 nominal=10.00ms median=10.124ms mean=10.126ms p95=10.153ms min=10.089ms max=10.194ms abs_jitter_median=0.124ms abs_jitter_p95=0.153ms total=2.025s (ideal 2.000s)
+exit=0
+
+--- sleep_for 100 200
+[  2.084s] get_clock().sleep_for(period), no executor, 100.0 Hz: n=200 nominal=10.00ms median=10.220ms mean=10.223ms p95=10.267ms min=10.170ms max=10.330ms abs_jitter_median=0.220ms abs_jitter_p95=0.267ms total=2.045s (ideal 2.000s)
+exit=0
+
+--- sleep_until 100 200
+[  2.040s] get_clock().sleep_until(next deadline), no executor, 100.0 Hz: n=200 nominal=10.00ms median=10.000ms mean=10.000ms p95=10.024ms min=9.929ms max=10.057ms abs_jitter_median=0.009ms abs_jitter_p95=0.032ms total=2.000s (ideal 2.000s)
+exit=0
+
+##### 1b: rate.sleep inside a callback
+
+--- incb_ste
+[  0.129s] in timer callback, calling rate.sleep() (10 Hz)
+[  5.029s] WATCHDOG: rate.sleep() inside a callback (incb_ste) still blocked after 5.0 s -> os._exit(3)
+exit=3
+
+--- incb_mte
+[  0.131s] in timer callback, calling rate.sleep() (10 Hz)
+[  0.331s] 3 x rate.sleep() inside callback returned after 0.1994 s
+[  0.331s] done
+exit=0
+
+--- incb_mte_reentrant
+[  0.131s] in timer callback, calling rate.sleep() (10 Hz)
+[  0.331s] 3 x rate.sleep() inside callback returned after 0.1994 s
+[  0.430s] done
+exit=0
+
+##### 3: use_sim_time=true, no /clock, then /clock
+
+--- simtime rate
+[  0.031s] use_sim_time = True | clock type: ClockType.ROS_TIME | now() = 0 ns
+[  3.032s] phase A (no /clock, 3.0 s wall): 0 rate wakeups, now() = 0 ns
+[  3.033s] started /clock publisher process (sim time starts at 1000 s, 1x speed, 100 Hz)
+[  8.033s] phase B: first rate wakeup 0.359 s after publisher start, sim now=1000.103 s; 47 wakeups in 5.0 s wall
+[  8.033s] phase B wall intervals between wakeups: n=45 nominal=100.00ms median=102.802ms mean=100.098ms p95=102.972ms min=92.383ms max=103.025ms abs_jitter_median=2.887ms abs_jitter_p95=7.487ms total=4.504s (ideal 4.500s)
+[ 11.050s] phase C (/clock publisher stopped, 3.0 s wall): 0 wakeups, now() = 1004.741 s
+exit=0
+
+--- simtime timer
+[  0.030s] use_sim_time = True | clock type: ClockType.ROS_TIME | now() = 0 ns
+[  3.031s] phase A (no /clock, 3.0 s wall): 0 timer wakeups, now() = 0 ns
+[  3.032s] started /clock publisher process (sim time starts at 1000 s, 1x speed, 100 Hz)
+[  8.032s] phase B: first timer wakeup 0.347 s after publisher start, sim now=1000.092 s; 48 wakeups in 5.0 s wall
+[  8.033s] phase B wall intervals between wakeups: n=46 nominal=100.00ms median=102.780ms mean=100.169ms p95=102.966ms min=92.492ms max=103.034ms abs_jitter_median=2.879ms abs_jitter_p95=7.492ms total=4.608s (ideal 4.600s)
+[ 11.049s] phase C (/clock publisher stopped, 3.0 s wall): 0 wakeups, now() = 1004.741 s
+exit=0
+
+--- simtime sleep_for
+[  0.030s] use_sim_time = True | clock type: ClockType.ROS_TIME | now() = 0 ns
+[  3.032s] phase A (no /clock, 3.0 s wall): 0 sleep_for wakeups, now() = 0 ns
+[  3.033s] started /clock publisher process (sim time starts at 1000 s, 1x speed, 100 Hz)
+[  8.033s] phase B: first sleep_for wakeup 0.346 s after publisher start, sim now=1000.092 s; 46 wakeups in 5.0 s wall
+[  8.033s] phase B wall intervals between wakeups: n=44 nominal=100.00ms median=102.832ms mean=102.831ms p95=103.054ms min=102.509ms max=103.097ms abs_jitter_median=2.832ms abs_jitter_p95=3.054ms total=4.525s (ideal 4.400s)
+[ 11.049s] phase C (/clock publisher stopped, 3.0 s wall): 0 wakeups, now() = 1004.740 s
+exit=0
+
+##### 4: destroy / shutdown while blocked in rate.sleep (0.2 Hz)
+
+--- destroy rate nospin
+[  1.029s] main: calling rate while sleeper is in rate.sleep() (0.2 Hz, nospin)
+[  1.029s] main: rate call returned
+[  1.029s] sleeper: raised builtins.RuntimeError: RuntimeError('Rate cannot sleep because it has been destroyed') after 1.000 s
+exit=0
+
+--- destroy node nospin
+[  1.032s] main: calling node while sleeper is in rate.sleep() (0.2 Hz, nospin)
+[  1.035s] main: node call returned
+[ 13.036s] sleeper STILL blocked 12.0 s after the call
+exit=0
+
+--- destroy shutdown nospin
+[  1.030s] main: calling shutdown while sleeper is in rate.sleep() (0.2 Hz, nospin)
+[  1.034s] main: shutdown call returned
+[  1.034s] sleeper: raised rclpy.exceptions.ROSInterruptException: ROSInterruptException('rclpy.shutdown() has been called') after 1.004 s
+exit=0
+
+--- destroy rate spin
+[  1.030s] main: calling rate while sleeper is in rate.sleep() (0.2 Hz, spin)
+[  1.030s] main: rate call returned
+[  1.030s] sleeper: raised builtins.RuntimeError: RuntimeError('Rate cannot sleep because it has been destroyed') after 1.000 s
+exit=0
+
+--- destroy node spin
+[  1.030s] main: calling node while sleeper is in rate.sleep() (0.2 Hz, spin)
+[  1.030s] main: node call returned
+[ 13.031s] sleeper STILL blocked 12.0 s after the call
+exit=0
+
+--- destroy shutdown spin
+[  1.030s] main: calling shutdown while sleeper is in rate.sleep() (0.2 Hz, spin)
+[  1.031s] main: shutdown call returned
+Exception in thread Thread-1 (spin):
+[  1.034s] sleeper: raised rclpy.exceptions.ROSInterruptException: ROSInterruptException('rclpy.shutdown() has been called') after 1.004 s
+exit=0
+
+##### 4b: SIGINT while main thread is blocked in rate.sleep
+
+--- sigint nospin
+[  0.029s] child: entering rate.sleep() in the main thread nospin
+[  2.007s] parent: SIGINT sent
+[  1.777s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.030s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.775s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+
+##### 4c: SIGINT with a daemon spin thread, repeated 10 times
+
+--- sigint spin
+[  0.029s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.778s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Fatal Python error: _enter_buffered_busy: could not acquire lock for <_io.BufferedWriter name='<stderr>'> at interpreter shutdown, possibly due to daemon threads
+Python runtime state: finalizing (tstate=0x0000000000b217c8)
+
+Current thread 0x00007fa2abc8a400 [python3] (most recent call first):
+  <no Python frame>
+
+Extension modules: yaml._yaml, numpy._core._multiarray_umath, numpy.linalg._umath_linalg, rcl_interfaces.rcl_interfaces_s__rosidl_typesupport_c, builtin_interfaces.builtin_interfaces_s__rosidl_typesupport_c, service_msgs.service_msgs_s__rosidl_typesupport_c, type_description_interfaces.type_description_interfaces_s__rosidl_typesupport_c (total: 7)
+[  4.177s] parent: child exited rc=-6 2.170 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.029s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.778s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.029s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.779s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+Exception in thread Thread-1 (spin):
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.028s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.782s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.029s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.781s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+Exception in thread Thread-1 (spin):
+[  2.071s] parent: child exited rc=-2 0.064 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.029s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.781s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+KeyboardInterrupt
+rclpy.executors.ExternalShutdownException
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.030s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.780s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.071s] parent: child exited rc=-2 0.064 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.030s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.774s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.071s] parent: child exited rc=-2 0.064 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.029s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.781s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+
+--- sigint spin
+[  0.029s] child: entering rate.sleep() in the main thread spin
+[  2.007s] parent: SIGINT sent
+[  1.778s] child: caught builtins.KeyboardInterrupt: KeyboardInterrupt()
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.14/threading.py", line 1024, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 403, in spin
+    self._spin_once_impl()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 1013, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        timeout_sec, None, wait_condition)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 983, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 889, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
+Traceback (most recent call last):
+  File "/e/rate.py", line 254, in <module>
+    main()
+    ~~~~^^
+  File "/e/rate.py", line 229, in main
+    rate.sleep(); rate.sleep()
+    ~~~~~~~~~~^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/timer.py", line 289, in sleep
+    self._event.wait()
+    ~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.14/threading.py", line 369, in wait
+    waiter.acquire()
+    ~~~~~~~~~~~~~~^^
+KeyboardInterrupt
+[  2.121s] parent: child exited rc=-2 0.114 s after SIGINT
+exit=0
+=== done
