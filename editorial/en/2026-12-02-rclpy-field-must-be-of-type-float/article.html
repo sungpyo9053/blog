@@ -1,0 +1,189 @@
+<pre><code>AssertionError: The 'data' field must be of type 'float'</code></pre>
+
+<p>On Jazzy and Lyrical the same mistake usually shows no AssertionError. The process dies when you publish:</p>
+
+<pre><code>python3: ./.obj-x86_64-linux-gnu/rosidl_generator_py/std_msgs/msg/_float64_s.c:58: std_msgs__msg__float64__convert_from_py: Assertion `PyFloat_Check(field)' failed.</code></pre>
+
+<p>Short answer: a Python message field takes exactly one Python type. A <code>float64</code> or <code>float32</code> field needs a <code>float</code>, an integer field needs an <code>int</code>, a <code>string</code> field needs a <code>str</code>, and a sub-message field needs that message class. Python's <code>1</code> is an <code>int</code>, so <code>msg.data = 1</code> fails on a <code>Float64</code>. Convert at the point where you assign:</p>
+
+<pre><code class="language-python">msg.data = float(value)                    # float64 / float32 fields, also for numpy.float32 and numpy.int64
+msg.data = int(value)                      # int32, uint8, ... fields
+msg.header.stamp = node.get_clock().now().to_msg()   # not time.time(), not clock.now()
+point.time_from_start = Duration(seconds=1).to_msg()  # rclpy Duration -> builtin_interfaces Duration
+arr_msg.data = np_array.astype(float).tolist()        # float64[] from numpy on Humble</code></pre>
+
+<p>On Humble the check runs in the setter, so you get the AssertionError at the line that assigns the value. On Jazzy and Lyrical the setter check is off unless you set <code>ROS_PYTHON_CHECK_FIELDS=1</code>. A wrong scalar type then reaches the C conversion code and aborts the interpreter with exit code 134 and no Python traceback. Some wrong values don't fail at all. They arrive changed. Turn the checks on while you develop on Jazzy and Lyrical:</p>
+
+<pre><code>export ROS_PYTHON_CHECK_FIELDS=1</code></pre>
+
+<h2>Find your error text</h2>
+
+<p>All of these came from assigning one value to one field. With checks on (Humble by default, Jazzy and Lyrical with <code>ROS_PYTHON_CHECK_FIELDS=1</code>), the text was the same on all three distros, except for the sequence wording noted in the last rows.</p>
+
+<table>
+<thead><tr><th>What you assigned</th><th>AssertionError text</th></tr></thead>
+<tbody>
+<tr><td><code>Float64.data = 1</code>, <code>True</code>, <code>'1.0'</code>, <code>None</code>, <code>np.float32(1.5)</code> or <code>np.int64(1)</code></td><td><code>The 'data' field must be of type 'float'</code></td></tr>
+<tr><td><code>Vector3(x=1, y=2.0, z=3.0)</code> (constructor keyword)</td><td><code>The 'x' field must be of type 'float'</code></td></tr>
+<tr><td><code>Float32.data = 1e39</code></td><td><code>The 'data' field must be a float in [-3.402823466e+38, 3.402823466e+38]</code></td></tr>
+<tr><td><code>Int32.data = 1.0</code> or <code>np.int64(5)</code></td><td><code>The 'data' field must be of type 'int'</code></td></tr>
+<tr><td><code>Int32.data = 2**31</code></td><td><code>The 'data' field must be an integer in [-2147483648, 2147483647]</code></td></tr>
+<tr><td><code>UInt8.data = 256</code> or <code>-1</code></td><td><code>The 'data' field must be an unsigned integer in [0, 255]</code></td></tr>
+<tr><td><code>Bool.data = 1</code></td><td><code>The 'data' field must be of type 'bool'</code></td></tr>
+<tr><td><code>String.data = 5</code> or <code>b'abc'</code>, <code>Header.frame_id = None</code></td><td><code>The 'data' field must be of type 'str'</code> (or <code>'frame_id'</code>)</td></tr>
+<tr><td><code>Header.stamp = time.time()</code> or <code>node.get_clock().now()</code></td><td><code>The 'stamp' field must be a sub message of type 'Time'</code></td></tr>
+<tr><td><code>JointTrajectoryPoint.time_from_start = Duration(seconds=1)</code> (rclpy) or <code>1.0</code></td><td><code>The 'time_from_start' field must be a sub message of type 'Duration'</code></td></tr>
+<tr><td><code>Wrench.force = [1.0, 2.0, 3.0]</code></td><td><code>The 'force' field must be a sub message of type 'Vector3'</code></td></tr>
+<tr><td><code>Float64MultiArray.data = [1, 2, 3]</code>, a numpy array, a generator, a nested list or a scalar</td><td><code>The 'data' field must be a set or sequence and each value of type 'float' and each double in [-1797...</code> (Lyrical: <code>must be sequence and each value</code>)</td></tr>
+<tr><td><code>Imu.orientation_covariance = [0.0]*8</code> or <code>[0]*9</code></td><td><code>The 'orientation_covariance' field must be a set or sequence with length 9 and each value of type 'float' ...</code> (Lyrical: <code>must be sequence with length 9</code>)</td></tr>
+<tr><td><code>Float64MultiArray.data = array.array('f', ...)</code></td><td><code>The 'data' array.array() must have the type code of 'd'</code></td></tr>
+<tr><td><code>Imu.orientation_covariance = np.zeros(9, dtype=np.float32)</code></td><td><code>The 'orientation_covariance' numpy.ndarray() must have the dtype of 'numpy.float64'</code></td></tr>
+</tbody>
+</table>
+
+<p>The sequence message prints the double range as two 309-digit numbers, so the line is very long. The useful part is the field name at the start. The error comes from the setter, so the traceback points at your own assignment line or at the message constructor. With checks on, nothing reaches <code>publish()</code>: <code>publisher.publish()</code> of a <code>Float64</code> with <code>data = 1</code> never ran on Humble because the assignment failed first.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-02 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images with no extra packages. One script assigned 69 different values to fields of <code>std_msgs</code>, <code>geometry_msgs</code>, <code>sensor_msgs</code> and <code>trajectory_msgs</code> messages and printed either the stored type or the exception. I ran it twice per distro: with the default environment, and with <code>ROS_PYTHON_CHECK_FIELDS=1</code>. A second script took 24 of the wrong values, assigned one, then ran <code>serialize_message</code> and <code>deserialize_message</code>, which use the same C conversion as <code>publish()</code>. Each of these ran in its own process, because a wrong type can abort the interpreter. I ran that set in three modes: default, <code>ROS_PYTHON_CHECK_FIELDS=1</code>, and <code>python3 -O</code>. Three of the cases also went through a real <code>publisher.publish()</code>. I also printed the generated setter for <code>std_msgs/Float64.data</code> on each distro.</p>
+
+<p>This is the setter on Humble:</p>
+
+<pre><code class="language-python">    @data.setter
+    def data(self, value):
+        if __debug__:
+            assert \
+                isinstance(value, float), \
+                "The 'data' field must be of type 'float'"</code></pre>
+
+<p>And on Jazzy:</p>
+
+<pre><code class="language-python">ros_python_check_fields = getenv('ROS_PYTHON_CHECK_FIELDS', default='')
+...
+            self._check_fields = ros_python_check_fields == '1'
+...
+    @data.setter
+    def data(self, value):
+        if self._check_fields:
+            assert \
+                isinstance(value, float), \
+                "The 'data' field must be of type 'float'"</code></pre>
+
+<p>Lyrical has the same <code>_check_fields</code> switch and adds a type hint (<code>def data(self, value: float) -&gt; None</code>). The check is a plain <code>isinstance</code>, so it has no tolerance. An <code>int</code> is not a <code>float</code>, and <code>numpy.float32</code> is not a <code>float</code> either. <code>numpy.float64</code> passed on all three distros, and so did an element taken from a float64 numpy array, because that type is a subclass of Python <code>float</code>. <code>Int32.data = True</code> also passed, because <code>bool</code> is a subclass of <code>int</code>. The reverse, <code>Bool.data = 1</code>, failed.</p>
+
+<h2>Jazzy and Lyrical: no AssertionError, then a crash at publish</h2>
+
+<p>With the default environment, every wrong assignment in the table above succeeded on Jazzy and Lyrical. The setter stored whatever it got (<code>int 1</code>, <code>str '1.0'</code>, <code>NoneType None</code>, an rclpy <code>Time</code> object). The failure came later, when the message was converted for the wire. For these cases the process printed one line from a C <code>assert</code> and exited with code 134 (SIGABRT):</p>
+
+<table>
+<thead><tr><th>Stored wrong value</th><th>Abort line (Jazzy file and line)</th></tr></thead>
+<tbody>
+<tr><td><code>Float64.data</code> as int, str, None, <code>np.float32</code>, <code>np.int64</code></td><td><code>_float64_s.c:58: ... Assertion `PyFloat_Check(field)' failed.</code></td></tr>
+<tr><td><code>Int32.data</code> as float or <code>np.int64</code></td><td><code>_int32_s.c:58: ... Assertion `PyLong_Check(field)' failed.</code></td></tr>
+<tr><td><code>Bool.data = 1</code></td><td><code>_bool_s.c:58: ... Assertion `PyBool_Check(field)' failed.</code></td></tr>
+<tr><td><code>String.data</code> as int or bytes, <code>Header.frame_id = None</code></td><td><code>Assertion `PyUnicode_Check(field)' failed.</code></td></tr>
+<tr><td><code>Header.stamp = time.time()</code> or <code>clock.now()</code></td><td><code>_time_s.c:50: ... Assertion `strncmp("builtin_interfaces.msg._time.Time", full_classname_dest, 33) == 0' failed.</code></td></tr>
+<tr><td><code>time_from_start</code> = rclpy <code>Duration</code></td><td><code>_duration_s.c:50: ... Assertion `strncmp("builtin_interfaces.msg._duration.Duration", full_classname_dest, 41) == 0' failed.</code></td></tr>
+<tr><td><code>Wrench.force</code> = a list</td><td><code>_vector3_s.c:50: ... Assertion `strncmp("geometry_msgs.msg._vector3.Vector3", full_classname_dest, 34) == 0' failed.</code></td></tr>
+</tbody>
+</table>
+
+<p>A real <code>publisher.publish()</code> of a <code>Float64</code> with <code>data = 1</code> aborted the same way on Jazzy and Lyrical, with exit code 134. So did a <code>String</code> with <code>data = 5</code>. There is no Python exception and no traceback, only that one line and the exit code.</p>
+
+<p>If you see a <code>convert_from_py</code> line like this, the fix is the same as for the AssertionError. Set <code>ROS_PYTHON_CHECK_FIELDS=1</code>, run again, and the AssertionError will name the field.</p>
+
+<h2>Wrong values that don't fail at all</h2>
+
+<p>These are the cases worth knowing about even if your node never crashes. With checks off (Jazzy and Lyrical by default, Humble under <code>python3 -O</code>), these values went through <code>serialize_message</code> and came back changed, with no error:</p>
+
+<table>
+<thead><tr><th>Assigned</th><th>Received after serialize and deserialize</th></tr></thead>
+<tbody>
+<tr><td><code>Int32.data = 2**31</code></td><td><code>-2147483648</code></td></tr>
+<tr><td><code>UInt8.data = 256</code></td><td><code>0</code></td></tr>
+<tr><td><code>Float32.data = 1e39</code></td><td><code>inf</code></td></tr>
+<tr><td><code>Imu.orientation_covariance = [0.0]*8</code> (8 values for a 9-value field)</td><td>9 values. The ninth was <code>6.2390559063634e-310</code> on Humble, <code>6.80997452258134e-310</code> on Jazzy and <code>3.95e-322</code> on Lyrical, whatever was in memory</td></tr>
+</tbody>
+</table>
+
+<p><code>UInt8.data = -1</code> didn't wrap. It raised <code>SystemError: &lt;built-in method rclpy_serialize ...&gt; returned a result with an exception set</code>. The covariance row is the worst of these, because the extra value differed between runs and looked like a plausible tiny number. With checks on, all of these were rejected at assignment with the range or length messages from the first table.</p>
+
+<p>With checks on, <code>Float32.data = 1e39</code> was rejected. Only <code>float('inf')</code> and <code>float('nan')</code> passed the range check, on all three distros, for both <code>Float32</code> and <code>Float64</code>.</p>
+
+<h2>Arrays: numpy, lists of ints and fixed sizes</h2>
+
+<p>Sequence fields such as <code>float64[]</code> behaved differently from scalars. On Jazzy and Lyrical with the default environment, the setter turned the value into <code>array.array('d', value)</code>. That conversion accepts ints and numpy arrays. A list <code>[1, 2, 3]</code>, a float64, float32 or int64 numpy array, a raveled 2-D array and a generator were all stored as <code>array('d')</code>, and the list and the numpy array serialized without error. <code>array.array('f', ...)</code> was stored as <code>array('d')</code> on Jazzy but kept as <code>array('f')</code> on Lyrical. I didn't serialize that one. A 2-D array still failed, with <code>TypeError: only length-1 arrays can be converted to Python scalars</code>.</p>
+
+<p>On Humble, and on Jazzy and Lyrical with checks on, the check asks for a <code>Sequence</code> whose items are all <code>float</code>. A numpy array is not a <code>Sequence</code>, so even a float64 array failed with the long "set or sequence" message. These forms worked everywhere:</p>
+
+<pre><code class="language-python">msg.data = arr.tolist()                     # float64 array -> list of float
+msg.data = arr.astype(float).tolist()       # int array -> list of float
+msg.data = array.array('d', arr)            # skips the per-item check (typecode must be 'd')
+msg.data = [1.0, 2.0, 3.0]                  # or a tuple</code></pre>
+
+<p>Fixed-size fields like <code>Imu.orientation_covariance</code> (<code>float64[9]</code>) are stored as a numpy array. Here the checks accepted a 9-element list of floats, <code>np.zeros(9)</code>, <code>np.eye(3).flatten()</code>, and setting one element with an int (<code>cov[0] = 1</code>). A float32 array was rejected with the dtype message. One case slipped past the checks on every distro: <code>np.eye(3)</code>, a 3x3 array. The setter accepted it, even with checks on, and <code>serialize_message</code> then aborted with <code>Assertion `PyArray_NDIM(seq_field) == 1' failed.</code> Flatten 2-D arrays before you assign them.</p>
+
+<h2>Fix options compared</h2>
+
+<p>The fix is always a conversion. For a single value it costs nothing you'd notice. 1,000 <code>Float64.data = 1.0</code> assignments took 1.003 ms on Humble, 0.518 ms on Jazzy and 0.405 ms on Lyrical. For a 100,000-element <code>Float64MultiArray.data</code> the choice matters a bit more. Best of five, per assignment, including the conversion:</p>
+
+<table>
+<thead><tr><th>Assignment (100,000 values)</th><th>Humble</th><th>Jazzy, default</th><th>Jazzy, checks on</th><th>Lyrical, default</th></tr></thead>
+<tbody>
+<tr><td>list of Python floats</td><td>16.861 ms</td><td>2.955 ms</td><td>12.780 ms</td><td>2.715 ms</td></tr>
+<tr><td>numpy float64 array, as is</td><td>AssertionError</td><td>10.793 ms</td><td>AssertionError</td><td>11.430 ms</td></tr>
+<tr><td><code>arr.tolist()</code></td><td>18.736 ms</td><td>5.455 ms</td><td>15.328 ms</td><td>5.085 ms</td></tr>
+<tr><td><code>array.array('d', arr)</code></td><td>10.442 ms</td><td>10.956 ms</td><td>10.722 ms</td><td>11.402 ms</td></tr>
+<tr><td><code>[float(x) for x in arr]</code></td><td>26.790 ms</td><td>11.686 ms</td><td>22.070 ms</td><td>12.077 ms</td></tr>
+</tbody>
+</table>
+
+<p>The per-item check is most of the cost of a big list: on Jazzy, turning it on raised the plain-list case from 2.955 ms to 12.780 ms. <code>array.array('d', arr)</code> stayed between 10.4 and 11.4 ms in every mode, because the setter takes an <code>array('d')</code> without checking each item. On Humble that made it the fastest fix that works. With checks off, <code>arr.tolist()</code> was faster. A list comprehension with <code>float(x)</code> was the slowest everywhere. If large arrays are slow in your node for other reasons, such as arrays of nested messages, that is a different problem, measured in <a href="https://huntlab.app/en/ros-2-rclpy-publish-slow-large-custom-message-arrays/">rclpy publish() slow with large custom message arrays</a>.</p>
+
+<p>The fix options in short:</p>
+
+<ul>
+<li><strong>Convert at assignment</strong> with <code>float()</code>, <code>int()</code>, <code>.to_msg()</code> or <code>.tolist()</code>. Works on every distro and in every mode.</li>
+<li><strong>Write float literals</strong>: <code>2022.0</code>, not <code>2022</code>; <code>Vector3(x=1.0, ...)</code>, not <code>x=1</code>.</li>
+<li><strong>Turn checks on during development</strong> on Jazzy and Lyrical with <code>ROS_PYTHON_CHECK_FIELDS=1</code>, or per message with the <code>check_fields=True</code> constructor keyword. <code>Float64(data=1, check_fields=True)</code> raised the usual AssertionError on Jazzy and Lyrical. On Humble that keyword doesn't exist and gave <code>AssertionError: Invalid arguments passed to constructor: check_fields</code>.</li>
+<li><strong>Don't fix it with <code>python3 -O</code></strong>. On Humble, <code>-O</code> removes the setter checks (they sit under <code>if __debug__:</code>). The result matched the Jazzy default exactly: the same aborts and the same silent wraps.</li>
+</ul>
+
+<h2>Version notes</h2>
+
+<p>The main change is when the check runs. On Humble (rosidl_generator_py 0.14.6) it runs whenever Python runs without <code>-O</code>. On Jazzy (0.22.2) and Lyrical (0.27.2) it runs only with <code>ROS_PYTHON_CHECK_FIELDS=1</code> or <code>check_fields=True</code>, and it is off by default. <code>python3 -O</code> had no extra effect on Jazzy or Lyrical. With checks on, the AssertionError texts were identical on all three, with one exception. For sequence and fixed-array fields, Lyrical says <code>must be sequence and each value</code> where Humble and Jazzy say <code>must be a set or sequence and each value</code>. If you search for the error, use the part before that wording. The C abort lines moved from <code>_float64_s.c:58</code> on Humble and Jazzy to <code>_float64_s.c:55</code> on Lyrical, and <code>_imu_s.c:106</code> to <code>:103</code>. numpy was 1.21.5, 1.26.4 and 2.3.5, and the numpy results matched across all three versions. Lyrical only prints numpy scalars differently (<code>np.float64(1.5)</code>).</p>
+
+<h2>Not tested</h2>
+
+<p>Custom <code>.msg</code> packages (I only used the standard message packages), service requests and action goals, <code>ros2 topic pub</code> YAML, rclcpp, nodes started from a launch file and how the abort shows up there, serializing an <code>array('f')</code> on Lyrical, non-default RMW implementations, <code>byte[]</code> and <code>char</code> fields, bounded strings, Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "The 'data' field must be of type 'float'" mean?</h3>
+<p>You assigned something that isn't a Python <code>float</code> to a <code>float32</code> or <code>float64</code> field. Most often it is an <code>int</code> literal like <code>1</code> or <code>2022</code>, or a <code>numpy.float32</code>. Wrap the value in <code>float()</code> or write <code>1.0</code>.</p>
+
+<h3>Why does my code work on Jazzy but fail on Humble?</h3>
+<p>Humble checks field types in every setter by default. Jazzy and Lyrical skip the check unless <code>ROS_PYTHON_CHECK_FIELDS=1</code> is set. A wrong scalar type on Jazzy then crashes at <code>publish()</code> with a <code>convert_from_py</code> assertion, and a list of ints in a <code>float64[]</code> field is converted silently, so it can look like it works.</p>
+
+<h3>What is "Assertion `PyFloat_Check(field)' failed" in ROS 2 Jazzy?</h3>
+<p>It is the same type error, caught later in C code instead of in the Python setter. The process exits with code 134 and no traceback. Run with <code>ROS_PYTHON_CHECK_FIELDS=1</code> to get an AssertionError that names the field, then convert the value.</p>
+
+<h3>How do I put a numpy array into a ROS 2 message field?</h3>
+<p>For <code>float64[]</code>, use <code>arr.tolist()</code> or <code>array.array('d', arr)</code>. On Humble a numpy array is rejected as is, even with dtype float64. For fixed-size fields like a covariance, a 1-D float64 numpy array of the right length works directly. Flatten 2-D arrays first, because a 3x3 array passed the check and then aborted at serialization.</p>
+
+<h3>How do I fix "The 'stamp' field must be a sub message of type 'Time'"?</h3>
+<p>Assign a <code>builtin_interfaces</code> message, not a float or an rclpy <code>Time</code>. Use <code>node.get_clock().now().to_msg()</code>. For <code>Duration</code> fields, use <code>Duration(seconds=1).to_msg()</code> or <code>builtin_interfaces.msg.Duration(sec=1)</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does The data field must be of type float mean?", "acceptedAnswer": {"@type": "Answer", "text": "You assigned something that is not a Python float to a float32 or float64 field. Most often it is an int literal like 1 or 2022, or a numpy.float32. Wrap the value in float() or write 1.0."}},
+{"@type": "Question", "name": "Why does my code work on Jazzy but fail on Humble?", "acceptedAnswer": {"@type": "Answer", "text": "Humble checks field types in every setter by default. Jazzy and Lyrical skip the check unless ROS_PYTHON_CHECK_FIELDS=1 is set. A wrong scalar type on Jazzy then crashes at publish() with a convert_from_py assertion, and a list of ints in a float64[] field is converted silently, so it can look like it works."}},
+{"@type": "Question", "name": "What is Assertion PyFloat_Check(field) failed in ROS 2 Jazzy?", "acceptedAnswer": {"@type": "Answer", "text": "It is the same type error, caught later in C code instead of in the Python setter. The process exits with code 134 and no traceback. Run with ROS_PYTHON_CHECK_FIELDS=1 to get an AssertionError that names the field, then convert the value."}},
+{"@type": "Question", "name": "How do I put a numpy array into a ROS 2 message field?", "acceptedAnswer": {"@type": "Answer", "text": "For float64[], use arr.tolist() or array.array('d', arr). On Humble a numpy array is rejected as is, even with dtype float64. For fixed-size fields like a covariance, a 1-D float64 numpy array of the right length works directly. Flatten 2-D arrays first, because a 3x3 array passed the check and then aborted at serialization."}},
+{"@type": "Question", "name": "How do I fix The stamp field must be a sub message of type Time?", "acceptedAnswer": {"@type": "Answer", "text": "Assign a builtin_interfaces message, not a float or an rclpy Time. Use node.get_clock().now().to_msg(). For Duration fields, use Duration(seconds=1).to_msg() or builtin_interfaces.msg.Duration(sec=1)."}}
+]}
+</script>
+
+<p>Measured on 2026-11-02 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rosidl_generator_py 0.14.6, Python 3.10.12, numpy 1.21.5), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rosidl_generator_py 0.22.2, Python 3.12.3, numpy 1.26.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rosidl_generator_py 0.27.2, Python 3.14.4, numpy 2.3.5), default RMW (Fast DDS), on a 2 vCPU x86_64 machine. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-02-rclpy-field-must-be-of-type-float/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/96084">Timestamp message ros2 - python</a>, <a href="https://robotics.stackexchange.com/questions/101616">float error while using a float - custom messages</a>, <a href="https://robotics.stackexchange.com/questions/101461">Best way to integrate ndarray into ros2</a>, <a href="https://robotics.stackexchange.com/questions/103316">AssertionError: The 'time_from_start' field must be a sub message of type 'Duration'</a>, <a href="https://robotics.stackexchange.com/questions/110901">Publish an Array of Values as Wrench Message in ROS2 and Python</a>, <a href="https://github.com/ros2/rosidl_python/issues/172">rosidl_python: Integers should be accepted as floats</a>.</p>
