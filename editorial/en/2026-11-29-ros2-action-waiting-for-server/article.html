@@ -1,0 +1,170 @@
+<pre><code>$ ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci "{order: 5}"
+Waiting for an action server to become available...</code></pre>
+
+<p>In Python the same problem shows up as <code>ActionClient.wait_for_server()</code> returning <code>False</code>, or as a goal or result future that never completes.</p>
+
+<p>Short answer: <code>ros2 action send_goal</code> prints this line every time, even when the server is up. It only means something when nothing follows it. Then the client can't see a server with that exact name, type and ROS_DOMAIN_ID, and by default it waits forever. I stopped it after 60 seconds and it was still waiting. Check what the graph has, then copy the name and type from it:</p>
+
+<pre><code>ros2 action list -t
+ros2 action info /fibonacci -t
+ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci "{order: 5}" --timeout 10</code></pre>
+
+<p><code>--timeout</code> was in <code>ros2 action send_goal</code> on Humble, Jazzy and Lyrical in the images I tested. It turns an endless wait into <code>Action server is not available after waiting 3 seconds.</code> or <code>Timed out waiting for result after 5 seconds.</code> The exit code was 0 in both cases, so scripts have to read the text. In rclpy, spin the node while you wait, and don't block inside a callback on a single-threaded executor. That deadlocked every time.</p>
+
+<h2>Find your cause</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical unless the Version notes say otherwise. "Hangs" means the command was still waiting when I killed it.</p>
+
+<table>
+<thead><tr><th>Cause</th><th>What send_goal printed</th><th>What the graph showed</th></tr></thead>
+<tbody>
+<tr><td>No server running</td><td><code>Waiting for an action server...</code>, then hangs (60 s, still waiting)</td><td><code>ros2 action info /fibonacci -t</code>: <code>Action servers: 0</code></td></tr>
+<tr><td>Wrong name (server is <code>/fibonacci_as</code>)</td><td>Waiting line, then hangs</td><td><code>ros2 action list -t</code>: <code>/fibonacci_as [example_interfaces/action/Fibonacci]</code></td></tr>
+<tr><td>Server in namespace <code>/robot1</code></td><td>Waiting line, then hangs</td><td><code>/robot1/fibonacci [example_interfaces/action/Fibonacci]</code></td></tr>
+<tr><td>Wrong but existing type (<code>tf2_msgs/action/LookupTransform</code>)</td><td>Waiting line, then hangs</td><td>The list shows the right name with the real type in brackets</td></tr>
+<tr><td>Misspelled type, or its package not installed</td><td><code>The passed action type is invalid</code>, exit 1, under 0.6 s</td><td>Not relevant, nothing is sent</td></tr>
+<tr><td>Goal field that doesn't exist (<code>{orders: 5}</code>)</td><td><code>Failed to populate message fields: AttributeError("'Fibonacci_Goal' object has no attribute 'orders'")</code>, exit 1</td><td>Not relevant</td></tr>
+<tr><td>Server on <code>ROS_DOMAIN_ID=7</code>, client on the default</td><td>Waiting line, then hangs. Same in one container and across two containers</td><td><code>ros2 action list -t</code> empty, <code>Action servers: 0</code></td></tr>
+<tr><td>Server created, but its node never spins</td><td>Waiting line, <code>Sending goal:</code>, then hangs</td><td>Listed normally, <code>Action servers: 1</code></td></tr>
+<tr><td>Server rejects the goal</td><td><code>Goal was rejected.</code>, exit 0</td><td>Listed normally</td></tr>
+<tr><td>Server killed after accepting the goal</td><td><code>Goal accepted with ID: ...</code>, then hangs (40 s, still waiting)</td><td>Gone once discovery notices</td></tr>
+</tbody>
+</table>
+
+<p>The "never spins" row is the one that confuses people. Discovery is done by the middleware, so the server looks healthy in every CLI tool, but nobody answers the goal request. If <code>ros2 action info</code> shows your server and the client still stalls after <code>Sending goal:</code>, look at the server's executor.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-02 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host, one distro at a time. None of the three ros-base images ships <code>example_interfaces</code>. The only action type in them was <code>tf2_msgs/action/LookupTransform</code>, so the script installs <code>ros-&lt;distro&gt;-example-interfaces</code> first. Before that install, <code>send_goal</code> with <code>example_interfaces/action/Fibonacci</code> printed <code>The passed action type is invalid</code>.</p>
+
+<p>The server is a small rclpy Fibonacci action server on a <code>MultiThreadedExecutor</code>. It can accept, reject, abort or run slowly (1 s per step) so it can be canceled or killed mid-goal. The client is a short rclpy script with a few modes. Each case ran the CLI under <code>timeout</code> so a hang ends and gets measured. For the domain test, I also ran server and client in two separate containers on the default Docker bridge network.</p>
+
+<h2>send_goal waits forever unless you pass --timeout</h2>
+
+<p>With no server, <code>ros2 action send_goal</code> printed one <code>Waiting for an action server to become available...</code> line and nothing else for 60 seconds. It doesn't repeat the line, so a 10-second run also showed exactly one. When <code>timeout</code> sent SIGTERM, it printed <code>Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:428</code> (the line number differs per distro). That message is about the shutdown. It isn't the cause. Ctrl+C (SIGINT) exited with code 2 and printed nothing extra.</p>
+
+<p>With <code>--timeout 3</code> it gave up after 3.47 to 3.57 s with <code>Action server is not available after waiting 3 seconds.</code> and exit code 0. The rclpy equivalent behaves as documented. <code>wait_for_server(timeout_sec=0.0)</code> returned <code>False</code> immediately, and 0.5, 2 and 5 seconds returned <code>False</code> after 0.50, 2.00 and 5.00 to 5.01 s.</p>
+
+<p>The waiting line isn't an error in itself. Against a server that was already running, the CLI still printed it once and then <code>Goal accepted</code> 0.57 to 1.05 s after the command started.</p>
+
+<h2>Name, namespace and remapping</h2>
+
+<p>Action names follow the same rules as topics. A server created with the relative name <code>fibonacci</code> in a node under <code>/robot1</code> became <code>/robot1/fibonacci</code>. <code>send_goal /fibonacci</code> hung, and <code>send_goal /robot1/fibonacci</code> succeeded. An rclpy client in the same namespace found it with the relative name <code>fibonacci</code> (<code>True</code> after 0.00 to 2.50 s). The same client with the absolute name <code>/fibonacci</code> returned <code>False</code> after its 3 s timeout.</p>
+
+<p>Remapping is where the distros differed. With the server started as <code>--ros-args -r fibonacci:=fib2</code>, Humble ignored the rule. The action stayed at <code>/fibonacci</code> and the goal succeeded. On Jazzy the list showed <code>/fib2</code>, and <code>/fibonacci</code> hung. On Lyrical <code>/fibonacci</code> also hung. If a launch file remaps an rclpy action server, check <code>ros2 action list</code> on the distro you actually run.</p>
+
+<h2>The type has to match exactly</h2>
+
+<p>The CLI resolves the type locally before it waits. If the type can't be imported (a typo like <code>Fibonaci</code>, or a package that isn't installed or sourced in that shell), you get <code>The passed action type is invalid</code> right away. The type <code>example_interfaces/Fibonacci</code>, without <code>/action/</code>, was accepted and worked.</p>
+
+<p>A type that exists but isn't the server's type is worse. With the server on <code>example_interfaces/action/Fibonacci</code> and the CLI sending <code>tf2_msgs/action/LookupTransform</code> to the same name, the CLI printed the waiting line and hung. There's no "type mismatch" message. <code>ros2 action list -t</code> shows the real type in brackets, so compare it with what you typed.</p>
+
+<h2>ROS_DOMAIN_ID, in one container or two</h2>
+
+<p>A server on <code>ROS_DOMAIN_ID=7</code> and a client on the default domain don't see each other. <code>ros2 action list -t</code> was empty and <code>send_goal</code> hung. That was true in one container and with two containers on the default bridge network. Setting <code>ROS_DOMAIN_ID=7</code> in the client container fixed it, and the goal finished in 1.02 to 1.87 s including startup. Check <code>printenv ROS_DOMAIN_ID</code> in both containers, along with their compose files and entrypoints.</p>
+
+<h2>Discovery delay: starting both at once</h2>
+
+<p>When the server and <code>send_goal</code> started at the same moment, the server logged ready after 0.38 to 0.50 s, and the CLI reached <code>Goal accepted</code> after 0.54 to 0.97 s (5 runs per distro). An rclpy client started at the same moment saw the server and had its goal accepted after 0.41 to 0.76 s. Discovery delay on one host is under a second. If your client waits longer than a few seconds, the cause is one of the mismatches above, not slow discovery. A fixed sleep before the first goal doesn't help. <code>wait_for_server()</code> with a timeout does the same job and ends sooner.</p>
+
+<h2>rclpy: futures that never complete</h2>
+
+<p>An rclpy future only completes when an executor processes the response. In the no-spin case, <code>wait_for_server</code> returned <code>True</code> and <code>send_goal_async</code> returned a future. After 5 s of <code>time.sleep</code> it was still <code>done=False</code>. One <code>rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)</code> completed it right away with <code>accepted=True</code>. <code>wait_for_server</code> itself worked without spinning. It returned <code>True</code> in this client and also against the server that never spun.</p>
+
+<p>Inside callbacks it depends on the executor and the callback groups. A timer callback sent the goal and then waited for the result. The executor ran in a thread, and a watchdog gave up after 10 s:</p>
+
+<table>
+<thead><tr><th>Pattern in the timer callback</th><th>Executor and groups</th><th>Result (all three distros)</th></tr></thead>
+<tbody>
+<tr><td><code>send_goal_async().add_done_callback()</code>, then <code>get_result_async().add_done_callback()</code>, return at once</td><td><code>SingleThreadedExecutor</code></td><td>Worked. Result 0.4 s after the goal</td></tr>
+<tr><td>Busy-wait on the <code>send_goal_async</code> future</td><td><code>SingleThreadedExecutor</code></td><td>Deadlock. Still <code>done=False</code> after 8 s</td></tr>
+<tr><td>Blocking <code>ActionClient.send_goal()</code></td><td><code>SingleThreadedExecutor</code></td><td>Deadlock</td></tr>
+<tr><td>Blocking <code>send_goal()</code></td><td><code>MultiThreadedExecutor</code>, default group for timer and client</td><td>Deadlock</td></tr>
+<tr><td>Blocking <code>send_goal()</code></td><td><code>MultiThreadedExecutor</code>, one <code>ReentrantCallbackGroup</code> for both</td><td>Worked. Returned 2.4 to 3.7 s after the callback started</td></tr>
+<tr><td>Blocking <code>send_goal()</code></td><td><code>MultiThreadedExecutor</code>, separate <code>MutuallyExclusiveCallbackGroup</code> for timer and client</td><td>Worked. Returned 1.7 to 3.7 s after the callback started</td></tr>
+</tbody>
+</table>
+
+<p>A <code>MultiThreadedExecutor</code> alone doesn't fix it. The node's default callback group is mutually exclusive, which fits what I saw: the client's response callbacks can't run while the timer callback in the same group is blocked. They need a group the blocked callback isn't holding. The fully asynchronous version needed neither and was the fastest. The blocking versions took several seconds for a goal that otherwise finished in 0.4 s. I didn't look into why.</p>
+
+<h2>Rejected, aborted, canceled, or server gone</h2>
+
+<p><strong>Rejected:</strong> the CLI printed <code>Goal was rejected.</code> and exited 0 in under a second. In rclpy the goal future completes and <code>goal_handle.accepted</code> is <code>False</code>. Calling <code>get_result_async()</code> on a rejected goal makes no sense, so check <code>accepted</code> first.</p>
+
+<p><strong>Aborted:</strong> the CLI printed the partial result and <code>Goal finished with status: ABORTED</code>, exit 0. In rclpy the result arrives normally with <code>status=ABORTED</code>.</p>
+
+<p><strong>Canceled from rclpy:</strong> <code>cancel_goal_async()</code> returned <code>return_code=0</code> and <code>goals_canceling=1</code>. The result came about 0.5 s later with <code>status=CANCELED</code>, on all three distros. The server has to accept the cancel and check <code>is_cancel_requested</code> in its loop. Mine did.</p>
+
+<p><strong>Ctrl+C on the CLI during a goal:</strong> on Humble the CLI printed the partial result and <code>Goal finished with status: CANCELED</code>, exit 0. On Jazzy and Lyrical it printed <code>Canceling goal...</code>, then <code>Executor is already spinning</code>, and exited with code 1. The server still received the cancel and canceled the goal. On Lyrical the server also logged <code>RuntimeWarning: failed to send response (timeout): client will not receive response</code>. So on Jazzy and Lyrical the error comes from the CLI's own exit path. The cancel went through.</p>
+
+<p><strong>Server killed with SIGKILL mid-goal:</strong> nothing tells the client. The CLI sat after <code>Goal accepted with ID: ...</code> until my 40 s limit. With <code>--timeout 5</code> it printed <code>Timed out waiting for result after 5 seconds.</code> after 5.73 to 5.83 s, exit 0. In rclpy the result future never completed within 25 s. <code>server_is_ready()</code> stayed <code>True</code> until 22.3 s into the client run, about 19 s after the kill.</p>
+
+<p><strong>Server stopped with SIGTERM mid-goal:</strong> <code>server_is_ready()</code> turned <code>False</code> about a second after the signal. The result future still never completed. In both cases the client has to notice on its own, with a timeout on the result or a check on <code>server_is_ready()</code>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Solves</th><th>Doesn't solve</th></tr></thead>
+<tbody>
+<tr><td>Copy name and type from <code>ros2 action list -t</code></td><td>Wrong name, namespace, remap, wrong type</td><td>Domain mismatch, a server that doesn't spin</td></tr>
+<tr><td>Same <code>ROS_DOMAIN_ID</code> on both sides</td><td>Empty list across shells or containers</td><td>Anything else</td></tr>
+<tr><td>Install and source the interface package in the client's shell</td><td><code>The passed action type is invalid</code></td><td>Typos in the type</td></tr>
+<tr><td><code>send_goal --timeout N</code></td><td>Endless waits, for the server and for the result</td><td>Nothing about the cause. Exit code stays 0, so parse the text</td></tr>
+<tr><td><code>wait_for_server(timeout_sec=N)</code> and check the return value</td><td>Endless waits for the server in rclpy</td><td>A server that is listed but doesn't spin</td></tr>
+<tr><td><code>spin_until_future_complete(node, fut, timeout_sec=N)</code> on goal and result</td><td>Futures that never complete when nothing spins, results that never come</td><td>Doesn't belong inside a callback</td></tr>
+<tr><td>Chain <code>add_done_callback</code>, never block in a callback</td><td>Deadlocks on any executor</td><td>Needs code restructured around callbacks</td></tr>
+<tr><td><code>MultiThreadedExecutor</code> plus a reentrant or separate callback group</td><td>Blocking <code>send_goal()</code> inside a callback</td><td>Not enough with the default group</td></tr>
+<tr><td>Spin the server node</td><td>Stuck after <code>Sending goal:</code></td><td>Anything on the client side</td></tr>
+</tbody>
+</table>
+
+<p>Service calls behave much the same way when the response never comes back. The <a href="https://huntlab.app/en/rclpy-asyncio-no-running-event-loop-call-async-hangs/">rclpy asyncio and hung call_async</a> post covers that case.</p>
+
+<h2>Version notes</h2>
+
+<p>Most results were identical across Humble, Jazzy and Lyrical. These were the differences:</p>
+
+<ul>
+<li><code>--timeout</code> was present on all three. Jazzy and Lyrical also had <code>--stdin</code>. Lyrical's help adds that the timeout "Also applies to goal cancellation if interrupted".</li>
+<li><code>-r fibonacci:=fib2</code> on an rclpy action server was ignored on Humble and worked on Jazzy.</li>
+<li>Ctrl+C during a goal ended with <code>CANCELED</code> and exit 0 on Humble, and with <code>Executor is already spinning</code> and exit 1 on Jazzy and Lyrical.</li>
+<li>The <code>rcl node's context is invalid</code> line pointed at <code>node.c:428</code> on Humble, <code>node.c:404</code> on Jazzy and <code>node.c:409</code> on Lyrical. On Lyrical a killed CLI sometimes also printed <code>failed to initialize wait set: the given context is not valid</code>. Drop the line numbers when you search.</li>
+<li>Discovery was a little slower on Jazzy and Lyrical (CLI goal accepted after 0.89 to 0.97 s) than on Humble (0.54 to 0.80 s).</li>
+</ul>
+
+<p>One thing to watch on Jazzy and Lyrical: right after <code>ros2 daemon stop</code>, the first <code>ros2 action list -t</code> sometimes printed nothing, even though <code>ros2 action info</code> showed the server in the same case. If the list is empty, run it again or check with <code>ros2 action info</code> before you assume the server is gone.</p>
+
+<h2>Not tested</h2>
+
+<p>rclcpp action clients and servers, Cyclone DDS or any other RMW, mixed RMWs, hosts on different machines, discovery server or <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code> settings, goals sent through launch files or Nav2, the <code>ros2 action send_goal --stdin</code> option, and Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 action send_goal hang at "Waiting for an action server to become available..."?</h3>
+<p>The client can't see a server with that exact name and type on its ROS_DOMAIN_ID. By default it waits forever. In my run it was still waiting after 60 seconds. Compare your name and type with <code>ros2 action list -t</code>, and check the domain ID on both sides.</p>
+
+<h3>Does ros2 action send_goal have a timeout?</h3>
+<p>Yes, <code>--timeout N</code> (or <code>-t N</code>) on Humble, Jazzy and Lyrical in my images. It printed <code>Action server is not available after waiting 3 seconds.</code> or <code>Timed out waiting for result after 5 seconds.</code> and exited with code 0, so check the text in scripts.</p>
+
+<h3>Why does my rclpy action client never get the result?</h3>
+<p>Either nothing spins the node, or a callback blocks the executor. A <code>send_goal_async</code> future stayed undone after 5 s without spinning. Blocking inside a callback deadlocked on a <code>SingleThreadedExecutor</code>, and also on a <code>MultiThreadedExecutor</code> with the default callback group. Use <code>add_done_callback</code> chains, or a reentrant or separate callback group.</p>
+
+<h3>What happens to the client if the action server dies mid-goal?</h3>
+<p>Nothing tells it. The CLI waited past 40 s after <code>Goal accepted</code>, and an rclpy result future never completed. <code>server_is_ready()</code> turned <code>False</code> about 1 s after SIGTERM and about 19 s after SIGKILL. Put a timeout on the result.</p>
+
+<h3>What does "The passed action type is invalid" mean?</h3>
+<p>The CLI couldn't import the type you typed. It was misspelled, or its package isn't installed or sourced in that shell. The ros-base images don't include <code>example_interfaces</code>, so the tutorial's Fibonacci type gives this error until you install it.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 action send_goal hang at Waiting for an action server to become available?", "acceptedAnswer": {"@type": "Answer", "text": "The client can't see a server with that exact name and type on its ROS_DOMAIN_ID. By default it waits forever. In my run it was still waiting after 60 seconds. Compare your name and type with ros2 action list -t, and check the domain ID on both sides."}},
+{"@type": "Question", "name": "Does ros2 action send_goal have a timeout?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, --timeout N (or -t N) on Humble, Jazzy and Lyrical in my images. It printed Action server is not available after waiting 3 seconds. or Timed out waiting for result after 5 seconds. and exited with code 0, so check the text in scripts."}},
+{"@type": "Question", "name": "Why does my rclpy action client never get the result?", "acceptedAnswer": {"@type": "Answer", "text": "Either nothing spins the node, or a callback blocks the executor. A send_goal_async future stayed undone after 5 s without spinning. Blocking inside a callback deadlocked on a SingleThreadedExecutor, and also on a MultiThreadedExecutor with the default callback group. Use add_done_callback chains, or a reentrant or separate callback group."}},
+{"@type": "Question", "name": "What happens to the client if the action server dies mid-goal?", "acceptedAnswer": {"@type": "Answer", "text": "Nothing tells it. The CLI waited past 40 s after Goal accepted, and an rclpy result future never completed. server_is_ready() turned False about 1 s after SIGTERM and about 19 s after SIGKILL. Put a timeout on the result."}},
+{"@type": "Question", "name": "What does The passed action type is invalid mean?", "acceptedAnswer": {"@type": "Answer", "text": "The CLI couldn't import the type you typed. It was misspelled, or its package isn't installed or sourced in that shell. The ros-base images don't include example_interfaces, so the tutorial's Fibonacci type gives this error until you install it."}}
+]}
+</script>
+
+<p>Measured on 2026-11-02 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli and ros2action 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS), with <code>example_interfaces</code> installed from apt. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-11-29-ros2-action-waiting-for-server/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/ros2cli/issues/1065">ros2 action send_goal option with timeout</a>, <a href="https://robotics.stackexchange.com/questions/108102">How to wait for an action to be complete inside a callback?</a>, <a href="https://robotics.stackexchange.com/questions/101964">ROS2 action client callbacks not triggered</a>, <a href="https://robotics.stackexchange.com/questions/109589">Nothing happens when running Writing an action server and client (C++)</a>, <a href="https://robotics.stackexchange.com/questions/118097">unable to run ros2 action send-goal</a>.</p>

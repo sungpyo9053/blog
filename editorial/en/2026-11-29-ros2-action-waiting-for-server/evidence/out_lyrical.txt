@@ -1,0 +1,520 @@
+=== distro=lyrical
+2026-11-02T00:37:06Z
+ros-lyrical-action-msgs 2.4.5-1resolute.20260915.041037
+ros-lyrical-fastdds 3.6.2-1resolute.20260728.174239
+ros-lyrical-fastrtps 
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclcpp-action 32.0.3-1resolute.20260915.064317
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2action 0.40.9-1resolute.20260915.075756
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+--- default RMW
+rmw_fastrtps_cpp
+--- action types in the image
+Actions:
+    tf2_msgs/action/LookupTransform
+##### C-1 send_goal with a type whose package is not installed (example_interfaces is not in ros-base)
+The passed action type is invalid
+rc=1 elapsed=0.55s
+--- installing ros-lyrical-example-interfaces
+ros-lyrical-example-interfaces 0.14.1-3resolute.20260915.044603
+Actions:
+    example_interfaces/action/Fibonacci
+    tf2_msgs/action/LookupTransform
+--- ros2 action send_goal -h
+options:
+  -h, --help       show this help message and exit
+  --stdin          Read goal from standard input
+  -f, --feedback   Echo feedback messages for the goal
+  -t, --timeout N  Wait for N seconds until action server becomes available,
+                   goal is sent, and result is received. Also applies to goal
+                   cancellation if interrupted. (default: waits indefinitely)
+send_goal --timeout option present: 1
+
+##### C0 baseline: server /fibonacci, correct name and type
+ 00:37:20 up 96 days, 13:33,  0 users,  load average: 1.04, 0.45, 0.27
+[server] SERVER_READY name=/fibonacci ns=/ mode=ok t=1793579840.539
+$ ros2 action list -t
+/fibonacci [example_interfaces/action/Fibonacci]
+rc=0
+$ ros2 action info /fibonacci -t
+Action: /fibonacci
+Action clients: 0
+Action servers: 1
+    /act_server [example_interfaces/action/Fibonacci]
+rc=0
+$ ros2 node info /act_server (Action part)
+  Action Servers:
+    /fibonacci: example_interfaces/action/Fibonacci
+  Action Clients:
+
+$ timeout 20 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Sending goal:
+     order: 5
+
+Goal accepted with ID: da1f4a19427c416c81d0acf06ce0308d
+
+Result:
+    sequence:
+- 0
+- 1
+- 1
+- 2
+- 3
+- 5
+
+Goal finished with status: SUCCEEDED
+rc=0 elapsed=1.82s
+--- with --feedback
+$ timeout 20 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 3} --feedback
+Waiting for an action server to become available...
+Sending goal:
+     order: 3
+
+Goal accepted with ID: c6c046a6f4414a1f917c0e3b40a8e827
+
+Feedback:
+    sequence:
+- 0
+- 1
+- 1
+
+Feedback:
+    sequence:
+- 0
+- 1
+- 1
+- 2
+
+Result:
+    sequence:
+- 0
+- 1
+- 1
+- 2
+rc=0 elapsed=3.79s
+
+##### C1 no server at all (bounded 60s)
+ 00:37:32 up 96 days, 13:33,  0 users,  load average: 0.95, 0.46, 0.27
+$ ros2 action list -t
+rc=0
+$ ros2 action info /fibonacci -t
+Action: /fibonacci
+Action clients: 0
+Action servers: 0
+rc=0
+$ timeout 60 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:409
+rc=124 elapsed=60.38s
+lines printed in a 10s run:
+1
+--- Ctrl-C (SIGINT after 5s)
+Waiting for an action server to become available...
+rc=2 (exit code of ros2 itself)
+--- --timeout 3
+$ timeout 30 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5} --timeout 3
+Waiting for an action server to become available...
+Action server is not available after waiting 3 seconds.
+rc=0 elapsed=3.57s
+--- rclpy wait_for_server with different timeouts
+[wait +0.04s] wait_for_server(timeout_sec=0.0) returned False after 0.00s
+[wait +0.54s] wait_for_server(timeout_sec=0.5) returned False after 0.50s
+[wait +2.04s] wait_for_server(timeout_sec=2.0) returned False after 2.00s
+[wait +5.04s] wait_for_server(timeout_sec=5.0) returned False after 5.01s
+
+##### C2 wrong name: server /fibonacci_as, client /fibonacci
+ 00:39:02 up 96 days, 13:35,  0 users,  load average: 0.39, 0.38, 0.26
+[server] SERVER_READY name=/fibonacci_as ns=/ mode=ok t=1793579943.148
+$ ros2 action list -t
+rc=0
+$ ros2 action info /fibonacci -t
+Action: /fibonacci
+Action clients: 0
+Action servers: 0
+rc=0
+$ ros2 node info /act_server (Action part)
+  Action Servers:
+    /fibonacci_as: example_interfaces/action/Fibonacci
+  Action Clients:
+
+$ timeout 10 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:409
+rc=124 elapsed=10.43s
+[wait +3.04s] wait_for_server(timeout_sec=3.0) returned False after 3.00s
+
+##### C3 namespace: server in /robot1 with relative name 'fibonacci', client /fibonacci
+ 00:39:23 up 96 days, 13:35,  0 users,  load average: 0.28, 0.36, 0.26
+[server] SERVER_READY name=fibonacci ns=/robot1 mode=ok t=1793579963.353
+$ ros2 action list -t
+/robot1/fibonacci [example_interfaces/action/Fibonacci]
+rc=0
+$ ros2 action info /fibonacci -t
+Action: /fibonacci
+Action clients: 0
+Action servers: 0
+rc=0
+$ ros2 node info /robot1/act_server (Action part)
+  Action Servers:
+    /robot1/fibonacci: example_interfaces/action/Fibonacci
+  Action Clients:
+
+$ timeout 10 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:409
+rc=124 elapsed=10.33s
+$ timeout 20 ros2 action send_goal /robot1/fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Sending goal:
+     order: 5
+
+Goal accepted with ID: 246079cd196743dca4467cb6f14af733
+
+Result:
+    sequence:
+- 0
+- 1
+- 1
+- 2
+- 3
+- 5
+
+Goal finished with status: SUCCEEDED
+rc=0 elapsed=1.49s
+--- rclpy client in /robot1, relative name 'fibonacci'
+[wait +0.29s] wait_for_server(timeout_sec=3.0) returned True after 0.25s
+--- rclpy client in /robot1, absolute name '/fibonacci'
+[wait +3.04s] wait_for_server(timeout_sec=3.0) returned False after 3.00s
+
+##### C3b remap: server run with -r fibonacci:=fib2
+ 00:39:45 up 96 days, 13:36,  0 users,  load average: 0.18, 0.33, 0.25
+[server] SERVER_READY name=fibonacci ns=/ mode=ok t=1793579985.686
+$ timeout 10 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:409
+rc=124 elapsed=10.42s
+
+##### C4 wrong type: server Fibonacci on /fibonacci, client sends another existing action type
+ 00:40:02 up 96 days, 13:36,  0 users,  load average: 0.21, 0.33, 0.25
+[server] SERVER_READY name=/fibonacci ns=/ mode=ok t=1793580002.451
+$ ros2 action list -t
+/fibonacci [example_interfaces/action/Fibonacci]
+rc=0
+$ ros2 action info /fibonacci -t
+Action: /fibonacci
+Action clients: 0
+Action servers: 1
+    /act_server [example_interfaces/action/Fibonacci]
+rc=0
+$ timeout 15 ros2 action send_goal /fibonacci tf2_msgs/action/LookupTransform {target_frame: a, source_frame: b}
+Waiting for an action server to become available...
+Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:409
+rc=124 elapsed=15.27s
+--- misspelled type
+$ timeout 15 ros2 action send_goal /fibonacci example_interfaces/action/Fibonaci {order: 5}
+The passed action type is invalid
+rc=1 elapsed=0.43s
+--- type written without /action/
+$ timeout 15 ros2 action send_goal /fibonacci example_interfaces/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Sending goal:
+     order: 5
+
+Goal accepted with ID: 7119ea04857140ff8a394f245296a0d3
+
+Result:
+    sequence:
+- 0
+- 1
+- 1
+- 2
+- 3
+- 5
+
+Goal finished with status: SUCCEEDED
+rc=0 elapsed=1.50s
+--- bad goal YAML (field that does not exist)
+$ timeout 15 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {orders: 5}
+Failed to populate message fields: AttributeError("'Fibonacci_Goal' object has no attribute 'orders'")
+rc=1 elapsed=0.57s
+
+##### C5 different ROS_DOMAIN_ID in the same container: server 7, client default
+ 00:40:25 up 96 days, 13:36,  0 users,  load average: 0.30, 0.33, 0.26
+[server] SERVER_READY name=/fibonacci ns=/ mode=ok t=1793580026.082
+$ ros2 action list -t
+rc=0
+$ ros2 action info /fibonacci -t
+Action: /fibonacci
+Action clients: 0
+Action servers: 0
+rc=0
+$ timeout 10 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:409
+rc=124 elapsed=10.34s
+--- client ROS_DOMAIN_ID=7
+$ timeout 20 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Sending goal:
+     order: 5
+
+Goal accepted with ID: 545ab2033b744555baf3996aff9a3f1c
+
+Result:
+    sequence:
+- 0
+- 1
+- 1
+- 2
+- 3
+- 5
+
+Goal finished with status: SUCCEEDED
+rc=0 elapsed=1.24s
+
+##### C6 server created but its node never spins
+ 00:40:44 up 96 days, 13:37,  0 users,  load average: 0.23, 0.32, 0.25
+[server] SERVER_READY name=/fibonacci ns=/ mode=nospin t=1793580044.448
+$ ros2 action list -t
+rc=0
+$ ros2 action info /fibonacci -t
+Action: /fibonacci
+Action clients: 0
+Action servers: 1
+    /act_server [example_interfaces/action/Fibonacci]
+rc=0
+$ ros2 node info /act_server (Action part)
+  Action Servers:
+    /fibonacci: example_interfaces/action/Fibonacci
+  Action Clients:
+
+$ timeout 15 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Sending goal:
+     order: 5
+
+failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:110
+rc=124 elapsed=15.20s
+[wait +1.79s] wait_for_server(timeout_sec=3.0) returned True after 1.75s
+[full +0.29s] wait_for_server(timeout_sec=5.0) returned True after 0.25s
+SERVER_SEEN t=1793580066.994
+[full +5.29s] goal response not received within 5.0s
+
+##### C7 server rejects the goal
+ 00:41:13 up 96 days, 13:37,  0 users,  load average: 0.21, 0.30, 0.25
+[server] SERVER_READY name=/fibonacci ns=/ mode=reject t=1793580073.931
+$ timeout 15 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Sending goal:
+     order: 5
+
+Goal was rejected.
+rc=0 elapsed=0.84s
+[full +0.29s] wait_for_server(timeout_sec=5.0) returned True after 0.25s
+SERVER_SEEN t=1793580078.030
+[full +0.29s] goal accepted=False
+
+##### C7b server aborts the goal
+ 00:41:19 up 96 days, 13:37,  0 users,  load average: 0.26, 0.31, 0.25
+[server] SERVER_READY name=/fibonacci ns=/ mode=abort t=1793580079.873
+$ timeout 15 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 5}
+Waiting for an action server to become available...
+Sending goal:
+     order: 5
+
+Goal accepted with ID: f4de639c40fd43d0b5f643db94740a61
+
+Result:
+    sequence:
+- 0
+- 1
+
+Goal finished with status: ABORTED
+rc=0 elapsed=0.83s
+[full +0.29s] wait_for_server(timeout_sec=5.0) returned True after 0.25s
+SERVER_SEEN t=1793580083.968
+[full +0.29s] goal accepted=True
+GOAL_ACCEPTED t=1793580083.972
+[full +0.29s] result status=ABORTED sequence=[0, 1]
+
+##### C8 goal canceled
+ 00:41:25 up 96 days, 13:37,  0 users,  load average: 0.24, 0.30, 0.25
+[server] SERVER_READY name=/fibonacci ns=/ mode=slow t=1793580085.802
+--- CLI, SIGINT 3s into a 10-step goal
+Waiting for an action server to become available...
+Sending goal:
+     order: 10
+
+Goal accepted with ID: 17b47025741143dc9490c413a71c243c
+
+Canceling goal...
+Executor is already spinning
+rc=1 elapsed=3.84s
+[server log tail]
+[INFO] [1793580092.211213201] [act_server]: cancel request received, accepting
+/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/action/server.py:525: RuntimeWarning: failed to send response (timeout): client will not receive response, at ./src/rmw_response.cpp:164, at ./src/rcl/service.c:392
+  self._handle.send_cancel_response(request_header, cancel_response)
+[INFO] [1793580093.208412266] [act_server]: goal canceled at step 5
+--- rclpy cancel_goal_async after 1.5s
+[cancel +0.29s] wait_for_server(timeout_sec=5.0) returned True after 0.25s
+SERVER_SEEN t=1793580093.923
+[cancel +0.29s] goal accepted=True
+GOAL_ACCEPTED t=1793580093.927
+[cancel +1.80s] cancel response return_code=0 goals_canceling=1
+[cancel +2.30s] result status=CANCELED sequence=[0, 1, 1, 2]
+
+##### C9 server killed (SIGKILL) mid-goal
+ 00:41:37 up 96 days, 13:37,  0 users,  load average: 0.20, 0.29, 0.25
+[server] SERVER_READY name=/fibonacci ns=/ mode=slow t=1793580097.776
+--- CLI, server killed 3s into a 30-step goal, CLI bounded at 40s
+$ timeout 40 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 30}
+Waiting for an action server to become available...
+Sending goal:
+     order: 30
+
+Goal accepted with ID: 7cea2c4bfe064e97b14eb4066720873a
+
+failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:110
+/w/repro.sh: line 300:  1405 Killed                     "$@" > /tmp/srv.log 2>&1
+rc=124 elapsed=40.20s
+[server] SERVER_READY name=/fibonacci ns=/ mode=slow t=1793580140.986
+--- same with --timeout 5
+$ timeout 40 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci {order: 30} --timeout 5
+Waiting for an action server to become available...
+Sending goal:
+     order: 30
+
+Goal accepted with ID: 21ede6f7cf6b43a6a7474a82d13a4c4e
+
+Timed out waiting for result after 5 seconds.
+/w/repro.sh: line 300:  1452 Killed                     "$@" > /tmp/srv.log 2>&1
+rc=0 elapsed=5.83s
+[server] SERVER_READY name=/fibonacci ns=/ mode=slow t=1793580149.831
+--- rclpy client, server killed 3s after start of goal
+[killed +0.29s] wait_for_server(timeout_sec=25.0) returned True after 0.25s
+SERVER_SEEN t=1793580153.098
+[killed +0.29s] goal accepted=True
+GOAL_ACCEPTED t=1793580153.103
+[killed +1.29s] server_is_ready()=True result done=False
+[killed +22.30s] server_is_ready()=False result done=False
+[killed +25.30s] result done=False after 25.0s budget
+/w/repro.sh: line 421:  1499 Killed                     "$@" > /tmp/srv.log 2>&1
+--- ros2 action list right after the kill
+(second list after daemon stop)
+
+##### C9b server stopped cleanly (SIGTERM) mid-goal
+ 00:43:01 up 96 days, 13:39,  0 users,  load average: 0.13, 0.23, 0.23
+[server] SERVER_READY name=/fibonacci ns=/ mode=slow t=1793580181.817
+[killed +0.29s] wait_for_server(timeout_sec=25.0) returned True after 0.25s
+SERVER_SEEN t=1793580184.895
+[killed +0.29s] goal accepted=True
+GOAL_ACCEPTED t=1793580184.899
+[killed +1.29s] server_is_ready()=True result done=False
+[killed +4.29s] server_is_ready()=False result done=False
+[killed +25.30s] result done=False after 25.0s budget
+
+##### C10 rclpy: send_goal_async without spinning
+ 00:43:31 up 96 days, 13:39,  0 users,  load average: 0.13, 0.22, 0.22
+[server] SERVER_READY name=/fibonacci ns=/ mode=ok t=1793580211.732
+[nospin +0.29s] wait_for_server(timeout_sec=5.0) returned True after 0.25s
+SERVER_SEEN t=1793580214.993
+[nospin +5.29s] no spin: send_goal_async future done=False after 5.0s of sleep
+[nospin +5.29s] after spin_until_future_complete: done=True accepted=True
+--- with spin_until_future_complete (the fix)
+[full +0.29s] wait_for_server(timeout_sec=5.0) returned True after 0.25s
+SERVER_SEEN t=1793580220.666
+[full +0.29s] goal accepted=True
+GOAL_ACCEPTED t=1793580220.670
+[full +0.69s] result status=SUCCEEDED sequence=[0, 1, 1, 2, 3, 5]
+
+##### C11 rclpy: goal and result inside callbacks
+ 00:43:42 up 96 days, 13:40,  0 users,  load average: 0.18, 0.23, 0.23
+[server] SERVER_READY name=/fibonacci ns=/ mode=ok t=1793580222.905
+--- cb_async_single
+[cb_async_single +0.79s] timer callback started, sending goal
+[cb_async_single +0.79s] timer callback returned
+[cb_async_single +0.79s] goal response callback: accepted=True
+[cb_async_single +1.19s] result callback: status=SUCCEEDED sequence=[0, 1, 1, 2, 3, 5]
+[cb_async_single +1.19s] OK: result received
+rc=0
+--- cb_block_single
+[cb_block_single +0.79s] timer callback started, sending goal
+[cb_block_single +8.79s] busy-wait on send_goal_async future in callback: done=False after 8.01s
+[cb_block_single +10.29s] DEADLOCK/TIMEOUT: no result after 10.0s (watchdog)
+rc=5
+--- cb_sync_single
+[cb_sync_single +1.04s] timer callback started, sending goal
+[cb_sync_single +10.54s] DEADLOCK/TIMEOUT: no result after 10.0s (watchdog)
+rc=5
+--- cb_sync_multi_default
+[cb_sync_multi_default +0.79s] timer callback started, sending goal
+[cb_sync_multi_default +10.29s] DEADLOCK/TIMEOUT: no result after 10.0s (watchdog)
+rc=5
+--- cb_sync_multi_reentrant
+[cb_sync_multi_reentrant +0.79s] timer callback started, sending goal
+[cb_sync_multi_reentrant +3.19s] send_goal() returned: status=SUCCEEDED sequence=[0, 1, 1, 2, 3, 5]
+[cb_sync_multi_reentrant +3.19s] OK: result received
+rc=0
+--- cb_sync_multi_separate
+[cb_sync_multi_separate +0.79s] timer callback started, sending goal
+[cb_sync_multi_separate +2.56s] send_goal() returned: status=SUCCEEDED sequence=[0, 1, 1, 2, 3, 5]
+[cb_sync_multi_separate +2.56s] OK: result received
+rc=0
+
+##### C12 discovery: server and client started at the same moment (5 runs each)
+ 00:44:26 up 96 days, 13:40,  0 users,  load average: 0.08, 0.20, 0.21
+cli run1: start -> Goal accepted 0.89s ; server ready at 0.47s ; waiting lines=1
+cli run2: start -> Goal accepted 0.92s ; server ready at 0.47s ; waiting lines=1
+cli run3: start -> Goal accepted 0.92s ; server ready at 0.48s ; waiting lines=1
+cli run4: start -> Goal accepted 0.91s ; server ready at 0.50s ; waiting lines=1
+cli run5: start -> Goal accepted 0.89s ; server ready at 0.48s ; waiting lines=1
+rclpy run1: start -> server seen 0.73s -> goal accepted 0.73s
+rclpy run2: start -> server seen 0.53s -> goal accepted 0.53s
+rclpy run3: start -> server seen 0.73s -> goal accepted 0.74s
+rclpy run4: start -> server seen 0.72s -> goal accepted 0.73s
+rclpy run5: start -> server seen 0.73s -> goal accepted 0.73s
+--- against a server already running for 3s (3 runs)
+[server] SERVER_READY name=/fibonacci ns=/ mode=ok t=1793580291.888
+cli run1: start -> Goal accepted 0.66s ; total 0.89s ; waiting lines=1
+cli run2: start -> Goal accepted 0.66s ; total 0.89s ; waiting lines=1
+cli run3: start -> Goal accepted 0.66s ; total 0.90s ; waiting lines=1
+ 00:44:58 up 96 days, 13:41,  0 users,  load average: 0.25, 0.23, 0.22
+=== done lyrical
+MAINDONE
+
+##### X1 two containers on the default bridge network: server ROS_DOMAIN_ID=7, client default (unset)
+SERVER_READY name=/fibonacci ns=/ mode=ok t=1793580313.880
+client container ROS_DOMAIN_ID=unset
+$ timeout 15 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci '{order: 3}'
+Waiting for an action server to become available...
+Failed to check if action server is available: rcl node's context is invalid, at ./src/rcl/node.c:409
+rc=124 elapsed=15.46s
+$ ros2 action list -t
+rc=0
+
+##### X2 same server container, client container with ROS_DOMAIN_ID=7
+client container ROS_DOMAIN_ID=7
+$ timeout 30 ros2 action send_goal /fibonacci example_interfaces/action/Fibonacci '{order: 3}'
+Waiting for an action server to become available...
+Sending goal:
+     order: 3
+
+Goal accepted with ID: 99b43f546d1b450ea5c4760119195160
+
+Result:
+    sequence:
+- 0
+- 1
+- 1
+- 2
+rc=0 elapsed=1.87s
+$ ros2 action list -t
+/fibonacci [example_interfaces/action/Fibonacci]
+rc=0
+=== host part done lyrical
+ALLDONE
