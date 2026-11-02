@@ -1,0 +1,170 @@
+<pre><code>$ ros2 launch pk2 v.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-02-02-20-56-282748-07bdf14633b4-187
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [printer.py-1]: process started with pid [188]
+[printer.py-1] [INFO] [1793586056.646174917] [printer]: LOG 0 emit=8349435.536
+[printer.py-1] [INFO] [1793586057.047383615] [printer]: LOG 1 emit=8349435.953
+...
+[INFO] [printer.py-1]: process has finished cleanly [pid 188]</code></pre>
+
+<p>The node called <code>print()</code> five times, once before each of those <code>LOG</code> lines. None of the five <code>PRINT</code> lines reached the terminal. The <code>get_logger().info()</code> lines did. A C++ node with <code>std::cout</code> behaved the same way. There's no error message for this. The output just isn't there, or it shows up seconds late, all at once.</p>
+
+<p>Short answer: two separate things hide your prints. First, a launch <code>Node</code> without <code>output=</code> uses <code>output='log'</code>, and stdout goes only to <code>launch.log</code>. Second, with <code>output='screen'</code> the node's stdout is a pipe, not a terminal, so Python and C++ buffer it. Lines show up when the buffer fills or when the process exits. The fix that worked for both Python and C++ on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-python">Node(
+    package='my_pkg',
+    executable='my_node',
+    output='screen',     # stdout to the terminal, not only to launch.log
+    emulate_tty=True,    # give the node a pseudo-terminal, so stdout is line-buffered
+)</code></pre>
+
+<p>With those two keywords, every <code>print()</code> and <code>std::cout &lt;&lt; "...\n"</code> line reached the terminal within 2 ms of being written. For Python only, <code>additional_env={'PYTHONUNBUFFERED': '1'}</code> or <code>print(..., flush=True)</code> worked just as well. If you only need to see messages, use the logger. In every run that didn't set <code>RCUTILS_LOGGING_USE_STDOUT</code>, <code>get_logger().info()</code> lines reached the terminal within 22 ms.</p>
+
+<h2>Find your case</h2>
+
+<p>All rows below behaved the same on Humble, Jazzy and Lyrical, except the Python buffer size (see Version notes). "Delay" is the time from the <code>print</code> call to the line appearing in the terminal.</p>
+
+<table>
+<thead><tr><th>What you have</th><th>What I saw</th></tr></thead>
+<tbody>
+<tr><td>No <code>output=</code> (or <code>output='log'</code>)</td><td>0 of 5 prints on screen. All 5 in <code>launch.log</code>. Logger lines on screen.</td></tr>
+<tr><td><code>output='screen'</code>, Python <code>print()</code></td><td>5 of 5 on screen, but all in one batch at exit. Delay 0.40 s to 2.03 s.</td></tr>
+<tr><td><code>output='screen'</code>, C++ <code>std::cout &lt;&lt; "...\n"</code></td><td>Same: one batch at exit, delay 0.50 s to 2.11 s.</td></tr>
+<tr><td><code>output='screen'</code>, C++ <code>std::endl</code></td><td>Real time, delay 2 ms or less.</td></tr>
+<tr><td><code>output='screen'</code> plus <code>emulate_tty=True</code></td><td>Real time for Python and C++, 2 ms or less.</td></tr>
+<tr><td><code>output='screen'</code> plus <code>PYTHONUNBUFFERED=1</code></td><td>Real time, 2 ms or less.</td></tr>
+<tr><td><code>output='screen'</code>, <code>print(..., flush=True)</code></td><td>Real time, 1 ms or less.</td></tr>
+<tr><td>Node crashes (<code>os.abort()</code>) with <code>output='screen'</code></td><td>0 of 5 prints ever shown. Logger lines were shown.</td></tr>
+<tr><td>Node stopped with Ctrl+C (SIGINT)</td><td>All prints shown, but only at exit.</td></tr>
+<tr><td><code>ros2 run</code> in a terminal</td><td>Real time.</td></tr>
+<tr><td><code>ros2 run ... | tee log.txt</code> (any pipe)</td><td>Buffered, one batch at exit.</td></tr>
+<tr><td><code>RCUTILS_LOGGING_USE_STDOUT=1</code> with <code>output='screen'</code></td><td>Now the logger lines are buffered too, delay up to 2.07 s.</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-02 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images. One <code>ament_cmake</code> package held two nodes. <code>printer.py</code> is an rclpy node that calls <code>print()</code> and then <code>get_logger().info()</code> five times, 0.4 s apart, and exits. <code>cpp_printer</code> does the same with <code>std::cout</code> and <code>RCLCPP_INFO</code>. Each line carries its own <code>CLOCK_MONOTONIC</code> timestamp (<code>emit=</code>).</p>
+
+<p>A launch file started one <code>Node</code> per run, with the <code>output</code>, <code>emulate_tty</code> and <code>additional_env</code> keywords switched on or off. I ran <code>ros2 launch</code> inside <code>script</code>, so launch itself had a pseudo-terminal, like in a normal shell. A stamper then recorded the arrival time of every line. Delay is arrival minus emit. After each run I counted the node's lines in every file under <code>~/.ros/log</code>. There were 22 runs per distro: 12 Python launch cases, 6 C++ launch cases, and 4 <code>ros2 run</code> cases. I also ran one plain Python pipe test with no ROS involved.</p>
+
+<p>The defaults, read from <code>ExecuteProcess</code>'s signature on each distro, were the same everywhere: <code>output = 'log'</code> and <code>emulate_tty = False</code>.</p>
+
+<h2>Cause 1: no output= means stdout goes to launch.log only</h2>
+
+<p>With no <code>output</code> keyword, the five <code>PRINT</code> lines never reached the terminal. They were all in the launch log file, at <code>~/.ros/log/&lt;date-time-host-pid&gt;/launch.log</code>. That's the directory launch names in its first line, <code>All log files can be found below ...</code>. The C++ node was the same: 0 <code>COUT</code> lines on screen, 5 in <code>launch.log</code>. An explicit <code>output='log'</code> gave the same result.</p>
+
+<p>The logger lines did show up in that run. The ROS loggers write to stderr by default (moving them to stdout changed their behaviour, see below), and with <code>output='log'</code> launch still put them on screen. That's why the logger works and <code>print</code> doesn't, and it's the exact situation in the questions linked at the end.</p>
+
+<p>Where things ended up:</p>
+
+<table>
+<thead><tr><th>output=</th><th>print / cout on screen</th><th>print / cout in launch.log</th><th>logger on screen</th></tr></thead>
+<tbody>
+<tr><td>not set</td><td>0 of 5</td><td>5</td><td>5 of 5</td></tr>
+<tr><td><code>'log'</code></td><td>0 of 5</td><td>5</td><td>5 of 5</td></tr>
+<tr><td><code>'screen'</code></td><td>5 of 5 (buffered)</td><td>0</td><td>5 of 5</td></tr>
+<tr><td><code>'both'</code></td><td>5 of 5 (buffered)</td><td>5</td><td>5 of 5</td></tr>
+</tbody>
+</table>
+
+<p>One more file showed up in every run: the rcl logging file, named like <code>python3_188_1793586056581.log</code> or <code>cpp_printer_588_...log</code>. In every five-line run that exited normally it had the 5 logger lines and 0 print lines. Don't look for <code>print</code> output there.</p>
+
+<h2>Cause 2: output='screen' gives the node a pipe, and pipes are block-buffered</h2>
+
+<p>With <code>output='screen'</code> the prints did appear, but late. On Humble the five <code>PRINT</code> lines all arrived at 2.49 s, right before <code>process has finished cleanly</code>. The first one was written 2.03 s earlier. The logger lines in the same run arrived within 16 ms each. The node had already reported why: <code>ISATTY stdout=False</code>. Launch connects the node's stdout to a pipe, and on a pipe both Python and the C++ runtime collect output in a buffer instead of writing each line.</p>
+
+<p>To find the buffer size, I made each node write 300 lines of 64 bytes, 5 ms apart, with <code>output='screen'</code>, and grouped the lines by arrival time:</p>
+
+<table>
+<thead><tr><th>Node</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Python <code>print()</code></td><td>batches of 128 lines = 8,192 bytes</td><td>8,192 bytes</td><td>one batch, all 19,200 bytes at exit</td></tr>
+<tr><td>C++ <code>std::cout &lt;&lt; "\n"</code></td><td>batches of 64 lines = 4,096 bytes</td><td>4,096 bytes</td><td>4,096 bytes</td></tr>
+</tbody>
+</table>
+
+<p>So a busy node that prints a lot does show output, in chunks. A node that prints a status line now and then looks silent, because nothing appears until 8 KiB have piled up in Python (128 of my 64-byte lines) or 4 KiB in C++ (64 lines). A <code>"\n"</code> in C++ doesn't flush a pipe. <code>std::endl</code> does: with it, every <code>COUT</code> line arrived within 2 ms.</p>
+
+<p>Lyrical is different because of Python. The plain pipe test (2,500 lines of 64 bytes, 1 ms apart, no ROS) printed <code>io.DEFAULT_BUFFER_SIZE = 131072</code> on Python 3.14.4 and showed a first batch of 2,048 lines, 131,072 bytes. Python 3.10.12 (Humble) and 3.12.3 (Jazzy) printed <code>8192</code> and flushed every 128 lines. On Lyrical a Python node has to print 128 KiB before anything shows up, so in practice you see nothing until it exits.</p>
+
+<h2>Crashes lose buffered prints, Ctrl+C doesn't</h2>
+
+<p>If the output only appears at exit, the next question is what happens when the node doesn't exit cleanly. I tested two cases with <code>output='screen'</code>.</p>
+
+<p>Crash. The Python node printed five lines and then called <code>os.abort()</code>, which stands in for a segfault in a C extension. Launch reported <code>process has died [pid 485, exit code -6, ...]</code>. None of the five <code>PRINT</code> lines ever appeared, on any distro. The logger lines did, because stderr isn't buffered. With <code>emulate_tty=True</code> the same crash showed all five prints. If you add <code>print</code> calls to find where a node crashes, this is how they mislead you: the last lines before the crash are the ones you lose. The rcl log file from that run had 0 logger lines in it too, although the same lines had reached the terminal.</p>
+
+<p>Ctrl+C. A node that prints from a timer every 0.2 s ran under <code>rclpy.spin()</code>. After 3 s I sent SIGINT to the process group, as a terminal does on Ctrl+C. All 12 prints arrived, in one batch, when the node exited (the first was 2.36 s late on Humble). The C++ version showed all 13 <code>COUT</code> lines the same way. Nothing was lost. The Python node ended with a traceback and <code>exit code 1</code>, with <code>rclpy.executors.ExternalShutdownException</code> as the last line on Humble and Jazzy. That traceback is a shutdown issue, not an output issue. I measured it separately in <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">ROS 2 node shutdown: Ctrl+C, SIGTERM and launch's escalation</a>.</p>
+
+<h2>Fix options compared</h2>
+
+<p>Every option below was combined with <code>output='screen'</code>. The delay is the worst of the five lines in that run, across the three distros.</p>
+
+<table>
+<thead><tr><th>Fix</th><th>Python delay</th><th>C++ delay</th><th>Prints survive a crash</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>none (pipe)</td><td>2.03 s, all at exit</td><td>2.11 s, all at exit</td><td>no</td><td>the default behaviour</td></tr>
+<tr><td><code>emulate_tty=True</code></td><td>2 ms</td><td>1 ms</td><td>yes (Python tested)</td><td>works for any language, node sees <code>isatty()</code> true</td></tr>
+<tr><td><code>additional_env={'PYTHONUNBUFFERED': '1'}</code></td><td>2 ms</td><td>no effect expected (Not tested)</td><td>Not tested</td><td>Python only</td></tr>
+<tr><td><code>print(..., flush=True)</code></td><td>1 ms</td><td>n/a</td><td>Not tested</td><td>only the lines you change</td></tr>
+<tr><td><code>std::endl</code> instead of <code>"\n"</code></td><td>n/a</td><td>2 ms</td><td>Not tested</td><td>only the lines you change</td></tr>
+<tr><td>use the logger</td><td>18 ms</td><td>3 ms</td><td>yes, on screen (Python tested)</td><td>adds level, time and node name</td></tr>
+</tbody>
+</table>
+
+<p><code>emulate_tty=True</code> is the one to use when you can't or don't want to edit the node. It's a launch keyword, so it also works for third-party nodes. One side effect: the logger lines got ANSI color codes. The raw output had <code>ESC</code> bytes only in the <code>emulate_tty</code> runs, and none in the others. If you pipe the whole launch output into a file, those codes end up in it.</p>
+
+<p>For your own Python nodes, <code>PYTHONUNBUFFERED=1</code> is the smallest change. It goes in <code>additional_env</code> of the <code>Node</code>. Exporting it in the shell before <code>ros2 launch</code> should reach the nodes too, since they inherit launch's environment, but I only measured the <code>additional_env</code> form.</p>
+
+<h2>Don't send the logger to stdout to "fix" it</h2>
+
+<p>A common tip is <code>RCUTILS_LOGGING_USE_STDOUT=1</code>, so that logger lines go to the same stream as <code>print</code>. With <code>output='screen'</code> and no tty, that made things worse. The logger lines arrived between 0.43 s and 2.07 s late, in one batch at exit, just like the prints. Before, they had been on time. If you set it, add <code>emulate_tty=True</code> too. I didn't test <code>RCUTILS_LOGGING_BUFFERED_STREAM</code>.</p>
+
+<h2>ros2 run looks fine because your terminal is a tty</h2>
+
+<p>Several of the questions say the prints work with <code>ros2 run</code> but not with <code>ros2 launch</code>. In my run, <code>ros2 run</code> in a terminal gave <code>ISATTY stdout=True</code>, and every print and <code>cout</code> line arrived within 1 ms. Then I piped the same command into another program, the way <code>| tee</code> or <code>| grep</code> does. The node reported <code>ISATTY stdout=False</code>. The Python prints were delayed 0.40 s to 2.03 s and the C++ lines 0.50 s to 2.11 s, again in one batch at exit. So the difference isn't <code>ros2 run</code> versus <code>ros2 launch</code>. It's whether stdout is a terminal. A node started from systemd, from a Docker container without <code>-t</code> or from a CI job has the same problem, for the same reason. I didn't measure those three directly.</p>
+
+<h2>Version notes</h2>
+
+<p>The launch defaults (<code>output='log'</code>, <code>emulate_tty=False</code>), where each stream ended up, and the C++ 4,096-byte batches were the same on Humble, Jazzy and Lyrical. Three things differed:</p>
+
+<ul>
+<li>Python's default buffer size. It was 8,192 bytes on Humble (Python 3.10.12) and Jazzy (Python 3.12.3), and 131,072 bytes on Lyrical (Python 3.14.4). A Python node that printed 19,200 bytes over 1.5 s showed nothing until exit on Lyrical, and its first lines were 1.55 s late. On Humble and Jazzy the first batch came at 128 lines and the worst delay was 0.65 s. Code that "worked well enough" on Jazzy because it printed a lot can look silent on Lyrical.</li>
+<li>The rclcpp SIGINT message was <code>signal_handler(SIGINT/SIGTERM)</code> on Humble and Jazzy and <code>signal_handler(signum=2)</code> on Lyrical.</li>
+<li>After SIGINT, the Python traceback ended in <code>rclpy.executors.ExternalShutdownException</code> on Humble and Jazzy. On Lyrical my filter caught only the <code>Traceback</code> line, so I can't tell you its last line. Exit code 1 on all three.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>XML and YAML launch files (<code>output="screen"</code>, <code>emulate_tty</code>), <code>ExecuteProcess</code> without <code>Node</code>, component containers, <code>python3 -u</code> in a shebang, <code>sys.stdout.reconfigure(line_buffering=True)</code>, <code>RCUTILS_LOGGING_BUFFERED_STREAM</code>, <code>PYTHONUNBUFFERED</code> with a C++ node, crashes of a C++ node, SIGTERM and SIGKILL, systemd, <code>docker run</code> without <code>-t</code>, Windows, Cyclone DDS, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does print() not show up in ros2 launch?</h3>
+<p>Without <code>output=</code> a launch <code>Node</code> uses <code>output='log'</code>, so stdout goes only to <code>~/.ros/log/.../launch.log</code>. All 5 prints were in that file and 0 on screen. Add <code>output='screen'</code>, and add <code>emulate_tty=True</code> so the lines aren't held back.</p>
+
+<h3>Why do my prints appear only when the node exits?</h3>
+<p>With <code>output='screen'</code> the node's stdout is a pipe, and Python and C++ buffer pipes. Python held 8,192 bytes on Humble and Jazzy and 131,072 bytes on Lyrical. C++ held 4,096 bytes. Short status lines take a long time to fill that, so they come out at exit. <code>emulate_tty=True</code>, <code>PYTHONUNBUFFERED=1</code>, <code>flush=True</code> or <code>std::endl</code> made them show up within 2 ms.</p>
+
+<h3>Why does get_logger().info() work when print() doesn't?</h3>
+<p>The ROS loggers write to stderr, and launch showed stderr on screen even with <code>output='log'</code>, without buffering it. Logger lines arrived within 18 ms in every launch run that kept the default. Setting <code>RCUTILS_LOGGING_USE_STDOUT=1</code> moved them to stdout, and then they were buffered like the prints.</p>
+
+<h3>Why does std::cout work with ros2 run but not ros2 launch?</h3>
+<p>Under <code>ros2 run</code> in a terminal, stdout is a tty and the C++ runtime writes each line. Under launch it's a pipe, and lines ending in <code>"\n"</code> waited for a 4,096-byte buffer or for exit. Piping <code>ros2 run</code> into another command gave the same delay. Use <code>output='screen'</code> with <code>emulate_tty=True</code>, or <code>std::endl</code>.</p>
+
+<h3>Can buffered prints be lost?</h3>
+<p>Yes, when the process dies. After <code>os.abort()</code> (exit code -6), 0 of 5 prints were ever shown with <code>output='screen'</code>, and 5 of 5 with <code>emulate_tty=True</code>. On Ctrl+C nothing was lost: all prints came out when the node exited.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does print() not show up in ros2 launch?", "acceptedAnswer": {"@type": "Answer", "text": "Without output= a launch Node uses output='log', so stdout goes only to ~/.ros/log/.../launch.log. All 5 prints were in that file and 0 on screen. Add output='screen', and add emulate_tty=True so the lines are not held back."}},
+{"@type": "Question", "name": "Why do my prints appear only when the node exits?", "acceptedAnswer": {"@type": "Answer", "text": "With output='screen' the node's stdout is a pipe, and Python and C++ buffer pipes. Python held 8,192 bytes on Humble and Jazzy and 131,072 bytes on Lyrical. C++ held 4,096 bytes. emulate_tty=True, PYTHONUNBUFFERED=1, flush=True or std::endl made lines show up within 2 ms."}},
+{"@type": "Question", "name": "Why does get_logger().info() work when print() does not?", "acceptedAnswer": {"@type": "Answer", "text": "The ROS loggers write to stderr, and launch showed stderr on screen even with output='log', without buffering it. Logger lines arrived within 18 ms in every launch run that kept the default. Setting RCUTILS_LOGGING_USE_STDOUT=1 moved them to stdout, and then they were buffered like the prints."}},
+{"@type": "Question", "name": "Why does std::cout work with ros2 run but not ros2 launch?", "acceptedAnswer": {"@type": "Answer", "text": "Under ros2 run in a terminal, stdout is a tty and the C++ runtime writes each line. Under launch it is a pipe, and lines ending in a newline waited for a 4,096-byte buffer or for exit. Use output='screen' with emulate_tty=True, or std::endl."}},
+{"@type": "Question", "name": "Can buffered prints be lost?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, when the process dies. After os.abort() (exit code -6), 0 of 5 prints were ever shown with output='screen', and 5 of 5 with emulate_tty=True. On Ctrl+C nothing was lost: all prints came out when the node exited."}}
+]}
+</script>
+
+<p>Measured on 2026-11-02 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, launch 1.0.15, launch_ros 0.19.14, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, launch 3.4.12, launch_ros 0.26.13, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, launch 3.9.8, launch_ros 0.29.9, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, Python 3.14.4), default RMW (Fast DDS), on a 2 vCPU Linux host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-01-ros2-launch-print-not-showing/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/93247">No stdout logging output in ROS2 using launch</a>, <a href="https://robotics.stackexchange.com/questions/104961">cout behaviour when using ros2 run and ros2 launch</a>, <a href="https://robotics.stackexchange.com/questions/104557">ROS2 launch: No way to get log displayed in console?</a>, <a href="https://robotics.stackexchange.com/questions/112638">Handling Stdin and Stdout in a ROS2 Node Launched via a Launch File</a>, <a href="https://github.com/ros2/launch/issues/188">[launch] not wiring python prints to stdout in realtime</a>.</p>
