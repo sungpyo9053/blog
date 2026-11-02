@@ -47,8 +47,8 @@ add_action(
             'body'     => wp_json_encode( [
                 'host'        => $host,
                 'key'         => HUNTLAB_INDEXNOW_KEY,
-                'keyLocation' => home_url( '/' . HUNTLAB_INDEXNOW_KEY . '.txt' ),
-                'urlList'     => [ get_permalink( $post ), home_url( '/' ), home_url( '/en/' ) ],
+                'keyLocation' => home_url( '/' . HUNTLAB_INDEXNOW_KEY . '.txt', 'https' ),
+                'urlList'     => [ set_url_scheme( get_permalink( $post ), 'https' ), home_url( '/', 'https' ), home_url( '/en/', 'https' ) ], // https: wp-config WP_HOME is http://, so cron-time URLs came out http (2026-11-02)
             ] ),
         ] );
     },
