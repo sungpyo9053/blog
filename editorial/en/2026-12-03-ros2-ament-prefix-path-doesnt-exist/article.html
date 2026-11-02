@@ -1,0 +1,191 @@
+<pre><code>[0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+[0.326s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist</code></pre>
+
+<p>When the whole sourced workspace is gone or moved, a third line shows up first:</p>
+
+<pre><code>[0.318s] WARNING:colcon.colcon_core.prefix_path.colcon:The path '/ws/install' in the environment variable COLCON_PREFIX_PATH doesn't exist</code></pre>
+
+<p>Short answer: this is a warning, not an error. Your shell sourced <code>install/setup.bash</code> at some point, and that put one path per package into <code>AMENT_PREFIX_PATH</code> (and, for <code>ament_cmake</code> packages, into <code>CMAKE_PREFIX_PATH</code>). Then that directory was deleted or moved. colcon checks every entry when it starts and prints one line for each entry that is missing. In my runs the build still finished (exit code 0 where I checked it), and the packages worked afterwards. To get rid of it, open a new terminal and source again:</p>
+
+<pre><code># new terminal
+source /opt/ros/humble/setup.bash      # or jazzy, lyrical
+cd ~/ros2_ws
+colcon build
+source install/setup.bash</code></pre>
+
+<p>Sourcing again in the same terminal did not help. That surprised me, so it gets its own section below. Neither did sourcing <code>/opt/ros/&lt;distro&gt;/setup.bash</code> again. The stale entry stayed in the variable both times.</p>
+
+<h2>Find your case</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical. All three images ship the same colcon (colcon-core 0.21.3, colcon-ros 0.5.0), which explains why.</p>
+
+<table>
+<thead><tr><th>What you did in a terminal that had sourced the workspace</th><th>What colcon build printed</th></tr></thead>
+<tbody>
+<tr><td><code>rm -rf build install log</code>, then <code>colcon build</code></td><td>One <code>AMENT_PREFIX_PATH</code> line per package (3) and one <code>CMAKE_PREFIX_PATH</code> line per <code>ament_cmake</code> package (2). 5 lines in total. Build OK.</td></tr>
+<tr><td>Same, then <code>colcon build</code> a second time</td><td>Nothing. The directories exist again.</td></tr>
+<tr><td>Deleted <code>src/cpp_b</code> and <code>install/cpp_b</code> (an <code>ament_cmake</code> package)</td><td>2 lines, both for <code>install/cpp_b</code>. Build OK.</td></tr>
+<tr><td>Deleted <code>src/py_pkg</code> and <code>install/py_pkg</code> (an <code>ament_python</code> package)</td><td>1 line, <code>AMENT_PREFIX_PATH</code> only</td></tr>
+<tr><td>Deleted <code>src/cpp_b</code> only</td><td>Nothing. But <code>install/cpp_b</code> stays, and <code>ros2 pkg list</code> still lists <code>cpp_b</code>.</td></tr>
+<tr><td>Moved the workspace (<code>mv /ws /ws_moved</code>) and built there</td><td>6 lines, including <code>COLCON_PREFIX_PATH</code>, then a CMake error for <code>cpp_a</code></td></tr>
+<tr><td>Deleted the workspace and built a second one</td><td>6 lines, including <code>COLCON_PREFIX_PATH</code>. Build OK.</td></tr>
+<tr><td>10 or 30 <code>ament_cmake</code> packages, <code>rm -rf build install log</code></td><td>20 lines and 60 lines (2 per package)</td></tr>
+</tbody>
+</table>
+
+<p>The count tells you what happened. Two lines for one package name means one <code>ament_cmake</code> package is gone. One line means an <code>ament_python</code> package is gone. A <code>COLCON_PREFIX_PATH</code> line means the whole <code>install</code> directory of a workspace you sourced is gone or somewhere else.</p>
+
+<p>These lines are separate from any real failure. The CMake error in the moved-workspace row comes from the old <code>build/</code> directory, not from the prefix paths. Treat it as a different problem.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-02 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images on a 2 vCPU Linux VM, one distro after another. The test workspace <code>/ws</code> had three packages:</p>
+
+<ul>
+<li><code>py_pkg</code>, an <code>ament_python</code> package with one console script, <code>hello</code></li>
+<li><code>cpp_a</code> and <code>cpp_b</code>, two minimal <code>ament_cmake</code> packages</li>
+</ul>
+
+<p>Each test case starts a fresh <code>bash -c</code> that sources only <code>/opt/ros/&lt;distro&gt;/setup.bash</code>, then runs the commands for that case, including any <code>source install/setup.bash</code>. So "same shell" below means one bash process that sourced the workspace and then deleted or moved something. The script counts lines containing <code>doesn't exist</code> in the output and records the exit code and wall time. For the scale test I built a second workspace with 10, then 30, empty <code>ament_cmake</code> packages.</p>
+
+<p>After sourcing a clean build, the variables looked like this on all three distros (with the distro name changed):</p>
+
+<pre><code>AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/humble
+CMAKE_PREFIX_PATH=/ws/install/cpp_b:/ws/install/cpp_a
+COLCON_PREFIX_PATH=/ws/install</code></pre>
+
+<p>That explains the counts. Every package is its own entry in <code>AMENT_PREFIX_PATH</code>. Only the CMake packages are in <code>CMAKE_PREFIX_PATH</code>. <code>COLCON_PREFIX_PATH</code> holds the <code>install</code> directory once.</p>
+
+<h2>Cause 1: you deleted build, install and log in a sourced terminal</h2>
+
+<p>This is the most common way to see the warning. You run <code>rm -rf build install log</code> to start clean, then <code>colcon build</code> in the same terminal. The shell still remembers every path from the last <code>source install/setup.bash</code>. colcon checks those paths when it starts. On Humble all five warnings were stamped 0.325s:</p>
+
+<pre><code>[0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+[0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+[0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_a' in the environment variable AMENT_PREFIX_PATH doesn't exist
+[0.325s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+[0.325s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_a' in the environment variable CMAKE_PREFIX_PATH doesn't exist</code></pre>
+
+<p>The <code>catkin</code> in the logger name is just the colcon-ros module that checks <code>CMAKE_PREFIX_PATH</code>. It doesn't mean anything is using catkin.</p>
+
+<p>In this case the warning fixes itself. The build recreates exactly the same directories. A second <code>colcon build</code> in the same terminal printed nothing. In that same shell, after the rebuild, <code>ros2 pkg list</code> showed all three packages and <code>ros2 run py_pkg hello</code> printed <code>HELLO from py_pkg</code>. A new shell that sourced the rebuilt workspace also ran <code>hello</code> and found <code>cpp_a</code>.</p>
+
+<p>No <code>COLCON_PREFIX_PATH</code> line appeared in this case, even though <code>/ws/install</code> had been deleted too. That line only showed up when I built in a different directory than the one I had sourced (causes 3 and 4).</p>
+
+<h2>Cause 2: you removed a package from the workspace</h2>
+
+<p>This matches the most viewed question on this warning: a package was deleted from <code>src</code>, its <code>install</code> folder was removed by hand, and every later build warned about it. I deleted <code>src/cpp_b</code>, <code>build/cpp_b</code> and <code>install/cpp_b</code>, then built in the same shell:</p>
+
+<pre><code>[0.323s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+[0.323s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist</code></pre>
+
+<p>Unlike cause 1, this one doesn't go away on its own. Nothing will recreate <code>install/cpp_b</code>, so every build in that terminal warns again. For the <code>ament_python</code> package the same steps gave one line, because Python packages are not added to <code>CMAKE_PREFIX_PATH</code>.</p>
+
+<p>The <code>ros2</code> command didn't warn. In that shell, <code>ros2 pkg list</code> no longer listed <code>cpp_b</code>, and <code>ros2 pkg prefix cpp_b</code> printed <code>Package not found</code> with exit code 1. <code>ros2 pkg prefix cpp_a</code> still worked. The stale entry only bothers colcon.</p>
+
+<h3>Deleting only src leaves a ghost package</h3>
+
+<p>If you delete <code>src/cpp_b</code> and leave <code>install/cpp_b</code> alone, you get no warning at all. colcon doesn't delete install folders of packages that are no longer in <code>src</code>. After the rebuild, <code>install/cpp_b</code> was still there. Even in a new shell, <code>ros2 pkg list</code> listed <code>cpp_b</code> and <code>ros2 pkg prefix cpp_b</code> returned <code>/ws/install/cpp_b</code>.</p>
+
+<p>So when you remove a package, delete <code>build/&lt;pkg&gt;</code> and <code>install/&lt;pkg&gt;</code> as well, then start a new terminal. Doing only the deletion gives you the warning. Doing nothing gives you a package that still looks installed.</p>
+
+<h2>Cause 3: you moved or renamed the workspace</h2>
+
+<p>I sourced <code>/ws/install/setup.bash</code>, ran <code>mv /ws /ws_moved</code> and built inside <code>/ws_moved</code>. colcon printed six lines: <code>COLCON_PREFIX_PATH</code> for <code>/ws/install</code>, three <code>AMENT_PREFIX_PATH</code> lines and two <code>CMAKE_PREFIX_PATH</code> lines. All of them point to the old location.</p>
+
+<p>That build also failed, but not because of the warnings. <code>cpp_a</code> stopped with <code>CMake Error: The current CMakeCache.txt directory /ws_moved/build/cpp_a/CMakeCache.txt is different than the directory /ws/build/cpp_a where CMakeCache.txt was created</code>. The old <code>build</code> directory still remembers the old path. After a move, delete <code>build</code> and <code>install</code>, open a new terminal, and build again.</p>
+
+<h2>Cause 4: you sourced another workspace and then deleted it</h2>
+
+<p>Overlays add up. If you sourced workspace A and then build workspace B in the same terminal, A's paths are still in the variables. I sourced <code>/ws</code>, deleted it, and built a separate <code>/ws2</code>. colcon printed the same six lines, all for <code>/ws</code>, a workspace that <code>/ws2</code> never used. The <code>/ws2</code> build finished normally.</p>
+
+<p>The same thing happens if your <code>~/.bashrc</code> sources a workspace you have since deleted. Every new terminal then starts with stale entries. Check for a <code>source .../install/setup.bash</code> line pointing at a folder that no longer exists.</p>
+
+<h2>Why sourcing again in the same terminal doesn't help</h2>
+
+<p>This was the most useful result. After deleting <code>cpp_b</code>, I ran <code>source install/setup.bash</code> again in the same shell and printed the variable:</p>
+
+<pre><code>AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/humble</code></pre>
+
+<p><code>/ws/install/cpp_b</code> is still there, and the next build printed both warnings again. Sourcing <code>/opt/ros/humble/setup.bash</code> first, then <code>install/setup.bash</code>, gave the same variable and the same two warnings. Jazzy and Lyrical behaved the same way. The setup scripts add their own paths and skip ones that are already there. They don't remove paths that someone else added, even when those paths no longer exist.</p>
+
+<p>A new shell that sourced the same <code>install/setup.bash</code> got this instead:</p>
+
+<pre><code>AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_a:/opt/ros/humble</code></pre>
+
+<p>That shell's build printed nothing. A fresh shell builds the list from what is in <code>install</code> now. Your old shell keeps the list it built before.</p>
+
+<h2>Fix options compared</h2>
+
+<p>All fixes started from cause 2: <code>cpp_b</code> deleted from <code>src</code>, <code>build</code> and <code>install</code> in a shell that had sourced the workspace. "Lines" is the number of <code>doesn't exist</code> lines from the next <code>colcon build</code>. Results were identical on all three distros.</p>
+
+<table>
+<thead><tr><th>Fix</th><th>Lines</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Nothing (control)</td><td>2</td><td>Repeats on every build</td></tr>
+<tr><td><code>source install/setup.bash</code> again, same shell</td><td>2</td><td>Stale path stays in the variable</td></tr>
+<tr><td><code>source /opt/ros/&lt;distro&gt;/setup.bash</code>, then <code>install/setup.bash</code>, same shell</td><td>2</td><td>Stale path stays in the variable</td></tr>
+<tr><td>New shell, only <code>/opt/ros/&lt;distro&gt;</code> sourced, then build</td><td>0</td><td>The recommended way to build</td></tr>
+<tr><td>New shell, source <code>install/setup.bash</code>, then build</td><td>0</td><td>Variable lists only existing packages</td></tr>
+<tr><td><code>export AMENT_PREFIX_PATH=/opt/ros/&lt;distro&gt;</code> and <code>unset CMAKE_PREFIX_PATH COLCON_PREFIX_PATH</code>, same shell</td><td>0</td><td>Works, but also drops any other overlay you had sourced</td></tr>
+<tr><td><code>env -i HOME=$HOME PATH=/usr/bin:/bin bash -c 'source /opt/ros/&lt;distro&gt;/setup.bash; colcon build'</code></td><td>0</td><td>A clean environment for one command, without leaving the terminal</td></tr>
+<tr><td><code>colcon --log-level error build</code></td><td>0</td><td>Hides the lines, doesn't fix the variable. Also hides every other colcon warning.</td></tr>
+</tbody>
+</table>
+
+<p>Open a new terminal. It's the simplest fix, and it also clears whatever else the old shell picked up. I wouldn't use <code>--log-level error</code> for this. The warning is often the first sign that you are building against an overlay you didn't mean to use, and hiding it hides that too.</p>
+
+<p>A good habit that avoids the warning: build in a terminal that sourced only <code>/opt/ros/&lt;distro&gt;/setup.bash</code>, and run nodes from a terminal that sourced <code>install/setup.bash</code>. In my runs, a build from a shell like that never printed the warning, even after <code>rm -rf build install log</code>. If <code>ros2</code> itself stops working after you change what you source, the difference between <code>setup.bash</code> and <code>local_setup.bash</code> is explained in <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">ros2: command not found on Jazzy? local_setup.bash vs setup.bash</a>.</p>
+
+<h2>Does the warning slow down or break the build?</h2>
+
+<p>It didn't break anything I tested. I recorded the exit code for the <code>rm -rf build install log</code> case, and it was 0 on all three distros. In every other case colcon reported no failed package, apart from the moved-workspace build, which failed on its CMake cache. The packages built by a warned build ran in a new shell. The warning is about what is already in your environment, not about what is being built.</p>
+
+<p>Timing was single runs, so treat the numbers as rough. With 30 packages, the warned build and the clean-shell build took 14.70 s and 14.59 s on Humble, 17.11 s and 14.93 s on Jazzy, and 30.07 s and 17.18 s on Lyrical. With 10 packages: 5.18 s and 4.95 s (Humble), 5.78 s and 5.38 s (Jazzy), 7.84 s and 6.11 s (Lyrical). The warned run was slower every time on Jazzy and Lyrical, and once by a lot. I can't tell from one run each whether that comes from the warning itself or from noise on a shared 2 vCPU VM. On Humble and Jazzy the warnings were all stamped within 0.4 s of colcon starting.</p>
+
+<p>The line count grows with the workspace. 30 <code>ament_cmake</code> packages gave 60 lines, and those can push a real error off the screen. That's a better reason to fix it than speed.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble, Jazzy and Lyrical all had colcon-core 0.21.3, colcon-ros 0.5.0 and colcon-cmake 0.2.30, and gave the same warnings, counts and fix results.</li>
+<li>Logger format: all three images printed <code>[0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path ...</code>. Some posts show <code>colcon.colcon_ros.prefix_path.ament WARNING The path ...</code> instead. That's the same check with a different colcon log format, so search for the part from <code>The path</code> on.</li>
+<li>Lyrical printed a broken timestamp in front of the warnings: <code>[-1793604232554663936.000s] WARNING:colcon.colcon_ros.prefix_path.ament:...</code>. The rest of the line was correct. Humble (Python 3.10.12) and Jazzy (Python 3.12.3) printed normal times. Lyrical runs Python 3.14.4 with the same colcon-core 0.21.3. I didn't check what causes it.</li>
+<li>Lyrical's CMake 4.2.3 also printed <code>Compatibility with CMake &lt; 3.10 will be removed</code> for my test packages, because they said <code>cmake_minimum_required(VERSION 3.8)</code>. That's unrelated to the prefix paths, but it shows up in the same output.</li>
+<li><code>ros2 pkg list</code> and <code>ros2 pkg prefix</code> ignored the missing paths silently on all three distros.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Not tested: <code>--merge-install</code> workspaces, <code>--symlink-install</code>, zsh and <code>setup.zsh</code>, Windows <code>setup.bat</code> and PowerShell, catkin or ROS 1 workspaces mixed in, Foxy, Iron and Rolling, colcon versions other than 0.21.3, and repeated timing runs. I also didn't test a dependent package whose dependency's install folder is gone. That case fails with a CMake <code>find_package</code> error rather than just this warning.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Is "The path ... in the environment variable AMENT_PREFIX_PATH doesn't exist" an error?</h3>
+<p>No. It's a colcon warning. In my runs on Humble, Jazzy and Lyrical the builds that printed it finished, with exit code 0 where I checked, and the packages ran afterwards. It means your shell still lists a directory that has been deleted or moved.</p>
+
+<h3>Why do I still get the warning after sourcing install/setup.bash again?</h3>
+<p>Sourcing again in the same terminal doesn't remove stale paths. I measured it: <code>AMENT_PREFIX_PATH</code> still contained the deleted <code>/ws/install/cpp_b</code> after re-sourcing <code>install/setup.bash</code>, and also after re-sourcing <code>/opt/ros/&lt;distro&gt;/setup.bash</code> first. Open a new terminal, or reset the variables.</p>
+
+<h3>Why are there two lines for every package?</h3>
+<p><code>ament_cmake</code> packages are added to both <code>AMENT_PREFIX_PATH</code> and <code>CMAKE_PREFIX_PATH</code>, so colcon reports each one twice. <code>ament_python</code> packages only appear in <code>AMENT_PREFIX_PATH</code> and give one line. A <code>COLCON_PREFIX_PATH</code> line means a whole <code>install</code> folder is gone or moved.</p>
+
+<h3>I deleted a package but ros2 pkg list still shows it. Why?</h3>
+<p>colcon doesn't delete <code>install/&lt;pkg&gt;</code> when a package disappears from <code>src</code>. In my test, <code>install/cpp_b</code> stayed after the rebuild, and <code>ros2 pkg list</code> and <code>ros2 pkg prefix</code> still found it. Delete <code>build/&lt;pkg&gt;</code> and <code>install/&lt;pkg&gt;</code> too, then open a new terminal.</p>
+
+<h3>Can I just hide the warning?</h3>
+<p><code>colcon --log-level error build</code> printed none of the lines in my test. But the variable stays wrong, and the flag hides every other colcon warning as well. A new terminal fixed it with no lines on all three distros.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Is The path in the environment variable AMENT_PREFIX_PATH doesn't exist an error?", "acceptedAnswer": {"@type": "Answer", "text": "No. It's a colcon warning. In my runs on Humble, Jazzy and Lyrical the builds that printed it finished, with exit code 0 where I checked, and the packages ran afterwards. It means your shell still lists a directory that has been deleted or moved."}},
+{"@type": "Question", "name": "Why do I still get the warning after sourcing install/setup.bash again?", "acceptedAnswer": {"@type": "Answer", "text": "Sourcing again in the same terminal doesn't remove stale paths. I measured it: AMENT_PREFIX_PATH still contained the deleted /ws/install/cpp_b after re-sourcing install/setup.bash, and also after re-sourcing /opt/ros/distro/setup.bash first. Open a new terminal, or reset the variables."}},
+{"@type": "Question", "name": "Why are there two lines for every package?", "acceptedAnswer": {"@type": "Answer", "text": "ament_cmake packages are added to both AMENT_PREFIX_PATH and CMAKE_PREFIX_PATH, so colcon reports each one twice. ament_python packages only appear in AMENT_PREFIX_PATH and give one line. A COLCON_PREFIX_PATH line means a whole install folder is gone or moved."}},
+{"@type": "Question", "name": "I deleted a package but ros2 pkg list still shows it. Why?", "acceptedAnswer": {"@type": "Answer", "text": "colcon doesn't delete install/pkg when a package disappears from src. In my test, install/cpp_b stayed after the rebuild, and ros2 pkg list and ros2 pkg prefix still found it. Delete build/pkg and install/pkg too, then open a new terminal."}},
+{"@type": "Question", "name": "Can I just hide the warning?", "acceptedAnswer": {"@type": "Answer", "text": "colcon --log-level error build printed none of the lines in my test. But the variable stays wrong, and the flag hides every other colcon warning as well. A new terminal fixed it with no lines on all three distros."}}
+]}
+</script>
+
+<p>Measured on 2026-11-02 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2), all with colcon-core 0.21.3 and colcon-ros 0.5.0, default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-03-ros2-ament-prefix-path-doesnt-exist/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/113088">The path &lt;path&gt; in the environment variable AMENT_PREFIX_PATH doesn't exist</a>, <a href="https://robotics.stackexchange.com/questions/112000">urdf_tutorial error</a>, <a href="https://robotics.stackexchange.com/questions/116966">Cartographer from Source Fails to Build on ROS 2 Humble</a>, <a href="https://robotics.stackexchange.com/questions/110866">ROS2 Custom message package is not compiling</a>, <a href="https://forums.developer.nvidia.com/t/issac-ros-nova-carter-error-building-from-source/302499">Isaac ROS Nova Carter error building from source</a>.</p>

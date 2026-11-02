@@ -1,0 +1,247 @@
+=== distro=humble
+ros-humble-ament-index-python 1.4.1-1jammy.20260304.090250
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-implementation 2.8.5-1jammy.20260907.211224
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+python3-colcon-cmake 0.2.30+upstream-1
+python3-colcon-core 0.21.3+upstream-1
+python3-colcon-library-path 0.2.1-100
+python3-colcon-ros 0.5.0+upstream-1
+colcon_core 0.21.3
+
+### C0 baseline: first build in a clean shell
+$ cd /ws; colcon build
+    Starting >>> cpp_a
+    Starting >>> cpp_b
+    Finished <<< cpp_b [0.85s]
+    Starting >>> py_pkg
+    Finished <<< cpp_a [0.88s]
+    Finished <<< py_pkg [0.84s]
+    Summary: 3 packages finished [1.92s]
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.31]
+
+### C0b env after sourcing
+$ cd /ws; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; echo CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH; echo COLCON_PREFIX_PATH=${COLCON_PREFIX_PATH:-unset}
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/humble
+    CMAKE_PREFIX_PATH=/ws/install/cpp_b:/ws/install/cpp_a
+    COLCON_PREFIX_PATH=/ws/install
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=0.34]
+
+### C0c rebuild in a sourced shell, nothing deleted
+$ cd /ws; source install/setup.bash; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.78]
+
+### C1 rm -rf build install log, rebuild in the same shell
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_a' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.325s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.325s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_a' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=5] [ament=3] [cmake=2] [colcon=0] [secs=2.52]
+
+### C1-ros2 same shell, ros2 pkg list / ros2 run after deletion and rebuild
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build >/dev/null 2>&1; ros2 pkg list 2>&1 | grep -E '^(py_pkg|cpp_a|cpp_b)$'; ros2 run py_pkg hello
+    cpp_a
+    cpp_b
+    py_pkg
+    HELLO from py_pkg
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.92]
+
+### C1-twice rebuild a second time in that shell (no re-source)
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build >/dev/null 2>&1; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=3.95]
+
+### C2 remove src/cpp_b and install/cpp_b, rebuild in same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [0.323s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.323s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=2] [ament=1] [cmake=1] [colcon=0] [secs=1.7]
+
+### C2-py same for the ament_python package py_pkg
+$ cd /ws; source install/setup.bash; rm -rf src/py_pkg install/py_pkg build/py_pkg; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [0.317s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=1] [ament=1] [cmake=0] [colcon=0] [secs=0.9]
+
+### C2-ros2 ros2 commands in that shell
+$ cd /ws; source install/setup.bash; ros2 pkg list 2>&1 | grep -E '^(py_pkg|cpp_a|cpp_b)$'; ros2 pkg prefix cpp_a; echo rc=$?; ros2 pkg prefix cpp_b; echo rc=$?
+    cpp_a
+    /ws/install/cpp_a
+    rc=0
+    Package not found
+    rc=1
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=0.84]
+
+### C3 remove src/cpp_b only, rebuild in same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err; ls install
+    COLCON_IGNORE
+    _local_setup_util_ps1.py
+    _local_setup_util_sh.py
+    cpp_a
+    cpp_b
+    local_setup.bash
+    local_setup.ps1
+    local_setup.sh
+    local_setup.zsh
+    py_pkg
+    setup.bash
+    setup.ps1
+    setup.sh
+    setup.zsh
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.68]
+
+### C3-ros2 is cpp_b still a package?
+$ cd /ws; source install/setup.bash; ros2 pkg list | grep -E '^(py_pkg|cpp_a|cpp_b)$'; ros2 pkg prefix cpp_b
+    cpp_a
+    cpp_b
+    py_pkg
+    /ws/install/cpp_b
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=0.67]
+
+### C4 source /ws, mv /ws /ws_moved, build there
+$ source /ws/install/setup.bash; mv /ws /ws_moved; cd /ws_moved; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err; mv /ws_moved /ws
+    [0.328s] WARNING:colcon.colcon_core.prefix_path.colcon:The path '/ws/install' in the environment variable COLCON_PREFIX_PATH doesn't exist
+    [0.328s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.328s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.328s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_a' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.328s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.328s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_a' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    --- stderr: cpp_a
+    CMake Error: The current CMakeCache.txt directory /ws_moved/build/cpp_a/CMakeCache.txt is different than the directory /ws/build/cpp_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+    CMake Error: The source directory "/ws/src/cpp_a" does not exist.
+    Specify --help for usage, or press the help button on the CMake GUI.
+    gmake: *** [Makefile:213: cmake_check_build_system] Error 1
+    ---
+    Failed   <<< cpp_a [0.07s, exited with code 2]
+    [rc=0] [warn_lines=6] [ament=3] [cmake=2] [colcon=1] [secs=0.88]
+
+### C5 source /ws, delete /ws, build /ws2
+$ source /ws/install/setup.bash; rm -rf /ws; cd /ws2; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [0.318s] WARNING:colcon.colcon_core.prefix_path.colcon:The path '/ws/install' in the environment variable COLCON_PREFIX_PATH doesn't exist
+    [0.318s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.318s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.318s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_a' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.318s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.318s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_a' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=6] [ament=3] [cmake=2] [colcon=1] [secs=1.25]
+
+### F1 re-source install/setup.bash in the same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/humble
+    [0.325s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.326s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=2] [ament=1] [cmake=1] [colcon=0] [secs=1.9]
+
+### F2 re-source /opt/ros setup.bash, then install/setup.bash
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; source /opt/ros/humble/setup.bash; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/humble
+    [0.321s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.322s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=2] [ament=1] [cmake=1] [colcon=0] [secs=2.02]
+
+### F3 new shell: only /opt/ros sourced, then build
+$ cd /ws; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.49]
+
+### F3b new shell, source install/setup.bash, then build
+$ cd /ws; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_a:/opt/ros/humble
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.69]
+
+### F4 reset the three variables by hand in the same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; export AMENT_PREFIX_PATH=/opt/ros/humble; unset CMAKE_PREFIX_PATH COLCON_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.67]
+
+### F5 env -i style: build with a clean environment from the polluted shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; env -i HOME=$HOME PATH=/usr/bin:/bin bash -c 'source /opt/ros/humble/setup.bash; cd /ws; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err'
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.88]
+
+### F6 colcon --log-level error hides it?
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; colcon --log-level error build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.67]
+
+### H1 warned build: are packages installed and runnable afterwards (new shell)?
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build >/dev/null 2>&1; echo build_rc=$?; bash -c 'source /opt/ros/humble/setup.bash; source /ws/install/setup.bash; ros2 run py_pkg hello; ros2 pkg prefix cpp_a'
+    build_rc=0
+    HELLO from py_pkg
+    /ws/install/cpp_a
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=3.21]
+
+### S10 10 ament_cmake packages, rm -rf install, rebuild in same shell
+$ cd /wsn; source install/setup.bash; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [0.331s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c9' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.331s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c8' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.331s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c7' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c6' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c5' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c4' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c3' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c2' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c10' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c1' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c9' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c8' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c7' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c6' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c5' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c4' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c3' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c2' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c10' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.332s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c1' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=20] [ament=10] [cmake=10] [colcon=0] [secs=5.18]
+
+### S10-clean same rebuild from a clean shell
+$ cd /wsn; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=4.95]
+
+### S30 30 ament_cmake packages, rm -rf install, rebuild in same shell
+$ cd /wsn; source install/setup.bash; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c9' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c8' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c7' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c6' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c5' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c4' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c30' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c3' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c29' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c28' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c27' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c26' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c25' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c24' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c23' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c22' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c21' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c20' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c2' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.370s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c19' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c18' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c17' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c16' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c15' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c14' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c13' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c12' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c11' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c10' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c1' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c9' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c8' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c7' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c6' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c5' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c4' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c30' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c3' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c29' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [0.371s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c28' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=60] [ament=30] [cmake=30] [colcon=0] [secs=14.7]
+
+### S30-clean same rebuild from a clean shell
+$ cd /wsn; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=14.59]
+=== done humble

@@ -1,0 +1,388 @@
+=== distro=lyrical
+ros-lyrical-ament-index-python 1.13.3-3resolute.20260728.172618
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+python3-colcon-cmake 0.2.30+upstream-1
+python3-colcon-core 0.21.3+upstream-1
+python3-colcon-library-path 0.2.1-100
+python3-colcon-ros 0.5.0+upstream-1
+colcon_core 0.21.3
+
+### C0 baseline: first build in a clean shell
+$ cd /ws; colcon build
+    Starting >>> cpp_a
+    Starting >>> cpp_b
+    --- stderr: cpp_b
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    Finished <<< cpp_b [1.10s]
+    Starting >>> py_pkg
+    --- stderr: cpp_a
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    Finished <<< cpp_a [1.14s]
+    Finished <<< py_pkg [1.26s]
+    Summary: 3 packages finished [2.58s]
+      2 packages had stderr output: cpp_a cpp_b
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=3.3]
+
+### C0b env after sourcing
+$ cd /ws; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; echo CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH; echo COLCON_PREFIX_PATH=${COLCON_PREFIX_PATH:-unset}
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/lyrical
+    CMAKE_PREFIX_PATH=/ws/install/cpp_b:/ws/install/cpp_a
+    COLCON_PREFIX_PATH=/ws/install
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=0.56]
+
+### C0c rebuild in a sourced shell, nothing deleted
+$ cd /ws; source install/setup.bash; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.4]
+
+### C1 rm -rf build install log, rebuild in the same shell
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [-1793604232554663936.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604232554663936.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604232554663936.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_a' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604232554663936.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604232554663936.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_a' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    --- stderr: cpp_b
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: cpp_a
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    [rc=0] [warn_lines=5] [ament=3] [cmake=2] [colcon=0] [secs=3.38]
+
+### C1-ros2 same shell, ros2 pkg list / ros2 run after deletion and rebuild
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build >/dev/null 2>&1; ros2 pkg list 2>&1 | grep -E '^(py_pkg|cpp_a|cpp_b)$'; ros2 run py_pkg hello
+    cpp_a
+    cpp_b
+    py_pkg
+    HELLO from py_pkg
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=4.49]
+
+### C1-twice rebuild a second time in that shell (no re-source)
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build >/dev/null 2>&1; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=5.84]
+
+### C2 remove src/cpp_b and install/cpp_b, rebuild in same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [-1793604249416040704.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604249416040704.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=2] [ament=1] [cmake=1] [colcon=0] [secs=2.28]
+
+### C2-py same for the ament_python package py_pkg
+$ cd /ws; source install/setup.bash; rm -rf src/py_pkg install/py_pkg build/py_pkg; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [-1793604251727185920.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=1] [ament=1] [cmake=0] [colcon=0] [secs=1.1]
+
+### C2-ros2 ros2 commands in that shell
+$ cd /ws; source install/setup.bash; ros2 pkg list 2>&1 | grep -E '^(py_pkg|cpp_a|cpp_b)$'; ros2 pkg prefix cpp_a; echo rc=$?; ros2 pkg prefix cpp_b; echo rc=$?
+    cpp_a
+    /ws/install/cpp_a
+    rc=0
+    Package not found
+    rc=1
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.55]
+
+### C3 remove src/cpp_b only, rebuild in same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err; ls install
+    COLCON_IGNORE
+    _local_setup_util_ps1.py
+    _local_setup_util_sh.py
+    cpp_a
+    cpp_b
+    local_setup.bash
+    local_setup.ps1
+    local_setup.sh
+    local_setup.zsh
+    py_pkg
+    setup.bash
+    setup.ps1
+    setup.sh
+    setup.zsh
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.28]
+
+### C3-ros2 is cpp_b still a package?
+$ cd /ws; source install/setup.bash; ros2 pkg list | grep -E '^(py_pkg|cpp_a|cpp_b)$'; ros2 pkg prefix cpp_b
+    cpp_a
+    cpp_b
+    py_pkg
+    /ws/install/cpp_b
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.22]
+
+### C4 source /ws, mv /ws /ws_moved, build there
+$ source /ws/install/setup.bash; mv /ws /ws_moved; cd /ws_moved; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err; mv /ws_moved /ws
+    [-1793604264030411520.000s] WARNING:colcon.colcon_core.prefix_path.colcon:The path '/ws/install' in the environment variable COLCON_PREFIX_PATH doesn't exist
+    [-1793604264030411520.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604264030411520.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604264030411520.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_a' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604264030411520.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604264030411520.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_a' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    --- stderr: cpp_a
+    CMake Error: The current CMakeCache.txt directory /ws_moved/build/cpp_a/CMakeCache.txt is different than the directory /ws/build/cpp_a where CMakeCache.txt was created. This may result in binaries being created in the wrong place. If you are not sure, reedit the CMakeCache.txt
+    CMake Error: The source directory "/ws/src/cpp_a" does not exist.
+    Specify --help for usage, or press the help button on the CMake GUI.
+    gmake: *** [Makefile:213: cmake_check_build_system] Error 1
+    ---
+    Failed   <<< cpp_a [0.07s, exited with code 2]
+    [rc=0] [warn_lines=6] [ament=3] [cmake=2] [colcon=1] [secs=1.09]
+
+### C5 source /ws, delete /ws, build /ws2
+$ source /ws/install/setup.bash; rm -rf /ws; cd /ws2; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [-1793604268189790464.000s] WARNING:colcon.colcon_core.prefix_path.colcon:The path '/ws/install' in the environment variable COLCON_PREFIX_PATH doesn't exist
+    [-1793604268189790464.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/py_pkg' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604268189790464.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604268189790464.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_a' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604268189790464.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604268189790464.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_a' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    --- stderr: cpp_c
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    [rc=0] [warn_lines=6] [ament=3] [cmake=2] [colcon=1] [secs=1.61]
+
+### F1 re-source install/setup.bash in the same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/lyrical
+    [-1793604273124051200.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604273124051200.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=2] [ament=1] [cmake=1] [colcon=0] [secs=2.58]
+
+### F2 re-source /opt/ros setup.bash, then install/setup.bash
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; source /opt/ros/lyrical/setup.bash; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_b:/ws/install/cpp_a:/opt/ros/lyrical
+    [-1793604279020218368.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/ws/install/cpp_b' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604279020218368.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/ws/install/cpp_b' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=2] [ament=1] [cmake=1] [colcon=0] [secs=2.84]
+
+### F3 new shell: only /opt/ros sourced, then build
+$ cd /ws; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=1.98]
+
+### F3b new shell, source install/setup.bash, then build
+$ cd /ws; source install/setup.bash; echo AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    AMENT_PREFIX_PATH=/ws/install/py_pkg:/ws/install/cpp_a:/opt/ros/lyrical
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.27]
+
+### F4 reset the three variables by hand in the same shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; export AMENT_PREFIX_PATH=/opt/ros/lyrical; unset CMAKE_PREFIX_PATH COLCON_PREFIX_PATH; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.25]
+
+### F5 env -i style: build with a clean environment from the polluted shell
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; env -i HOME=$HOME PATH=/usr/bin:/bin bash -c 'source /opt/ros/lyrical/setup.bash; cd /ws; colcon build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err'
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.59]
+
+### F6 colcon --log-level error hides it?
+$ cd /ws; source install/setup.bash; rm -rf src/cpp_b install/cpp_b build/cpp_b; colcon --log-level error build --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=2.28]
+
+### H1 warned build: are packages installed and runnable afterwards (new shell)?
+$ cd /ws; source install/setup.bash; rm -rf build install log; colcon build >/dev/null 2>&1; echo build_rc=$?; bash -c 'source /opt/ros/lyrical/setup.bash; source /ws/install/setup.bash; ros2 run py_pkg hello; ros2 pkg prefix cpp_a'
+    build_rc=0
+    HELLO from py_pkg
+    /ws/install/cpp_a
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=4.68]
+
+### S10 10 ament_cmake packages, rm -rf install, rebuild in same shell
+$ cd /wsn; source install/setup.bash; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c9' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c8' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c7' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c6' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c5' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c4' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c3' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c2' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c10' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c1' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c9' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c8' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c7' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c6' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c5' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c4' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c3' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c2' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c10' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604319379559424.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c1' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    --- stderr: c1
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c10
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c2
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+    [rc=0] [warn_lines=20] [ament=10] [cmake=10] [colcon=0] [secs=7.84]
+
+### S10-clean same rebuild from a clean shell
+$ cd /wsn; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    --- stderr: c10
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c1
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c2
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c3
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c4
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=6.11]
+
+### S30 30 ament_cmake packages, rm -rf install, rebuild in same shell
+$ cd /wsn; source install/setup.bash; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c9' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c8' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c7' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c6' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c5' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c4' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c30' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c3' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c29' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c28' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c27' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c26' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c25' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c24' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c23' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c22' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c21' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c20' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c2' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c19' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c18' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c17' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c16' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c15' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c14' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c13' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c12' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c11' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c10' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.ament:The path '/wsn/install/c1' in the environment variable AMENT_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c9' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c8' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c7' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c6' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c5' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c4' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c30' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c3' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c29' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [-1793604350871247360.000s] WARNING:colcon.colcon_ros.prefix_path.catkin:The path '/wsn/install/c28' in the environment variable CMAKE_PREFIX_PATH doesn't exist
+    [rc=0] [warn_lines=60] [ament=30] [cmake=30] [colcon=0] [secs=30.07]
+
+### S30-clean same rebuild from a clean shell
+$ cd /wsn; rm -rf build install log; colcon build --parallel-workers 2 --event-handlers console_direct- console_cohesion- >/dev/null 2>/tmp/err; cat /tmp/err
+    --- stderr: c10
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c1
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c11
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c12
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    --- stderr: c13
+    CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+      Compatibility with CMake < 3.10 will be removed from a future version of
+      CMake.
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+    ---
+    [rc=0] [warn_lines=0] [ament=0] [cmake=0] [colcon=0] [secs=17.18]
+=== done lyrical
