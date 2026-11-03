@@ -1,0 +1,190 @@
+<pre><code>terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+Aborted (core dumped)</code></pre>
+
+<p>In Python the same failure ends in <code>rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory: /home/u/.ros/log</code>. On Jazzy and Lyrical the path is quoted and followed by an errno, for example <code>Failed to create log directory '/home/u/.ros/log': 13</code>. A close relative is <code>Failed to get logging directory</code>, which shows up when <code>HOME</code> is unset or empty.</p>
+
+<p>Short answer: every ROS 2 node writes a log file to disk when it starts. By default the file goes in <code>~/.ros/log</code>, and if the process can't create or write that directory, <code>rclcpp::init</code> or <code>rclpy.init</code> fails and the node never starts. This usually happens in Docker, where a non-root user has a <code>HOME</code> it can't write to, no <code>HOME</code> at all, or a <code>~/.ros</code> owned by root. The fix that worked both with an unwritable <code>HOME</code> and with no <code>HOME</code>, for Python nodes, C++ nodes and <code>ros2 launch</code>, on Humble, Jazzy and Lyrical, was to point <code>ROS_LOG_DIR</code> at a directory the user can write:</p>
+
+<pre><code>export ROS_LOG_DIR=/tmp/ros_logs    # created on first start, nested paths too
+ros2 run my_pkg my_node</code></pre>
+
+<p>If you don't need log files at all, a single node also starts with <code>--ros-args --disable-external-lib-logs</code>. That flag doesn't help <code>ros2 launch</code>, because launch writes its own <code>launch.log</code> through a separate code path.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every row below behaved the same for an <code>rclpy</code> node and an <code>rclcpp</code> node on all three distros. Only the format of the message changed between Humble and the newer distros (see Version notes). The node ran as uid 1234, a non-root user, the way <code>docker run --user 1234</code> would run it.</p>
+
+<table>
+<thead><tr><th>Situation</th><th>Message (Jazzy form)</th></tr></thead>
+<tbody>
+<tr><td><code>HOME</code> points to a directory the user can't write (<code>/home/u</code> owned by root)</td><td><code>Failed to create log directory '/home/u/.ros/log': 13</code></td></tr>
+<tr><td><code>HOME</code> points to a directory that doesn't exist (<code>/nonexistent</code>)</td><td><code>Failed to create log directory '/nonexistent/.ros/log': 13</code></td></tr>
+<tr><td><code>HOME</code> unset</td><td><code>Failed to get logging directory</code>, after <code>rcutils_expand_user failed</code></td></tr>
+<tr><td><code>HOME</code> set to an empty string</td><td>same as unset</td></tr>
+<tr><td><code>~/.ros/log</code> exists but is owned by root</td><td>Python: <code>RuntimeError: Failed opening file /home/r/.ros/log/python3_239_....log for writing: Permission denied</code>. C++: <code>terminate called after throwing an instance of 'spdlog::spdlog_ex'</code> with the same text</td></tr>
+<tr><td><code>ROS_LOG_DIR</code> points to a directory the user can't create (<code>/var/log/ros</code>)</td><td><code>Failed to create log directory '/var/log/ros': 13</code></td></tr>
+<tr><td><code>ROS_LOG_DIR=/dev/null</code></td><td><code>Failed to create log directory '/dev/null': 20</code></td></tr>
+</tbody>
+</table>
+
+<p>The number after the path is the errno. 13 is <code>EACCES</code> (permission denied) and 20 is <code>ENOTDIR</code> (the path exists but isn't a directory). In C++ every row ended with exit code 134, meaning the process aborted. In Python every row ended with exit code 1 and a traceback through <code>rclpy_logging_configure</code>.</p>
+
+<p>The <code>~/.ros/log</code> owned by root case is the one people miss. The directory exists, so creating it isn't the problem. Opening a file inside it is, and the message no longer says "log directory" at all. You get it after a container ran a node once as root and later runs as a normal user, or when <code>~/.ros</code> is a volume created by root on the host.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-04 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after the other. The script built one package with two minimal nodes: a Python node <code>py_node</code> and a C++ node <code>cpp_node</code>. Each one calls init, creates a node, logs <code>NODE-OK</code> and exits. The script then ran them as root and as uid 1234 (through <code>setpriv</code>) with different <code>HOME</code>, <code>ROS_LOG_DIR</code> and <code>ROS_HOME</code> values. It also ran <code>ros2 launch</code>, <code>ros2 run</code>, <code>ros2 topic list --no-daemon</code> and <code>ros2 topic pub --once</code> the same way. All logging in these images went through <code>rcl_logging_spdlog</code>, the default. The default RMW was used (<code>RMW_IMPLEMENTATION</code> was empty).</p>
+
+<p>Results for uid 1234 with <code>HOME=/home/u</code> not writable unless the row says otherwise. These were the same for the Python node and the C++ node on all three distros:</p>
+
+<table>
+<thead><tr><th>Setting</th><th>Result</th><th>Where the log file went</th></tr></thead>
+<tbody>
+<tr><td>Nothing set</td><td>fails, <code>Failed to create log directory</code></td><td>none</td></tr>
+<tr><td><code>ROS_LOG_DIR=/tmp/ld</code></td><td>starts</td><td>1 file in <code>/tmp/ld</code></td></tr>
+<tr><td><code>ROS_LOG_DIR=/tmp/a/b/c</code> (no part of it exists)</td><td>starts</td><td>1 file in <code>/tmp/a/b/c</code></td></tr>
+<tr><td><code>ROS_HOME=/tmp/rhb</code></td><td>starts</td><td>1 file in <code>/tmp/rhb/log</code></td></tr>
+<tr><td><code>HOME=/tmp/hb</code> (writable, not created in advance)</td><td>starts</td><td>1 file in <code>/tmp/hb/.ros/log</code></td></tr>
+<tr><td><code>--ros-args --disable-external-lib-logs</code></td><td>starts</td><td>no file</td></tr>
+<tr><td><code>ROS_LOG_DIR='~/logs'</code> (literal tilde), <code>HOME=/tmp/hb</code></td><td>starts</td><td>1 file in <code>/tmp/hb/logs</code></td></tr>
+<tr><td><code>ROS_LOG_DIR=</code> (empty), <code>HOME=/tmp/hb</code></td><td>starts</td><td><code>/tmp/hb/.ros/log</code>, as if unset</td></tr>
+<tr><td><code>HOME</code> unset, <code>ROS_LOG_DIR=/tmp/ld</code></td><td>starts</td><td>1 file in <code>/tmp/ld</code></td></tr>
+<tr><td><code>HOME</code> unset, <code>ROS_HOME=/tmp/rh</code></td><td>starts</td><td>1 file in <code>/tmp/rh/log</code></td></tr>
+</tbody>
+</table>
+
+<h2>Why a node needs a writable directory at all</h2>
+
+<p>ROS 2 logging has three outputs: the console, the <code>/rosout</code> topic, and a file written by an external logging library. On these images that library is spdlog, loaded through <code>rcl_logging_spdlog</code>. The file output is set up during init, before your node object exists. If it fails, init fails with it. Nothing in your own code runs, so you can't catch it in the node.</p>
+
+<p>Every process writes its own file. Twenty runs of the Python node left twenty files named like <code>python3_1005_1793749551727.log</code>, and twenty runs of the C++ node left twenty named like <code>cpp_node_1253_1793749559504.log</code>. The name is the executable, the process ID and a millisecond timestamp. Each file held one line, the same <code>[INFO] ... NODE-OK</code> line the console showed.</p>
+
+<p>The <a href="https://docs.ros.org/en/jazzy/Concepts/Intermediate/About-Logging.html">About Logging</a> page gives the lookup order. <code>ROS_LOG_DIR</code> "If non-empty, use the exact directory as specified in this variable". If it's empty, ROS uses <code>ROS_HOME</code>, and <code>ROS_HOME</code> defaults to <code>~/.ros</code>. It also says "In all cases, the ~ character is expanded to the user's HOME directory." That last part explains the <code>HOME</code> unset case. Every default path starts with <code>~</code>, so with no <code>HOME</code> the expansion fails, and the error says <code>Failed to get logging directory</code> instead of naming a path. In my run, setting <code>ROS_LOG_DIR</code> or <code>ROS_HOME</code> to an absolute path fixed that case too. No <code>~</code> was left to expand.</p>
+
+<p>The same page writes the <code>ROS_HOME</code> path as <code>$ROS_HOME/.log</code>. What I measured on all three distros was <code>$ROS_HOME/log</code>, without the dot.</p>
+
+<h2>Cause 1: a HOME the user can't write</h2>
+
+<p>This is the case in the <a href="https://robotics.stackexchange.com/questions/101538">Robotics Stack Exchange question</a> about Docker and rviz2. A Dockerfile creates <code>/home/user</code> as root, or <code>docker run --user</code> gives a uid whose <code>HOME</code> is still <code>/root</code> or <code>/</code>. Then <code>~/.ros/log</code> can't be created. The C++ node printed the exact message from the top of this page and aborted. The Python node raised <code>RCLError</code>. The ros2 CLI hit it too. <code>ros2 topic list --no-daemon</code> and <code>ros2 topic pub --once</code> both printed <code>failed to initialize logging: Failed to create log directory '/home/u/.ros/log': 13</code> and exited with code 1, because they create a node internally.</p>
+
+<p>A <code>HOME</code> that doesn't exist fails the same way unless the parent is writable. With <code>HOME=/nonexistent</code> the message named <code>/nonexistent/.ros/log</code>. With <code>HOME=/tmp/hb</code>, a path that didn't exist either, the node created <code>/tmp/hb/.ros/log</code> and started, because <code>/tmp</code> is writable. Creation is recursive, so a missing parent is fine as long as some ancestor can be written.</p>
+
+<p>Fixes, in the order I'd try them:</p>
+<ul>
+<li>Set <code>ROS_LOG_DIR</code> to a writable absolute path, for example <code>ENV ROS_LOG_DIR=/tmp/ros_logs</code> in the Dockerfile. It worked for every node type I tried.</li>
+<li>Give the user a real, writable home: create it with the right owner in the Dockerfile (<code>useradd -m</code>, or <code>chown</code> after <code>mkdir</code>), or pass <code>-e HOME=/tmp/somewhere</code>.</li>
+<li>Set <code>ROS_HOME</code> instead if you also want other ROS files out of <code>~/.ros</code>. Logs then go to <code>$ROS_HOME/log</code>.</li>
+</ul>
+
+<h2>Cause 2: HOME unset or empty</h2>
+
+<p>This is the case in <a href="https://github.com/ros2/ros2/issues/1332">ros2/ros2#1332</a> (a node started from Python's <code>subprocess</code>) and <a href="https://github.com/ros2/rcl_logging/issues/72">ros2/rcl_logging#72</a> (rclpy inside a Django server under supervisor). Both are environments that may not pass <code>HOME</code> through. On Humble and Jazzy the output starts with an rcutils warning block, which looks like the main error but isn't:</p>
+
+<pre><code>&gt;&gt;&gt; [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:
+  'rcutils_expand_user failed, at ./src/logging_dir.c:81'
+with this new error message:
+  'Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131'
+rcutils_reset_error() should be called after error handling to avoid this.
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131</code></pre>
+
+<p>Lyrical prints one line instead: <code>Failed to get logging directory: rcutils_expand_user failed, at ./src/logging_dir.c:82, at ./src/rcl_logging_spdlog.cpp:198</code>. An empty <code>HOME=</code> gave the same output as an unset one on all three distros.</p>
+
+<p>The fix is to pass <code>HOME</code> to the child process, or to set <code>ROS_LOG_DIR</code> or <code>ROS_HOME</code> to an absolute path. Both worked with <code>HOME</code> unset. With <code>subprocess</code>, the usual mistake is passing <code>env={...}</code> without copying <code>os.environ</code>. I didn't run that variant, but the effect on the child is the same: no <code>HOME</code>.</p>
+
+<h2>Cause 3: ~/.ros/log left behind by root</h2>
+
+<p>When <code>~/.ros/log</code> already exists and belongs to root, the directory check passes and the file open fails. spdlog throws its own exception, so the text differs from the other cases:</p>
+
+<pre><code>terminate called after throwing an instance of 'spdlog::spdlog_ex'
+  what():  Failed opening file /home/r/.ros/log/cpp_node_357_1793749465490.log for writing: Permission denied</code></pre>
+
+<p>In Python it's <code>RuntimeError: Failed opening file ... for writing: Permission denied</code>, not <code>RCLError</code>. This matches the comment under the Stack Exchange question that <code>chown -R user /home/user</code> fixed it. Either change the owner of <code>~/.ros</code> or point <code>ROS_LOG_DIR</code> somewhere else. I tested <code>ROS_LOG_DIR</code> with an unwritable and an unset <code>HOME</code>, not with this exact case.</p>
+
+<h2>ros2 launch fails earlier, with a Python traceback</h2>
+
+<p><code>ros2 launch</code> doesn't use the rcl logging path for its own log. The launch library creates a timestamped directory for <code>launch.log</code> with Python's <code>os.makedirs</code>, before any node starts. With the unwritable <code>HOME</code>, all three distros failed with a traceback ending in:</p>
+
+<pre><code>  File ".../launch/logging/__init__.py", line 81, in _make_unique_log_dir
+PermissionError: [Errno 13] Permission denied: '/home/u/.ros'</code></pre>
+
+<p>On Lyrical the traceback goes through <code>_get_logging_directory()</code> and <code>os.makedirs</code>, and ends with the same <code>PermissionError</code>. With <code>HOME</code> unset, launch failed with <code>PermissionError: [Errno 13] Permission denied: '~'</code>. The <code>~</code> wasn't expanded, so launch tried to create a directory with that literal name in the current directory, which wasn't writable.</p>
+
+<p><code>ROS_LOG_DIR</code> fixed launch on all three distros. With <code>ROS_LOG_DIR=/tmp/lc</code>, launch created a timestamped subdirectory holding <code>launch.log</code>. The Python node's own <code>python3_...log</code> went directly into <code>/tmp/lc</code>, not into that subdirectory. The <code>--disable-external-lib-logs</code> flag is a node argument, so it can't stop launch from creating its directory. An open issue, <a href="https://github.com/ros2/launch/issues/761">ros2/launch#761</a>, asks for an option to turn that off.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Python and C++ node</th><th><code>ros2 launch</code></th><th>ros2 CLI</th><th>Log file kept</th></tr></thead>
+<tbody>
+<tr><td><code>ROS_LOG_DIR=/writable/path</code></td><td>works</td><td>works</td><td>Not tested</td><td>yes, in that path</td></tr>
+<tr><td><code>ROS_HOME=/writable/path</code></td><td>works</td><td>Not tested</td><td>Not tested</td><td>yes, in <code>path/log</code></td></tr>
+<tr><td>Writable <code>HOME</code></td><td>works</td><td>Not tested</td><td>Not tested</td><td>yes, in <code>~/.ros/log</code></td></tr>
+<tr><td><code>--ros-args --disable-external-lib-logs</code></td><td>works, with <code>ros2 run</code> too</td><td>no, launch still fails</td><td>not applicable</td><td>no</td></tr>
+<tr><td><code>ROS_LOG_DIR=/dev/null</code></td><td>fails (errno 20 on Jazzy and Lyrical)</td><td>Not tested</td><td>Not tested</td><td>no</td></tr>
+</tbody>
+</table>
+
+<p>I timed 20 sequential starts of each node as root, with and without <code>--disable-external-lib-logs</code>, to see whether the file costs anything:</p>
+
+<table>
+<thead><tr><th>20 starts</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Python, file logging</td><td>6974 ms</td><td>8085 ms</td><td>8414 ms</td></tr>
+<tr><td>Python, <code>--disable-external-lib-logs</code></td><td>6874 ms</td><td>8281 ms</td><td>8473 ms</td></tr>
+<tr><td>C++, file logging</td><td>2603 ms</td><td>2830 ms</td><td>2870 ms</td></tr>
+<tr><td>C++, <code>--disable-external-lib-logs</code></td><td>2521 ms</td><td>2817 ms</td><td>2830 ms</td></tr>
+</tbody>
+</table>
+
+<p>The differences are under 5% and go both ways, so I'd call them noise. Startup cost isn't a reason to choose one fix over another. The real difference is that the flag throws away the file, which you may want later when a node crashes on a robot.</p>
+
+<p>I also tried to reproduce the "about 20% of the time" failure from a comment on the Stack Exchange question as a race. Ten C++ nodes started at once into a log directory that didn't exist yet. In 5 rounds per distro, all 50 starts created their log files and none printed a log directory error. On Lyrical, 3 of the 50 starts aborted with <code>Failed to create std::thread: Resource temporarily unavailable</code>, which came from my container's 200-process limit, not from logging. A first try with 20 nodes at once hit that limit more often on Humble. Its log files were still all created. So I couldn't reproduce an intermittent version of this error.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble prints <code>Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138</code>. Jazzy and Lyrical print <code>Failed to create log directory '/home/u/.ros/log': 13</code> with the errno, at <code>rcl_logging_spdlog.cpp:154</code> on Jazzy and <code>:214</code> on Lyrical. Drop the quotes, errno and line number when you search.</li>
+<li>For <code>HOME</code> unset, Humble and Jazzy print the "error state is being overwritten" block first. Lyrical folds both messages into one line.</li>
+<li>Lyrical ships a package called <code>rcl_logging_implementation</code>, which its <code>package.xml</code> describes as "Provides the ability to load logging implementations at runtime." Only <code>rcl_logging_spdlog</code> was installed in the image, and I didn't try another backend.</li>
+<li>The launch traceback differs only in line numbers and file paths. On all three distros it ends in <code>PermissionError</code>.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Read-only root filesystems (<code>docker run --read-only</code>), switching the logging backend (<code>rcl_logging_noop</code>, rcutils or syslog), <code>ROS_HOME</code> or a writable <code>HOME</code> with <code>ros2 launch</code>, the ros2 CLI with any of the fixes, nodes started from Python <code>subprocess</code> with a stripped environment, the ros2 daemon, Foxy, Iron and Rolling, and other RMW implementations than the default.</p>
+
+<p>If your node starts but can't find Python packages in the same container, see <a href="https://huntlab.app/en/ros2-run-conda-venv-no-module-named-torch-shebang/">ros2 run ignores your conda or venv</a>. It's another case where the environment the node gets differs from your shell.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Failed to create log directory" mean in ROS 2?</h3>
+<p>The node tried to create its log directory, <code>~/.ros/log</code> by default, and the user running it didn't have permission. Init fails, so the node never starts. In my runs that happened when <code>HOME</code> pointed to a root-owned or missing directory, or when <code>ROS_LOG_DIR</code> pointed somewhere unwritable.</p>
+
+<h3>How do I fix it in a Docker container running as a non-root user?</h3>
+<p>Set <code>ROS_LOG_DIR</code> to a writable absolute path such as <code>/tmp/ros_logs</code>. It doesn't need to exist yet. That fixed Python nodes, C++ nodes and <code>ros2 launch</code> on Humble, Jazzy and Lyrical. Giving the user a writable <code>HOME</code> also fixed the nodes.</p>
+
+<h3>Why do I get "Failed to get logging directory"?</h3>
+<p><code>HOME</code> was unset or empty, so <code>~</code> couldn't be expanded. That happens with some process managers and with <code>subprocess</code> when the environment isn't passed through. Pass <code>HOME</code>, or set <code>ROS_LOG_DIR</code> or <code>ROS_HOME</code> to an absolute path. Both worked with <code>HOME</code> unset.</p>
+
+<h3>Can I disable ROS 2 log files?</h3>
+<p>For a single node, yes: <code>--ros-args --disable-external-lib-logs</code> started the node with no log file even when <code>HOME</code> wasn't writable. It didn't help <code>ros2 launch</code>, which creates its own <code>launch.log</code> directory first and fails there.</p>
+
+<h3>Why does it say "Failed opening file ... Permission denied" instead?</h3>
+<p><code>~/.ros/log</code> already exists but belongs to another user, usually root from an earlier run or a volume. Change its owner or set <code>ROS_LOG_DIR</code> to another path.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Failed to create log directory mean in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "The node tried to create its log directory, ~/.ros/log by default, and the user running it didn't have permission. Init fails, so the node never starts. In my runs that happened when HOME pointed to a root-owned or missing directory, or when ROS_LOG_DIR pointed somewhere unwritable."}},
+{"@type": "Question", "name": "How do I fix it in a Docker container running as a non-root user?", "acceptedAnswer": {"@type": "Answer", "text": "Set ROS_LOG_DIR to a writable absolute path such as /tmp/ros_logs. It doesn't need to exist yet. That fixed Python nodes, C++ nodes and ros2 launch on Humble, Jazzy and Lyrical. Giving the user a writable HOME also fixed the nodes."}},
+{"@type": "Question", "name": "Why do I get Failed to get logging directory?", "acceptedAnswer": {"@type": "Answer", "text": "HOME was unset or empty, so ~ couldn't be expanded. That happens with some process managers and with subprocess when the environment isn't passed through. Pass HOME, or set ROS_LOG_DIR or ROS_HOME to an absolute path. Both worked with HOME unset."}},
+{"@type": "Question", "name": "Can I disable ROS 2 log files?", "acceptedAnswer": {"@type": "Answer", "text": "For a single node, yes: --ros-args --disable-external-lib-logs started the node with no log file even when HOME wasn't writable. It didn't help ros2 launch, which creates its own launch.log directory first and fails there."}},
+{"@type": "Question", "name": "Why does it say Failed opening file ... Permission denied instead?", "acceptedAnswer": {"@type": "Answer", "text": "~/.ros/log already exists but belongs to another user, usually root from an earlier run or a volume. Change its owner or set ROS_LOG_DIR to another path."}}
+]}
+</script>
+
+<p>Measured on 2026-11-04 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rcl_logging_spdlog 2.3.2, launch 1.0.15), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rcl_logging_spdlog 3.1.1, launch 3.4.12) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rcl_logging_spdlog 3.4.1, launch 3.9.8), default RMW, on a 2 vCPU Linux host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-13-ros2-failed-to-create-log-directory/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/101538">ROS2 through docker: failed to configure logging: Failed to create log directory</a>, <a href="https://github.com/ros2/ros2/issues/1332">Issue with ROS 2 and Python's subprocess library - Failed to get logging directory</a>, <a href="https://github.com/ros2/rcl_logging/issues/72">Failed to get logging directory (rcl_logging #72)</a>, <a href="https://github.com/ros2/rcl_logging/issues/50">Configure logging directory</a>, <a href="https://answers.ros.org/question/378285/">How to change log directory on ROS2 Foxy?</a>, <a href="https://github.com/ros2/launch/issues/761">Add an option to disable creating log files by the launch system</a>.</p>

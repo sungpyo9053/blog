@@ -1,0 +1,273 @@
+=== distro=humble
+ros-humble-launch 1.0.15-1jammy.20260907.191132
+ros-humble-rcl 5.3.13-1jammy.20260907.211637
+ros-humble-rcl-logging-interface 2.3.2-1jammy.20260907.194806
+ros-humble-rcl-logging-spdlog 2.3.2-1jammy.20260907.195605
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rcutils 5.1.10-1jammy.20260907.192648
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-implementation 2.8.5-1jammy.20260907.211224
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+RMW_IMPLEMENTATION env: ''
+logging lib: librcl_logging_interface.so
+logging lib: librcl_logging_spdlog.so
+uid=0(root) gid=0(root) groups=0(root)
+
+##### A. causes (python node / C++ node)
+--- [py A1 root, HOME=/root] rc=0 ms=438
+[INFO] [1793749462.534387621] [py_node]: NODE-OK
+    files in /root/.ros/log: 1
+--- [py A2 uid 1234, HOME=/home/u not writable] rc=1 ms=190
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+--- [py A3 uid 1234, HOME unset] rc=1 ms=191
+>>> [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:
+  'rcutils_expand_user failed, at ./src/logging_dir.c:81'
+with this new error message:
+  'Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131'
+rcutils_reset_error() should be called after error handling to avoid this.
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+--- [py A4 uid 1234, HOME empty] rc=1 ms=190
+>>> [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:
+  'rcutils_expand_user failed, at ./src/logging_dir.c:81'
+with this new error message:
+  'Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131'
+rcutils_reset_error() should be called after error handling to avoid this.
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+--- [py A5 uid 1234, HOME=/nonexistent] rc=1 ms=189
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory: /nonexistent/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+--- [py A6 uid 1234, ~/.ros/log exists, owned by root] rc=1 ms=239
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+RuntimeError: Failed opening file /home/r/.ros/log/python3_239_1793749463635.log for writing: Permission denied
+--- [py A7 uid 1234, ROS_LOG_DIR=/var/log/ros (not writable)] rc=1 ms=191
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory: /var/log/ros, at ./src/rcl_logging_spdlog.cpp:138
+--- [py A8 uid 1234, HOME unset, ROS_LOG_DIR=/tmp/ld_py] rc=0 ms=351
+[INFO] [1793749464.133695328] [py_node]: NODE-OK
+    files in /tmp/ld_py: 1
+--- [py A9 uid 1234, HOME unset, ROS_HOME=/tmp/rh_py] rc=0 ms=349
+[INFO] [1793749464.493045405] [py_node]: NODE-OK
+    dirs with files under /tmp/rh_py: /tmp/rh_py/log 
+--- [cpp A1 root, HOME=/root] rc=0 ms=128
+[INFO] [1793749464.667047751] [cpp_node]: NODE-OK
+    files in /root/.ros/log: 1
+/w/repro.sh: line 72:   320 Aborted                 timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A2 uid 1234, HOME=/home/u not writable] rc=134 ms=165
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+/w/repro.sh: line 72:   328 Aborted                 timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A3 uid 1234, HOME unset] rc=134 ms=165
+>>> [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:
+  'rcutils_expand_user failed, at ./src/logging_dir.c:81'
+with this new error message:
+  'Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131'
+rcutils_reset_error() should be called after error handling to avoid this.
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131
+/w/repro.sh: line 72:   336 Aborted                 timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A4 uid 1234, HOME empty] rc=134 ms=166
+>>> [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:
+  'rcutils_expand_user failed, at ./src/logging_dir.c:81'
+with this new error message:
+  'Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131'
+rcutils_reset_error() should be called after error handling to avoid this.
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to get logging directory, at ./src/rcl_logging_spdlog.cpp:131
+/w/repro.sh: line 72:   344 Aborted                 timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A5 uid 1234, HOME=/nonexistent] rc=134 ms=166
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory: /nonexistent/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+/w/repro.sh: line 72:   356 Aborted                 timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A6 uid 1234, ~/.ros/log exists, owned by root] rc=134 ms=214
+terminate called after throwing an instance of 'spdlog::spdlog_ex'
+  what():  Failed opening file /home/r/.ros/log/cpp_node_357_1793749465490.log for writing: Permission denied
+/w/repro.sh: line 72:   364 Aborted                 timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A7 uid 1234, ROS_LOG_DIR=/var/log/ros (not writable)] rc=134 ms=164
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory: /var/log/ros, at ./src/rcl_logging_spdlog.cpp:138
+--- [cpp A8 uid 1234, HOME unset, ROS_LOG_DIR=/tmp/ld_cpp] rc=0 ms=130
+[INFO] [1793749465.894529953] [cpp_node]: NODE-OK
+    files in /tmp/ld_cpp: 1
+--- [cpp A9 uid 1234, HOME unset, ROS_HOME=/tmp/rh_cpp] rc=0 ms=130
+[INFO] [1793749466.035503746] [cpp_node]: NODE-OK
+    dirs with files under /tmp/rh_cpp: /tmp/rh_cpp/log 
+
+##### B. fixes for uid 1234 with HOME=/home/u not writable
+--- [py B1 ROS_LOG_DIR=/tmp/ld] rc=0 ms=350
+[INFO] [1793749466.368745226] [py_node]: NODE-OK
+    files in /tmp/ld: 1
+--- [py B2 ROS_HOME=/tmp/rhb] rc=0 ms=352
+[INFO] [1793749466.729247358] [py_node]: NODE-OK
+    files in /tmp/rhb/log: 1
+--- [py B3 HOME=/tmp/hb_py (writable, created by the node)] rc=0 ms=348
+[INFO] [1793749467.088332075] [py_node]: NODE-OK
+    files in /tmp/hb_py/.ros/log: 1
+--- [py B4 --ros-args --disable-external-lib-logs] rc=0 ms=349
+[INFO] [1793749467.447701741] [py_node]: NODE-OK
+--- [py B5 ROS_LOG_DIR=~/logs (literal tilde)] rc=0 ms=350
+[INFO] [1793749467.805611156] [py_node]: NODE-OK
+    /tmp/hb_py/logs files: 1
+--- [py B6 ROS_LOG_DIR= (empty)] rc=0 ms=354
+[INFO] [1793749468.166914918] [py_node]: NODE-OK
+    /tmp/hb_py/.ros/log files now: 2
+--- [py B7 ROS_LOG_DIR=/tmp/a/b/c_py (nested, missing)] rc=0 ms=357
+[INFO] [1793749468.533317943] [py_node]: NODE-OK
+    /tmp/a/b/c_py files: 1
+--- [py B8 ROS_LOG_DIR=/dev/null] rc=1 ms=195
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory: /dev/null, at ./src/rcl_logging_spdlog.cpp:138
+--- [cpp B1 ROS_LOG_DIR=/tmp/ld] rc=0 ms=130
+[INFO] [1793749468.913068106] [cpp_node]: NODE-OK
+    files in /tmp/ld: 1
+--- [cpp B2 ROS_HOME=/tmp/rhb] rc=0 ms=130
+[INFO] [1793749469.053930781] [cpp_node]: NODE-OK
+    files in /tmp/rhb/log: 1
+--- [cpp B3 HOME=/tmp/hb_cpp (writable, created by the node)] rc=0 ms=130
+[INFO] [1793749469.194813865] [cpp_node]: NODE-OK
+    files in /tmp/hb_cpp/.ros/log: 1
+--- [cpp B4 --ros-args --disable-external-lib-logs] rc=0 ms=130
+[INFO] [1793749469.334916350] [cpp_node]: NODE-OK
+--- [cpp B5 ROS_LOG_DIR=~/logs (literal tilde)] rc=0 ms=130
+[INFO] [1793749469.472168454] [cpp_node]: NODE-OK
+    /tmp/hb_cpp/logs files: 1
+--- [cpp B6 ROS_LOG_DIR= (empty)] rc=0 ms=129
+[INFO] [1793749469.612297689] [cpp_node]: NODE-OK
+    /tmp/hb_cpp/.ros/log files now: 2
+--- [cpp B7 ROS_LOG_DIR=/tmp/a/b/c_cpp (nested, missing)] rc=0 ms=130
+[INFO] [1793749469.752655299] [cpp_node]: NODE-OK
+    /tmp/a/b/c_cpp files: 1
+/w/repro.sh: line 72:   712 Aborted                 timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp B8 ROS_LOG_DIR=/dev/null] rc=134 ms=167
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory: /dev/null, at ./src/rcl_logging_spdlog.cpp:138
+
+##### C. ros2 launch and ros2 CLI
+--- [C1 ros2 launch, HOME=/home/u] rc=1 ms=282
+Traceback (most recent call last):
+    self.__logger = launch.logging.get_logger('launch')
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 298, in get_logger
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 272, in get_log_file_handler
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 258, in get_log_file_path
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 119, in log_dir
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 81, in _make_unique_log_dir
+PermissionError: [Errno 13] Permission denied: '/home/u/.ros'
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2launch/command/launch.py", line 172, in main
+    return launch_a_launch_file(
+  File "/opt/ros/humble/lib/python3.10/site-packages/ros2launch/api/api.py", line 162, in launch_a_launch_file
+    launch_service = launch.LaunchService(
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/launch_service.py", line 74, in __init__
+    self.__logger = launch.logging.get_logger('launch')
+--- [C2 ros2 launch, ROS_LOG_DIR=/tmp/lc] rc=0 ms=682
+[INFO] [launch]: Default logging verbosity is set to INFO
+[py_node.py-1] [INFO] [1793749470.837535657] [py_node]: NODE-OK
+    /tmp/lc files: <ts>d2e34c06f37-733/launch.log python<ts>.log 
+--- [C3 ros2 launch, HOME unset] rc=1 ms=289
+Traceback (most recent call last):
+    self.__logger = launch.logging.get_logger('launch')
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 298, in get_logger
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 272, in get_log_file_handler
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 258, in get_log_file_path
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 119, in log_dir
+  File "/opt/ros/humble/lib/python3.10/site-packages/launch/logging/__init__.py", line 81, in _make_unique_log_dir
+PermissionError: [Errno 13] Permission denied: '~'
+PermissionError: [Errno 13] Permission denied: '~'
+--- [C4 ros2 run, HOME=/home/u] rc=1 ms=342
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+--- [C5 ros2 topic list --no-daemon, HOME=/home/u] rc=1 ms=338
+failed to initialize logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+failed to initialize logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+--- [C6 ros2 topic pub --once, HOME=/home/u] rc=1 ms=341
+failed to initialize logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+failed to initialize logging: Failed to create log directory: /home/u/.ros/log, at ./src/rcl_logging_spdlog.cpp:138
+--- [C7 ros2 run with --disable-external-lib-logs, HOME=/home/u] rc=0 ms=500
+[INFO] [1793749472.726726447] [py_node]: NODE-OK
+
+##### D. log growth and cost (root, fresh dir, 20 runs each)
+D1 python with file logging: 6894 ms, files=20, bytes=5076
+D2 python --disable-external-lib-logs: 6944 ms, files=0
+D3 C++ with file logging: 2518 ms, files=20, bytes=5096
+D4 C++ --disable-external-lib-logs: 2512 ms, files=0
+D5 sample file names:
+python3_1005_1793749478909.log
+python3_1016_1793749479255.log
+cpp_node_1253_1793749486756.log
+cpp_node_1264_1793749486881.log
+D6 sample content:
+[INFO] [1793749478.959117769] [py_node]: NODE-OK
+
+##### E. 20 C++ nodes started at once into a missing nested dir, 5 rounds
+/w/repro.sh: line 154:  1714 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  1702 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  1730 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  1713 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  1715 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+E round 1: nonzero=5 files=20
+      2   what():  Resource temporarily unavailable
+      3   what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415
+/w/repro.sh: line 154:  2053 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2052 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2055 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2032 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2050 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2038 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2013 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+E round 2: nonzero=7 files=20
+      3   what():  Resource temporarily unavailable
+      4   what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415
+/w/repro.sh: line 154:  2397 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2360 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2388 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2361 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2369 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2362 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2367 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+E round 3: nonzero=7 files=20
+      2   what():  Resource temporarily unavailable
+      5   what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415
+/w/repro.sh: line 154:  2899 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2888 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2924 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2922 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2890 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2930 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2917 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2903 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2887 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2914 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2882 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  2919 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+E round 4: nonzero=12 files=20
+      7   what():  Resource temporarily unavailable
+      5   what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415
+/w/repro.sh: line 154:  3222 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3255 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3258 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3221 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3210 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3238 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3217 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3233 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3219 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3235 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3218 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3220 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+/w/repro.sh: line 154:  3234 Aborted                 ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+E round 5: nonzero=13 files=20
+      8   what():  Resource temporarily unavailable
+      5   what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415
+=== done humble

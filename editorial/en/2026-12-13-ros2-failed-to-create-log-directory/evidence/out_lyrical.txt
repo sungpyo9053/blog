@@ -1,0 +1,202 @@
+=== distro=lyrical
+ros-lyrical-launch 3.9.8-1resolute.20260728.172811
+ros-lyrical-rcl 10.4.5-1resolute.20260915.060844
+ros-lyrical-rcl-logging-interface 3.4.1-3resolute.20260915.055121
+ros-lyrical-rcl-logging-spdlog 3.4.1-3resolute.20260915.055418
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rcutils 7.1.3-1resolute.20260831.165446
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+RMW_IMPLEMENTATION env: ''
+logging lib: librcl_logging_implementation.so
+logging lib: librcl_logging_interface.so
+logging lib: librcl_logging_spdlog.so
+uid=0(root) gid=0(root) groups=0(root)
+
+##### A. causes (python node / C++ node)
+--- [py A1 root, HOME=/root] rc=0 ms=1063
+[INFO] [1793749677.306446119] [py_node]: NODE-OK
+    files in /root/.ros/log: 1
+--- [py A2 uid 1234, HOME=/home/u not writable] rc=1 ms=297
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory '/home/u/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+--- [py A3 uid 1234, HOME unset] rc=1 ms=289
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to get logging directory: rcutils_expand_user failed, at ./src/logging_dir.c:82, at ./src/rcl_logging_spdlog.cpp:198
+--- [py A4 uid 1234, HOME empty] rc=1 ms=291
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to get logging directory: rcutils_expand_user failed, at ./src/logging_dir.c:82, at ./src/rcl_logging_spdlog.cpp:198
+--- [py A5 uid 1234, HOME=/nonexistent] rc=1 ms=290
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory '/nonexistent/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+--- [py A6 uid 1234, ~/.ros/log exists, owned by root] rc=1 ms=344
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+RuntimeError: Failed opening file /home/r/.ros/log/python3_212_1793749678960.log for writing: Permission denied
+--- [py A7 uid 1234, ROS_LOG_DIR=/var/log/ros (not writable)] rc=1 ms=293
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory '/var/log/ros': 13, at ./src/rcl_logging_spdlog.cpp:214
+--- [py A8 uid 1234, HOME unset, ROS_LOG_DIR=/tmp/ld_py] rc=0 ms=430
+[INFO] [1793749679.656078607] [py_node]: NODE-OK
+    files in /tmp/ld_py: 1
+--- [py A9 uid 1234, HOME unset, ROS_HOME=/tmp/rh_py] rc=0 ms=506
+[INFO] [1793749680.163328511] [py_node]: NODE-OK
+    dirs with files under /tmp/rh_py: /tmp/rh_py/log 
+--- [cpp A1 root, HOME=/root] rc=0 ms=174
+[INFO] [1793749680.434917327] [cpp_node]: NODE-OK
+    files in /root/.ros/log: 1
+/w/repro.sh: line 72:   318 Aborted                    (core dumped) timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A2 uid 1234, HOME=/home/u not writable] rc=134 ms=341
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory '/home/u/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+/w/repro.sh: line 72:   328 Aborted                    (core dumped) timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A3 uid 1234, HOME unset] rc=134 ms=387
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to get logging directory: rcutils_expand_user failed, at ./src/logging_dir.c:82, at ./src/rcl_logging_spdlog.cpp:198
+/w/repro.sh: line 72:   337 Aborted                    (core dumped) timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A4 uid 1234, HOME empty] rc=134 ms=581
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to get logging directory: rcutils_expand_user failed, at ./src/logging_dir.c:82, at ./src/rcl_logging_spdlog.cpp:198
+/w/repro.sh: line 72:   347 Aborted                    (core dumped) timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A5 uid 1234, HOME=/nonexistent] rc=134 ms=591
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory '/nonexistent/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+/w/repro.sh: line 72:   361 Aborted                    (core dumped) timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A6 uid 1234, ~/.ros/log exists, owned by root] rc=134 ms=394
+terminate called after throwing an instance of 'spdlog::spdlog_ex'
+  what():  Failed opening file /home/r/.ros/log/cpp_node_362_1793749682590.log for writing: Permission denied
+/w/repro.sh: line 72:   371 Aborted                    (core dumped) timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp A7 uid 1234, ROS_LOG_DIR=/var/log/ros (not writable)] rc=134 ms=336
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory '/var/log/ros': 13, at ./src/rcl_logging_spdlog.cpp:214
+--- [cpp A8 uid 1234, HOME unset, ROS_LOG_DIR=/tmp/ld_cpp] rc=0 ms=153
+[INFO] [1793749683.359598708] [cpp_node]: NODE-OK
+    files in /tmp/ld_cpp: 1
+--- [cpp A9 uid 1234, HOME unset, ROS_HOME=/tmp/rh_cpp] rc=0 ms=154
+[INFO] [1793749683.531722326] [cpp_node]: NODE-OK
+    dirs with files under /tmp/rh_cpp: /tmp/rh_cpp/log 
+
+##### B. fixes for uid 1234 with HOME=/home/u not writable
+--- [py B1 ROS_LOG_DIR=/tmp/ld] rc=0 ms=431
+[INFO] [1793749683.933498140] [py_node]: NODE-OK
+    files in /tmp/ld: 1
+--- [py B2 ROS_HOME=/tmp/rhb] rc=0 ms=430
+[INFO] [1793749684.381368589] [py_node]: NODE-OK
+    files in /tmp/rhb/log: 1
+--- [py B3 HOME=/tmp/hb_py (writable, created by the node)] rc=0 ms=428
+[INFO] [1793749684.828908303] [py_node]: NODE-OK
+    files in /tmp/hb_py/.ros/log: 1
+--- [py B4 --ros-args --disable-external-lib-logs] rc=0 ms=430
+[INFO] [1793749685.273943981] [py_node]: NODE-OK
+--- [py B5 ROS_LOG_DIR=~/logs (literal tilde)] rc=0 ms=434
+[INFO] [1793749685.721402758] [py_node]: NODE-OK
+    /tmp/hb_py/logs files: 1
+--- [py B6 ROS_LOG_DIR= (empty)] rc=0 ms=433
+[INFO] [1793749686.170191546] [py_node]: NODE-OK
+    /tmp/hb_py/.ros/log files now: 2
+--- [py B7 ROS_LOG_DIR=/tmp/a/b/c_py (nested, missing)] rc=0 ms=424
+[INFO] [1793749686.616906641] [py_node]: NODE-OK
+    /tmp/a/b/c_py files: 1
+--- [py B8 ROS_LOG_DIR=/dev/null] rc=1 ms=290
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory '/dev/null': 20, at ./src/rcl_logging_spdlog.cpp:214
+--- [cpp B1 ROS_LOG_DIR=/tmp/ld] rc=0 ms=153
+[INFO] [1793749687.142960900] [cpp_node]: NODE-OK
+    files in /tmp/ld: 1
+--- [cpp B2 ROS_HOME=/tmp/rhb] rc=0 ms=153
+[INFO] [1793749687.313719553] [cpp_node]: NODE-OK
+    files in /tmp/rhb/log: 1
+--- [cpp B3 HOME=/tmp/hb_cpp (writable, created by the node)] rc=0 ms=153
+[INFO] [1793749687.484400254] [cpp_node]: NODE-OK
+    files in /tmp/hb_cpp/.ros/log: 1
+--- [cpp B4 --ros-args --disable-external-lib-logs] rc=0 ms=153
+[INFO] [1793749687.654952859] [cpp_node]: NODE-OK
+--- [cpp B5 ROS_LOG_DIR=~/logs (literal tilde)] rc=0 ms=156
+[INFO] [1793749687.823909798] [cpp_node]: NODE-OK
+    /tmp/hb_cpp/logs files: 1
+--- [cpp B6 ROS_LOG_DIR= (empty)] rc=0 ms=153
+[INFO] [1793749687.994961432] [cpp_node]: NODE-OK
+    /tmp/hb_cpp/.ros/log files now: 2
+--- [cpp B7 ROS_LOG_DIR=/tmp/a/b/c_cpp (nested, missing)] rc=0 ms=154
+[INFO] [1793749688.166772972] [cpp_node]: NODE-OK
+    /tmp/a/b/c_cpp files: 1
+/w/repro.sh: line 72:   835 Aborted                    (core dumped) timeout 60 env "${envs[@]}" "$@" > /tmp/o.txt 2>&1
+--- [cpp B8 ROS_LOG_DIR=/dev/null] rc=134 ms=334
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  failed to configure logging: Failed to create log directory '/dev/null': 20, at ./src/rcl_logging_spdlog.cpp:214
+
+##### C. ros2 launch and ros2 CLI
+--- [C1 ros2 launch, HOME=/home/u] rc=1 ms=666
+Traceback (most recent call last):
+    self.__logger = launch.logging.get_logger(self._logger_name)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 375, in get_logger
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 349, in get_log_file_handler
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 335, in get_log_file_path
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 160, in log_dir
+        base_path=_get_logging_directory()
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 89, in _make_unique_log_dir
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/ros2launch/command/launch.py", line 175, in main
+    return launch_a_launch_file(
+        launch_file_path=path,
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/ros2launch/api/api.py", line 165, in launch_a_launch_file
+    launch_service = launch.LaunchService(
+        argv=launch_file_arguments,
+--- [C2 ros2 launch, ROS_LOG_DIR=/tmp/lc] rc=0 ms=997
+[INFO] [launch]: Default logging verbosity is set to INFO
+[py_node.py-1] [INFO] [1793749690.085324810] [py_node]: NODE-OK
+    /tmp/lc files: <ts>a3f<ts>/launch.log python<ts>.log 
+--- [C3 ros2 launch, HOME unset] rc=1 ms=419
+Traceback (most recent call last):
+    self.__logger = launch.logging.get_logger(self._logger_name)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 375, in get_logger
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 349, in get_log_file_handler
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 335, in get_log_file_path
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 160, in log_dir
+        base_path=_get_logging_directory()
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/launch/logging/__init__.py", line 89, in _make_unique_log_dir
+PermissionError: [Errno 13] Permission denied: '~'
+--- [C4 ros2 run, HOME=/home/u] rc=1 ms=591
+Traceback (most recent call last):
+    _rclpy.rclpy_logging_configure(self.__context)
+rclpy._rclpy_pybind11.RCLError: failed to initialize logging: Failed to create log directory '/home/u/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+--- [C5 ros2 topic list --no-daemon, HOME=/home/u] rc=1 ms=481
+failed to initialize logging: Failed to create log directory '/home/u/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+failed to initialize logging: Failed to create log directory '/home/u/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+--- [C6 ros2 topic pub --once, HOME=/home/u] rc=1 ms=433
+failed to initialize logging: Failed to create log directory '/home/u/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+failed to initialize logging: Failed to create log directory '/home/u/.ros/log': 13, at ./src/rcl_logging_spdlog.cpp:214
+--- [C7 ros2 run with --disable-external-lib-logs, HOME=/home/u] rc=0 ms=722
+[INFO] [1793749692.861304120] [py_node]: NODE-OK
+
+##### D. log growth and cost (root, fresh dir, 20 runs each)
+D1 python with file logging: 8414 ms, files=20, bytes=980
+D2 python --disable-external-lib-logs: 8473 ms, files=0
+D3 C++ with file logging: 2870 ms, files=20, bytes=1000
+D4 C++ --disable-external-lib-logs: 2830 ms, files=0
+D5 sample file names:
+python3_1009_1793749694149.log
+python3_1027_1793749694576.log
+cpp_node_1689_1793749710024.log
+cpp_node_1707_1793749710167.log
+D6 sample content:
+[INFO] [1793749694.184462441] [py_node]: NODE-OK
+
+##### E. 10 C++ nodes started at once into a missing nested dir, 5 rounds
+E round 1: nonzero=0 log_files=10 log_dir_errors=0
+/w/repro.sh: line 155:  2650 Aborted                    (core dumped) ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+E round 2: nonzero=2 log_files=10 log_dir_errors=0
+      1   what():  failed to initialize rcl node: Failed to create std::thread: Resource temporarily unavailable, at ./src/listener_thread.cpp:60
+E round 3: nonzero=0 log_files=10 log_dir_errors=0
+/w/repro.sh: line 155:  3096 Aborted                    (core dumped) ROS_LOG_DIR=/tmp/race/a/b timeout 60 $CPP > /tmp/race_$i.txt 2>&1
+E round 4: nonzero=1 log_files=10 log_dir_errors=0
+      1   what():  failed to initialize rcl node: Failed to create std::thread: Resource temporarily unavailable, at ./src/listener_thread.cpp:60
+E round 5: nonzero=0 log_files=10 log_dir_errors=0
+=== done lyrical
