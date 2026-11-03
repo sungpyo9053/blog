@@ -1,0 +1,150 @@
+<pre><code>[ERROR] [launch]: Caught exception in launch (see debug for traceback): Caught multiple exceptions when trying to load file of format [py]:
+ - PackageNotFoundError: "package 'gazebo_ros' not found, searching: ['/opt/ros/humble']"
+ - InvalidFrontendLaunchFileError: The launch file may have a syntax error, or its format is unknown</code></pre>
+
+<p>Older posts quote a one-line form of the same error: <code>Caught exception when trying to load file of format [py]: "package 'gazebo_ros' not found.</code> Humble, Jazzy and Lyrical all printed the multi-line form above.</p>
+
+<p>Short answer: "Caught exception when trying to load file of format [py]" is a wrapper. <code>ros2 launch</code> imported your launch file and called <code>generate_launch_description()</code>, and some ordinary Python exception came out of it. The real error is the first bullet line under the message. Ignore the <code>InvalidFrontendLaunchFileError</code> bullet. That one only says the XML and YAML parsers couldn't read a Python file either, and it showed up in every failing <code>.launch.py</code> I ran. Fix the first bullet as you would in any Python script. To find the error without launching anything, run the file the way the loader does:</p>
+
+<pre><code>python3 -c "
+import runpy, sys
+m = runpy.run_path(sys.argv[1])
+ld = m['generate_launch_description']()
+from launch import LaunchDescription
+assert isinstance(ld, LaunchDescription), type(ld)
+" my_robot.launch.py</code></pre>
+
+<p>In my run that check failed on all eight broken Python launch files it was given and passed on the good one. If you need the full stack, add <code>-d</code>: <code>ros2 launch -d my_pkg my_robot.launch.py</code>.</p>
+
+<h2>Find your error</h2>
+
+<p>Each row is a one-line mistake in an otherwise working launch file. The bullet text was identical on Humble, Jazzy and Lyrical. Every row exited with code 1, and nothing in the file was started.</p>
+
+<table>
+<thead><tr><th>What was wrong in the launch file</th><th>First bullet under "load file of format [py]"</th></tr></thead>
+<tbody>
+<tr><td><code>get_package_share_directory('gazebo_ros')</code> for a package that isn't installed or sourced</td><td><code>PackageNotFoundError: "package 'gazebo_ros' not found, searching: ['/opt/ros/humble']"</code></td></tr>
+<tr><td>Imported a package that isn't installed (<code>from nav2_common.launch import RewrittenYaml</code>)</td><td><code>ModuleNotFoundError: No module named 'nav2_common'</code></td></tr>
+<tr><td>Imported a helper <code>.py</code> sitting next to the launch file</td><td><code>ModuleNotFoundError: No module named 'helper'</code></td></tr>
+<tr><td>Misspelled name in an import (<code>get_packages_share_directory</code>)</td><td><code>ImportError: cannot import name 'get_packages_share_directory' from 'ament_index_python.packages'</code></td></tr>
+<tr><td>Used <code>launch_ros.actions.Node</code> without <code>import launch_ros</code></td><td><code>NameError: name 'launch_ros' is not defined</code></td></tr>
+<tr><td>Missing closing bracket</td><td><code>SyntaxError: '(' was never closed (c02_syntax.launch.py, line 4)</code></td></tr>
+<tr><td>Extra indentation on one line</td><td><code>IndentationError: unexpected indent (c17_indent.launch.py, line 5)</code></td></tr>
+<tr><td>Function named <code>generate_launch_descriptions</code> (extra s)</td><td><code>InvalidPythonLaunchFileError: launch file at '/l/c04_nofunc.launch.py' does not contain the required function 'generate_launch_description()'</code></td></tr>
+<tr><td>ROS 1 keyword in <code>Node(...)</code> (<code>node_name='x'</code>)</td><td><code>TypeError: Action.__init__() got an unexpected keyword argument 'node_name'</code></td></tr>
+</tbody>
+</table>
+
+<p>Four other cases failed without the "load file of format" wrapper, so they're easy to miss when you search:</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Whole error line</th></tr></thead>
+<tbody>
+<tr><td><code>generate_launch_description()</code> builds the description but has no <code>return</code></td><td><code>Caught exception in launch (see debug for traceback): 'NoneType' object has no attribute 'get_launch_arguments_with_include_launch_description_actions'</code></td></tr>
+<tr><td>It returns a plain list of actions instead of a <code>LaunchDescription</code></td><td><code>... 'list' object has no attribute 'get_launch_arguments_with_include_launch_description_actions'</code></td></tr>
+<tr><td>An exception inside an <code>OpaqueFunction</code> at run time</td><td><code>Caught exception in launch (see debug for traceback): raised inside OpaqueFunction</code></td></tr>
+<tr><td>The path passed to <code>ros2 launch</code> doesn't exist</td><td>A Python traceback ending in <code>ValueError: '/l/nope.launch.py' is not a valid package name</code></td></tr>
+</tbody>
+</table>
+
+<p>The last row surprised me. With a single argument, <code>ros2 launch</code> treats a path that doesn't exist as a package name. You don't get "file not found", you get a stack trace about package names. Check the path first when you see it.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-03 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images on a 2 vCPU Linux host, one distro after another. I didn't build a package. Every launch file sat in <code>/l</code> and was started by path with <code>ros2 launch /l/&lt;file&gt;</code>, with a 60-second timeout. The baseline file has one <code>LogInfo</code> action that prints <code>LAUNCH-OK</code>. Each broken file differs from it by one mistake. I wrote 18 launch files: 14 <code>.launch.py</code> files, the good Python file copied under two other extensions, one XML file and one YAML file. I also ran the path that doesn't exist, <code>-d</code>, <code>-s</code> and <code>-p</code> on some of the broken files, and two checks outside <code>ros2 launch</code>.</p>
+
+<p>The good file ran in 275 to 283 ms on Humble, 321 to 326 ms on Jazzy and 409 to 427 ms on Lyrical (five runs each). The broken files failed in about the same time, 274 to 353 ms on Humble. So the error comes at load time, before any node or process is started. If your terminal shows other nodes starting and then this error, the error is in an included file or in a later step, not in the top-level file.</p>
+
+<h2>Why the message says "multiple exceptions"</h2>
+
+<p>The <code>-d</code> traceback shows where the wrapper comes from. <code>get_launch_description_from_any_launch_file</code> in <code>launch/launch_description_sources/any_launch_file_utilities.py</code> tries more than one loader. It collects each loader's exception, then raises <code>InvalidLaunchFileError</code> with all of them listed. For a <code>.launch.py</code> file the Python loader goes first, so its exception is the first bullet. The frontend (XML and YAML) attempt adds the second bullet. The order turns around for an XML file. A <code>.launch.xml</code> with a misspelled attribute printed:</p>
+
+<pre><code>Caught multiple exceptions when trying to load file of format [xml]:
+ - ValueError: Unexpected attribute(s) found in `node`: {'nmae'}
+ - SyntaxError: invalid syntax (c15_bad.launch.xml, line 1)</code></pre>
+
+<p>Here the first bullet is the real one again, and the <code>SyntaxError</code> is from the Python loader trying to read XML. A YAML file with a misplaced <code>-</code> gave <code>format [yaml]</code>, a nested <code>InvalidFrontendLaunchFileError</code>, the real <code>ParserError: while parsing a block mapping ... expected &lt;block end&gt;, but found '-'</code> with line and column, then an XML <code>ParseError</code> and a Python <code>SyntaxError</code>. In all three formats the rule held: read the first error that names your file's real problem and skip the ones from the other parsers.</p>
+
+<p>Trying more than one loader also means the extension isn't strict. A file with Python content named <code>c13_python_as.launch</code> ran and printed <code>LAUNCH-OK</code>, and so did the same Python content saved as <code>c14_python_as.launch.xml</code>, with exit code 0 on all three distros. A wrong extension didn't cause this error in my run.</p>
+
+<h2>Package not found</h2>
+
+<p>This is the cause behind the most-viewed question about this error, where a launch file needs <code>gazebo_ros</code>. <code>get_package_share_directory()</code> runs while the file is loading. If the package isn't in any sourced prefix, it raises <code>PackageNotFoundError</code>, and the message lists every prefix it searched. In my run that list was <code>['/opt/ros/humble']</code> (and the Jazzy and Lyrical paths). That list is the fastest clue. If your workspace's <code>install</code> folder isn't in it, you didn't source the workspace in this terminal. If the workspace is there but the package isn't, the package isn't installed or wasn't built. For <code>gazebo_ros</code> on Jazzy or Lyrical, keep in mind that the classic Gazebo packages are not part of those distros, so a launch file written for Gazebo Classic needs porting, not just an install. I didn't test installing Gazebo.</p>
+
+<h2>A helper module next to the launch file</h2>
+
+<p>A launch file that imports <code>helper.py</code> from its own folder fails with <code>ModuleNotFoundError: No module named 'helper'</code>, even though plain <code>python3</code> would find it. The loader doesn't put the launch file's folder on <code>sys.path</code>. Adding it yourself worked on all three distros and printed <code>HELPER-IMPORTED</code>:</p>
+
+<pre><code class="language-python">import os, sys
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from helper import MSG</code></pre>
+
+<p>Use <code>realpath</code> so the path still points to the real folder when <code>--symlink-install</code> links the launch file into <code>install/</code>. I only ran this from a plain folder, not from an installed package, so check that the helper is installed next to the launch file too (same <code>data_files</code> or <code>install(DIRECTORY ...)</code> entry). The other option is to move the helper into a real Python package that your <code>setup.py</code> installs, then import it by package name. I didn't test that.</p>
+
+<h2>NameError, ImportError and ROS 1 keywords</h2>
+
+<p>These are plain Python mistakes, and the bullet already names the line's problem. <code>NameError: name 'launch_ros' is not defined</code> means the file used <code>launch_ros.actions.Node</code> with only <code>from launch_ros.actions import Node</code>, or with no import at all. Use the same form in the import and in the call. <code>ImportError: cannot import name ...</code> is almost always a typo. The function is <code>get_package_share_directory</code>, singular. The <code>TypeError ... unexpected keyword argument 'node_name'</code> comes from old examples. The ROS 2 <code>Node</code> action takes <code>name=</code> and <code>executable=</code>, not <code>node_name=</code> or <code>node_executable=</code>. A ROS 1 dependency fails the same way, so <code>No module named 'roslaunch'</code> in a ROS 2 launch file means ROS 1 code got in. I didn't run that case.</p>
+
+<h2>No return, or the wrong return</h2>
+
+<p>If <code>generate_launch_description()</code> forgets <code>return</code>, or returns a list, the import itself succeeds. The failure comes one step later, and the message doesn't mention a file format: <code>'NoneType' object has no attribute 'get_launch_arguments_with_include_launch_description_actions'</code>. The fix is <code>return LaunchDescription([...])</code>. A misspelled function name gives a clearer error, <code>does not contain the required function 'generate_launch_description()'</code>, inside the usual wrapper.</p>
+
+<p>If you build the description from <code>LaunchConfiguration</code> values, a type mix-up inside the function also lands here. The published post on <a href="https://huntlab.app/en/ros-2-launchconfiguration-value-as-int-python-launch/">LaunchConfiguration values as int</a> covers why those values are strings at load time.</p>
+
+<h2>Fix options compared</h2>
+
+<p>I ran each check on the good file and eight broken Python files: syntax, indentation, NameError, missing function, missing package, local helper, missing module and no return.</p>
+
+<table>
+<thead><tr><th>Check</th><th>What it caught</th><th>Notes from the run</th></tr></thead>
+<tbody>
+<tr><td>Read the first bullet of the normal error</td><td>All wrapped causes</td><td>One line, same text on all three distros. Missing return shows a different, unwrapped message.</td></tr>
+<tr><td><code>ros2 launch -d ...</code></td><td>Same, plus the stack</td><td>50 lines (Humble), 60 (Jazzy) and 57 (Lyrical) for the NameError case. The useful part is still the last few lines.</td></tr>
+<tr><td><code>python3 -m py_compile file.launch.py</code></td><td>2 of 8 (syntax, indentation)</td><td>It only parses the file and runs nothing. Exit 0 on the NameError, missing package and missing module cases.</td></tr>
+<tr><td><code>runpy</code> plus calling <code>generate_launch_description()</code> (script above)</td><td>8 of 8</td><td>Starts nothing. Missing function shows as <code>KeyError: 'generate_launch_description'</code>, missing return as <code>AssertionError: &lt;class 'NoneType'&gt;</code>.</td></tr>
+<tr><td><code>ros2 launch -s</code> or <code>-p</code></td><td>Same causes</td><td>Both still load the file, and on these files they printed a raw Python traceback instead of the one-line error.</td></tr>
+</tbody>
+</table>
+
+<p>For daily use, read the first bullet. For CI or a pre-commit hook, the <code>runpy</code> check is the one that caught everything without starting a process. Run it in a sourced shell, with the same workspace sourced, or every missing-package case will fail there too.</p>
+
+<h2>Version notes</h2>
+
+<p>Every error text in this post was identical on Humble (launch 1.0.15, launch_ros 0.19.14, Python 3.10.12), Jazzy (launch 3.4.12, launch_ros 0.26.13, Python 3.12.3) and Lyrical (launch 3.9.8, launch_ros 0.29.9, Python 3.14.4). Only line numbers inside the <code>-d</code> traceback changed, for example <code>any_launch_file_utilities.py</code> line 57 on Humble and line 61 on Jazzy and Lyrical, plus Python's <code>^^^^</code> markers on 3.12 and later. Drop line numbers when you search for this error.</p>
+
+<p>The one-line form in older questions, <code>Caught exception when trying to load file of format [py]: ...</code> with no bullets, didn't appear on any of the three distros. I didn't test Foxy, Galactic or Iron, so I can't say which release changed it. The cause after the colon reads the same way in both forms.</p>
+
+<h2>Not tested</h2>
+
+<p>Launch files installed in a package and started as <code>ros2 launch my_pkg file.launch.py</code>, <code>--symlink-install</code>, errors inside an <code>IncludeLaunchDescription</code> child file, Gazebo and <code>gazebo_ros</code> installs, <code>roslaunch</code> substitution args from ROS 1 xacro, Foxy, Galactic, Iron and Rolling, and RMWs other than the default (no nodes were started, so the RMW played no part).</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Caught exception when trying to load file of format [py]" mean?</h3>
+<p><code>ros2 launch</code> imported the Python launch file or ran its <code>generate_launch_description()</code>, and that raised an exception. The real error is the first bullet under the message, for example <code>PackageNotFoundError</code>, <code>NameError</code> or <code>SyntaxError</code>.</p>
+
+<h3>What is "InvalidFrontendLaunchFileError: The launch file may have a syntax error, or its format is unknown"?</h3>
+<p>For a <code>.launch.py</code> file it's noise. After the Python loader fails, launch also tries the XML and YAML parsers, and they fail too. It appeared in every failing Python launch file in my run, whatever the real cause was.</p>
+
+<h3>How do I fix "package 'gazebo_ros' not found" in a launch file?</h3>
+<p>Look at the <code>searching:</code> list in the message. If your workspace's install folder is missing from it, source the workspace in that terminal. If it's there, build or install the package. On Jazzy and Lyrical the classic <code>gazebo_ros</code> packages aren't part of the distro, so the launch file needs porting.</p>
+
+<h3>Why can't my launch file import a Python file from the same folder?</h3>
+<p>The launch loader doesn't add the launch file's folder to <code>sys.path</code>, so <code>from helper import X</code> fails with <code>No module named 'helper'</code>. Adding <code>sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))</code> before the import worked on Humble, Jazzy and Lyrical.</p>
+
+<h3>How do I check a launch file for errors without running it?</h3>
+<p><code>python3 -m py_compile</code> found only the syntax and indentation errors. Loading the file with <code>runpy.run_path</code> and calling <code>generate_launch_description()</code> found all eight broken cases in my run, and it started nothing.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Caught exception when trying to load file of format [py] mean?", "acceptedAnswer": {"@type": "Answer", "text": "ros2 launch imported the Python launch file or ran its generate_launch_description(), and that raised an exception. The real error is the first bullet under the message, for example PackageNotFoundError, NameError or SyntaxError."}},
+{"@type": "Question", "name": "What is InvalidFrontendLaunchFileError: The launch file may have a syntax error, or its format is unknown?", "acceptedAnswer": {"@type": "Answer", "text": "For a .launch.py file it is noise. After the Python loader fails, launch also tries the XML and YAML parsers, and they fail too. It appeared in every failing Python launch file in my run, whatever the real cause was."}},
+{"@type": "Question", "name": "How do I fix package gazebo_ros not found in a launch file?", "acceptedAnswer": {"@type": "Answer", "text": "Look at the searching: list in the message. If your workspace install folder is missing from it, source the workspace in that terminal. If it is there, build or install the package. On Jazzy and Lyrical the classic gazebo_ros packages are not part of the distro, so the launch file needs porting."}},
+{"@type": "Question", "name": "Why can't my launch file import a Python file from the same folder?", "acceptedAnswer": {"@type": "Answer", "text": "The launch loader does not add the launch file folder to sys.path, so from helper import X fails with No module named helper. Adding sys.path.insert(0, os.path.dirname(os.path.realpath(__file__))) before the import worked on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "How do I check a launch file for errors without running it?", "acceptedAnswer": {"@type": "Answer", "text": "python3 -m py_compile found only the syntax and indentation errors. Loading the file with runpy.run_path and calling generate_launch_description() found all eight broken cases in my run, and it started nothing."}}
+]}
+</script>
+
+<p>Measured on 2026-11-03 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, launch 1.0.15, launch_ros and ros2launch 0.19.14, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, launch 3.4.12, launch_ros and ros2launch 0.26.13, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, launch 3.9.8, launch_ros and ros2launch 0.29.9, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-11-ros2-launch-load-file-of-format-py/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105319">package 'gazebo_ros' not found</a>, <a href="https://robotics.stackexchange.com/questions/109680">ros2 launch file syntax error - InvalidFrontendLaunchFileError</a>, <a href="https://robotics.stackexchange.com/questions/107096">Trouble launching display.launch.py file</a>, <a href="https://robotics.stackexchange.com/questions/112612">ROS2 Humble Launch - How to Get Log Level to Output Launch File Error Traceback</a>, <a href="https://robotics.stackexchange.com/questions/111015">Caught exception when trying to load file of format [yaml]: Expected only one root</a>.</p>
