@@ -32,8 +32,21 @@ class EnglishEditionTests(unittest.TestCase):
             client = SimpleNamespace(request=lambda *a, **k: calls.append((a, k)) or ([] if a[0] == "GET" else {"id": 9}))
             slot = datetime(2026, 10, 5, 10, tzinfo=ZoneInfo("Asia/Seoul"))
             self.assertEqual(schedule_english(root, 827, slot, client), 9)
-            payload = calls[1][1]["payload"]
+            payload = calls[-1][1]["payload"]
             self.assertEqual((payload["status"], payload["date"], payload["meta"]), ("future", "2026-10-05T10:00:00", {"ko_post_id": 827}))
+            self.assertNotIn("featured_media", payload)
+
+    def test_korean_card_is_copied_to_edition(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, runner = topic(d, "<!-- measured:start -->0.075 s vs 0.4 s<!-- measured:end -->")
+            write_english(root, "a-b", None, runner=runner)
+            calls = []
+            def request(method, path, **k):
+                calls.append((method, path, k))
+                return [] if path.startswith("hunt_en?") else {"featured_media": 1932} if method == "GET" else {"id": 9}
+            self.assertEqual(schedule_english(root, 1934, datetime(2026, 11, 3, 10), SimpleNamespace(request=request)), 9)
+            self.assertEqual(calls[1][1], "posts/1934?_fields=featured_media")
+            self.assertEqual(calls[-1][2]["payload"]["featured_media"], 1932)
 
     def test_existing_edition_is_reused_not_duplicated(self):
         with tempfile.TemporaryDirectory() as d:

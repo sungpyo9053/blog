@@ -86,8 +86,13 @@ def schedule_english(topic_dir: Path, ko_post_id: int, slot, client) -> int | No
     existing = client.request("GET", f"hunt_en?slug={meta['slug']}&status=publish,future&_fields=id")
     if existing:
         return existing[0]["id"]
-    post = client.request("POST", "hunt_en", payload={
+    payload = {
         "title": meta["title"], "content": article.read_text(encoding="utf-8"), "excerpt": meta["excerpt"],
         "slug": meta["slug"], "status": "future", "date": slot.strftime("%Y-%m-%dT%H:%M:%S"),
-        "meta": {"ko_post_id": int(ko_post_id)}}, expected=(201,))
+        "meta": {"ko_post_id": int(ko_post_id)}}
+    # Without the Korean card the edition went out with no og:image (#1936, 2026-11-03).
+    ko = client.request("GET", f"posts/{int(ko_post_id)}?_fields=featured_media")
+    if isinstance(ko, dict) and ko.get("featured_media"):
+        payload["featured_media"] = int(ko["featured_media"])
+    post = client.request("POST", "hunt_en", payload=payload, expected=(201,))
     return post["id"]

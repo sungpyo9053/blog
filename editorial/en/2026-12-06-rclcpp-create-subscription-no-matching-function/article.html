@@ -1,0 +1,199 @@
+<pre><code>c_no_qos.cpp:13:39: error: no matching function for call to ‘N::create_subscription&lt;String&gt;(const char [8], std::_Bind_helper&lt;false, void (N::*)(std::shared_ptr&lt;std_msgs::msg::String_&lt;std::allocator&lt;void&gt; &gt; &gt;), N*, const std::_Placeholder&lt;1&gt;&amp;&gt;::type)’
+/w/src/c_no_qos.cpp:13:39: note:   candidate expects 5 arguments, 2 provided</code></pre>
+
+<p>When the callback is the problem, the error usually comes from inside rclcpp instead:</p>
+
+<pre><code>/opt/ros/humble/include/rclcpp/rclcpp/any_subscription_callback.hpp:394:25: error: no match for ‘operator=’ (operand types are ‘rclcpp::detail::AnySubscriptionCallbackHelper&lt;std_msgs::msg::String_&lt;std::allocator&lt;void&gt; &gt;, std::allocator&lt;void&gt;, false&gt;::variant_type’ {aka ‘std::variant&lt;std::function&lt;void(const std_msgs::msg::String_&lt;std::allocator&lt;void&gt; &gt;&amp;)&gt;, ...</code></pre>
+
+<p>Short answer: pass the message type as a template argument, a QoS (a depth like <code>10</code> is enough) as the second argument, and a callback whose parameter is one of the forms rclcpp accepts. This line compiled on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-cpp">sub_ = create_subscription&lt;std_msgs::msg::String&gt;(
+  "chatter", 10,
+  [this](const std_msgs::msg::String &amp; msg) { cb(msg); });</code></pre>
+
+<p>A lambda was the one callback form that fixed every failing case I tried. That includes passing an extra argument to the callback. <code>std::bind(&amp;N::cb, this, _1, 1)</code> did not compile on any of the three distros.</p>
+
+<h2>Find your error</h2>
+
+<p>The first <code>error:</code> line tells you which group you are in. If it says <code>no matching function for call to ... create_subscription</code>, the arguments around the callback are wrong. If it points into <code>any_subscription_callback.hpp</code> or <code>functional</code>, the callback itself is wrong. Every row below gave the same first error on Humble, Jazzy and Lyrical. Only the header line numbers changed.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>First error line (shortened)</th></tr></thead>
+<tbody>
+<tr><td>No QoS argument: <code>create_subscription&lt;String&gt;("chatter", std::bind(...))</code></td><td><code>no matching function for call to ‘N::create_subscription&lt;String&gt;(const char [8], std::_Bind_helper&lt;...&gt;::type)’</code>, then <code>candidate expects 5 arguments, 2 provided</code> (Humble) or <code>3 arguments, 2 provided</code> (Jazzy, Lyrical)</td></tr>
+<tr><td>No template argument: <code>create_subscription("chatter", 10, ...)</code></td><td><code>no matching function for call to ‘N::create_subscription(const char [8], int, ...)’</code>, with no <code>&lt;String&gt;</code> in the name</td></tr>
+<tr><td>An <code>rmw_qos_profile_t</code> as the QoS: <code>rmw_qos_profile_sensor_data</code></td><td><code>no matching function for call to ‘N::create_subscription&lt;String&gt;(const char [8], const rmw_qos_profile_t&amp;, ...)’</code></td></tr>
+<tr><td><code>std::bind(&amp;N::cb, this)</code>, no <code>_1</code></td><td><code>static assertion failed: Wrong number of arguments for pointer-to-member</code></td></tr>
+<tr><td>Callback with an extra parameter, bound with only <code>_1</code></td><td><code>static assertion failed: Wrong number of arguments for pointer-to-member</code>, then <code>no matching function for call to ‘std::function&lt;void(const std_msgs::msg::String_&lt;...&gt;&amp;, int)&gt;::function(...)’</code></td></tr>
+<tr><td>Same callback, extra value bound: <code>std::bind(&amp;N::cb, this, _1, 1)</code></td><td><code>any_subscription_callback.hpp: error: no match for ‘operator=’</code></td></tr>
+<tr><td>Callback takes a different message type (<code>Int32</code> for a <code>String</code> subscription)</td><td><code>any_subscription_callback.hpp: error: no match for ‘operator=’</code></td></tr>
+<tr><td>Callback parameter form rclcpp rejects (<code>Msg &amp;</code>, <code>const Msg::SharedPtr &amp;</code>, <code>Msg::SharedPtr &amp;</code>, <code>const Msg *</code>)</td><td><code>any_subscription_callback.hpp: error: no match for ‘operator=’</code></td></tr>
+<tr><td>Two overloads of <code>cb</code>, used with <code>std::bind</code></td><td><code>no matching function for call to ‘bind(&lt;unresolved overloaded function type&gt;, N*, const std::_Placeholder&lt;1&gt;&amp;)’</code></td></tr>
+<tr><td>Generic lambda: <code>[](auto msg) { ... }</code></td><td><code>function_traits.hpp:51:9: error: ‘decltype’ cannot resolve address of overloaded function</code></td></tr>
+<tr><td>Member declared as <code>Subscription&lt;Int32&gt;::SharedPtr</code>, assigned a <code>String</code> subscription</td><td><code>no match for ‘operator=’ (operand types are ‘rclcpp::Subscription&lt;std_msgs::msg::Int32_&lt;...&gt; &gt;::SharedPtr’ ... and ‘std::shared_ptr&lt;rclcpp::Subscription&lt;std_msgs::msg::String_&lt;...&gt; &gt; &gt;’)</code></td></tr>
+<tr><td><code>create_publisher&lt;String&gt;("chatter")</code>, no QoS</td><td><code>no matching function for call to ‘N::create_publisher&lt;String&gt;(const char [8])’</code>, then <code>candidate expects 3 arguments, 1 provided</code> (Humble) or <code>2 arguments, 1 provided</code> (Jazzy, Lyrical)</td></tr>
+</tbody>
+</table>
+
+<p>Compiler output was long for the callback errors. The wrong message type produced 69 lines and 45,551 bytes on Humble, and 171 lines and 51,107 bytes on Lyrical. Only the first <code>error:</code> line and the <code>aka</code> part after it matter. The rest lists the alternatives inside the variant.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-03 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one after another, on a 2 vCPU Linux host. The script writes 34 small C++ files. Each is a class <code>N</code> that derives from <code>rclcpp::Node</code>, with one <code>create_subscription</code> or <code>create_publisher</code> call in the constructor and a <code>cb</code> member function. A plain CMake project builds each file as its own executable, linked with <code>target_link_libraries(... rclcpp::rclcpp ${std_msgs_TARGETS})</code>. I ran <code>make &lt;target&gt;</code> for each one and recorded the exit code, the time, the size of the output and the first errors. Then I ran one fixed node, published one message on each of two topics, and checked that the callback ran. Release build, C++17, default warning flags.</p>
+
+<p>The CMake side is the same on every distro. If your Lyrical build fails earlier, at <code>ament_target_dependencies</code>, that is a different problem, covered in <a href="https://huntlab.app/en/ros-2-lyrical-unknown-cmake-command-ament-target-dependencies/">Unknown CMake command "ament_target_dependencies" in ROS 2 Lyrical</a>.</p>
+
+<p>Result for each variant (same on all three distros):</p>
+
+<table>
+<thead><tr><th>Variant</th><th>Compiled?</th></tr></thead>
+<tbody>
+<tr><td><code>std::bind(&amp;N::cb, this, _1)</code>, <code>cb(const String::SharedPtr)</code>, depth 10</td><td>yes</td></tr>
+<tr><td>Lambda <code>[this](const String &amp; msg) { cb(msg); }</code>, depth 10</td><td>yes</td></tr>
+<tr><td>No QoS argument</td><td>no</td></tr>
+<tr><td>No template argument</td><td>no</td></tr>
+<tr><td><code>std::bind(&amp;N::cb, this)</code>, no placeholder</td><td>no</td></tr>
+<tr><td>Wrong message type in the callback</td><td>no</td></tr>
+<tr><td>Extra callback parameter, <code>std::bind(..., _1)</code></td><td>no</td></tr>
+<tr><td>Extra callback parameter, <code>std::bind(..., _1, 1)</code></td><td>no</td></tr>
+<tr><td>Extra callback parameter, lambda <code>[this](const String &amp; m) { cb(m, 1); }</code></td><td>yes</td></tr>
+<tr><td><code>rmw_qos_profile_sensor_data</code> as the QoS</td><td>no</td></tr>
+<tr><td><code>rclcpp::SensorDataQoS()</code></td><td>yes</td></tr>
+<tr><td><code>rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data), rmw_qos_profile_sensor_data)</code></td><td>yes</td></tr>
+<tr><td>Overloaded <code>cb</code> with <code>std::bind</code></td><td>no</td></tr>
+<tr><td>Overloaded <code>cb</code> called from a lambda with a typed parameter</td><td>yes</td></tr>
+<tr><td>Generic lambda <code>(auto msg)</code></td><td>no</td></tr>
+<tr><td>Member pointer of the wrong <code>Subscription&lt;T&gt;</code> type</td><td>no</td></tr>
+<tr><td><code>create_publisher&lt;String&gt;("chatter")</code></td><td>no</td></tr>
+<tr><td><code>create_publisher&lt;String&gt;("chatter", 10)</code></td><td>yes</td></tr>
+</tbody>
+</table>
+
+<p>Failed files stopped after 3.4 to 7.9 seconds. Subscription files that compiled took 11.7 to 15.4 seconds each, a little longer on Lyrical (GCC 15) than on Humble (GCC 11). The publisher-only file took 5.8 to 9.1 seconds. None of the files that compiled printed a warning.</p>
+
+<h2>Missing QoS or template argument</h2>
+
+<p>Some older code calls <code>create_subscription&lt;T&gt;(topic, callback)</code> or <code>create_publisher&lt;T&gt;(topic)</code>. On all three distros I tested, a QoS argument is required, and its place is right after the topic name. The fix in the accepted <a href="https://robotics.stackexchange.com/questions/102560">answer to the Foxy question</a> is the same as mine: add a depth. <code>10</code> compiled on all three distros. The note <code>candidate expects N arguments, 2 provided</code> is the clue. You gave two arguments and the function needs at least three.</p>
+
+<p>The message type must be given explicitly. rclcpp doesn't deduce it from the callback. Without <code>&lt;String&gt;</code> the error has no template argument in the function name (<code>N::create_subscription(const char [8], int, ...)</code>). Check that first if you copied the code from a web page, where text between angle brackets is easy to lose.</p>
+
+<h2>rmw_qos_profile_t is not a QoS</h2>
+
+<p>Older examples pass <code>rmw_qos_profile_sensor_data</code> straight to <code>create_subscription</code>, as in <a href="https://robotics.stackexchange.com/questions/96819">this Eloquent question</a>. That is the C struct from rmw, and current rclcpp wants an <code>rclcpp::QoS</code> object. Two replacements compiled everywhere. The short one is <code>rclcpp::SensorDataQoS()</code>. If you need a specific rmw profile, wrap it: <code>rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(profile), profile)</code>. The error mentions <code>const rmw_qos_profile_t&amp;</code> in the argument list, so this case is easy to spot.</p>
+
+<h2>Callback parameter forms that compile</h2>
+
+<p>rclcpp keeps the callback in a <code>std::variant</code> of <code>std::function</code> types, one per supported signature. If your callable doesn't match any of them, the assignment in <code>any_subscription_callback.hpp</code> fails with <code>no match for ‘operator=’</code>. I tested each parameter form with a lambda on a <code>std_msgs/msg/String</code> subscription:</p>
+
+<table>
+<thead><tr><th>Callback parameter</th><th>Humble, Jazzy, Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>const String &amp;</code></td><td>compiles</td></tr>
+<tr><td><code>String</code> (by value)</td><td>compiles</td></tr>
+<tr><td><code>String &amp;</code></td><td>error</td></tr>
+<tr><td><code>String::SharedPtr</code></td><td>compiles</td></tr>
+<tr><td><code>const String::SharedPtr</code></td><td>compiles</td></tr>
+<tr><td><code>const String::SharedPtr &amp;</code></td><td>error</td></tr>
+<tr><td><code>String::SharedPtr &amp;</code></td><td>error</td></tr>
+<tr><td><code>String::ConstSharedPtr</code></td><td>compiles</td></tr>
+<tr><td><code>const String::ConstSharedPtr &amp;</code></td><td>compiles</td></tr>
+<tr><td><code>String::UniquePtr</code></td><td>compiles</td></tr>
+<tr><td><code>const String *</code></td><td>error</td></tr>
+<tr><td><code>const String &amp;, const rclcpp::MessageInfo &amp;</code></td><td>compiles</td></tr>
+<tr><td><code>String::SharedPtr, const rclcpp::MessageInfo &amp;</code></td><td>compiles</td></tr>
+<tr><td><code>std::shared_ptr&lt;rclcpp::SerializedMessage&gt;</code></td><td>compiles</td></tr>
+<tr><td><code>const rclcpp::SerializedMessage &amp;</code></td><td>compiles</td></tr>
+</tbody>
+</table>
+
+<p>The one that catches people is <code>const String::SharedPtr &amp;</code>. It looks like a harmless way to avoid copying a shared pointer, but it is <code>const std::shared_ptr&lt;String&gt; &amp;</code>, and that form isn't in the list. <code>const String::ConstSharedPtr &amp;</code>, a reference to a pointer to a const message, is in the list. This matches the results in <a href="https://robotics.stackexchange.com/questions/107802">this 2024 question</a>, which found that every form with a non-const <code>&amp;</code> fails, and so does <code>const SharedPtr&amp;</code>. The accepted answer there explains the list in terms of ownership. <code>const Msg &amp;</code> means you only read the message, <code>UniquePtr</code> means you take ownership, and a shared pointer means you may keep a copy.</p>
+
+<p>A generic lambda (<code>auto msg</code>) fails for a related reason. rclcpp needs one concrete parameter type to pick the variant entry, and a generic lambda's <code>operator()</code> is a template. The error is <code>‘decltype’ cannot resolve address of overloaded function</code> in <code>function_traits.hpp</code>. Write the type out.</p>
+
+<p>If you use <code>std::bind</code> with a member function, the same rules apply to that function's parameter list. <code>void cb(const Int32::SharedPtr)</code> bound for a <code>String</code> subscription gave <code>no match for ‘operator=’</code>, and the <code>aka</code> part of the message showed both message types.</p>
+
+<h2>Passing an extra argument to the callback</h2>
+
+<p>This is the most common question in the group (<a href="https://robotics.stackexchange.com/questions/97254">907 views</a>, <a href="https://robotics.stackexchange.com/questions/109801">434 views</a>). People want one callback for several topics and an extra value to tell them apart. I tried three ways with <code>void cb(const String &amp; msg, int src)</code>:</p>
+
+<ul>
+<li><code>std::bind(&amp;N::cb, this, _1)</code> failed. The standard library's own check fires first: <code>static assertion failed: Wrong number of arguments for pointer-to-member</code>.</li>
+<li><code>std::bind(&amp;N::cb, this, _1, 1)</code> also failed, on all three distros, with <code>no match for ‘operator=’</code> in <code>any_subscription_callback.hpp</code>. The call is correct C++ and the bind object takes one argument. The error shows the callback type rclcpp worked out from the bind expression, and it isn't one of the accepted forms. Don't spend time on <code>std::bind</code> for this case.</li>
+<li>The lambda <code>[this](const String &amp; m) { cb(m, 1); }</code> compiled everywhere.</li>
+</ul>
+
+<p>To check that the lambda version also works at run time, I built a node with two subscriptions, <code>chatter_1</code> passing <code>1</code> and <code>chatter_2</code> passing <code>2</code> to the same <code>cb</code>, and sent one message to each with <code>ros2 topic pub --once</code>. On all three distros the log showed:</p>
+
+<pre><code>[INFO] [1793667092.560565545] [listener]: RT heard 'one' from 1
+[INFO] [1793667093.640659970] [listener]: RT heard 'two' from 2</code></pre>
+
+<p>That is the Humble output. Jazzy and Lyrical printed the same two lines with their own timestamps.</p>
+
+<p>For the topic name itself, capture it in the lambda the same way: <code>[this, topic](const String &amp; m) { cb(m, topic); }</code>. I tested the <code>int</code> version only.</p>
+
+<h2>std::bind pitfalls</h2>
+
+<p>Two more <code>std::bind</code> mistakes showed up as compile errors. Forgetting <code>_1</code> (<code>std::bind(&amp;N::cb, this)</code>) gives the <code>Wrong number of arguments for pointer-to-member</code> static assertion, 89 lines of output on Humble and 202 on Lyrical. You need <code>using std::placeholders::_1;</code> or <code>std::placeholders::_1</code> written out. With two overloads of <code>cb</code> (one for <code>String</code>, one for <code>Int32</code>), <code>&amp;N::cb</code> is ambiguous and the error comes from <code>std::bind</code> itself: <code>&lt;unresolved overloaded function type&gt;</code>. A lambda that calls <code>cb(msg)</code> with a typed parameter compiled, because normal overload resolution picks the right one. A <code>static_cast</code> to the member function pointer type should also work, but I didn't test it.</p>
+
+<p>The <a href="https://robotics.stackexchange.com/questions/86694">2018 question</a> about <code>std::bind</code> errors says "using lamdas as a callback function is ok in this case". In my run that held for every case.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Problem</th><th>Fix that compiled on all three distros</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>No QoS</td><td>Add a depth: <code>create_subscription&lt;T&gt;(topic, 10, cb)</code></td><td>Same for <code>create_publisher&lt;T&gt;(topic, 10)</code></td></tr>
+<tr><td>No template argument</td><td><code>create_subscription&lt;T&gt;(...)</code></td><td>Check copied code for lost angle brackets</td></tr>
+<tr><td><code>rmw_qos_profile_t</code></td><td><code>rclcpp::SensorDataQoS()</code> or <code>rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(p), p)</code></td><td>Both compiled</td></tr>
+<tr><td>Wrong callback parameter</td><td>Use <code>const T &amp;</code>, <code>T::ConstSharedPtr</code>, <code>T::SharedPtr</code> or <code>T::UniquePtr</code></td><td>No non-const references, no raw pointers</td></tr>
+<tr><td>Extra callback argument</td><td>Lambda that calls <code>cb(msg, value)</code></td><td><code>std::bind(..., _1, value)</code> failed everywhere</td></tr>
+<tr><td>Overloaded callback</td><td>Lambda with a typed parameter</td><td><code>static_cast</code> not tested</td></tr>
+<tr><td>Generic lambda</td><td>Write the parameter type</td><td></td></tr>
+<tr><td>Member of the wrong <code>Subscription&lt;T&gt;</code> type</td><td>Declare the member with the same <code>T</code> as the call</td><td></td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>Every variant compiled or failed the same way on Humble (rclcpp 16.0.21, GCC 11.4), Jazzy (rclcpp 28.1.22, GCC 13.3) and Lyrical (rclcpp 32.0.3, GCC 15.2). Three things in the messages differed:</p>
+
+<ul>
+<li>The argument count in the note. For a missing QoS, Humble said <code>candidate expects 5 arguments, 2 provided</code> and Jazzy and Lyrical said <code>candidate expects 3 arguments, 2 provided</code>. For <code>create_publisher</code> it was 3 on Humble and 2 on Jazzy and Lyrical, with 1 provided.</li>
+<li>The header line. The <code>operator=</code> error was at <code>any_subscription_callback.hpp:394</code> on Humble, <code>:396</code> on Jazzy and <code>:444</code> on Lyrical. Leave the line number out when you search.</li>
+<li>Output length. The same callback error printed 69 lines on Humble, 60 on Jazzy and 171 on Lyrical. The bind-without-placeholder case printed 89, 85 and 202 lines.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Clang and MSVC, builds with <code>-Wall -Wextra</code>, C++20 and <code>std::bind_front</code>, a <code>static_cast</code> for overloaded callbacks, <code>rclcpp_lifecycle::LifecycleNode</code>, components, intra-process communication, custom message types, a missing message header (the cause in <a href="https://robotics.stackexchange.com/questions/105193">this create_publisher question</a>), subscription options and message memory strategies, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What causes "no matching function for call to create_subscription"?</h3>
+<p>In my run, one of three things: no QoS argument after the topic name, no message type in angle brackets, or an <code>rmw_qos_profile_t</code> passed where an <code>rclcpp::QoS</code> is expected. Add a depth such as <code>10</code>, write <code>create_subscription&lt;T&gt;</code>, or use <code>rclcpp::SensorDataQoS()</code>.</p>
+
+<h3>Why do I get "no match for operator=" in any_subscription_callback.hpp?</h3>
+<p>The callback's parameter isn't one rclcpp accepts, or it takes a different message type than the subscription. Forms that compiled are <code>const T &amp;</code>, <code>T</code>, <code>T::SharedPtr</code>, <code>T::ConstSharedPtr</code>, <code>const T::ConstSharedPtr &amp;</code> and <code>T::UniquePtr</code>, optionally with <code>const rclcpp::MessageInfo &amp;</code>. <code>T &amp;</code>, <code>const T::SharedPtr &amp;</code> and raw pointers failed.</p>
+
+<h3>How do I pass an extra argument to a ROS 2 C++ subscription callback?</h3>
+<p>Use a lambda: <code>[this](const T &amp; msg) { cb(msg, 1); }</code>. It compiled and ran on Humble, Jazzy and Lyrical. <code>std::bind(&amp;N::cb, this, _1, 1)</code> failed to compile on all three.</p>
+
+<h3>Is const SharedPtr &amp; allowed as a callback parameter?</h3>
+<p>No. <code>const T::SharedPtr &amp;</code> failed on all three distros. <code>const T::ConstSharedPtr &amp;</code> compiled, and so did <code>T::SharedPtr</code> by value.</p>
+
+<h3>Can I use an auto parameter in the subscription lambda?</h3>
+<p>No. A generic lambda failed with <code>‘decltype’ cannot resolve address of overloaded function</code> in <code>function_traits.hpp</code>, because rclcpp needs a concrete parameter type to pick the callback form.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What causes no matching function for call to create_subscription?", "acceptedAnswer": {"@type": "Answer", "text": "In my run, one of three things: no QoS argument after the topic name, no message type in angle brackets, or an rmw_qos_profile_t passed where an rclcpp::QoS is expected. Add a depth such as 10, write the message type as a template argument, or use rclcpp::SensorDataQoS()."}},
+{"@type": "Question", "name": "Why do I get no match for operator= in any_subscription_callback.hpp?", "acceptedAnswer": {"@type": "Answer", "text": "The callback parameter is not one rclcpp accepts, or it takes a different message type than the subscription. Forms that compiled are const T reference, T by value, T::SharedPtr, T::ConstSharedPtr, const T::ConstSharedPtr reference and T::UniquePtr, optionally with a const rclcpp::MessageInfo reference. A non-const T reference, a const T::SharedPtr reference and raw pointers failed."}},
+{"@type": "Question", "name": "How do I pass an extra argument to a ROS 2 C++ subscription callback?", "acceptedAnswer": {"@type": "Answer", "text": "Use a lambda that calls your function with the extra value, for example cb(msg, 1). It compiled and ran on Humble, Jazzy and Lyrical. std::bind with the extra value bound, std::bind(cb, this, _1, 1), failed to compile on all three."}},
+{"@type": "Question", "name": "Is const SharedPtr reference allowed as a callback parameter?", "acceptedAnswer": {"@type": "Answer", "text": "No. A const T::SharedPtr reference failed on all three distros. A const T::ConstSharedPtr reference compiled, and so did T::SharedPtr by value."}},
+{"@type": "Question", "name": "Can I use an auto parameter in the subscription lambda?", "acceptedAnswer": {"@type": "Answer", "text": "No. A generic lambda failed with decltype cannot resolve address of overloaded function in function_traits.hpp, because rclcpp needs a concrete parameter type to pick the callback form."}}
+]}
+</script>
+
+<p>Measured on 2026-11-03 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, rmw 6.1.4, g++ 11.4.0), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw 7.3.4, g++ 13.3.0) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw 7.10.2, g++ 15.2.0), default RMW. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-06-rclcpp-create-subscription-no-matching-function/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/102560">error: no matching function for call to create_subscription</a>, <a href="https://robotics.stackexchange.com/questions/107802">Compilation error when subscription callback's input is of certain type</a>, <a href="https://robotics.stackexchange.com/questions/109801">How to add an additional argument in a ROS2 cpp callback</a>, <a href="https://robotics.stackexchange.com/questions/97254">ROS2/create_subscription: How to pass callback arguments</a>, <a href="https://robotics.stackexchange.com/questions/96819">ROS2 creating a subscriber in a class</a>, <a href="https://robotics.stackexchange.com/questions/86694">function callback using std::bind in ros 2 subscription</a>.</p>
