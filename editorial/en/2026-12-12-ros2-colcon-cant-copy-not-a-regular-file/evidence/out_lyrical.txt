@@ -1,0 +1,279 @@
+=== distro=lyrical
+ros-lyrical-ament-cmake-core 2.8.8-1resolute.20260728.162608
+ros-lyrical-ament-cmake-python 2.8.8-1resolute.20260728.173021
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+setuptools 78.1.1 colcon-core 0.21.3
+cmake 4.2.3-2ubuntu2
+python3-colcon-python-setup-py 0.2.9-2
+python3-colcon-ros 0.5.0+upstream-1
+Python 3.14.4
+===== P0 baseline: glob('launch/*.launch.py')
+  [plain] colcon build  -> exit=0 elapsed_ms=1673
+      Summary: 1 package finished [1.37s]
+  [symlink] colcon build --symlink-install -> exit=0 elapsed_ms=2297
+      Summary: 1 package finished [1.96s]
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (symlink)
+===== P1 explicit path that does not exist (typo)
+  [plain] colcon build  -> exit=1 elapsed_ms=1585
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.11s, exited with code 1]
+      Summary: 0 packages finished [1.26s]
+      error: can't copy 'worlds/my_world.wbt': doesn't exist or not a regular file
+  (file exists in worlds/, listed without the folder)
+  [plain] colcon build  -> exit=1 elapsed_ms=1537
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.10s, exited with code 1]
+      Summary: 0 packages finished [1.25s]
+      error: can't copy 'my_world.wbt': doesn't exist or not a regular file
+  (listed as worlds/my_world.wbt)
+  [plain] colcon build  -> exit=0 elapsed_ms=1654
+      Summary: 1 package finished [1.36s]
+  (path written with ~)
+  [plain] colcon build  -> exit=1 elapsed_ms=1539
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.09s, exited with code 1]
+      Summary: 0 packages finished [1.24s]
+      error: can't copy '~/my_world.wbt': doesn't exist or not a regular file
+===== P2 directory in the file list
+  glob('models/**', recursive=True) gives: ['models/', 'models/robot', 'models/robot/model.sdf', 'models/robot/meshes', 'models/robot/meshes/base.dae']
+  [plain] colcon build  -> exit=1 elapsed_ms=1547
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.11s, exited with code 1]
+      Summary: 0 packages finished [1.26s]
+      error: can't copy 'models': doesn't exist or not a regular file
+  -- glob('launch/*') with a subfolder launch/include
+  [plain] colcon build  -> exit=1 elapsed_ms=1559
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.12s, exited with code 1]
+      Summary: 0 packages finished [1.26s]
+      error: can't copy 'launch/include': doesn't exist or not a regular file
+  [symlink] colcon build --symlink-install -> exit=1 elapsed_ms=2029
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.59s, exited with code 1]
+      Summary: 0 packages finished [1.74s]
+      error: [Errno 17] File exists: '/w2b/build/py_pkg/resource/py_pkg' -> '/w2b/install/py_pkg/share/ament_index/resource_index/packages/py_pkg'
+  -- fix A: glob('models/**', recursive=True) filtered with os.path.isfile (flattens)
+  [plain] colcon build  -> exit=0 elapsed_ms=1651
+      Summary: 1 package finished [1.36s]
+  ls install/py_pkg/share/py_pkg/models:
+      ./base.dae (file)
+      ./model.sdf (file)
+  -- fix B: one entry per folder with os.walk (keeps the tree)
+  [plain] colcon build  -> exit=0 elapsed_ms=1668
+      Summary: 1 package finished [1.37s]
+  ls install/py_pkg/share/py_pkg/models:
+      ./robot (dir)
+      ./robot/meshes (dir)
+      ./robot/meshes/base.dae (file)
+      ./robot/model.sdf (file)
+  [symlink] colcon build --symlink-install -> exit=0 elapsed_ms=2033
+      Summary: 1 package finished [1.74s]
+  ls install/py_pkg/share/py_pkg/models:
+      ./robot (dir)
+      ./robot/meshes (dir)
+      ./robot/meshes/base.dae (symlink)
+      ./robot/model.sdf (symlink)
+  -- empty folder in the tree with fix B
+  [plain] colcon build  -> exit=0 elapsed_ms=1643
+      Summary: 1 package finished [1.35s]
+  ls install/py_pkg/share/py_pkg/models:
+      ./empty (dir)
+      ./robot (dir)
+      ./robot/meshes (dir)
+      ./robot/meshes/base.dae (file)
+      ./robot/model.sdf (file)
+===== P3 delete / rename a file after a --symlink-install build
+  --- delete b.launch.py, then symlink build
+  ls build/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  [second] colcon build --symlink-install -> exit=1 elapsed_ms=2006
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.57s, exited with code 1]
+      Summary: 0 packages finished [1.71s]
+      error: can't copy '/w3/build/py_pkg/launch/b.launch.py': doesn't exist or not a regular file
+    glob('launch/*.launch.py') run in build/py_pkg: ['launch/a.launch.py', 'launch/b.launch.py']
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  --- delete b.launch.py, then plain build
+  ls build/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  [second] colcon build  -> exit=0 elapsed_ms=2128
+      Summary: 1 package finished [1.83s]
+    glob('launch/*.launch.py') run in build/py_pkg: ['launch/a.launch.py', 'launch/b.launch.py']
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (file)
+      ./b.launch.py (DANGLING-symlink)
+  --- rename b.launch.py, then symlink build
+  ls build/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  [second] colcon build --symlink-install -> exit=1 elapsed_ms=2013
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.58s, exited with code 1]
+      Summary: 0 packages finished [1.72s]
+      error: can't copy '/w3/build/py_pkg/launch/b.launch.py': doesn't exist or not a regular file
+    glob('launch/*.launch.py') run in build/py_pkg: ['launch/a.launch.py', 'launch/b.launch.py', 'launch/c.launch.py']
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+      ./c.launch.py (symlink)
+  --- rename b.launch.py, then plain build
+  ls build/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  [second] colcon build  -> exit=0 elapsed_ms=2090
+      Summary: 1 package finished [1.80s]
+    glob('launch/*.launch.py') run in build/py_pkg: ['launch/a.launch.py', 'launch/b.launch.py']
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (file)
+      ./b.launch.py (DANGLING-symlink)
+      ./c.launch.py (file)
+  --- same delete after a PLAIN first build, plain rebuild
+  [second] colcon build  -> exit=0 elapsed_ms=1654
+      Summary: 1 package finished [1.36s]
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (file)
+      ./b.launch.py (file)
+  --- explicit list (no glob): delete b and remove it from setup.py, symlink rebuild
+  [second] colcon build --symlink-install -> exit=0 elapsed_ms=2036
+      Summary: 1 package finished [1.74s]
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  --- deleted python module (not a data file) after symlink build
+  [second] colcon build --symlink-install -> exit=0 elapsed_ms=2035
+      Summary: 1 package finished [1.74s]
+===== P3 fixes compared (delete b, then each fix, then --symlink-install)
+  --- fix=none
+  [after-fix] colcon build --symlink-install -> exit=1 elapsed_ms=1996
+        1 package failed: py_pkg
+      Failed   <<< py_pkg [1.57s, exited with code 1]
+      Summary: 0 packages finished [1.71s]
+      error: can't copy '/w3/build/py_pkg/launch/b.launch.py': doesn't exist or not a regular file
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  --- fix=rm_build_pkg
+  [after-fix] colcon build --symlink-install -> exit=0 elapsed_ms=2056
+      Summary: 1 package finished [1.76s]
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+    ros2 launch py_pkg b.launch.py with the dangling install link:
+      [ERROR] [launch]: Caught exception in launch (see debug for traceback): Caught multiple exceptions when trying to load file of format [py]:
+       - FileNotFoundError: [Errno 2] No such file or directory: '/w3/install/py_pkg/share/py_pkg/launch/b.launch.py'
+       - FileNotFoundError: [Errno 2] No such file or directory: '/w3/install/py_pkg/share/py_pkg/launch/b.launch.py'
+    ros2 launch py_pkg a.launch.py:
+      [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-07-33-58-198771-33c2db9c0ffa-870
+      [INFO] [launch]: Default logging verbosity is set to INFO
+  --- fix=rm_build_install_pkg
+  [after-fix] colcon build --symlink-install -> exit=0 elapsed_ms=2353
+      Summary: 1 package finished [2.05s]
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+  --- fix=find_xtype_delete
+      deleted: build/py_pkg/launch/b.launch.py
+  [after-fix] colcon build --symlink-install -> exit=0 elapsed_ms=2047
+      Summary: 1 package finished [1.75s]
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+      ./b.launch.py (DANGLING-symlink)
+  --- fix=clean_all
+  [after-fix] colcon build --symlink-install -> exit=0 elapsed_ms=2020
+      Summary: 1 package finished [1.73s]
+  ls install/py_pkg/share/py_pkg/launch:
+      ./a.launch.py (symlink)
+===== P4 ament_cmake + ament_cmake_python: switch plain <-> --symlink-install
+  --- plain first, then --symlink-install
+  [first-plain] colcon build  -> exit=0 elapsed_ms=2073
+      Summary: 1 package finished [1.77s]
+  [second] colcon build --symlink-install -> exit=0 elapsed_ms=1813
+      Summary: 1 package finished [1.52s]
+    src check: cm_pkg/__init__.py=x=1 
+launch/a.launch.py=# launch 
+scripts/tool.py=#!/usr/bin/env pytho
+    build/cm_pkg/ament_cmake_python/cm_pkg/cm_pkg: drwxr-xr-x 
+  --- fixes for plain->symlink
+  [fix-none] colcon build --symlink-install -> exit=0 elapsed_ms=1818
+      Summary: 1 package finished [1.52s]
+  [fix-cmake-clean-cache] colcon build --symlink-install --cmake-clean-cache -> exit=0 elapsed_ms=2320
+      Summary: 1 package finished [2.02s]
+    src check: cm_pkg/__init__.py=x=1 
+launch/a.launch.py=# launch 
+scripts/tool.py=#!/usr/bin/env pytho
+    installed cm_pkg python: drwxr-xr-x  
+  [fix-cmake-clean-first] colcon build --symlink-install --cmake-clean-first -> exit=0 elapsed_ms=1871
+      Summary: 1 package finished [1.57s]
+    src check: cm_pkg/__init__.py=x=1 
+launch/a.launch.py=# launch 
+scripts/tool.py=#!/usr/bin/env pytho
+    installed cm_pkg python: drwxr-xr-x  
+  [fix-rm-build-pkg] colcon build --symlink-install -> exit=0 elapsed_ms=2341
+      Summary: 1 package finished [2.04s]
+    src check: cm_pkg/__init__.py=x=1 
+launch/a.launch.py=# launch 
+scripts/tool.py=#!/usr/bin/env pytho
+    installed cm_pkg python: drwxr-xr-x  
+  [fix-rm-ament_cmake_python] colcon build --symlink-install -> exit=0 elapsed_ms=1833
+      Summary: 1 package finished [1.53s]
+    src check: cm_pkg/__init__.py=x=1 
+launch/a.launch.py=# launch 
+scripts/tool.py=#!/usr/bin/env pytho
+    installed cm_pkg python: drwxr-xr-x  
+  --- symlink first, then plain
+  [first-symlink] colcon build --symlink-install -> exit=0 elapsed_ms=2357
+      Summary: 1 package finished [2.04s]
+  [second-plain] colcon build  -> exit=0 elapsed_ms=1571
+      Summary: 1 package finished [1.26s]
+    src check: cm_pkg/__init__.py=x=1 
+launch/a.launch.py=# launch 
+scripts/tool.py=#!/usr/bin/env pytho
+    install launch: l 
+  --- symlink first, then plain, then symlink again
+  [third] colcon build --symlink-install -> exit=0 elapsed_ms=1547
+      Summary: 1 package finished [1.26s]
+    src check: cm_pkg/__init__.py=x=1 
+launch/a.launch.py=# launch 
+scripts/tool.py=#!/usr/bin/env pytho
+  --- ament_python: plain first, then --symlink-install (and back)
+  [second] colcon build --symlink-install -> exit=0 elapsed_ms=2065
+      Summary: 1 package finished [1.76s]
+  [third-plain] colcon build  -> exit=0 elapsed_ms=2131
+      Summary: 1 package finished [1.83s]
+===== P5 timing: fresh symlink build, no-op rebuild, rebuild after rm build/pkg (py_pkg, 3x)
+  [t1-fresh] colcon build --symlink-install -> exit=0 elapsed_ms=2086
+  [t1-noop] colcon build --symlink-install -> exit=0 elapsed_ms=2124
+  [t1-after-rm-build] colcon build --symlink-install -> exit=0 elapsed_ms=2090
+  [t2-fresh] colcon build --symlink-install -> exit=0 elapsed_ms=2082
+  [t2-noop] colcon build --symlink-install -> exit=0 elapsed_ms=2073
+  [t2-after-rm-build] colcon build --symlink-install -> exit=0 elapsed_ms=2172
+  [t3-fresh] colcon build --symlink-install -> exit=0 elapsed_ms=2513
+  [t3-noop] colcon build --symlink-install -> exit=0 elapsed_ms=2042
+  [t3-after-rm-build] colcon build --symlink-install -> exit=0 elapsed_ms=2083
+===== P6 ament_cmake_python: does a source edit show up without rebuilding?
+  [s1] colcon build --symlink-install -> exit=0 elapsed_ms=2356
+  --- fresh-symlink
+    build/cm_pkg/ament_cmake_python/cm_pkg/cm_pkg is: directory
+    installed __init__.py resolves to: /w4/src/cm_pkg/cm_pkg/__init__.py
+    after editing src to x=2, no rebuild: import gives x=2
+  [s1] colcon build  -> exit=0 elapsed_ms=2099
+  [s2] colcon build --symlink-install -> exit=0 elapsed_ms=1909
+  --- plain-then-symlink
+    build/cm_pkg/ament_cmake_python/cm_pkg/cm_pkg is: directory
+    installed __init__.py resolves to: /w4/src/cm_pkg/cm_pkg/__init__.py
+    after editing src to x=2, no rebuild: import gives x=2
+  [s1] colcon build  -> exit=0 elapsed_ms=2156
+  [s2] colcon build --symlink-install -> exit=0 elapsed_ms=2387
+  --- plain-then-rm-build-then-symlink
+    build/cm_pkg/ament_cmake_python/cm_pkg/cm_pkg is: directory
+    installed __init__.py resolves to: /w4/src/cm_pkg/cm_pkg/__init__.py
+    after editing src to x=2, no rebuild: import gives x=2
+=== done

@@ -1,0 +1,208 @@
+<pre><code>--- stderr: py_pkg
+error: can't copy 'models/': doesn't exist or not a regular file
+---
+Failed   &lt;&lt;&lt; py_pkg [0.80s, exited with code 1]</code></pre>
+
+<p>After a <code>--symlink-install</code> build you may see the same error with a path inside <code>build/</code>, for example <code>error: can't copy '/w3/build/py_pkg/launch/b.launch.py': doesn't exist or not a regular file</code>. An ament_cmake package that switches from a plain build to <code>--symlink-install</code> can fail with a related message: <code>failed to create symbolic link '.../build/cm_pkg/ament_cmake_python/cm_pkg/cm_pkg' because existing path cannot be removed: Is a directory</code>.</p>
+
+<p>Short answer: setuptools prints this error when an entry in <code>data_files</code> in <code>setup.py</code> is not a regular file. In my runs that happened for three reasons. The path was wrong, the list held a folder, or the file was deleted or renamed after a <code>--symlink-install</code> build, which leaves a broken symlink in <code>build/</code>. Read the path in quotes and match it to a case:</p>
+
+<ul>
+<li>A short relative path (<code>'worlds/my_world.wbt'</code>, <code>'my_world.wbt'</code>): the file isn't at that path relative to the folder with <code>setup.py</code>. Fix the path.</li>
+<li>A folder (<code>'models/'</code>, <code>'launch/include'</code>): your <code>glob()</code> matched a directory. Build one <code>data_files</code> entry per folder and list only files (code below).</li>
+<li>A path under <code>build/</code> that names a file you deleted or renamed: remove the stale package folders and rebuild:</li>
+</ul>
+
+<pre><code>rm -rf build/my_pkg install/my_pkg
+colcon build --symlink-install --packages-select my_pkg</code></pre>
+
+<p>For the ament_cmake "Is a directory" error, <code>rm -rf build/my_pkg</code> fixed it. <code>--cmake-clean-cache</code> and <code>--cmake-clean-first</code> didn't.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every row was measured on Humble, Jazzy and Lyrical. Where the distros differed, the row says so.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Error</th></tr></thead>
+<tbody>
+<tr><td><code>['worlds/my_world.wbt']</code>, file does not exist</td><td><code>error: can't copy 'worlds/my_world.wbt': doesn't exist or not a regular file</code></td></tr>
+<tr><td>File is in <code>worlds/</code>, listed as <code>['my_world.wbt']</code></td><td><code>error: can't copy 'my_world.wbt': doesn't exist or not a regular file</code></td></tr>
+<tr><td>Path written with <code>~</code> (<code>['~/my_world.wbt']</code>)</td><td><code>error: can't copy '~/my_world.wbt': doesn't exist or not a regular file</code></td></tr>
+<tr><td><code>glob('models/**', recursive=True)</code></td><td><code>can't copy 'models/'</code> on Humble and Jazzy, <code>can't copy 'models'</code> on Lyrical</td></tr>
+<tr><td><code>glob('launch/*')</code> with a subfolder <code>launch/include</code></td><td>Plain build: <code>can't copy 'launch/include'</code>. With <code>--symlink-install</code> on Humble and Jazzy: <code>can't copy '/w2b/build/py_pkg/launch/include'</code></td></tr>
+<tr><td>Launch file deleted or renamed after a <code>--symlink-install</code> build, then <code>--symlink-install</code> again</td><td><code>error: can't copy '/w3/build/py_pkg/launch/b.launch.py': doesn't exist or not a regular file</code></td></tr>
+<tr><td>ament_cmake package with <code>ament_python_install_package()</code>, plain build, then <code>--symlink-install</code></td><td>Humble and Jazzy: <code>failed to create symbolic link '/w4/build/cm_pkg/ament_cmake_python/cm_pkg/cm_pkg' because existing path cannot be removed: Is a directory</code>, exit code 2. Lyrical: no error</td></tr>
+<tr><td><code>resource/&lt;package_name&gt;</code> missing</td><td><code>can't copy 'resource/&lt;package_name&gt;'</code>. Not measured again here; covered in the <a href="https://huntlab.app/en/colcon-build-listing-git-files-failed-pretending-there-arent-any/">ament_python package layout post</a></td></tr>
+</tbody>
+</table>
+
+<p>The paths in the table come from my test workspaces (<code>/w2b</code>, <code>/w3</code>, <code>/w4</code>). Yours will name your own workspace.</p>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, with no extra packages. The script makes a fresh workspace for each case. <code>py_pkg</code> is an ament_python package with two launch files, <code>a.launch.py</code> and <code>b.launch.py</code>, installed with <code>glob('launch/*.launch.py')</code>. <code>cm_pkg</code> is an ament_cmake package that installs a Python module with <code>ament_python_install_package()</code>, a <code>launch</code> folder with <code>install(DIRECTORY ...)</code> and a script with <code>install(PROGRAMS ...)</code>. For each build I logged the exit code, wall time and error lines. After each build I listed the <code>build/</code> and <code>install/</code> folders and marked every entry as file, directory, symlink or dangling symlink.</p>
+
+<p>The baseline package built without errors with both <code>colcon build</code> and <code>colcon build --symlink-install</code> on all three distros. Exit codes were identical on Humble and Jazzy for every step. Lyrical differed only in the ament_cmake switch and in two message details, covered below.</p>
+
+<h2>Cause 1: the path is wrong</h2>
+
+<p>Each <code>data_files</code> entry is a pair: the destination folder under <code>install/&lt;pkg&gt;</code>, then a list of source files. The source paths are relative to the package folder, the one that holds <code>setup.py</code>, and they have to include the subfolder. If <code>my_world.wbt</code> sits in <code>worlds/</code>, then <code>['my_world.wbt']</code> failed and <code>['worlds/my_world.wbt']</code> built. This is the mix-up in the Stack Overflow question listed at the end, but in reverse. That user wrote the correct <code>worlds/...</code> path and was told to drop the folder. In my run, dropping the folder is what broke the build.</p>
+
+<p>No shell runs here, so <code>~</code> is not expanded. <code>['~/my_world.wbt']</code> failed with the literal <code>~</code> in the message. Keep data files inside the package and use relative paths.</p>
+
+<p>This cause fails the same way with or without <code>--symlink-install</code>, and deleting <code>build/</code> doesn't help. The message names the exact string from <code>setup.py</code>, so search for it there.</p>
+
+<h2>Cause 2: a folder in the file list</h2>
+
+<p><code>data_files</code> takes files, not folders. The common way to "install a folder with subfolders" is <code>glob('models/**', recursive=True)</code>, and it returns the folders too. In my run it returned:</p>
+
+<pre><code>['models/', 'models/robot', 'models/robot/model.sdf', 'models/robot/meshes', 'models/robot/meshes/base.dae']</code></pre>
+
+<p>setuptools stopped at the first entry: <code>can't copy 'models/'</code>. On Lyrical (Python 3.14.4) the first entry had no trailing slash, so the message read <code>can't copy 'models'</code>. Search for both forms.</p>
+
+<p>The same thing happened with a plain <code>glob('launch/*')</code> when <code>launch/</code> held a subfolder named <code>include</code>. The pattern <code>*.launch.py</code> doesn't match a folder, so it didn't hit this.</p>
+
+<p>I compared two fixes. Filtering the glob with <code>os.path.isfile</code> built, but it flattened the tree. <code>model.sdf</code> and <code>base.dae</code> both landed directly in <code>share/py_pkg/models/</code>, and the <code>robot/</code> and <code>meshes/</code> levels were lost. If the files reference each other by relative path, that breaks them. The fix that kept the tree adds one <code>data_files</code> entry per folder:</p>
+
+<pre><code class="language-python">import os
+from glob import glob
+from setuptools import setup
+
+package_name = 'my_pkg'
+
+def tree(src, dst):
+    out = []
+    for d, _, files in os.walk(src):
+        out.append((os.path.join(dst, d), [os.path.join(d, f) for f in files]))
+    return out
+
+setup(
+    name=package_name,
+    packages=[package_name],
+    data_files=[
+        ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
+        *tree('models', 'share/' + package_name),
+    ],
+    # ...
+)</code></pre>
+
+<p>With <code>tree()</code>, <code>install/py_pkg/share/py_pkg/models</code> held <code>robot/model.sdf</code> and <code>robot/meshes/base.dae</code> in their folders. That held for a plain build (copies) and for <code>--symlink-install</code> (symlinked files inside real folders). An empty folder <code>models/empty</code> was installed as an empty folder in the plain build.</p>
+
+<h2>Cause 3: you deleted or renamed a file after --symlink-install</h2>
+
+<p>This cause produces the confusing version of the error, with a path in <code>build/</code> that points at a file you know you removed. With <code>--symlink-install</code>, colcon fills <code>build/py_pkg/</code> with symlinks to your source files and runs <code>setup.py</code> from there. When I deleted <code>src/py_pkg/launch/b.launch.py</code>, its link stayed behind:</p>
+
+<pre><code>build/py_pkg/launch:
+  a.launch.py (symlink)
+  b.launch.py (DANGLING-symlink)</code></pre>
+
+<p>Python's <code>glob('launch/*.launch.py')</code>, run in <code>build/py_pkg</code>, still returned both names. A dangling symlink matches the pattern, but it isn't a regular file, so the next <code>colcon build --symlink-install</code> failed with exit code 1:</p>
+
+<pre><code>error: can't copy '/w3/build/py_pkg/launch/b.launch.py': doesn't exist or not a regular file</code></pre>
+
+<p>Renaming behaved the same way. After <code>mv b.launch.py c.launch.py</code>, the glob in <code>build/</code> returned <code>a</code>, <code>b</code> and <code>c</code>, and the build failed on the old name <code>b.launch.py</code>. This matches colcon-core issues #633 and #692, which were both still open when I checked.</p>
+
+<p>Some variations didn't fail, but they still left something stale behind:</p>
+
+<table>
+<thead><tr><th>Sequence</th><th>Build result</th><th>What <code>install/.../launch</code> held afterwards</th></tr></thead>
+<tbody>
+<tr><td>Symlink build, delete <code>b</code>, plain <code>colcon build</code></td><td>exit 0</td><td><code>a.launch.py</code> as a copied file, <code>b.launch.py</code> as a dangling symlink</td></tr>
+<tr><td>Symlink build, rename <code>b</code> to <code>c</code>, plain build</td><td>exit 0</td><td><code>a</code> and <code>c</code> as files, <code>b</code> dangling</td></tr>
+<tr><td>Plain build, delete <code>b</code>, plain build</td><td>exit 0</td><td><code>a</code> and the old <code>b</code>, both still regular files</td></tr>
+<tr><td>Explicit list instead of glob: symlink build, delete <code>b</code> and remove it from <code>setup.py</code>, symlink build</td><td>exit 0</td><td><code>a</code> symlink, <code>b</code> dangling</td></tr>
+<tr><td>Symlink build, delete a Python module (<code>py_pkg/old_mod.py</code>), symlink build</td><td>exit 0</td><td>not checked</td></tr>
+</tbody>
+</table>
+
+<p>So switching to a plain build "fixes" the error but leaves the dangling link in <code>install/</code>. colcon doesn't delete installed files that are no longer part of the package. A plain build doesn't either: after a delete, the old copied <code>b.launch.py</code> stayed installed as a regular file.</p>
+
+<h2>Fix options compared</h2>
+
+<p>Each fix started from the same state. I did a <code>--symlink-install</code> build, deleted <code>b.launch.py</code>, applied the fix, then ran <code>colcon build --symlink-install</code>. The result was the same on all three distros.</p>
+
+<table>
+<thead><tr><th>Fix</th><th>Build</th><th><code>install/.../launch</code> afterwards</th></tr></thead>
+<tbody>
+<tr><td>Nothing</td><td>exit 1, <code>can't copy</code></td><td><code>a</code>, <code>b</code> dangling</td></tr>
+<tr><td><code>rm -rf build/py_pkg</code></td><td>exit 0</td><td><code>a</code>, <code>b</code> dangling</td></tr>
+<tr><td><code>find build/py_pkg -xtype l -delete</code></td><td>exit 0 (it deleted <code>build/py_pkg/launch/b.launch.py</code>)</td><td><code>a</code>, <code>b</code> dangling</td></tr>
+<tr><td><code>rm -rf build/py_pkg install/py_pkg</code></td><td>exit 0</td><td><code>a</code> only</td></tr>
+<tr><td><code>rm -rf build install log</code></td><td>exit 0</td><td><code>a</code> only</td></tr>
+</tbody>
+</table>
+
+<p>The leftover link in <code>install/</code> matters when something tries to use it. With only <code>build/py_pkg</code> removed, <code>ros2 launch py_pkg b.launch.py</code> still found the name, then failed with <code>Caught multiple exceptions when trying to load file of format [py]</code> and <code>FileNotFoundError: [Errno 2] No such file or directory: '/w3/install/py_pkg/share/py_pkg/launch/b.launch.py'</code>. <code>ros2 launch py_pkg a.launch.py</code> worked. Removing both <code>build/&lt;pkg&gt;</code> and <code>install/&lt;pkg&gt;</code> for the one package is the smallest fix that left nothing stale. You don't need to wipe the whole workspace.</p>
+
+<p>Cost: for this one small package, a <code>--symlink-install</code> rebuild after <code>rm -rf build/py_pkg</code> took about as long as a no-op rebuild. On Humble that was 1669, 1659 and 1686 ms against 1678, 1653 and 1673 ms over three runs. On Jazzy and Lyrical every run was between about 2.0 and 2.5 s. The time is mostly colcon's own startup. For a package with compiled code, removing <code>build/&lt;pkg&gt;</code> means compiling it again. I didn't measure that.</p>
+
+<h2>The ament_cmake version: "Is a directory"</h2>
+
+<p><code>ament_python_install_package()</code> in an ament_cmake package keeps a staging copy of your Python package in <code>build/&lt;pkg&gt;/ament_cmake_python/&lt;pkg&gt;/&lt;pkg&gt;</code>. A plain build makes it a real directory. On Humble and Jazzy, a later <code>--symlink-install</code> build tried to replace it with a symlink to <code>src/</code>. CMake refuses to delete a directory there, so the target <code>ament_cmake_python_symlink_cm_pkg</code> failed:</p>
+
+<pre><code>--- stderr: cm_pkg
+failed to create symbolic link '/w4/build/cm_pkg/ament_cmake_python/cm_pkg/cm_pkg' because existing path cannot be removed: Is a directory
+gmake[2]: *** [CMakeFiles/ament_cmake_python_symlink_cm_pkg.dir/build.make:70: CMakeFiles/ament_cmake_python_symlink_cm_pkg] Error 1</code></pre>
+
+<table>
+<thead><tr><th>After a plain build, then <code>--symlink-install</code> with</th><th>Humble and Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>nothing extra</td><td>exit 2, "Is a directory"</td><td>exit 0</td></tr>
+<tr><td><code>--cmake-clean-cache</code></td><td>exit 2, same error</td><td>exit 0</td></tr>
+<tr><td><code>--cmake-clean-first</code></td><td>exit 2, same error</td><td>exit 0</td></tr>
+<tr><td><code>rm -rf build/cm_pkg</code> first</td><td>exit 0</td><td>exit 0</td></tr>
+<tr><td><code>rm -rf build/cm_pkg/ament_cmake_python</code> first</td><td>exit 0</td><td>exit 0</td></tr>
+</tbody>
+</table>
+
+<p>The CMake cache options don't touch that staging folder, so they didn't help. Deleting the staging folder alone fixed the build. Deleting <code>build/cm_pkg</code> is easier to remember, but it forces a full reconfigure.</p>
+
+<p>The failed build also leaves a trap. On Humble and Jazzy, after the failed switch, the installed <code>__init__.py</code> was still a copy in <code>install/</code>, not a link to <code>src/</code>. When I changed <code>x=1</code> to <code>x=2</code> in the source, <code>import cm_pkg</code> still gave <code>x=1</code>. After <code>rm -rf build/cm_pkg</code> and a symlink build, the installed file resolved to <code>src/cm_pkg/cm_pkg/__init__.py</code> and the edit showed up without a rebuild.</p>
+
+<p>The reverse switch was fine. A <code>--symlink-install</code> build, then a plain build, then <code>--symlink-install</code> again all exited 0 on every distro. In every ament_cmake sequence, my source files stayed regular files with their original content. One side effect: after the plain build, the installed launch file was still a symlink. For ament_python, plain to symlink and back also built without errors on all three distros.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The ament_python errors were identical on Humble (setuptools 59.6.0, Python 3.10.12), Jazzy (setuptools 68.1.2, Python 3.12.3) and Lyrical (setuptools 78.1.1, Python 3.14.4). The one difference was <code>'models/'</code> vs <code>'models'</code> from the recursive glob.</li>
+<li>All three used colcon-core 0.21.3 and colcon-python-setup-py 0.2.9, so I couldn't compare colcon versions.</li>
+<li>The "Is a directory" error appeared on Humble (ament_cmake_python 1.3.14, CMake 3.22.1) and Jazzy (2.5.6, CMake 3.28.3), but not on Lyrical (2.8.8, CMake 4.2.3). On Lyrical the staging path stayed a real directory even in a fresh <code>--symlink-install</code> build. The installed <code>__init__.py</code> still resolved to <code>src/</code>, and edits showed up without a rebuild after every sequence I tried.</li>
+<li>One Lyrical anomaly: in the <code>glob('launch/*')</code> case, the plain build failed first. The <code>--symlink-install</code> build after it then failed earlier with a different error: <code>error: [Errno 17] File exists: '/w2b/build/py_pkg/resource/py_pkg' -&gt; '/w2b/install/py_pkg/share/ament_index/resource_index/packages/py_pkg'</code>. The failed plain build had left a copied resource marker in <code>install/</code>. Humble and Jazzy reported the folder error in the same sequence. If you see <code>[Errno 17] File exists</code> after a failed build, remove <code>install/&lt;pkg&gt;</code> and fix the <code>setup.py</code> problem from the earlier failure.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>I didn't test Windows, where symlinks need extra permissions and fail with other messages. I also didn't test merged installs (<code>--merge-install</code>), packages with compiled C++ code (rebuild cost after removing <code>build/</code>), <code>pyproject.toml</code>-only packages, colcon versions other than 0.21.3, Foxy, Iron or Rolling. I didn't check what <code>package_data</code> or <code>MANIFEST.in</code> do with folders either.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "can't copy ... doesn't exist or not a regular file" mean?</h3>
+<p>setuptools tried to install an entry from <code>data_files</code> and it wasn't a regular file. In my runs the entry was a wrong path, a folder returned by <code>glob</code>, or a dangling symlink in <code>build/</code> left by a file deleted after a <code>--symlink-install</code> build.</p>
+
+<h3>I deleted a launch file and now colcon build fails. How do I fix it?</h3>
+<p>Run <code>rm -rf build/my_pkg install/my_pkg</code> and build again. Removing only <code>build/my_pkg</code> made the build pass, but a dangling link stayed in <code>install/</code>, and launching that file then failed with a FileNotFoundError.</p>
+
+<h3>How do I install a folder with subfolders from setup.py?</h3>
+<p>Add one <code>data_files</code> entry per folder, for example with <code>os.walk</code>, and list only files in each entry. <code>glob('models/**', recursive=True)</code> includes the folders and fails. Filtering it with <code>os.path.isfile</code> builds, but it installs every file into one flat folder.</p>
+
+<h3>Does --cmake-clean-cache fix "failed to create symbolic link ... Is a directory"?</h3>
+<p>No. On Humble and Jazzy it failed with the same error, and so did <code>--cmake-clean-first</code>. Removing <code>build/my_pkg</code>, or just <code>build/my_pkg/ament_cmake_python</code>, fixed it. Lyrical didn't show the error.</p>
+
+<h3>Is it safe to switch between colcon build and colcon build --symlink-install?</h3>
+<p>Symlink to plain worked for both build types on all three distros, and my source files weren't changed. Plain to symlink failed for ament_cmake packages with <code>ament_python_install_package()</code> on Humble and Jazzy until <code>build/&lt;pkg&gt;</code> was removed. It worked for ament_python packages.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does can't copy ... doesn't exist or not a regular file mean?", "acceptedAnswer": {"@type": "Answer", "text": "setuptools tried to install an entry from data_files and it wasn't a regular file. In my runs the entry was a wrong path, a folder returned by glob, or a dangling symlink in build/ left by a file deleted after a --symlink-install build."}},
+{"@type": "Question", "name": "I deleted a launch file and now colcon build fails. How do I fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Run rm -rf build/my_pkg install/my_pkg and build again. Removing only build/my_pkg made the build pass, but a dangling link stayed in install/, and launching that file then failed with a FileNotFoundError."}},
+{"@type": "Question", "name": "How do I install a folder with subfolders from setup.py?", "acceptedAnswer": {"@type": "Answer", "text": "Add one data_files entry per folder, for example with os.walk, and list only files in each entry. glob('models/**', recursive=True) includes the folders and fails. Filtering it with os.path.isfile builds, but it installs every file into one flat folder."}},
+{"@type": "Question", "name": "Does --cmake-clean-cache fix failed to create symbolic link ... Is a directory?", "acceptedAnswer": {"@type": "Answer", "text": "No. On Humble and Jazzy it failed with the same error, and so did --cmake-clean-first. Removing build/my_pkg, or just build/my_pkg/ament_cmake_python, fixed it. Lyrical didn't show the error."}},
+{"@type": "Question", "name": "Is it safe to switch between colcon build and colcon build --symlink-install?", "acceptedAnswer": {"@type": "Answer", "text": "Symlink to plain worked for both build types on all three distros, and my source files weren't changed. Plain to symlink failed for ament_cmake packages with ament_python_install_package() on Humble and Jazzy until build/pkg was removed. It worked for ament_python packages."}}
+]}
+</script>
+
+<p>Measured on 2026-11-03 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, ament_cmake_python 1.3.14, setuptools 59.6.0, CMake 3.22.1), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, ament_cmake_python 2.5.6, setuptools 68.1.2, CMake 3.28.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, ament_cmake_python 2.8.8, setuptools 78.1.1, CMake 4.2.3), all with colcon-core 0.21.3. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-12-ros2-colcon-cant-copy-not-a-regular-file/evidence">evidence folder</a>. Questions this answers: <a href="https://stackoverflow.com/questions/72072031">ROS2 colcon build fails - can't copy: doesn't exist or not a regular file</a>, <a href="https://robotics.stackexchange.com/questions/102879">colcon build error: can't copy 'resource/&lt;pkg-name&gt;'</a>, <a href="https://robotics.stackexchange.com/questions/101335">How to copy folders with subfolders to package installation path?</a>, <a href="https://answers.ros.org/question/418055/">renaming of launch files causes compilation error</a>, <a href="https://github.com/colcon/colcon-core/issues/633">Error building after deleting a file (colcon-core #633)</a>, <a href="https://github.com/colcon/colcon-core/issues/692">colcon builds fail when symlinked files were deleted (colcon-core #692)</a>, <a href="https://github.com/linorobot/linorobot2/issues/61">failed to create symbolic link ... Is a directory (linorobot2 #61)</a>.</p>
