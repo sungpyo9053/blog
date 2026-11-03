@@ -1,0 +1,168 @@
+<pre><code>[ERROR] [launch]: Caught exception in launch (see debug for traceback): Unable to parse the value of parameter robot_description as yaml. If the parameter is meant to be a string, try wrapping it in launch_ros.parameter_descriptions.ParameterValue(value, value_type=str)</code></pre>
+
+<p>The same launch file can also stop with one of these, depending on what is wrong:</p>
+
+<pre><code>[ERROR] [launch]: Caught exception in launch (see debug for traceback): executable '[&lt;launch.substitutions.text_substitution.TextSubstitution object at 0x715d6d7d47c0&gt;]' not found on the PATH
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executed command failed. Command: xacro /w/missing.urdf.xacro
+...
+AttributeError: module 'xml' has no attribute 'parsers'</code></pre>
+
+<p>Short answer: all three come from the line that builds <code>robot_description</code> from xacro. For the first one, wrap the <code>Command</code> in <code>ParameterValue(..., value_type=str)</code>. Without it, launch_ros runs the URDF text through a YAML parser, and a URDF that contains <code>: </code> or <code> #</code> anywhere (a comment is enough) fails. The second one means the <code>xacro</code> program isn't installed. The official <code>ros-base</code> images don't include it, so install <code>ros-&lt;distro&gt;-xacro</code>. The third one means xacro itself failed. The real reason is in the <code>Captured stderr output</code> below it. If that output ends with <code>module 'xml' has no attribute 'parsers'</code>, the file path is wrong.</p>
+
+<p>This works on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-python">from launch import LaunchDescription
+from launch.substitutions import Command, FindExecutable, PathJoinSubstitution
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    xacro_file = PathJoinSubstitution([FindPackageShare('my_robot_description'), 'urdf', 'robot.urdf.xacro'])
+    robot_description = ParameterValue(
+        Command([FindExecutable(name='xacro'), ' ', xacro_file]),  # note the ' '
+        value_type=str)
+    return LaunchDescription([
+        Node(package='robot_state_publisher', executable='robot_state_publisher',
+             parameters=[{'robot_description': robot_description}]),
+    ])</code></pre>
+
+<p>In an XML launch file, add <code>type="str"</code> to the <code>&lt;param&gt;</code> tag.</p>
+
+<h2>Find your error</h2>
+
+<p>Each row is one launch file I ran. The error text was the same on Humble, Jazzy and Lyrical, apart from the object address in the <code>TextSubstitution</code> message. Every failing row stopped within about one second and exited with code 1. No node was started.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Error after <code>Caught exception in launch (see debug for traceback):</code></th></tr></thead>
+<tbody>
+<tr><td>xacro not installed, <code>Command(['xacro ', path])</code></td><td><code>file not found: [Errno 2] No such file or directory: 'xacro'</code></td></tr>
+<tr><td>xacro not installed, <code>Command([FindExecutable(name='xacro'), ' ', path])</code></td><td><code>executable '[&lt;launch.substitutions.text_substitution.TextSubstitution object at 0x...&gt;]' not found on the PATH</code></td></tr>
+<tr><td>xacro not installed, <code>FindExecutable</code> inside <code>PathJoinSubstitution</code> (the ros2_control_demos style)</td><td>the same <code>TextSubstitution ... not found on the PATH</code></td></tr>
+<tr><td>No space after <code>xacro</code>: <code>Command(['xacro', path])</code></td><td><code>file not found: [Errno 2] No such file or directory: 'xacro/w/plain.urdf.xacro'</code></td></tr>
+<tr><td>Path to the <code>.xacro</code> file is wrong</td><td><code>executed command failed. Command: xacro /w/missing.urdf.xacro</code>, then a traceback ending in <code>AttributeError: module 'xml' has no attribute 'parsers'</code></td></tr>
+<tr><td>Undefined xacro property (<code>${wheel_radius}</code>)</td><td><code>executed command failed. ...</code> <code>Captured stderr output: error: name 'wheel_radius' is not defined</code></td></tr>
+<tr><td>Broken XML (<code>&lt;/robt&gt;</code>)</td><td><code>executed command failed. ...</code> <code>Captured stderr output: XML parsing error: mismatched tag: line 7, column 2</code></td></tr>
+<tr><td>No <code>ParameterValue</code>, URDF has a comment <code>&lt;!-- Note: base frame --&gt;</code></td><td><code>Unable to parse the value of parameter robot_description as yaml. If the parameter is meant to be a string, try wrapping it in launch_ros.parameter_descriptions.ParameterValue(value, value_type=str)</code></td></tr>
+<tr><td>No <code>ParameterValue</code>, URDF has a comment <code>&lt;!-- link #1 --&gt;</code></td><td>the same <code>Unable to parse the value of parameter robot_description as yaml</code></td></tr>
+<tr><td>No <code>ParameterValue</code>, <code>Command(['cat ', 'robot.urdf'])</code> on a URDF with that colon comment</td><td>the same <code>Unable to parse ...</code></td></tr>
+<tr><td>XML launch, <code>value="$(command 'xacro ...')"</code> without <code>type="str"</code>, colon comment</td><td><code>Failed to convert '&lt;?xml version="1.0" ?&gt; ...' using yaml rules: yaml.safe_load() failed</code> then <code>mapping values are not allowed here</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-03 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro after another. Each case is a launch file with one <code>robot_state_publisher</code> node and a <code>robot_description</code> parameter. The URDF is small: a <code>base_link</code>, a <code>wheel</code> link whose radius comes from a <code>xacro:property</code>, and one continuous joint. I made five variants of it. One is plain. One adds a comment with a colon and a space. One adds a comment with a space and <code>#</code>. One adds a <code>&lt;material&gt;</code> with an <code>rgba</code> color. The last two are broken, one with an undefined property and one with a mismatched closing tag.</p>
+
+<p>The first three cases ran before xacro was installed. Then the script ran <code>apt-get install ros-&lt;distro&gt;-xacro</code>, which took 9 to 11 seconds, and ran the rest. If the launch was still alive after 8 seconds, I listed the nodes, read the parameter back with <code>ros2 param get /robot_state_publisher robot_description</code>, and stopped the launch with SIGINT. I also ran <code>xacro</code> by hand on each file and fed its output to <code>yaml.safe_load</code> in Python. That's the step launch_ros applies to a substitution value when no type is given.</p>
+
+<table>
+<thead><tr><th>Case</th><th>Result on all three distros</th><th><code>ros2 param get</code> output</th></tr></thead>
+<tbody>
+<tr><td>Plain URDF, raw <code>Command</code>, no <code>ParameterValue</code></td><td>started, robot_state_publisher accepted it</td><td>1 line, 713 bytes</td></tr>
+<tr><td>URDF with <code>&lt;material&gt;</code> <code>rgba</code>, raw <code>Command</code></td><td>started</td><td>1 line, 771 bytes</td></tr>
+<tr><td>Colon comment, raw <code>Command</code></td><td>failed, YAML error</td><td>no node</td></tr>
+<tr><td><code>#</code> comment, raw <code>Command</code></td><td>failed, YAML error</td><td>no node</td></tr>
+<tr><td>Colon comment, <code>ParameterValue(..., value_type=str)</code></td><td>started</td><td>22 lines, 792 bytes</td></tr>
+<tr><td><code>#</code> comment, <code>ParameterValue(..., value_type=str)</code></td><td>started</td><td>22 lines, 783 bytes</td></tr>
+<tr><td>Undefined property, <code>ParameterValue(..., value_type=str)</code></td><td>failed, <code>executed command failed</code></td><td>no node</td></tr>
+<tr><td><code>FindExecutable</code>, with and without <code>PathJoinSubstitution</code>, xacro installed</td><td>started</td><td>1 line, 713 bytes</td></tr>
+<tr><td>Python: <code>xacro.process_file(path).toxml()</code></td><td>started</td><td>1 line, 719 bytes</td></tr>
+<tr><td>Python: <code>open('robot.urdf').read()</code>, colon comment</td><td>started</td><td>22 lines, 792 bytes</td></tr>
+<tr><td>XML launch with <code>type="str"</code>, colon comment</td><td>started</td><td>22 lines, 792 bytes</td></tr>
+<tr><td>XML launch without <code>type</code>, plain URDF</td><td>started</td><td>1 line, 713 bytes</td></tr>
+</tbody>
+</table>
+
+<p>The byte counts include the <code>String value is: </code> prefix that <code>ros2 param get</code> prints. The line count is the useful column. It shows whether the URDF arrived with its line breaks or was folded into one line.</p>
+
+<h2>Unable to parse the value of parameter robot_description as yaml</h2>
+
+<p>When a parameter value is a substitution such as <code>Command</code> and you don't give it a type, launch_ros evaluates the substitution and passes the resulting text to a YAML parser. That way <code>'5'</code> becomes an integer and <code>'true'</code> becomes a bool. A URDF is XML, not YAML, but most of it still happens to parse as one long YAML string. It breaks on the two things YAML treats as syntax inside plain text: a colon followed by a space, and a space followed by <code>#</code>.</p>
+
+<p>Running <code>yaml.safe_load</code> on the xacro output gave these errors, the same on PyYAML 5.4.1 (Humble), 6.0.1 (Jazzy) and 6.0.3 (Lyrical):</p>
+
+<pre><code>colon: YAMLError ScannerError mapping values are not allowed here |   in "&lt;unicode string&gt;", line 7, column 12: |       &lt;!-- Note: base frame --&gt; |                ^
+hash: YAMLError ParserError expected '&lt;document start&gt;', but found '&lt;scalar&gt;' |   in "&lt;unicode string&gt;", line 8, column 3: |       &lt;link name="base_link"/&gt; |       ^</code></pre>
+
+<p>That's why the error seems to come and go. A URDF works until someone adds a comment like <code>Note: ...</code> or <code>link #1</code>, or a xacro include brings one in, and then launch stops. The xacro banner at the top of every output file (<code>This document was autogenerated by xacro from ...</code>) didn't trigger it. Neither did <code>xmlns:xacro="http://..."</code>, because there's no space after those colons.</p>
+
+<p>The URDFs that pass don't come through unchanged, either. With no type given, the plain URDF reached robot_state_publisher as one line. YAML folded every line break into a space. robot_state_publisher still parsed it and logged <code>got segment base_link</code> and <code>got segment wheel</code> on Humble, and <code>Robot initialized</code> on Jazzy and Lyrical. But the parameter isn't the file xacro wrote. With <code>value_type=str</code> it came back as 22 lines, the same text xacro printed.</p>
+
+<p>The fix is the one the error message names. <code>ParameterValue(Command([...]), value_type=str)</code> skips the YAML step. It worked for both the colon and the <code>#</code> files on all three distros. A Python string, such as the result of <code>open().read()</code> or <code>xacro.process_file(path).toxml()</code>, isn't a substitution, so it doesn't go through YAML either. Both worked without <code>ParameterValue</code>. <code>toxml()</code> returns the XML without line breaks, so that one also showed as one line. Note that <code>Command(['cat ', file])</code> on a plain <code>.urdf</code> failed like the xacro case. The YAML step is about <code>Command</code>, not about xacro.</p>
+
+<h2>executable '[&lt;...TextSubstitution object at 0x...&gt;]' not found on the PATH</h2>
+
+<p>This one means <code>FindExecutable(name='xacro')</code> searched <code>PATH</code> and found nothing. The odd part is the message. It prints the internal list of substitutions instead of the name <code>xacro</code>, so it isn't obvious what is missing. I got the same text with plain <code>FindExecutable</code> and with <code>PathJoinSubstitution([FindExecutable(name='xacro')])</code>, the pattern the ros2_control demos use. It didn't change between launch 1.0.15 (Humble), 3.4.12 (Jazzy) and 3.9.8 (Lyrical).</p>
+
+<p>In my containers the cause was plain: <code>which xacro</code> printed nothing, because none of the three <code>ros-base</code> images ships xacro. After <code>apt-get install ros-&lt;distro&gt;-xacro</code>, xacro 2.1.1 was at <code>/opt/ros/&lt;distro&gt;/bin/xacro</code> and both <code>FindExecutable</code> forms worked. If xacro is installed and you still get this, the shell that runs <code>ros2 launch</code> probably hasn't sourced <code>/opt/ros/&lt;distro&gt;/setup.bash</code>, since that's what puts <code>/opt/ros/&lt;distro&gt;/bin</code> on <code>PATH</code>. I didn't test that variant separately.</p>
+
+<p>Without <code>FindExecutable</code>, the same missing program shows up as <code>file not found: [Errno 2] No such file or directory: 'xacro'</code>. That message is clearer. It names the program, not the file you passed.</p>
+
+<h2>No such file or directory: 'xacro/w/plain.urdf.xacro'</h2>
+
+<p><code>Command</code> joins its list without adding spaces. <code>Command(['xacro', path])</code> became the single word <code>xacro/w/plain.urdf.xacro</code>, and launch tried to run that as a program. Put the space in the first string (<code>'xacro '</code>) or add a separate <code>' '</code> item, as in the fix above. The message looks like a path problem, but the path is fine.</p>
+
+<h2>executed command failed and module 'xml' has no attribute 'parsers'</h2>
+
+<p><code>executed command failed. Command: ...</code> means xacro ran and exited with an error. launch shows xacro's stderr under <code>Captured stderr output:</code>, and the cause is there, not in the launch error line. In my runs, an undefined property printed <code>error: name 'wheel_radius' is not defined</code> and a broken closing tag printed <code>XML parsing error: mismatched tag: line 7, column 2</code>. Both made xacro exit with code 2. <code>ParameterValue</code> doesn't help here. With <code>value_type=str</code> the undefined-property file failed the same way.</p>
+
+<p>A wrong file path looks scarier. xacro 2.1.1 (the version on all three distros) first raises <code>FileNotFoundError: [Errno 2] No such file or directory: '/w/missing.urdf.xacro'</code>. While handling that, it trips over its own <code>except xml.parsers.expat.ExpatError</code> line, so the last line of the traceback is:</p>
+
+<pre><code>  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1143, in _process
+    except xml.parsers.expat.ExpatError as e:
+AttributeError: module 'xml' has no attribute 'parsers'</code></pre>
+
+<p>Running xacro by hand on the missing file printed the same traceback on Humble, Jazzy and Lyrical, and exited with code 1. The <code>AttributeError</code> is a side effect. Scroll up to the first <code>FileNotFoundError</code> and check the path. This is the error in the <a href="https://robotics.stackexchange.com/questions/107544">urdf_tutorial question</a>, where the file <code>turtlebot2.urdf</code> wasn't in the <code>urdf_tutorial</code> share directory.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Colon or <code>#</code> in the URDF</th><th>Line breaks kept</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>ParameterValue(Command([...]), value_type=str)</code></td><td>worked</td><td>yes (22 lines)</td><td>The usual fix. xacro errors still stop the launch, with stderr shown.</td></tr>
+<tr><td>Raw <code>Command([...])</code></td><td>failed</td><td>no (1 line)</td><td>Works only while the URDF happens to be valid YAML text.</td></tr>
+<tr><td><code>xacro.process_file(path).toxml()</code> in Python</td><td>worked</td><td>no newlines in <code>toxml()</code> output</td><td>Runs while the launch file is loaded, so a launch argument can't be passed in directly. Needs <code>import xacro</code>.</td></tr>
+<tr><td><code>open(urdf_path).read()</code></td><td>worked</td><td>yes (22 lines)</td><td>Only for a plain <code>.urdf</code>, there's no xacro processing.</td></tr>
+<tr><td>XML: <code>&lt;param ... value="$(command 'xacro ...')" type="str"/&gt;</code></td><td>worked</td><td>yes (22 lines)</td><td>Without <code>type="str"</code> it failed on the colon file and folded the plain one.</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>Every case gave the same result on Humble, Jazzy and Lyrical. The error texts matched word for word, except for the <code>0x...</code> address in the <code>TextSubstitution</code> message. The YAML errors came out the same on PyYAML 5.4.1, 6.0.1 and 6.0.3, and xacro was 2.1.1 on all three, with the same <code>xml.parsers</code> traceback. Two small differences showed up. robot_state_publisher 3.0.3 on Humble logs <code>got segment ...</code> for each link, while 3.3.4 (Jazzy) and 3.5.6 (Lyrical) log one line, <code>Robot initialized</code>. And after SIGINT, <code>ros2 launch</code> exited with code 0 on Humble and Jazzy and 130 on Lyrical. Jazzy's and Lyrical's Python 3.12 and 3.14 tracebacks add <code>^^^^</code> marker lines, so the stderr block is longer there.</p>
+
+<h2>Not tested</h2>
+
+<p>Launch arguments passed to xacro (<code>name:=value</code> inside <code>Command</code>), <code>Command</code>'s <code>on_stderr</code> option, YAML launch files, ros2_control's controller_manager reading <code>robot_description</code>, Gazebo spawn nodes, an unsourced shell with xacro installed, and very large URDFs. Rolling, Iron and Foxy weren't tested either.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I fix "Unable to parse the value of parameter robot_description as yaml"?</h3>
+<p>Wrap the value as the message says: <code>ParameterValue(Command([FindExecutable(name='xacro'), ' ', path]), value_type=str)</code>, imported from <code>launch_ros.parameter_descriptions</code>. In an XML launch file, add <code>type="str"</code> to the <code>&lt;param&gt;</code>. In my run this fixed URDFs containing a colon plus space or a space plus <code>#</code> on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why did my URDF work before and now fails with this error?</h3>
+<p>Without a type, the URDF text goes through a YAML parser. A URDF without a colon plus space or a space plus <code>#</code> passes. A comment like <code>Note: ...</code> or <code>link #1</code> is enough to make the parser fail. The ones that pass are folded into a single line.</p>
+
+<h3>What does "executable '[&lt;launch.substitutions.text_substitution.TextSubstitution object ...&gt;]' not found on the PATH" mean?</h3>
+<p><code>FindExecutable(name='xacro')</code> didn't find xacro on <code>PATH</code>. The <code>ros-base</code> Docker images don't include it. Install <code>ros-&lt;distro&gt;-xacro</code> and source <code>/opt/ros/&lt;distro&gt;/setup.bash</code>. The message showed the substitution object instead of the name on all three distros.</p>
+
+<h3>Why does xacro end with "AttributeError: module 'xml' has no attribute 'parsers'"?</h3>
+<p>In xacro 2.1.1 this was the last line when the input file didn't exist. The real error is the <code>FileNotFoundError</code> higher up in the same traceback. Check the path you pass to xacro.</p>
+
+<h3>What does "executed command failed. Command: xacro ..." mean?</h3>
+<p>xacro ran and returned an error. Read the <code>Captured stderr output</code> lines below it. In my runs they showed an undefined property name, a mismatched XML tag, or a missing file.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I fix Unable to parse the value of parameter robot_description as yaml?", "acceptedAnswer": {"@type": "Answer", "text": "Wrap the value as the message says: ParameterValue(Command([FindExecutable(name='xacro'), ' ', path]), value_type=str), imported from launch_ros.parameter_descriptions. In an XML launch file, add type=str to the param tag. In my run this fixed URDFs containing a colon plus space or a space plus # on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why did my URDF work before and now fails with this error?", "acceptedAnswer": {"@type": "Answer", "text": "Without a type, the URDF text goes through a YAML parser. A URDF without a colon plus space or a space plus # passes. A comment like Note: ... or link #1 is enough to make the parser fail. The ones that pass are folded into a single line."}},
+{"@type": "Question", "name": "What does executable TextSubstitution object not found on the PATH mean?", "acceptedAnswer": {"@type": "Answer", "text": "FindExecutable(name='xacro') didn't find xacro on PATH. The ros-base Docker images don't include it. Install ros-distro-xacro and source /opt/ros/distro/setup.bash. The message showed the substitution object instead of the name on all three distros."}},
+{"@type": "Question", "name": "Why does xacro end with AttributeError: module 'xml' has no attribute 'parsers'?", "acceptedAnswer": {"@type": "Answer", "text": "In xacro 2.1.1 this was the last line when the input file didn't exist. The real error is the FileNotFoundError higher up in the same traceback. Check the path you pass to xacro."}},
+{"@type": "Question", "name": "What does executed command failed. Command: xacro mean?", "acceptedAnswer": {"@type": "Answer", "text": "xacro ran and returned an error. Read the Captured stderr output lines below it. In my runs they showed an undefined property name, a mismatched XML tag, or a missing file."}}
+]}
+</script>
+
+<p>Measured on 2026-11-03 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, launch 1.0.15, launch_ros 0.19.14, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10, robot_state_publisher 3.0.3, PyYAML 5.4.1, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, launch 3.4.12, launch_ros 0.26.13, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4, robot_state_publisher 3.3.4, PyYAML 6.0.1, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, launch 3.9.8, launch_ros 0.29.9, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10, robot_state_publisher 3.5.6, PyYAML 6.0.3, Python 3.14.4), with xacro 2.1.1 installed from apt on each and the default RMW (Fast DDS). For another launch_ros surprise with substitution values, see <a href="https://huntlab.app/en/ros-2-launchconfiguration-value-as-int-python-launch/">why a LaunchConfiguration value of '2'+'5' gives 25</a>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-10-ros2-launch-xacro-robot-description/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103409">Caught exception in launch: Unable to parse the value of parameter robot_description as yaml</a>, <a href="https://robotics.stackexchange.com/questions/107544">AttributeError: module 'xml' has no attribute 'parsers'</a>, <a href="https://robotics.stackexchange.com/questions/105669">executable '[&lt;launch.substitutions.text_substitution.TextSubstitution&gt;]' not found on the PATH</a>, <a href="https://robotics.stackexchange.com/questions/112605">Error when trying to parse robot_description in YAML format</a>, <a href="https://robotics.stackexchange.com/questions/113758">ROS 2 Jazzy: Caught exception in launch: executed command failed</a>.</p>

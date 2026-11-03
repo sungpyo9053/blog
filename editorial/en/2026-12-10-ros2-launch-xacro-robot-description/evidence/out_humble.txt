@@ -1,0 +1,436 @@
+=== distro=humble
+python3-yaml 5.4.1-1ubuntu1
+ros-humble-launch 1.0.15-1jammy.20260907.191132
+ros-humble-launch-ros 0.19.14-1jammy.20260907.214826
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-rmw-implementation 2.8.5-1jammy.20260907.211224
+ros-humble-robot-state-publisher 3.0.3-2jammy.20260915.225247
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+RMW default: unset
+Python 3.10.12
+badxml.urdf.xacro:7
+colon.urdf.xacro:8
+hash.urdf.xacro:8
+material.urdf.xacro:8
+plain.urdf.xacro:7
+undefined.urdf.xacro:7
+
+=== which xacro before install: none
+
+########## CASE A_cmd_noxacro.launch.py
+robot_description': Command(['xacro ', '/w/plain.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-20-46-534534-16d3ed37ffd5-44
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): file not found: [Errno 2] No such file or directory: 'xacro'
+
+########## CASE B_findexec_noxacro.launch.py
+robot_description': Command([FindExecutable(name='xacro'), ' ', '/w/plain.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-20-47-018082-16d3ed37ffd5-59
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executable '[<launch.substitutions.text_substitution.TextSubstitution object at 0x78e00d55c7c0>]' not found on the PATH
+
+########## CASE C_pathjoin_findexec_noxacro.launch.py
+robot_description': Command([PathJoinSubstitution([FindExecutable(name='xacro')]), ' ', '/w/plain.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-20-47-550351-16d3ed37ffd5-73
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executable '[<launch.substitutions.text_substitution.TextSubstitution object at 0x7bba0b3e87c0>]' not found on the PATH
+
+=== installing xacro
+apt rc=0 seconds=11
+which xacro: /opt/ros/humble/bin/xacro
+ros-humble-xacro 2.1.1-1jammy.20260304.195513
+--- xacro CLI directly on each file:
+## xacro plain.urdf.xacro
+rc=0 stdout_lines=20
+## xacro colon.urdf.xacro
+rc=0 stdout_lines=21
+## xacro hash.urdf.xacro
+rc=0 stdout_lines=21
+## xacro material.urdf.xacro
+rc=0 stdout_lines=23
+## xacro undefined.urdf.xacro
+rc=2 stdout_lines=0
+error: name 'wheel_radius' is not defined 
+when evaluating expression 'wheel_radius'
+when processing file: /w/undefined.urdf.xacro
+## xacro badxml.urdf.xacro
+rc=2 stdout_lines=0
+Check that:
+ - Your XML is well-formed
+ - You have the xacro xmlns declaration: xmlns:xacro="http://www.ros.org/wiki/xacro"
+Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1026, in parse
+    inp = f = open(os.path.join(root_dir, filename))
+FileNotFoundError: [Errno 2] No such file or directory: '/w/missing.urdf.xacro'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1138, in _process
+    doc = process_file(input_file_name, **opts)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1110, in process_file
+    doc = parse(None, input_file_name)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1030, in parse
+    raise XacroException(e.strerror + ": " + e.filename, exc=e)
+xacro.XacroException: No such file or directory: /w/missing.urdf.xacro [Errno 2] No such file or directory: '/w/missing.urdf.xacro'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/ros/humble/bin/xacro", line 33, in <module>
+    sys.exit(load_entry_point('xacro==2.1.1', 'console_scripts', 'xacro')())
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1190, in main
+    _process(input_file_name, vars(opts))
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1143, in _process
+    except xml.parsers.expat.ExpatError as e:
+AttributeError: module 'xml' has no attribute 'parsers'
+missing rc=1
+--- YAML view of xacro output (what launch_ros does with a raw Command result):
+plain: yaml ok, type str len 695 equal_to_input False first80 '<?xml version="1.0" ?> <!-- ===================================================='
+colon: YAMLError ScannerError mapping values are not allowed here |   in "<unicode string>", line 7, column 12: |       <!-- Note: base frame --> |                ^
+hash: YAMLError ParserError expected '<document start>', but found '<scalar>' |   in "<unicode string>", line 8, column 3: |       <link name="base_link"/> |       ^
+material: yaml ok, type str len 753 equal_to_input False first80 '<?xml version="1.0" ?> <!-- ===================================================='
+--- xacro output header (plain):
+<?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from /w/plain.urdf.xacro            | -->
+<!-- |    EDITING THIS FILE BY HAND IS NOT RECOMMENDED                                 | -->
+<!-- =================================================================================== -->
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="wheel">
+
+########## CASE D_findexec_ok.launch.py
+robot_description': Command([FindExecutable(name='xacro'), ' ', '/w/plain.urdf.xacro'])}
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=713 lines=1 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?> <!-- =================================================================================== --> <!-- |    This document was autogenerated by xacro from /w/plain.ur
+--- exit=0 alive_at_8s=yes elapsed=10.7s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-00-391822-16d3ed37ffd5-446
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [449]
+[robot_state_publisher-1] [INFO] [1793683260.527626414] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683260.527763237] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683270.677910202] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683270.680460260] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 449]
+
+########## CASE E_pathjoin_findexec_ok.launch.py
+robot_description': Command([PathJoinSubstitution([FindExecutable(name='xacro')]), ' ', '/w/plain.urdf.xacro'])}
+--- launch still running after 8 s; node list:
+--- param get: bytes=713 lines=1 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?> <!-- =================================================================================== --> <!-- |    This document was autogenerated by xacro from /w/plain.ur
+--- exit=0 alive_at_8s=yes elapsed=10.61s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-11-092229-16d3ed37ffd5-538
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [541]
+[robot_state_publisher-1] [INFO] [1793683271.229756270] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683271.229895059] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683281.305951226] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683281.308009088] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 541]
+
+########## CASE F_nospace.launch.py
+robot_description': Command(['xacro', '/w/plain.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-21-726366-16d3ed37ffd5-611
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): file not found: [Errno 2] No such file or directory: 'xacro/w/plain.urdf.xacro'
+
+########## CASE G_badpath.launch.py
+robot_description': Command(['xacro ', '/w/missing.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-22-256308-16d3ed37ffd5-626
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executed command failed. Command: xacro /w/missing.urdf.xacro
+Captured stderr output: Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1026, in parse
+    inp = f = open(os.path.join(root_dir, filename))
+FileNotFoundError: [Errno 2] No such file or directory: '/w/missing.urdf.xacro'
+During handling of the above exception, another exception occurred:
+Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1138, in _process
+    doc = process_file(input_file_name, **opts)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1110, in process_file
+    doc = parse(None, input_file_name)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1030, in parse
+    raise XacroException(e.strerror + ": " + e.filename, exc=e)
+xacro.XacroException: No such file or directory: /w/missing.urdf.xacro [Errno 2] No such file or directory: '/w/missing.urdf.xacro'
+During handling of the above exception, another exception occurred:
+Traceback (most recent call last):
+  File "/opt/ros/humble/bin/xacro", line 33, in <module>
+    sys.exit(load_entry_point('xacro==2.1.1', 'console_scripts', 'xacro')())
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1190, in main
+    _process(input_file_name, vars(opts))
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/xacro/__init__.py", line 1143, in _process
+    except xml.parsers.expat.ExpatError as e:
+AttributeError: module 'xml' has no attribute 'parsers'
+
+########## CASE H_undefined.launch.py
+robot_description': Command(['xacro ', '/w/undefined.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-22-790512-16d3ed37ffd5-641
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executed command failed. Command: xacro /w/undefined.urdf.xacro
+Captured stderr output: error: name 'wheel_radius' is not defined 
+when evaluating expression 'wheel_radius'
+when processing file: /w/undefined.urdf.xacro
+
+########## CASE I_badxml.launch.py
+robot_description': Command(['xacro ', '/w/badxml.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-23-318318-16d3ed37ffd5-656
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executed command failed. Command: xacro /w/badxml.urdf.xacro
+Captured stderr output: XML parsing error: mismatched tag: line 7, column 2
+when processing file: /w/badxml.urdf.xacro
+Check that:
+ - Your XML is well-formed
+ - You have the xacro xmlns declaration: xmlns:xacro="http://www.ros.org/wiki/xacro"
+
+########## CASE J_raw_plain.launch.py
+robot_description': Command(['xacro ', '/w/plain.urdf.xacro'])}
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=713 lines=1 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?> <!-- =================================================================================== --> <!-- |    This document was autogenerated by xacro from /w/plain.ur
+--- exit=0 alive_at_8s=yes elapsed=10.11s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-23-853326-16d3ed37ffd5-671
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [674]
+[robot_state_publisher-1] [INFO] [1793683283.991369536] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683283.991484013] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683293.568571814] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683293.571215501] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 674]
+
+########## CASE K_raw_colon.launch.py
+robot_description': Command(['xacro ', '/w/colon.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-33-989523-16d3ed37ffd5-744
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Unable to parse the value of parameter robot_description as yaml. If the parameter is meant to be a string, try wrapping it in launch_ros.parameter_descriptions.ParameterValue(value, value_type=str)
+
+########## CASE L_raw_hash.launch.py
+robot_description': Command(['xacro ', '/w/hash.urdf.xacro'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-34-519110-16d3ed37ffd5-759
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Unable to parse the value of parameter robot_description as yaml. If the parameter is meant to be a string, try wrapping it in launch_ros.parameter_descriptions.ParameterValue(value, value_type=str)
+
+########## CASE M_raw_material.launch.py
+robot_description': Command(['xacro ', '/w/material.urdf.xacro'])}
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=771 lines=1 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?> <!-- =================================================================================== --> <!-- |    This document was autogenerated by xacro from /w/material
+--- exit=0 alive_at_8s=yes elapsed=10.1s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-35-052641-16d3ed37ffd5-774
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [777]
+[robot_state_publisher-1] [INFO] [1793683295.190104631] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683295.190221073] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[robot_state_publisher-1] [INFO] [1793683304.757801418] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683304.761318014] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 777]
+
+########## CASE N_pv_colon.launch.py
+robot_description': ParameterValue(Command(['xacro ', '/w/colon.urdf.xacro']), value_type=str)}
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=792 lines=22 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from /w/colon.ur
+--- exit=0 alive_at_8s=yes elapsed=10.35s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-45-175486-16d3ed37ffd5-847
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [850]
+[robot_state_publisher-1] [INFO] [1793683305.314484219] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683305.314606752] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683315.137309172] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683315.140290083] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 850]
+
+########## CASE O_pv_hash.launch.py
+robot_description': ParameterValue(Command(['xacro ', '/w/hash.urdf.xacro']), value_type=str)}
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=783 lines=22 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from /w/hash.urd
+--- exit=0 alive_at_8s=yes elapsed=10.1s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-21-55-553683-16d3ed37ffd5-920
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [923]
+[robot_state_publisher-1] [INFO] [1793683315.693459400] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683315.693574677] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683325.264910845] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683325.267979200] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 923]
+
+########## CASE P_pv_undefined.launch.py
+robot_description': ParameterValue(Command(['xacro ', '/w/undefined.urdf.xacro']), value_type=str)}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-22-05-680233-16d3ed37ffd5-993
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executed command failed. Command: xacro /w/undefined.urdf.xacro
+Captured stderr output: error: name 'wheel_radius' is not defined 
+when evaluating expression 'wheel_radius'
+when processing file: /w/undefined.urdf.xacro
+
+########## CASE Q_python_xacro.launch.py
+robot_description': xacro.process_file('/w/colon.urdf.xacro').toxml()}
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=719 lines=1 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?><!-- =================================================================================== --><!-- |    This document was autogenerated by xacro from /w/colon.urdf
+--- exit=0 alive_at_8s=yes elapsed=10.7s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-22-06-215673-16d3ed37ffd5-1008
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1010]
+[robot_state_publisher-1] [INFO] [1793683326.284930675] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683326.285043360] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683336.516684028] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1010]
+
+########## CASE R_open_read.launch.py
+robot_description': open('/tmp/colon.urdf').read()}
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=792 lines=22 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from /w/colon.ur
+--- exit=0 alive_at_8s=yes elapsed=10.11s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-22-16-938061-16d3ed37ffd5-1080
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1082]
+[robot_state_publisher-1] [INFO] [1793683336.999657637] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683336.999769478] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683346.652907356] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683346.655034751] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1082]
+
+########## CASE S_cat_raw.launch.py
+robot_description': Command(['cat ', '/tmp/colon.urdf'])}
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-22-27-071957-16d3ed37ffd5-1152
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Unable to parse the value of parameter robot_description as yaml. If the parameter is meant to be a string, try wrapping it in launch_ros.parameter_descriptions.ParameterValue(value, value_type=str)
+
+########## CASE T_xml_raw.launch.xml
+  <param name="robot_description" value="$(command 'xacro /w/colon.urdf.xacro')"/></node></launch>
+--- exit=1 alive_at_8s=no elapsed=0.51s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-22-27-604399-16d3ed37ffd5-1167
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Failed to convert '<?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from /w/colon.urdf.xacro            | -->
+<!-- |    EDITING THIS FILE BY HAND IS NOT RECOMMENDED                                 | -->
+<!-- =================================================================================== -->
+<robot name="bot">
+  <!-- Note: base frame -->
+  <link name="base_link"/>
+  <link name="wheel">
+    <visual>
+      <geometry>
+        <cylinder length="0.05" radius="0.1"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="wheel"/>
+    <origin rpy="0 0 0" xyz="0 0.2 0"/>
+  </joint>
+</robot>
+' using yaml rules: yaml.safe_load() failed
+mapping values are not allowed here
+
+########## CASE U_xml_typestr.launch.xml
+  <param name="robot_description" value="$(command 'xacro /w/colon.urdf.xacro')" type="str"/></node></launch>
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=792 lines=22 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from /w/colon.ur
+--- exit=0 alive_at_8s=yes elapsed=10.12s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-22-28-135367-16d3ed37ffd5-1182
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1185]
+[robot_state_publisher-1] [INFO] [1793683348.327478135] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683348.327596808] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683357.853437847] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683357.857304740] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1185]
+
+########## CASE V_xml_plain_raw.launch.xml
+  <param name="robot_description" value="$(command 'xacro /w/plain.urdf.xacro')"/></node></launch>
+--- launch still running after 8 s; node list:
+/robot_state_publisher
+--- param get: bytes=713 lines=1 (xacro output of the same file has more lines if newlines were folded)
+String value is: <?xml version="1.0" ?> <!-- =================================================================================== --> <!-- |    This document was autogenerated by xacro from /w/plain.ur
+--- exit=0 alive_at_8s=yes elapsed=10.13s
+--- launch output (first 25 lines, long lines cut at 400 chars):
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-03-05-22-38-274129-16d3ed37ffd5-1255
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1258]
+[robot_state_publisher-1] [INFO] [1793683358.464596810] [robot_state_publisher]: got segment base_link
+[robot_state_publisher-1] [INFO] [1793683358.464727951] [robot_state_publisher]: got segment wheel
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1793683368.009461128] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1793683368.012585375] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1258]
+--- Command source: on_stderr option present?
+(self, command: Union[str, pathlib.Path, launch.substitution.Substitution, Iterable[Union[str, pathlib.Path, launch.substitution.Substitution]]], *, on_stderr: Union[str, pathlib.Path, launch.substitution.Substitution, Iterable[Union[str, pathlib.Path, launch.substitution.Substitution]]] = 'fail') -> None
+=== done humble
