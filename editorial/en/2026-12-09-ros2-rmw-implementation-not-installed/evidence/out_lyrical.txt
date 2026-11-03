@@ -1,0 +1,384 @@
+cp: 'repro.sh' and '/tmp/en-pick10/repro.sh' are the same file
+### host 2026-11-03T13:22:13+09:00  13:22:13 up 97 days, 17:18,  1 user,  load average: 0.27, 0.32, 0.17
+docker.io/library/ros:lyrical-ros-base
+IMAGE ros:lyrical-ros-base ros@sha256:3224ee150cb02eb89a5e0811bc267b57ed3a91b9c10191df57810726a7e916d7 created 2026-10-27T00:32:46.80470403Z
+### inner 2026-11-03T04:22:35+00:00 distro=lyrical
+### versions (before)
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rcl 10.4.5-1resolute.20260915.060844
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-rmw-cyclonedds-cpp 
+ros-lyrical-cyclonedds NOT INSTALLED
+ros-lyrical-rmw-zenoh-cpp NOT INSTALLED
+### rmw libraries in /opt/ros/lyrical/lib
+librmw_dds_common.so
+librmw_dds_common__rosidl_generator_c.so
+librmw_dds_common__rosidl_generator_py.so
+librmw_dds_common__rosidl_typesupport_c.so
+librmw_dds_common__rosidl_typesupport_cpp.so
+librmw_dds_common__rosidl_typesupport_fastrtps_c.so
+librmw_dds_common__rosidl_typesupport_fastrtps_cpp.so
+librmw_dds_common__rosidl_typesupport_introspection_c.so
+librmw_dds_common__rosidl_typesupport_introspection_cpp.so
+librmw_fastrtps_cpp.so
+librmw_fastrtps_shared_cpp.so
+librmw_implementation.so
+librmw_security_common.so
+librmw_test_fixture_implementation.so
+### ros2 doctor middleware
+   RMW MIDDLEWARE
+middleware name    : rmw_fastrtps_cpp
+
+   ROS 2 INFORMATION
+
+=== CASE: baseline python, RMW_IMPLEMENTATION unset
+$ python3 probe.py
+stage: import rclpy
+stage: rclpy.init()
+stage: create_node
+OK identifier = rmw_fastrtps_cpp
+elapsed 0.235 s
+--- exit=0 wall=0.42s
+
+=== CASE: baseline C++ component_container (4 s), unset
+$ timeout 4 ros2 run rclcpp_components component_container
+[ros2run]: Received signal:  Terminated
+[INFO] [1793679766.060793101] [rclcpp]: signal_handler(signum=15)
+[INFO] [1793679766.061498444] [rclcpp]: signal_handler(signum=15)
+--- exit=124 wall=4.18s
+
+=== CASE: empty RMW_IMPLEMENTATION=''
+$ env RMW_IMPLEMENTATION= python3 probe.py
+stage: import rclpy
+stage: rclpy.init()
+stage: create_node
+OK identifier = rmw_fastrtps_cpp
+elapsed 0.245 s
+--- exit=0 wall=0.43s
+
+=== CASE: python, rmw_cyclonedds_cpp not installed
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp python3 probe.py
+stage: import rclpy
+[ERROR] [1793679766.772287613] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_cyclonedds_cpp'), with error message 'failed to load shared library 'librmw_cyclonedds_cpp.so' due to dlopen error: librmw_cyclonedds_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.07s
+
+=== CASE: C++ component_container, rmw_cyclonedds_cpp not installed
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp timeout 4 ros2 run rclcpp_components component_container
+[ERROR] [1793679766.885900607] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_cyclonedds_cpp'), with error message 'failed to load shared library 'librmw_cyclonedds_cpp.so' due to dlopen error: librmw_cyclonedds_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.09s
+
+=== CASE: typo rmw_cyclone_dds_cpp
+$ env RMW_IMPLEMENTATION=rmw_cyclone_dds_cpp python3 probe.py
+stage: import rclpy
+[ERROR] [1793679766.977075297] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_cyclone_dds_cpp'), with error message 'failed to load shared library 'librmw_cyclone_dds_cpp.so' due to dlopen error: librmw_cyclone_dds_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.07s
+
+=== CASE: wrong case RMW_CycloneDDS_cpp
+$ env RMW_IMPLEMENTATION=RMW_CycloneDDS_cpp python3 probe.py
+stage: import rclpy
+[ERROR] [1793679767.069541733] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'RMW_CycloneDDS_cpp'), with error message 'failed to load shared library 'libRMW_CycloneDDS_cpp.so' due to dlopen error: libRMW_CycloneDDS_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.07s
+
+=== CASE: rmw_connextdds not installed
+$ env RMW_IMPLEMENTATION=rmw_connextdds python3 probe.py
+stage: import rclpy
+[ERROR] [1793679767.159916835] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_connextdds'), with error message 'failed to load shared library 'librmw_connextdds.so' due to dlopen error: librmw_connextdds.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.07s
+
+=== CASE: rmw_zenoh_cpp not installed
+$ env RMW_IMPLEMENTATION=rmw_zenoh_cpp python3 probe.py
+stage: import rclpy
+[ERROR] [1793679767.250267648] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_zenoh_cpp'), with error message 'failed to load shared library 'librmw_zenoh_cpp.so' due to dlopen error: librmw_zenoh_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.07s
+
+=== CASE: ros2 topic list, cyclone not installed (daemon stopped)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 topic list
+[ERROR] [1793679767.357842127] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_cyclonedds_cpp'), with error message 'failed to load shared library 'librmw_cyclonedds_cpp.so' due to dlopen error: librmw_cyclonedds_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.09s
+
+=== CASE: ros2 topic list --no-daemon, cyclone not installed
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 topic list --no-daemon
+[ERROR] [1793679767.466422064] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_cyclonedds_cpp'), with error message 'failed to load shared library 'librmw_cyclonedds_cpp.so' due to dlopen error: librmw_cyclonedds_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.09s
+
+=== CASE: LD_LIBRARY_PATH removed, default RMW
+$ env -u LD_LIBRARY_PATH python3 probe.py
+stage: import rclpy
+Traceback (most recent call last):
+  File "/tmp/p/probe.py", line 4, in <module>
+    import rclpy
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/__init__.py", line 51, in <module>
+    from rclpy.context import Context as Context
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/context.py", line 29, in <module>
+    from rclpy.impl.implementation_singleton import rclpy_implementation as _rclpy
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/impl/implementation_singleton.py", line 33, in <module>
+    rclpy_implementation = import_c_library('._rclpy_pybind11', package)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rpyutils/import_c_library.py", line 40, in import_c_library
+    return importlib.import_module(name, package=package)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/importlib/__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ImportError: librcl_action.so: cannot open shared object file: No such file or directory
+The C extension '/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/_rclpy_pybind11.cpython-314-x86_64-linux-gnu.so' failed to be imported while being present on the system. Please refer to 'https://docs.ros.org/en/lyrical/How-To-Guides/Installation-Troubleshooting.html#import-failing-even-with-library-present-on-the-system' for possible solutions
+--- exit=1 wall=0.08s
+
+=== CASE: LD_LIBRARY_PATH removed, C++ component_container
+$ env -u LD_LIBRARY_PATH timeout 4 /opt/ros/lyrical/lib/rclcpp_components/component_container
+/opt/ros/lyrical/lib/rclcpp_components/component_container: error while loading shared libraries: libcomponent_manager.so: cannot open shared object file: No such file or directory
+--- exit=127 wall=0.02s
+
+=== CASE: colcon build with RMW_IMPLEMENTATION=rmw_cyclonedds_cpp (not installed)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build --event-handlers console_direct+
+Starting >>> pkgcpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- The C compiler identification is GNU 15.2.0
+-- The CXX compiler identification is GNU 15.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found ament_cmake: 2.8.8 (/opt/ros/lyrical/share/ament_cmake/cmake)
+-- Found rclcpp: 32.0.3 (/opt/ros/lyrical/share/rclcpp/cmake)
+-- Found rosidl_generator_c: 5.2.1 (/opt/ros/lyrical/share/rosidl_generator_c/cmake)
+-- Found rosidl_generator_cpp: 5.2.1 (/opt/ros/lyrical/share/rosidl_generator_cpp/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found rmw_implementation_cmake: 7.10.2 (/opt/ros/lyrical/share/rmw_implementation_cmake/cmake)
+CMake Error at /opt/ros/lyrical/share/rmw_implementation_cmake/cmake/get_default_rmw_implementation.cmake:60 (message):
+  Could not find ROS middleware implementation 'rmw_cyclonedds_cpp'.  Choose
+  one of the following: rmw_fastrtps_cpp
+Call Stack (most recent call first):
+  /opt/ros/lyrical/share/rmw_implementation/cmake/rmw_implementation-extras.cmake:19 (get_default_rmw_implementation)
+  /opt/ros/lyrical/share/rmw_implementation/cmake/rmw_implementationConfig.cmake:41 (include)
+  /opt/ros/lyrical/share/rcl/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/lyrical/share/rcl/cmake/rclConfig.cmake:41 (include)
+  /opt/ros/lyrical/share/libstatistics_collector/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/lyrical/share/libstatistics_collector/cmake/libstatistics_collectorConfig.cmake:41 (include)
+  /opt/ros/lyrical/share/rclcpp/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/lyrical/share/rclcpp/cmake/rclcppConfig.cmake:41 (include)
+  CMakeLists.txt:4 (find_package)
+
+
+-- Configuring incomplete, errors occurred!
+--- stderr: pkgcpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Error at /opt/ros/lyrical/share/rmw_implementation_cmake/cmake/get_default_rmw_implementation.cmake:60 (message):
+  Could not find ROS middleware implementation 'rmw_cyclonedds_cpp'.  Choose
+  one of the following: rmw_fastrtps_cpp
+Call Stack (most recent call first):
+  /opt/ros/lyrical/share/rmw_implementation/cmake/rmw_implementation-extras.cmake:19 (get_default_rmw_implementation)
+  /opt/ros/lyrical/share/rmw_implementation/cmake/rmw_implementationConfig.cmake:41 (include)
+  /opt/ros/lyrical/share/rcl/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/lyrical/share/rcl/cmake/rclConfig.cmake:41 (include)
+  /opt/ros/lyrical/share/libstatistics_collector/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)
+  /opt/ros/lyrical/share/libstatistics_collector/cmake/libstatistics_collectorConfig.cmake:41 (include)
+  /opt/ros/lyrical/share/rclcpp/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_--- exit=120 wall=1.47s
+
+=== CASE: colcon build, RMW unset
+$ colcon build
+Starting >>> pkgcpp
+--- stderr: pkgcpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< pkgcpp [6.05s]
+
+Summary: 1 package finished [6.18s]
+  1 package had stderr output: pkgcpp
+--- exit=0 wall=6.48s
+
+=== CASE: built C++ probe, unset
+$ bash -c source install/setup.bash && ros2 run pkgcpp probe_cpp
+OK identifier = rmw_fastrtps_cpp
+--- exit=0 wall=0.86s
+
+=== CASE: built C++ probe, cyclone not installed
+$ bash -c source install/setup.bash && RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 run pkgcpp probe_cpp
+[ERROR] [1793679777.327129409] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_cyclonedds_cpp'), with error message 'failed to load shared library 'librmw_cyclonedds_cpp.so' due to dlopen error: librmw_cyclonedds_cpp.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.40s
+
+### install rmw_cyclonedds_cpp
+  ros-lyrical-iceoryx-binding-c ros-lyrical-iceoryx-hoofs
+  ros-lyrical-iceoryx-posh
+  ros-lyrical-iceoryx-binding-c ros-lyrical-iceoryx-hoofs
+  ros-lyrical-iceoryx-posh ros-lyrical-rmw-cyclonedds-cpp
+0 upgraded, 8 newly installed, 0 to remove and 2 not upgraded.
+Need to get 2058 kB of archives.
+After this operation, 8723 kB of additional disk space will be used.
+Setting up ros-lyrical-iceoryx-binding-c (2.0.6-1resolute.20260728.175307) ...
+Setting up ros-lyrical-iceoryx-hoofs (2.0.6-1resolute.20260728.174501) ...
+Setting up ros-lyrical-iceoryx-posh (2.0.6-1resolute.20260728.174737) ...
+Setting up ros-lyrical-cyclonedds (11.0.1-4resolute.20260728.175307) ...
+Setting up ros-lyrical-rmw-cyclonedds-cpp (4.1.5-1resolute.20260915.051853) ...
+install wall=14s
+ros-lyrical-cyclonedds 11.0.1-4resolute.20260728.175307
+ros-lyrical-rmw-cyclonedds-cpp 4.1.5-1resolute.20260915.051853
+
+=== CASE: python, cyclone installed, same shell (not re-sourced)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp python3 probe.py
+stage: import rclpy
+stage: rclpy.init()
+stage: create_node
+OK identifier = rmw_cyclonedds_cpp
+elapsed 0.233 s
+--- exit=0 wall=0.31s
+
+=== CASE: C++ component_container, cyclone installed
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp timeout 4 ros2 run rclcpp_components component_container
+[ros2run]: Received signal:  Terminated
+[INFO] [1793679795.515995898] [rclcpp]: signal_handler(signum=15)
+--- exit=124 wall=4.08s
+
+=== CASE: built C++ probe (built before install), cyclone installed
+$ bash -c source ws/install/setup.bash && RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 run pkgcpp probe_cpp
+OK identifier = rmw_cyclonedds_cpp
+--- exit=0 wall=0.66s
+
+=== CASE: colcon build with RMW_IMPLEMENTATION=rmw_cyclonedds_cpp (installed)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp colcon build
+Starting >>> pkgcpp
+--- stderr: pkgcpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< pkgcpp [6.13s]
+
+Summary: 1 package finished [6.26s]
+  1 package had stderr output: pkgcpp
+--- exit=0 wall=6.56s
+libddsc at: 
+
+### mixed RMW on one host, same domain
+
+=== CASE: talker fastrtps -> listener cyclonedds
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp python3 listener.py 8
+listener rmw=rmw_cyclonedds_cpp received=70 nodes_seen=['listener_py', 'talker_py']
+--- exit=0 wall=8.60s
+talker sent 100
+
+=== CASE: talker cyclonedds -> listener fastrtps
+$ env RMW_IMPLEMENTATION=rmw_fastrtps_cpp python3 listener.py 8
+listener rmw=rmw_fastrtps_cpp received=80 nodes_seen=['listener_py', 'talker_py']
+--- exit=0 wall=8.46s
+talker sent 100
+
+### daemon started under fastrtps, CLI under cyclone
+The daemon has been started
+
+=== CASE: ros2 node list (cyclone shell, fastrtps daemon)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 node list
+/talker_py
+--- exit=0 wall=0.44s
+
+=== CASE: ros2 node list --no-daemon (cyclone shell)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 node list --no-daemon
+/talker_py
+--- exit=0 wall=1.16s
+
+=== CASE: ros2 daemon status
+$ ros2 daemon status
+The daemon is running
+--- exit=0 wall=0.42s
+    887 /usr/bin/python3 -c from ros2cli.daemon.daemonize import main; main() --name ros2-daemon --ros-domain-id 0 --rmw-implementation rmw_fastrtps_cpp
+The daemon has been stopped
+
+### zenoh
+ros-lyrical-rmw-zenoh-cpp 0.10.6-1resolute.20260915.025944
+
+=== CASE: zenoh installed, shell NOT re-sourced
+$ env RMW_IMPLEMENTATION=rmw_zenoh_cpp timeout 15 python3 probe.py
+stage: import rclpy
+[ERROR] [1793679851.067690182] [rcl]: Error getting RMW implementation identifier / RMW implementation not installed (expected identifier of 'rmw_zenoh_cpp'), with error message 'failed to load shared library 'librmw_zenoh_cpp.so' due to dlopen error: libzenohc.so: cannot open shared object file: No such file or directory, at ./src/shared_library.c:96, at ./src/functions.cpp:67', exiting with 1., at ./src/rcl/rmw_implementation_identifier_check.c:143
+
+--- exit=1 wall=0.07s
+
+=== CASE: zenoh, re-sourced, no router (timeout 15 s)
+$ bash -c source /opt/ros/lyrical/setup.bash && RMW_IMPLEMENTATION=rmw_zenoh_cpp timeout 15 python3 probe.py
+stage: import rclpy
+stage: rclpy.init()
+[2m2026-11-03T04:24:12.033470Z[0m [33m WARN[0m ThreadId(06) [2mzenoh::net::runtime::orchestrator[0m[2m:[0m Scouting delay elapsed before start conditions are met.
+[WARN] [1793679852.033546744] [rmw_zenoh_cpp]: Unable to connect to a Zenoh router. Have you started a router with `ros2 run rmw_zenoh_cpp rmw_zenohd`?
+[WARN] [1793679852.033576322] [rmw_zenoh_cpp]: Unable to connect to a Zenoh router after 1 attempt(s). Please ensure that a Zenoh router is running and can be reached. You may increase the number of attempts to check for a router by setting the ZENOH_ROUTER_CHECK_ATTEMPTS environment variable. Proceeding with initialization but other peers will not discover or receive data from peers in this session until a router is started.
+stage: create_node
+OK identifier = rmw_zenoh_cpp
+elapsed 0.718 s
+--- exit=0 wall=1.09s
+
+=== CASE: zenoh probe, re-sourced, router running
+$ bash -c source /opt/ros/lyrical/setup.bash && RMW_IMPLEMENTATION=rmw_zenoh_cpp python3 probe.py
+stage: import rclpy
+stage: rclpy.init()
+stage: create_node
+OK identifier = rmw_zenoh_cpp
+elapsed 0.226 s
+--- exit=0 wall=0.56s
+
+=== CASE: talker fastrtps -> listener zenoh (router running)
+$ bash -c source /opt/ros/lyrical/setup.bash && RMW_IMPLEMENTATION=rmw_zenoh_cpp python3 listener.py 6
+listener rmw=rmw_zenoh_cpp received=0 nodes_seen=['listener_py']
+--- exit=0 wall=6.59s
+
+=== CASE: talker zenoh -> listener zenoh (router running)
+$ bash -c source /opt/ros/lyrical/setup.bash && RMW_IMPLEMENTATION=rmw_zenoh_cpp python3 listener.py 5
+listener rmw=rmw_zenoh_cpp received=49 nodes_seen=['listener_py', 'talker_py']
+--- exit=0 wall=5.59s
+t4:
+talker sent 100
+t5:
+talker sent 80
+zenohd log head:
+[2m2026-11-03T04:24:12.717277Z[0m [32m INFO[0m ThreadId(02) [2mzenoh::net::runtime[0m[2m:[0m Using ZID: acd1f26721472004f93f4d5a74a0da5b
+[2m2026-11-03T04:24:12.717831Z[0m [32m INFO[0m ThreadId(02) [2mzenoh::net::runtime::orchestrator[0m[2m:[0m Zenoh can be reached at: tcp/172.17.0.2:7447
+Started Zenoh router with id acd1f26721472004f93f4d5a74a0da5b
+### inner done 2026-11-03T04:24:34+00:00
+### host done 2026-11-03T13:24:34+09:00  13:24:34 up 97 days, 17:20,  2 users,  load average: 0.47, 0.50, 0.27
