@@ -1,0 +1,187 @@
+<pre><code>Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 46, in import_type_support
+    return importlib.import_module(module_name, package=pkg_name)
+  ...
+ModuleNotFoundError: No module named 'my_msgs.my_msgs_s__rosidl_typesupport_c'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/ws/t.py", line 6, in &lt;module&gt;
+    pub = node.create_publisher(Num, 'num', 10)
+  ...
+  File "/ws/install/my_msgs/lib/python3.11/site-packages/my_msgs/msg/_num.py", line 29, in __import_type_support__
+    module = import_type_support('my_msgs')
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 48, in import_type_support
+    raise UnsupportedTypeSupport(pkg_name)
+rosidl_generator_py.import_type_support_impl.UnsupportedTypeSupport: Could not import 'rosidl_typesupport_c' for package 'my_msgs'</code></pre>
+
+<p>Short answer: the last line is a wrapper. rclpy tried to load the compiled C part of your message package and failed. The real reason is the first exception, above "During handling of the above exception". In my runs it was one of two things. Either the interface package was built while a different Python was first on <code>PATH</code> (a venv, conda or uv environment), or the workspace's <code>lib</code> directory was missing from <code>LD_LIBRARY_PATH</code>. For the first case, this fixed it on Humble, Jazzy and Lyrical:</p>
+
+<pre><code>deactivate            # or: conda deactivate
+cd ~/ws
+rm -rf build/my_msgs install/my_msgs
+colcon build --packages-select my_msgs
+source install/setup.bash</code></pre>
+
+<p>A plain <code>colcon build</code> after <code>deactivate</code> does not fix it. CMake keeps the old Python in its cache, and the rebuilt package was still broken on all three distros. For the second case, source <code>install/setup.bash</code> instead of adding the workspace to <code>PYTHONPATH</code> by hand.</p>
+
+<h2>Find your error</h2>
+
+<p>Look at the first exception in the chain, the one printed before "During handling of the above exception". Then find it in this table. The outer <code>UnsupportedTypeSupport</code> line was identical in every row.</p>
+
+<table>
+<thead><tr><th>First exception in the chain</th><th>Distro</th><th>Cause in my run</th></tr></thead>
+<tbody>
+<tr><td><code>ModuleNotFoundError: No module named 'my_msgs.my_msgs_s__rosidl_typesupport_c'</code></td><td>Humble</td><td>Interfaces built with Python 3.11, run with the system Python 3.10</td></tr>
+<tr><td><code>ImportError: libpython3.11.so.1.0: cannot open shared object file: No such file or directory</code></td><td>Jazzy, Lyrical</td><td>Interfaces built with Python 3.11, run with the system Python (3.12 or 3.14)</td></tr>
+<tr><td><code>ImportError: libmy_msgs__rosidl_generator_py.so: cannot open shared object file: No such file or directory</code></td><td>All three</td><td>Only <code>/opt/ros</code> sourced, workspace added to <code>PYTHONPATH</code> by hand, so the workspace <code>lib</code> directory was not on <code>LD_LIBRARY_PATH</code></td></tr>
+</tbody>
+</table>
+
+<p>Some things that sound related gave a different error in my runs. They are listed further down so you can rule them out.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-03 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one container per distro, run one after another on a 2 vCPU Linux host. The workspace had one ament_cmake interfaces package, <code>my_msgs</code>, with <code>msg/Num.msg</code> containing <code>int64 num</code>. The test script imports <code>my_msgs.msg.Num</code>, creates a node and a publisher, publishes once and prints <code>OK publisher created and published my_msgs.msg.Num(num=5)</code>.</p>
+
+<p>For the "other Python" case I installed CPython 3.11.11 with uv 0.5.31 and made a venv with <code>empy</code> (the same version as the distro's system package), <code>catkin_pkg</code>, <code>lark</code>, <code>numpy</code> and <code>setuptools</code>. With those installed, colcon builds the interfaces without any error. That is what makes this case hard to spot. The build is green and the failure only shows up at runtime. Python 3.11 differs from the system Python on all three distros: 3.10.12 on Humble, 3.12.3 on Jazzy, 3.14.4 on Lyrical.</p>
+
+<p>The baseline build with the system Python worked on every distro. It took 8.0 s on Humble, 10.4 s on Jazzy and 11.7 s on Lyrical, and the script printed the OK line.</p>
+
+<h2>Cause 1: interfaces built with a different Python</h2>
+
+<p>I activated the 3.11 venv and ran a clean <code>colcon build --packages-select my_msgs</code>. It finished with exit code 0 on all three distros (8.9 s, 10.4 s and 14.3 s). Then I deactivated the venv, sourced the workspace in a new shell and ran the script with <code>/usr/bin/python3</code>. It failed at <code>create_publisher</code> with the error at the top of this page, exit code 1.</p>
+
+<p>The install tree shows why. CMake had picked up <code>python3</code> from the venv. On Humble the cache said so directly:</p>
+
+<pre><code>PYTHON_EXECUTABLE:FILEPATH=/venv311/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv311/bin/python3</code></pre>
+
+<p>The Python package went to <code>install/my_msgs/lib/python3.11/site-packages/my_msgs</code> on all three distros, instead of the system Python's directory (<code>local/lib/python3.10/dist-packages</code> on Humble, <code>lib/python3.12/site-packages</code> on Jazzy, <code>lib/python3.14/site-packages</code> on Lyrical). After sourcing <code>install/setup.bash</code>, the system Python still imported the message class from that 3.11 directory (the traceback shows <code>.../lib/python3.11/site-packages/my_msgs/msg/_num.py</code>), and <code>from my_msgs.msg import Num</code> worked on its own. The pure-Python message class loaded. Only the compiled part did not.</p>
+
+<p>On Humble the compiled modules carry the Python version in their names:</p>
+
+<pre><code>my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so</code></pre>
+
+<p>Python 3.10 only looks for <code>.cpython-310-x86_64-linux-gnu.so</code>, <code>.abi3.so</code> and <code>.so</code>. It skips these files, so the inner error is <code>No module named 'my_msgs.my_msgs_s__rosidl_typesupport_c'</code>, even though a file with that name is in the directory.</p>
+
+<p>On Jazzy and Lyrical the modules have no version tag. They are just <code>my_msgs_s__rosidl_typesupport_c.so</code>. The system Python finds the file and tries to load it, and the loader fails because the module was linked against the other interpreter:</p>
+
+<pre><code>ImportError: libpython3.11.so.1.0: cannot open shared object file: No such file or directory</code></pre>
+
+<p>That line is a strong hint. If the number in <code>libpython3.X</code> is not your ROS Python version, the package was built with another Python.</p>
+
+<p>The CLI fails the same way. <code>ros2 topic pub --once /num my_msgs/msg/Num "{num: 1}"</code> exited with code 1 and the same <code>UnsupportedTypeSupport</code> line on all three distros. <code>ros2 interface show my_msgs/msg/Num</code> worked and printed <code>int64 num</code>, because it only reads the interface definition. A working <code>interface show</code> doesn't prove that the build is usable from Python.</p>
+
+<p>Running the script with the venv still active gave a different error. On Humble and Lyrical it was <code>ModuleNotFoundError: No module named 'rclpy._rclpy_pybind11'</code>, because rclpy itself is compiled for the system Python. On Jazzy it failed even earlier, with <code>ModuleNotFoundError: No module named 'yaml'</code>. If that is what you see, the <a href="https://huntlab.app/en/no-module-named-rclpy-rclpy-pybind11-ros-2/">rclpy import post</a> covers it.</p>
+
+<h3>Check it in ten seconds</h3>
+
+<p>Source the workspace and run this with the same <code>python3</code> you use for your nodes:</p>
+
+<pre><code class="language-python">import importlib.util, importlib.machinery, glob, os
+spec = importlib.util.find_spec('my_msgs')
+d = os.path.dirname(spec.origin)
+print('package dir:', d)
+print('this python wants:', importlib.machinery.EXTENSION_SUFFIXES[0])
+for f in sorted(glob.glob(d + '/*.so')): print('found:', os.path.basename(f))</code></pre>
+
+<p>On the broken Humble build it printed:</p>
+
+<pre><code>package dir: /ws/install/my_msgs/lib/python3.11/site-packages/my_msgs
+this python wants: .cpython-310-x86_64-linux-gnu.so
+found: libmy_msgs__rosidl_generator_py.so
+found: my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+found: my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+found: my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so</code></pre>
+
+<p>On Jazzy and Lyrical the file names don't show the version, so look at the package directory instead. <code>python3.11</code> in that path, when your ROS Python is 3.12 or 3.14, is the same problem.</p>
+
+<h2>Cause 2: the workspace lib directory is not on LD_LIBRARY_PATH</h2>
+
+<p>This one comes from setting up the environment by hand, as some IDE run configurations do. I built <code>my_msgs</code> normally with the system Python. Then I sourced only <code>/opt/ros/&lt;distro&gt;/setup.bash</code> and added the package's Python directory to <code>PYTHONPATH</code> myself. The import worked, and <code>create_publisher</code> failed with the same outer error on all three distros. The first exception was:</p>
+
+<pre><code>ImportError: libmy_msgs__rosidl_generator_py.so: cannot open shared object file: No such file or directory</code></pre>
+
+<p>The compiled module depends on three libraries from the package itself, and it has no RPATH or RUNPATH. <code>ldd</code> without the workspace on <code>LD_LIBRARY_PATH</code> showed:</p>
+
+<pre><code>libmy_msgs__rosidl_generator_py.so =&gt; not found
+libmy_msgs__rosidl_typesupport_c.so =&gt; not found
+libmy_msgs__rosidl_generator_c.so =&gt; not found</code></pre>
+
+<p>Adding <code>/ws/install/my_msgs/lib</code> to <code>LD_LIBRARY_PATH</code> made the script print the OK line on all three distros. Sourcing <code>install/setup.bash</code> does the same thing for every package in the workspace. After sourcing it, <code>LD_LIBRARY_PATH</code> had the <code>my_msgs</code> entry on every distro, and the script worked. In an IDE, the simplest fix is to start the IDE from a shell where the workspace is already sourced.</p>
+
+<h2>What did not give this error</h2>
+
+<p>These came up in the questions I read. In my runs each one failed with a different error, so you can rule them out when you see <code>UnsupportedTypeSupport</code>.</p>
+
+<ul>
+<li><strong>No <code>LD_LIBRARY_PATH</code> at all</strong> (<code>env -u LD_LIBRARY_PATH python3 t.py</code>). rclpy failed first with <code>ImportError: librcl_action.so: cannot open shared object file</code>. A plain <code>std_msgs</code> script failed the same way. A missing <code>LD_LIBRARY_PATH</code> breaks your message package only if <code>/opt/ros</code> is still on it, as in cause 2.</li>
+<li><strong><code>sudo</code></strong>. Inside the containers, running as root, both <code>sudo</code> and <code>sudo -E</code> dropped <code>PYTHONPATH</code> and <code>LD_LIBRARY_PATH</code>. The script failed with <code>ModuleNotFoundError: No module named 'rclpy'</code>. Passing <code>LD_LIBRARY_PATH</code> through <code>sudo -E env ...</code> still failed the same way, because <code>PYTHONPATH</code> was gone. This worked: <code>sudo bash -c "source /opt/ros/$ROS_DISTRO/setup.bash &amp;&amp; source /ws/install/setup.bash &amp;&amp; python3 /ws/t.py"</code>.</li>
+<li><strong>Missing <code>DEPENDENCIES</code> in <code>rosidl_generate_interfaces</code></strong>. I added <code>msg/Pose2.msg</code> with a <code>geometry_msgs/Point</code> field and left out <code>DEPENDENCIES geometry_msgs</code>. The build failed on every distro, so nothing reached runtime. On Humble the error was <code>fatal error: geometry_msgs/msg/detail/point__struct.hpp: No such file or directory</code>. On Jazzy and Lyrical it was <code>KeyError: 'geometry_msgs'</code> from <code>rosidl_generator_type_description</code>. With <code>DEPENDENCIES geometry_msgs</code> the build finished and a <code>Pose2</code> publisher was created. Older answers that blame missing dependencies for the runtime error come from older distros. I did not test those.</li>
+</ul>
+
+<h2>Fix options compared</h2>
+
+<p>For cause 1 I went back to the broken 3.11 build before each fix, deactivated the venv (except in the last row), ran the fix and then the script. Times are colcon wall time on Humble / Jazzy / Lyrical.</p>
+
+<table>
+<thead><tr><th>What I ran</th><th>Time (s)</th><th>Script after the fix</th></tr></thead>
+<tbody>
+<tr><td><code>colcon build</code> again after <code>deactivate</code></td><td>1.3 / 1.3 / 1.4</td><td>Still <code>UnsupportedTypeSupport</code> on all three. The package stayed in <code>lib/python3.11</code>, and on Humble the cache still pointed at <code>/venv311/bin/python3</code></td></tr>
+<tr><td><code>colcon build --cmake-force-configure</code></td><td>2.5 / 2.4 / 2.5</td><td>Still <code>UnsupportedTypeSupport</code> on all three. Reconfiguring keeps the cached Python</td></tr>
+<tr><td><code>colcon build --cmake-clean-cache</code></td><td>8.1 / 10.2 / 11.7</td><td>Worked on all three. The old <code>lib/python3.11</code> directory stayed in <code>install/</code> next to the new one</td></tr>
+<tr><td><code>rm -rf build/my_msgs install/my_msgs</code>, then <code>colcon build</code></td><td>8.0 / 10.0 / 11.6</td><td>Worked on all three. Only the system Python's directory was left</td></tr>
+<tr><td>Venv still active, clean build with <code>--cmake-args -DPython3_EXECUTABLE=/usr/bin/python3 -DPYTHON_EXECUTABLE=/usr/bin/python3</code></td><td>8.0 / 10.0 / 11.2</td><td>Worked on all three</td></tr>
+</tbody>
+</table>
+
+<p>The fast commands are fast because they skip the step that matters. Anything that keeps <code>CMakeCache.txt</code> keeps the wrong Python. The two fixes that worked after <code>deactivate</code> cost about as much as a clean build of the package, and <code>rm -rf</code> also removes the stale 3.11 files. If you must keep a venv active while building, pass both <code>-D</code> flags. I only tested that from a clean build.</p>
+
+<p>For cause 2 the fix is to source <code>install/setup.bash</code>, or to add <code>install/&lt;pkg&gt;/lib</code> to <code>LD_LIBRARY_PATH</code>. Both worked on all three distros, and no rebuild was needed.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble</strong> (rclpy 3.3.22, rosidl_generator_py 0.14.6): the typesupport modules carry the <code>cpython-310</code> tag, so a mismatch shows up as <code>ModuleNotFoundError</code> for <code>my_msgs_s__rosidl_typesupport_c</code>. CMakeCache has <code>PYTHON_EXECUTABLE</code> and <code>Python3_EXECUTABLE</code>, both set to the venv path.</li>
+<li><strong>Jazzy</strong> (rclpy 7.1.12, rosidl_generator_py 0.22.2): the modules are plain <code>.so</code> files with no version tag, so a mismatch shows up as <code>ImportError: libpython3.11.so.1.0</code>. Running with the venv active failed on <code>No module named 'yaml'</code> before reaching rclpy's C extension.</li>
+<li><strong>Lyrical</strong> (rclpy 10.0.11, rosidl_generator_py 0.27.2, Python 3.14.4): same as Jazzy for both causes. The traceback is longer because of Python 3.14's caret markers, but the first exception and the last line were the same.</li>
+<li>The fix results were the same on all three distros.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Not tested: conda environments (I used a uv venv, which I expect to behave the same but did not check), a venv with the same Python minor version as ROS, ament_python packages run through <code>ros2 run</code>, rclcpp, building in one image and running in another, overlays where a dependency message package was rebuilt underneath, <code>--symlink-install</code>, <code>--merge-install</code>, Windows, macOS, ARM, distros older than Humble, Cyclone DDS and other RMWs, and <code>sudo</code> as a non-root user with custom <code>env_keep</code> rules.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does Could not import 'rosidl_typesupport_c' for package mean?</h3>
+<p>rclpy found the Python message class but could not load its compiled typesupport module. The first exception in the traceback says why. In my runs it was either a build made with another Python, or a missing workspace <code>lib</code> directory on <code>LD_LIBRARY_PATH</code>.</p>
+
+<h3>The build succeeded. Why does it fail only at runtime?</h3>
+<p>colcon reported success with a venv Python 3.11 on all three distros. The import also worked. The compiled part is only loaded when you create a publisher, subscription or service, or run <code>ros2 topic pub</code>, so that is where it failed.</p>
+
+<h3>I deactivated conda or the venv and rebuilt. Why is it still broken?</h3>
+<p>CMakeCache.txt still holds the old interpreter. A plain rebuild and <code>--cmake-force-configure</code> both left the package broken. <code>--cmake-clean-cache</code> or deleting <code>build/&lt;pkg&gt;</code> and <code>install/&lt;pkg&gt;</code> fixed it on Humble, Jazzy and Lyrical.</p>
+
+<h3>What does ImportError: libpython3.11.so.1.0 mean here?</h3>
+<p>On Jazzy and Lyrical the typesupport module was linked against Python 3.11 while ROS runs a different Python. Rebuild the interface package with the system Python. On Humble the same mismatch shows up as <code>No module named ..._s__rosidl_typesupport_c</code>.</p>
+
+<h3>Is ros2 interface show working enough to prove the package is fine?</h3>
+<p>No. In the broken 3.11 build, <code>ros2 interface show my_msgs/msg/Num</code> printed <code>int64 num</code> on all three distros, while <code>ros2 topic pub</code> and the Python publisher failed.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Could not import rosidl_typesupport_c for package mean?", "acceptedAnswer": {"@type": "Answer", "text": "rclpy found the Python message class but could not load its compiled typesupport module. The first exception in the traceback says why. In my runs it was either a build made with another Python, or a missing workspace lib directory on LD_LIBRARY_PATH."}},
+{"@type": "Question", "name": "The build succeeded. Why does it fail only at runtime?", "acceptedAnswer": {"@type": "Answer", "text": "colcon reported success with a venv Python 3.11 on Humble, Jazzy and Lyrical, and the import worked. The compiled part is only loaded when you create a publisher, subscription or service, or run ros2 topic pub, so that is where it failed."}},
+{"@type": "Question", "name": "I deactivated conda or the venv and rebuilt. Why is it still broken?", "acceptedAnswer": {"@type": "Answer", "text": "CMakeCache.txt still holds the old interpreter. A plain rebuild and --cmake-force-configure both left the package broken. --cmake-clean-cache or deleting build/my_msgs and install/my_msgs fixed it on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "What does ImportError libpython3.11.so.1.0 mean here?", "acceptedAnswer": {"@type": "Answer", "text": "On Jazzy and Lyrical the typesupport module was linked against Python 3.11 while ROS runs a different Python. Rebuild the interface package with the system Python. On Humble the same mismatch shows up as No module named my_msgs_s__rosidl_typesupport_c."}},
+{"@type": "Question", "name": "Is ros2 interface show working enough to prove the package is fine?", "acceptedAnswer": {"@type": "Answer", "text": "No. In the broken 3.11 build, ros2 interface show printed the message definition on all three distros, while ros2 topic pub and the Python publisher failed."}}
+]}
+</script>
+
+<p>Measured on 2026-11-03 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Python 3.10.12, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Python 3.12.3, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Python 3.14.4, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS), with CPython 3.11.11 from uv 0.5.31 for the mismatched builds. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-05-ros2-rclpy-could-not-import-rosidl-typesupport-c/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103415">Can't publish or echo topics with custom message types from command line</a>, <a href="https://robotics.stackexchange.com/questions/104487">ros2 Iron Ubuntu 22.04 Could not import 'rosidl_typesupport_c' custom msg error</a>, <a href="https://robotics.stackexchange.com/questions/93959">Missing rosidl type support for custom message in Python</a>, <a href="https://github.com/ros2/examples/issues/303">ros2/examples #303: Could not import 'rosidl_typesupport_c' for package</a>, <a href="https://github.com/flynneva/bno055/issues/47">bno055 #47: Could not import 'rosidl_typesupport_c' for package 'example_interfaces'</a>.</p>

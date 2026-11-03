@@ -1,0 +1,435 @@
+##### distro: humble
+== versions
+Python 3.10.12
+system EXTENSION_SUFFIXES: ['.cpython-310-x86_64-linux-gnu.so', '.abi3.so', '.so']
+cmake version 3.22.1
+python3-colcon-core 0.21.3+upstream-1
+python3-empy 3.3.4-2
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-rosidl-generator-py 0.14.6-1jammy.20260907.200655
+ros-humble-rosidl-typesupport-c 2.0.2-1jammy.20260907.195356
+uv: uv 0.5.31
+
+=== BUILD: A0: system python, clean
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 0  wall: 8.0s
+Finished <<< my_msgs [7.52s]
+Summary: 1 package finished [7.74s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 
+-- python package dir(s): install/my_msgs/local/lib/python3.10/dist-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+
+--- RUN: A0 t.py
+OK publisher created and published my_msgs.msg.Num(num=5)
+exit code: 0
+LD_LIBRARY_PATH contains my_msgs: 1
+PYTHONPATH entries for my_msgs: /ws/install/my_msgs/local/lib/python3.10/dist-packages
+
+##### A: interfaces built while a venv with another Python version is active
+ + cpython-3.11.11-linux-x86_64-gnu
+catkin-pkg 1.1.1;empy 3.3.4;lark 1.3.1;numpy 2.4.6;setuptools 84.2.1;
+venv EXTENSION_SUFFIXES: ['.cpython-311-x86_64-linux-gnu.so', '.abi3.so', '.so']
+
+=== BUILD: A1: venv python 3.11 active, clean
+python3 on PATH: /venv311/bin/python3 (Python 3.11.11)  VIRTUAL_ENV=/venv311
+colcon exit code: 0  wall: 8.9s
+Finished <<< my_msgs [8.44s]
+Summary: 1 package finished [8.66s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/venv311/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv311/bin/python3 
+-- python package dir(s): install/my_msgs/lib/python3.11/site-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+
+--- RUN: A1b t.py with the venv python 3.11 still active
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'rclpy._rclpy_pybind11'
+The C extension '/opt/ros/humble/lib/python3.10/site-packages/_rclpy_pybind11.cpython-311-x86_64-linux-gnu.so' isn't present on the system. Please refer to 'https://docs.ros.org/en/humble/Guides/Installation-Troubleshooting.html#import-failing-without-library-present-on-the-system' for possible solutions
+after deactivate python3: /usr/bin/python3 (Python 3.10.12)
+
+--- RUN: A1 t.py with system python3
+Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 46, in import_type_support
+    return importlib.import_module(module_name, package=pkg_name)
+  File "/usr/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'my_msgs.my_msgs_s__rosidl_typesupport_c'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/ws/t.py", line 6, in <module>
+    pub = node.create_publisher(Num, 'num', 10)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 1296, in create_publisher
+    check_is_valid_msg_type(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 35, in check_is_valid_msg_type
+    check_for_type_support(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 29, in check_for_type_support
+    msg_or_srv_type.__class__.__import_type_support__()
+  File "/ws/install/my_msgs/lib/python3.11/site-packages/my_msgs/msg/_num.py", line 29, in __import_type_support__
+    module = import_type_support('my_msgs')
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 48, in import_type_support
+    raise UnsupportedTypeSupport(pkg_name)
+rosidl_generator_py.import_type_support_impl.UnsupportedTypeSupport: Could not import 'rosidl_typesupport_c' for package 'my_msgs'
+exit code: 1
+
+--- RUN: A1 ros2 topic pub --once
+    check_for_type_support(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 29, in check_for_type_support
+    msg_or_srv_type.__class__.__import_type_support__()
+  File "/ws/install/my_msgs/lib/python3.11/site-packages/my_msgs/msg/_num.py", line 29, in __import_type_support__
+    module = import_type_support('my_msgs')
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 48, in import_type_support
+    raise UnsupportedTypeSupport(pkg_name)
+rosidl_generator_py.import_type_support_impl.UnsupportedTypeSupport: Could not import 'rosidl_typesupport_c' for package 'my_msgs'
+exit code: 1
+
+--- RUN: A1 ros2 interface show
+int64 num
+
+--- RUN: A1 import only (no publisher)
+import ok my_msgs.msg.Num(num=3)
+
+--- DIAG: one-liner check
+package dir: /ws/install/my_msgs/lib/python3.11/site-packages/my_msgs
+this python wants: .cpython-310-x86_64-linux-gnu.so
+found: libmy_msgs__rosidl_generator_py.so
+found: my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+found: my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+found: my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+
+=== BUILD: F1: plain rebuild after deactivate (no clean)
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 0  wall: 1.3s
+Finished <<< my_msgs [0.84s]
+Summary: 1 package finished [1.05s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/venv311/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv311/bin/python3 
+-- python package dir(s): install/my_msgs/lib/python3.11/site-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+
+--- RUN: F1 t.py
+Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 46, in import_type_support
+    return importlib.import_module(module_name, package=pkg_name)
+  File "/usr/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'my_msgs.my_msgs_s__rosidl_typesupport_c'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/ws/t.py", line 6, in <module>
+    pub = node.create_publisher(Num, 'num', 10)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 1296, in create_publisher
+    check_is_valid_msg_type(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 35, in check_is_valid_msg_type
+    check_for_type_support(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 29, in check_for_type_support
+    msg_or_srv_type.__class__.__import_type_support__()
+  File "/ws/install/my_msgs/lib/python3.11/site-packages/my_msgs/msg/_num.py", line 29, in __import_type_support__
+    module = import_type_support('my_msgs')
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 48, in import_type_support
+    raise UnsupportedTypeSupport(pkg_name)
+rosidl_generator_py.import_type_support_impl.UnsupportedTypeSupport: Could not import 'rosidl_typesupport_c' for package 'my_msgs'
+exit code: 1
+
+=== BUILD: F2: --cmake-clean-cache
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 0  wall: 8.1s
+Finished <<< my_msgs [7.61s]
+Summary: 1 package finished [7.83s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 
+-- python package dir(s): install/my_msgs/lib/python3.11/site-packages/my_msgs install/my_msgs/local/lib/python3.10/dist-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+
+--- RUN: F2 t.py
+OK publisher created and published my_msgs.msg.Num(num=5)
+exit code: 0
+
+=== BUILD: A1 again (to reset)
+python3 on PATH: /venv311/bin/python3 (Python 3.11.11)  VIRTUAL_ENV=/venv311
+colcon exit code: 0  wall: 8.5s
+Finished <<< my_msgs [8.06s]
+Summary: 1 package finished [8.27s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/venv311/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv311/bin/python3 
+-- python package dir(s): install/my_msgs/lib/python3.11/site-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+
+=== BUILD: F3: --cmake-force-configure
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 0  wall: 2.5s
+Finished <<< my_msgs [2.00s]
+Summary: 1 package finished [2.21s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/venv311/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv311/bin/python3 
+-- python package dir(s): install/my_msgs/lib/python3.11/site-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+
+--- RUN: F3 t.py
+Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 46, in import_type_support
+    return importlib.import_module(module_name, package=pkg_name)
+  File "/usr/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1004, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'my_msgs.my_msgs_s__rosidl_typesupport_c'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/ws/t.py", line 6, in <module>
+    pub = node.create_publisher(Num, 'num', 10)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 1296, in create_publisher
+    check_is_valid_msg_type(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 35, in check_is_valid_msg_type
+    check_for_type_support(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 29, in check_for_type_support
+    msg_or_srv_type.__class__.__import_type_support__()
+  File "/ws/install/my_msgs/lib/python3.11/site-packages/my_msgs/msg/_num.py", line 29, in __import_type_support__
+    module = import_type_support('my_msgs')
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 48, in import_type_support
+    raise UnsupportedTypeSupport(pkg_name)
+rosidl_generator_py.import_type_support_impl.UnsupportedTypeSupport: Could not import 'rosidl_typesupport_c' for package 'my_msgs'
+exit code: 1
+
+=== BUILD: A1 again (to reset)
+python3 on PATH: /venv311/bin/python3 (Python 3.11.11)  VIRTUAL_ENV=/venv311
+colcon exit code: 0  wall: 8.1s
+Finished <<< my_msgs [7.63s]
+Summary: 1 package finished [7.85s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/venv311/bin/python3 Python3_EXECUTABLE:FILEPATH=/venv311/bin/python3 
+-- python package dir(s): install/my_msgs/lib/python3.11/site-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-311-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-311-x86_64-linux-gnu.so
+
+=== BUILD: F4: rm -rf build/my_msgs install/my_msgs, rebuild
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 0  wall: 8.0s
+Finished <<< my_msgs [7.54s]
+Summary: 1 package finished [7.75s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 
+-- python package dir(s): install/my_msgs/local/lib/python3.10/dist-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+
+--- RUN: F4 t.py
+OK publisher created and published my_msgs.msg.Num(num=5)
+exit code: 0
+
+=== BUILD: F5: venv still active, clean, -DPython3_EXECUTABLE and -DPYTHON_EXECUTABLE=/usr/bin/python3
+python3 on PATH: /venv311/bin/python3 (Python 3.11.11)  VIRTUAL_ENV=/venv311
+colcon exit code: 0  wall: 8.0s
+Finished <<< my_msgs [7.53s]
+Summary: 1 package finished [7.75s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:UNINITIALIZED=/usr/bin/python3 
+-- python package dir(s): install/my_msgs/local/lib/python3.10/dist-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+
+--- RUN: F5 t.py
+OK publisher created and published my_msgs.msg.Num(num=5)
+exit code: 0
+
+##### B: good build, LD_LIBRARY_PATH removed
+
+=== BUILD: B0: system python, clean
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 0  wall: 8.0s
+Finished <<< my_msgs [7.54s]
+Summary: 1 package finished [7.75s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 
+-- python package dir(s): install/my_msgs/local/lib/python3.10/dist-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+
+--- RUN: B1 env -u LD_LIBRARY_PATH
+Traceback (most recent call last):
+  File "/ws/t.py", line 2, in <module>
+    import rclpy
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 49, in <module>
+    from rclpy.signals import install_signal_handlers
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/signals.py", line 15, in <module>
+    from rclpy.exceptions import InvalidHandle
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/exceptions.py", line 15, in <module>
+    from rclpy.impl.implementation_singleton import rclpy_implementation as _rclpy
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/impl/implementation_singleton.py", line 32, in <module>
+    rclpy_implementation = import_c_library('._rclpy_pybind11', package)
+  File "/opt/ros/humble/lib/python3.10/site-packages/rpyutils/import_c_library.py", line 39, in import_c_library
+    return importlib.import_module(name, package=package)
+  File "/usr/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+ImportError: librcl_action.so: cannot open shared object file: No such file or directory
+The C extension '/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/_rclpy_pybind11.cpython-310-x86_64-linux-gnu.so' failed to be imported while being present on the system. Please refer to 'https://docs.ros.org/en/{distro}/Guides/Installation-Troubleshooting.html#import-failing-even-with-library-present-on-the-system' for possible solutions
+exit code: 1
+
+--- RUN: B1 std_msgs only, env -u LD_LIBRARY_PATH
+  File "/usr/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+ImportError: librcl_action.so: cannot open shared object file: No such file or directory
+The C extension '/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/_rclpy_pybind11.cpython-310-x86_64-linux-gnu.so' failed to be imported while being present on the system. Please refer to 'https://docs.ros.org/en/{distro}/Guides/Installation-Troubleshooting.html#import-failing-even-with-library-present-on-the-system' for possible solutions
+
+--- sudo env check
+sudo -E keeps PYTHONPATH: 0  keeps LD_LIBRARY_PATH: 0
+sudo keeps PYTHONPATH: 0  keeps LD_LIBRARY_PATH: 0
+
+--- RUN: B2 sudo -E
+Traceback (most recent call last):
+  File "/ws/t.py", line 2, in <module>
+    import rclpy
+ModuleNotFoundError: No module named 'rclpy'
+exit code: 1
+
+--- RUN: B3 sudo (no -E)
+Traceback (most recent call last):
+  File "/ws/t.py", line 2, in <module>
+    import rclpy
+ModuleNotFoundError: No module named 'rclpy'
+exit code: 1
+
+--- RUN: B4 sudo -E with LD_LIBRARY_PATH passed explicitly
+  File "/ws/t.py", line 2, in <module>
+    import rclpy
+ModuleNotFoundError: No module named 'rclpy'
+
+--- RUN: B5 sudo bash -c 'source ... && python3 t.py'
+OK publisher created and published my_msgs.msg.Num(num=5)
+
+--- RUN: B6 only /opt/ros sourced, workspace added to PYTHONPATH by hand (IDE style)
+LD_LIBRARY_PATH has /ws: 0
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 46, in import_type_support
+    return importlib.import_module(module_name, package=pkg_name)
+  File "/usr/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1006, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 674, in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 571, in module_from_spec
+  File "<frozen importlib._bootstrap_external>", line 1176, in create_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+ImportError: libmy_msgs__rosidl_generator_py.so: cannot open shared object file: No such file or directory
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/ws/t.py", line 6, in <module>
+    pub = node.create_publisher(Num, 'num', 10)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 1296, in create_publisher
+    check_is_valid_msg_type(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 35, in check_is_valid_msg_type
+    check_for_type_support(msg_type)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 29, in check_for_type_support
+    msg_or_srv_type.__class__.__import_type_support__()
+  File "/ws/install/my_msgs/local/lib/python3.10/dist-packages/my_msgs/msg/_num.py", line 29, in __import_type_support__
+    module = import_type_support('my_msgs')
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rosidl_generator_py/import_type_support_impl.py", line 48, in import_type_support
+    raise UnsupportedTypeSupport(pkg_name)
+rosidl_generator_py.import_type_support_impl.UnsupportedTypeSupport: Could not import 'rosidl_typesupport_c' for package 'my_msgs'
+exit code: 1
+
+--- RUN: B7 same, plus the workspace lib dir on LD_LIBRARY_PATH
+OK publisher created and published my_msgs.msg.Num(num=5)
+
+--- DIAG: ldd on the typesupport module without LD_LIBRARY_PATH
+file: install/my_msgs/local/lib/python3.10/dist-packages/my_msgs/my_msgs_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+	libmy_msgs__rosidl_generator_py.so => not found
+	libmy_msgs__rosidl_typesupport_c.so => not found
+	libmy_msgs__rosidl_generator_c.so => not found
+no RPATH/RUNPATH
+
+##### C: Pose2 uses geometry_msgs/Point, rosidl_generate_interfaces without DEPENDENCIES
+
+=== BUILD: C1: find_package(geometry_msgs), no DEPENDENCIES
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 2  wall: 3.1s
+/ws/build/my_msgs/rosidl_generator_cpp/my_msgs/msg/detail/pose2__struct.hpp:21:10: fatal error: geometry_msgs/msg/detail/point__struct.hpp: No such file or directory
+gmake[2]: *** [CMakeFiles/my_msgs__rosidl_typesupport_cpp.dir/build.make:104: CMakeFiles/my_msgs__rosidl_typesupport_cpp.dir/rosidl_typesupport_cpp/my_msgs/msg/pose2__type_support.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:414: CMakeFiles/my_msgs__rosidl_typesupport_cpp.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2
+Summary: 0 packages finished [2.89s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 
+-- python package dir(s): 
+-- typesupport modules:
+--- stderr: my_msgs
+In file included from /ws/build/my_msgs/rosidl_typesupport_cpp/my_msgs/msg/pose2__type_support.cpp:7:
+/ws/build/my_msgs/rosidl_generator_cpp/my_msgs/msg/detail/pose2__struct.hpp:21:10: fatal error: geometry_msgs/msg/detail/point__struct.hpp: No such file or directory
+   21 | #include "geometry_msgs/msg/detail/point__struct.hpp"
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+gmake[2]: *** [CMakeFiles/my_msgs__rosidl_typesupport_cpp.dir/build.make:104: CMakeFiles/my_msgs__rosidl_typesupport_cpp.dir/rosidl_typesupport_cpp/my_msgs/msg/pose2__type_support.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:414: CMakeFiles/my_msgs__rosidl_typesupport_cpp.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2
+---
+Failed   <<< my_msgs [2.67s, exited with code 2]
+
+Summary: 0 packages finished [2.89s]
+  1 package failed: my_msgs
+  1 package had stderr output: my_msgs
+
+=== BUILD: C2: with DEPENDENCIES geometry_msgs
+python3 on PATH: /usr/bin/python3 (Python 3.10.12)  VIRTUAL_ENV=none
+colcon exit code: 0  wall: 10.7s
+Finished <<< my_msgs [10.3s]
+Summary: 1 package finished [10.5s]
+-- cache: PYTHON_EXECUTABLE:FILEPATH=/usr/bin/python3 Python3_EXECUTABLE:FILEPATH=/usr/bin/python3 
+-- python package dir(s): install/my_msgs/local/lib/python3.10/dist-packages/my_msgs 
+-- typesupport modules:
+   libmy_msgs__rosidl_generator_py.so
+   my_msgs_s__rosidl_typesupport_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_fastrtps_c.cpython-310-x86_64-linux-gnu.so
+   my_msgs_s__rosidl_typesupport_introspection_c.cpython-310-x86_64-linux-gnu.so
+OK Pose2 publisher
+
+##### done humble
