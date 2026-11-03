@@ -86,3 +86,7 @@
 - 발행 속도: huntlab 전체 78·7일 13·30일 43 (10/27: 74·10·40). 비교 thecheck 7일 33, yellowit 56, foxcg 100, blanclucy 12, aboda 타임아웃. KO 하루 4편 예약이 공개되기 시작해 다음 주 7일 수가 28+EN 7=35 안팎이 될 예정 → thecheck 수준.
 - 기능 loss: 남은 것은 other_ad_net(보류, 사용자 결정)·google_verify(DNS 인증, 효과 없음)뿐 → 기능 loss 루프는 사실상 끝. 앞으로 일일 loss는 ① 7일 발행 수 ② 색인률 ③ 노출 상위 글 CTR(제목·첫 문단)로 본다.
 - post_sec 1.14s(우리) vs 0.255s(중앙값)는 이 Mac이 일본 엣지(NRT·KIX·HKG)로 나가서 생긴 값이다. 서울 러너는 ICN HIT 0.05~0.09s. 스크립트도 NOT_LOSS로 분류한다 → 조치 없음.
+
+## 11/03 발행 속도 재측정 (09:1x, bench_velocity.py)
+- huntlab 7일 32편(10/27 10편 → 3.2배, 하루 4.6편) — 상위 중앙값 하루 4~8편 범위 하단 진입. thecheck 28·blanclucy 10보다 많고 aboda·foxcg·yellowit 100+에는 못 미침. 30일 64편.
+- 남은 loss 순서: ② 색인률(Discovered 15편 — GSC 요청 하루 한도 안에서 계속) ③ 노출 상위 CTR(멜론 #514 노출 559·CTR 0.7%·순위 7.7, 11/08 비교 전 동결). 속도는 KO 하루 4~6편+EN 1~2편을 유지.
