@@ -1,0 +1,175 @@
+<pre><code>terminate called after throwing an instance of 'std::runtime_error'
+  what():  Node '/my_node' has already been added to an executor.
+[ros2run]: Aborted</code></pre>
+
+<p>The same family has three more messages: <code>Callback group has already been added to an executor.</code>, <code>spin_some() called while already spinning</code> (also <code>spin_once()</code> and <code>spin_until_future_complete()</code>), and, in a MultiThreadedExecutor, a bare <code>terminate called without an active exception</code>.</p>
+
+<p>Short answer: an rclcpp node can belong to one executor at a time, and an executor can only be spun from one place at a time. The error usually comes from <code>rclcpp::spin_until_future_complete(node, future)</code> or <code>rclcpp::spin_some(node)</code> inside a callback of a node that is already spinning. Those functions add the node to a second, temporary executor, and rclcpp refuses. Don't spin inside a callback. Send the request with a response callback and return:</p>
+
+<pre><code class="language-cpp">// inside a timer, subscription or service callback
+client_->async_send_request(request,
+  [this](rclcpp::Client&lt;std_srvs::srv::Trigger&gt;::SharedFuture f) {
+    RCLCPP_INFO(get_logger(), "reply: %s", f.get()-&gt;message.c_str());
+  });
+// return right away; the executor delivers the reply later</code></pre>
+
+<p>If the callback really has to wait for the answer, put the client in its own callback group, spin the node with a MultiThreadedExecutor, and block with <code>future.wait_for(...)</code>. Both of these, and a third option with a separate client node, completed 20 out of 20 calls on Humble, Jazzy and Lyrical. Details and timings are below.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical. Each one is a separate run of one small rclcpp program.</p>
+
+<table>
+<thead><tr><th>What the code did</th><th>Error (from <code>what()</code>)</th></tr></thead>
+<tbody>
+<tr><td><code>exec.add_node(node)</code>, then <code>rclcpp::spin(node)</code></td><td><code>Node '/my_node' has already been added to an executor.</code></td></tr>
+<tr><td>Same node added to two executors</td><td>Same</td></tr>
+<tr><td>Same node added twice to one executor</td><td>Same</td></tr>
+<tr><td><code>rclcpp::spin_some(node)</code> inside a timer callback, node spun with <code>rclcpp::spin(node)</code></td><td>Same</td></tr>
+<tr><td><code>rclcpp::spin_until_future_complete(node, future, 2s)</code> inside a timer callback</td><td>Same</td></tr>
+<tr><td><code>SyncParametersClient(node, ...)</code> and <code>get_parameters()</code> inside a timer callback</td><td>Same</td></tr>
+<tr><td>A callback group added to two executors with <code>add_callback_group()</code></td><td><code>Callback group has already been added to an executor.</code></td></tr>
+<tr><td>A group created with <code>automatically_add_to_executor_with_node=true</code>, node added to executor A, group added to executor B</td><td>Same</td></tr>
+<tr><td><code>exec.spin_some()</code> inside a callback of <code>exec</code></td><td><code>spin_some() called while already spinning</code></td></tr>
+<tr><td><code>exec.spin_all(10ms)</code> inside a callback of <code>exec</code></td><td><code>spin_some() called while already spinning</code> (it names <code>spin_some</code>)</td></tr>
+<tr><td><code>exec.spin_once(0ms)</code> inside a callback of <code>exec</code></td><td><code>spin_once() called while already spinning</code></td></tr>
+<tr><td><code>exec.spin_until_future_complete(f, 2s)</code> inside a callback of a SingleThreadedExecutor</td><td><code>spin_until_future_complete() called while already spinning</code></td></tr>
+<tr><td>Same, inside a callback of a MultiThreadedExecutor</td><td>Process aborts. Either the message above after <code>terminate called after throwing</code>, or only <code>terminate called without an active exception</code></td></tr>
+</tbody>
+</table>
+
+<p>Two quick checks tell you which kind you have. "Node has already been added" or "Callback group has already been added" means the node or group is going into a second executor. "called while already spinning" means the same executor is being spun again from inside itself.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-03 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro after another, on a 2 vCPU Linux VM. One ament_cmake package held two executables. <code>uncaught</code> is the plain mistake with no <code>try</code>: add a node to an executor, then call <code>rclcpp::spin(node)</code>. <code>cases</code> takes a case name, runs one pattern from the table, and catches the exception in <code>main()</code> so it can print <code>what()</code> and the time since start.</p>
+
+<p>The service cases use a <code>std_srvs/srv/Trigger</code> server on a second node, <code>srv_node</code>, in the same process, spun by its own SingleThreadedExecutor in a separate thread. The calling node has a 100 ms wall timer. For the fixes, the timer sends one request per tick until 20 have been sent, and the program records the time from <code>async_send_request</code> to the reply. Because client and server share one process, these times show the cost of each pattern, not network latency.</p>
+
+<p>The package built with no warnings on Humble and Jazzy. On Lyrical, both uses of the free function <code>rclcpp::spin_some(node)</code> printed a deprecation warning (see Version notes).</p>
+
+<h2>Cause 1: the node goes into a second executor</h2>
+
+<p><code>rclcpp::spin(node)</code>, <code>rclcpp::spin_some(node)</code> and <code>rclcpp::spin_until_future_complete(node, ...)</code> are convenience functions. Each one creates an executor, adds your node to it, spins, and removes it again. If the node already belongs to another executor, the add fails. In my runs that happened in every one of these cases:</p>
+
+<ul>
+<li><code>exec.add_node(node)</code> followed by <code>rclcpp::spin(node)</code>. It threw at startup, 12.7 to 18.7 ms into the program.</li>
+<li><code>add_node</code> of the same node to two executors, or twice to the same one.</li>
+<li>A timer callback that called <code>rclcpp::spin_some(node)</code> or <code>rclcpp::spin_until_future_complete(node, f, 2s)</code> while <code>main()</code> was in <code>rclcpp::spin(node)</code>. It threw on the first tick, 114.0 to 129.8 ms in.</li>
+</ul>
+
+<p>The last one is the pattern in most of the questions linked below: someone calls a service from inside a callback the same way the client tutorial does from <code>main()</code>. The tutorial code works because nothing is spinning yet when <code>main()</code> calls <code>spin_until_future_complete</code>. I ran that too. 20 out of 20 calls completed, with a median of 0.070 ms (Humble), 0.090 ms (Jazzy) and 0.068 ms (Lyrical) per call. The same line inside a timer callback threw on the first call.</p>
+
+<p>The message is the same wherever it comes from. A shell that ends in <code>terminate called after throwing</code> doesn't tell you which line did it. Look for any call that takes the node itself (<code>rclcpp::spin*</code>, <code>spin_until_future_complete</code>, a <code>SyncParametersClient</code> built from the node) and runs while the node is already spinning.</p>
+
+<h3>SyncParametersClient hits it too</h3>
+
+<p><code>SyncParametersClient(node, "srv_node")</code> created and used inside a timer callback threw <code>Node '/my_node' has already been added to an executor.</code> on all three distros. It never got to call <code>get_parameters()</code>. The same client created in <code>main()</code> before spinning worked and read <code>use_sim_time=false</code> from <code>srv_node</code>. This matches <a href="https://github.com/ros2/rclcpp/issues/2940">rclcpp issue #2940</a>, where the reporter found that <code>get_parameters</code> calls <code>spin_node_until_future_complete</code> internally. Inside a callback, use <code>AsyncParametersClient</code> with a callback, or build the sync client on a separate node (fix 3 below).</p>
+
+<h3>Callback groups follow the same rule</h3>
+
+<p>A callback group can also belong to only one executor. Adding the same group to two executors with <code>add_callback_group</code> threw <code>Callback group has already been added to an executor.</code> So did a quieter variant. I created the group with the default <code>automatically_add_to_executor_with_node=true</code>, added the node to executor A, then added the group to executor B. The group had already gone into A with the node. If you want to give a group its own executor, create it with <code>false</code> as the second argument to <code>create_callback_group</code>.</p>
+
+<h3>remove_node frees the node</h3>
+
+<p>After <code>exec.add_node(node)</code> and <code>exec.remove_node(node)</code>, <code>rclcpp::spin_some(node)</code> ran without an error on all three distros. Calling <code>remove_node</code> in the middle of a spin is not something I tested, and I wouldn't use it as a fix.</p>
+
+<h2>Cause 2: the same executor is spun again from inside</h2>
+
+<p>If you hold the executor yourself and call its own spin methods from one of its callbacks, the node isn't added anywhere new. The executor sees that it is already spinning and throws:</p>
+
+<ul>
+<li><code>exec.spin_some()</code> gave <code>spin_some() called while already spinning</code>.</li>
+<li><code>exec.spin_all(10ms)</code> gave the same text, <code>spin_some()</code>, not <code>spin_all()</code>. Search for the <code>spin_some</code> message even if your code calls <code>spin_all</code>.</li>
+<li><code>exec.spin_once(0ms)</code> gave <code>spin_once() called while already spinning</code>.</li>
+<li><code>exec.spin_until_future_complete(f, 2s)</code> gave <code>spin_until_future_complete() called while already spinning</code>.</li>
+</ul>
+
+<p>In a SingleThreadedExecutor all four threw on the first timer tick, and the exception came out of <code>exec.spin()</code> in <code>main()</code>, where a <code>try</code> could catch it.</p>
+
+<h3>The MultiThreadedExecutor aborts</h3>
+
+<p>With a MultiThreadedExecutor the same <code>spin_until_future_complete</code> call killed the process every time, and the <code>try</code> in <code>main()</code> never caught it. The callback runs in a worker thread, and the exception doesn't come back to the thread that called <code>spin()</code>. What gets printed varies. I ran this case 10 more times per distro:</p>
+
+<table>
+<thead><tr><th>Distro</th><th>Printed <code>what(): spin_until_future_complete() called while already spinning</code></th><th>Printed only <code>terminate called without an active exception</code></th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>1 of 10</td><td>9 of 10</td></tr>
+<tr><td>Jazzy</td><td>7 of 10</td><td>3 of 10</td></tr>
+<tr><td>Lyrical</td><td>1 of 10</td><td>9 of 10</td></tr>
+</tbody>
+</table>
+
+<p>So if a multithreaded node dies with <code>terminate called without an active exception</code> and nothing else, a nested spin in a callback is one possible cause. With a <code>try</code>/<code>catch</code> around the call inside the callback, the real message showed up every time on all three distros: <code>spin_until_future_complete() called while already spinning</code>.</p>
+
+<h2>The fix options compared</h2>
+
+<p>Each option ran from the same 100 ms timer callback against the same in-process server and tried 20 calls. The baseline is the tutorial pattern, <code>spin_until_future_complete</code> in <code>main()</code> with nothing else spinning.</p>
+
+<table>
+<thead><tr><th>Option</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Baseline: <code>spin_until_future_complete</code> in <code>main()</code>, not in a callback</td><td>20/20, median 0.070 ms, max 0.167 ms</td><td>20/20, median 0.090 ms, max 0.215 ms</td><td>20/20, median 0.068 ms, max 0.231 ms</td></tr>
+<tr><td>1. <code>async_send_request(req, callback)</code>, return</td><td>20/20, median 0.216 ms, max 0.302 ms</td><td>20/20, median 0.211 ms, max 0.313 ms</td><td>20/20, median 0.207 ms, max 0.320 ms</td></tr>
+<tr><td>2. Client in its own MutuallyExclusive group, MultiThreadedExecutor (2 threads), <code>future.wait_for(1s)</code> in the timer</td><td>20/20, median 0.202 ms, max 0.304 ms</td><td>20/20, median 0.238 ms, max 0.348 ms</td><td>20/20, median 0.212 ms, max 0.395 ms</td></tr>
+<tr><td>3. Separate client node with its own SingleThreadedExecutor, <code>side_exec-&gt;spin_until_future_complete(f, 2s)</code> in the timer</td><td>20/20, median 0.192 ms, max 0.292 ms</td><td>20/20, median 0.214 ms, max 0.285 ms</td><td>20/20, median 0.201 ms, max 0.330 ms</td></tr>
+<tr><td>Wrong: client in the timer's group, MultiThreadedExecutor, <code>wait_for(1s)</code></td><td>0/20, 20 timeouts</td><td>0/20, 20 timeouts</td><td>0/20, 20 timeouts</td></tr>
+<tr><td>Wrong: client in its own group, SingleThreadedExecutor, <code>wait_for(1s)</code></td><td>0/20, 20 timeouts</td><td>0/20, 20 timeouts</td><td>0/20, 20 timeouts</td></tr>
+</tbody>
+</table>
+
+<p>All three fixes worked, and their per-call times were within about 0.05 ms of each other on every distro. Pick by code shape, not by speed:</p>
+
+<ul>
+<li><strong>Option 1</strong> is the smallest change and needs no extra threads. The cost is that the code after the call moves into the response callback.</li>
+<li><strong>Option 2</strong> keeps straight-line code that waits for the reply. Both parts are needed. With the client in the same group as the timer, the reply can't be handled while the timer callback is running, and every <code>wait_for(1s)</code> timed out. With a separate group but only one thread, it timed out too, because the only thread was busy waiting. I always waited with a timeout, which is what turned these mistakes into counted timeouts. After each timeout my code called <code>client-&gt;remove_pending_request(future.request_id)</code> to drop the request.</li>
+<li><strong>Option 3</strong> keeps <code>spin_until_future_complete</code> and the code you copied from the tutorial. The client lives on a second node, here <code>my_node_client</code>, that isn't added to the main executor, so spinning its private executor from a callback is allowed. Like option 2, it holds the timer callback until the reply arrives.</li>
+</ul>
+
+<p>Making the node a member of a second executor doesn't help. That is the error itself.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Every error text in the first table was the same on Humble (rclcpp 16.0.21), Jazzy (rclcpp 28.1.22) and Lyrical (rclcpp 32.0.3). All three include the node's full name, <code>'/my_node'</code>. Older questions show <code>Node has already been added to an executor.</code> without a name. The name was added by <a href="https://github.com/ros2/rclcpp/pull/1686">rclcpp PR #1686</a>. Drop the name when you search.</li>
+<li>Lyrical deprecates the free function <code>rclcpp::spin_some(node)</code>: <code>'void rclcpp::spin_some(const Node::SharedPtr&amp;)' is deprecated: use SingleThreadedExecutor::spin_some instead [-Wdeprecated-declarations]</code>. It still compiled and behaved as on the other distros. <code>rclcpp::spin(node)</code> and the free <code>rclcpp::spin_until_future_complete</code> gave no warning on Lyrical.</li>
+<li>For option 2 the script passes <code>rmw_qos_profile_services_default</code> to <code>create_client</code> on Humble and <code>rclcpp::ServicesQoS()</code> on Jazzy and Lyrical, chosen with <code>RCLCPP_VERSION_MAJOR</code>. If you copy it to Humble, use the <code>rmw_qos_profile_t</code> form.</li>
+<li>How often the MultiThreadedExecutor abort printed the real message differed between distros (table above). With 10 runs each, I wouldn't read more into that than "either can happen".</li>
+</ul>
+
+<p>The rclpy version of this problem has different messages. If you see <code>Executor is already spinning</code> or a stalled <code>spin_until_future_complete</code> from Python, see <a href="https://huntlab.app/en/rclpy-asyncio-no-running-event-loop-call-async-hangs/">rclpy and asyncio: no running event loop, hung service calls</a>.</p>
+
+<h2>Not tested</h2>
+
+<p>Component containers and <code>rclcpp_components</code>, lifecycle node transitions such as <code>on_configure</code>, action servers and clients, the StaticSingleThreadedExecutor and the EventsExecutor, <code>AsyncParametersClient</code>, Reentrant callback groups, a server in another process or on another machine, Cyclone DDS or other RMWs, calling <code>remove_node</code> during a spin, and Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Node has already been added to an executor" mean?</h3>
+<p>Your node was added to a second executor while it still belonged to the first. Usually a <code>rclcpp::spin_until_future_complete(node, ...)</code>, <code>rclcpp::spin_some(node)</code> or <code>SyncParametersClient(node, ...)</code> call ran inside a callback of the spinning node. Each of those threw on Humble, Jazzy and Lyrical.</p>
+
+<h3>How do I call a service from inside a callback in rclcpp?</h3>
+<p>Send it with <code>async_send_request(request, callback)</code> and return, or put the client in its own callback group, use a MultiThreadedExecutor and wait with <code>future.wait_for</code>. A separate client node with its own executor also worked. All three completed 20 of 20 calls on every distro I tested.</p>
+
+<h3>What does "spin_some() called while already spinning" mean?</h3>
+<p>Your code called a spin method on an executor from inside one of that executor's callbacks. <code>spin_all</code> reports it with the same <code>spin_some()</code> text. <code>spin_once</code> and <code>spin_until_future_complete</code> have their own versions of the message.</p>
+
+<h3>Why does my multithreaded node die with "terminate called without an active exception"?</h3>
+<p>One cause I measured is a nested <code>spin_until_future_complete</code> in a MultiThreadedExecutor callback. The process aborted every time, and in most runs on Humble and Lyrical the real message was not printed. Wrap the call in <code>try</code>/<code>catch</code> inside the callback to see it.</p>
+
+<h3>Why does future.wait_for time out inside my callback?</h3>
+<p>The reply can't be handled while your callback holds the thread or the callback group. In my runs, a client in the timer's group or a SingleThreadedExecutor gave 20 timeouts out of 20. A separate group for the client plus a MultiThreadedExecutor fixed it.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Node has already been added to an executor mean?", "acceptedAnswer": {"@type": "Answer", "text": "Your node was added to a second executor while it still belonged to the first. Usually a rclcpp::spin_until_future_complete(node, ...), rclcpp::spin_some(node) or SyncParametersClient(node, ...) call ran inside a callback of the spinning node. Each of those threw on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "How do I call a service from inside a callback in rclcpp?", "acceptedAnswer": {"@type": "Answer", "text": "Send it with async_send_request(request, callback) and return, or put the client in its own callback group, use a MultiThreadedExecutor and wait with future.wait_for. A separate client node with its own executor also worked. All three completed 20 of 20 calls on every distro I tested."}},
+{"@type": "Question", "name": "What does spin_some() called while already spinning mean?", "acceptedAnswer": {"@type": "Answer", "text": "Your code called a spin method on an executor from inside one of that executor's callbacks. spin_all reports it with the same spin_some() text. spin_once and spin_until_future_complete have their own versions of the message."}},
+{"@type": "Question", "name": "Why does my multithreaded node die with terminate called without an active exception?", "acceptedAnswer": {"@type": "Answer", "text": "One cause I measured is a nested spin_until_future_complete in a MultiThreadedExecutor callback. The process aborted every time, and in most runs on Humble and Lyrical the real message was not printed. Wrap the call in try/catch inside the callback to see it."}},
+{"@type": "Question", "name": "Why does future.wait_for time out inside my callback?", "acceptedAnswer": {"@type": "Answer", "text": "The reply can't be handled while your callback holds the thread or the callback group. In my runs, a client in the timer's group or a SingleThreadedExecutor gave 20 timeouts out of 20. A separate group for the client plus a MultiThreadedExecutor fixed it."}}
+]}
+</script>
+
+<p>Measured on 2026-11-03 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, rmw 6.1.4, g++ 11.4.0), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw 7.3.4, g++ 13.3.0) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw 7.10.2, g++ 15.2.0), with <code>RMW_IMPLEMENTATION</code> unset. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-08-rclcpp-node-already-added-to-executor/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105974">ros2 spinning problem (Node has already been added to an executor, spin_once() called while already spinning)</a>, <a href="https://robotics.stackexchange.com/questions/101952">Attempt to trigger a ROS2 Service from within an ROS2 Action server</a>, <a href="https://robotics.stackexchange.com/questions/111827">ROS2 Service call inside Lifecycle configure state change</a>, <a href="https://github.com/ros2/rclcpp/issues/2359">Calling a service from inside a service</a>, <a href="https://github.com/ros2/rclcpp/issues/2940">Parameter clients does not support spin_until_future_complete</a>.</p>
