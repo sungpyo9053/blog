@@ -1,0 +1,166 @@
+<pre><code>terminate called after throwing an instance of 'pluginlib::LibraryLoadException'
+  what():  According to the loaded plugin descriptions the class p_noexport::Square with base class type pbase::RegularPolygon does not exist. Declared types are  p_badpath::Square p_good::Square p_libprefix::Square ...</code></pre>
+
+<p>Nav2, MoveIt, ros2_control and rviz2 print the same sentence with their own names in it, for example <code>the class teb_local_planner::TebLocalPlannerROS with base class type nav2_core::Controller does not exist</code> or <code>the class gazebo_ros2_control/GazeboSystem with base class type hardware_interface::SystemInterface does not exist</code>.</p>
+
+<p>Short answer: pluginlib never opened your library. It looked up the name you asked for in the plugin XML files registered for the base class's package and didn't find it. The list after "Declared types are" is everything it did find. If your plugin isn't in that list, the XML wasn't registered: add this line to the plugin package's <code>CMakeLists.txt</code>, with the package that owns the <em>base class</em> as the first argument, rebuild, and open a new shell or source <code>install/setup.bash</code> again:</p>
+
+<pre><code class="language-cmake">pluginlib_export_plugin_description_file(pbase plugins.xml)   # pbase = package of the base class, not your package</code></pre>
+
+<p>If your plugin is in the list but spelled differently, ask for the exact string in the list. That string is the <code>name</code> attribute from your XML, or the <code>type</code> attribute when there is no <code>name</code>. In my runs every cause gave the same result on Humble, Jazzy and Lyrical. The other pluginlib errors, "no factory exists for it", "Could not find library corresponding to plugin" and "Failed to load library ... undefined symbol", come from later steps and have different fixes. They're in the table below.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row is one plugin package with one mistake, loaded by the same <code>pluginlib::ClassLoader&lt;pbase::RegularPolygon&gt;</code>. The exception class is the C++ type my loader caught.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Exception and message</th><th>In "Declared types"?</th></tr></thead>
+<tbody>
+<tr><td>No <code>pluginlib_export_plugin_description_file</code> call</td><td><code>LibraryLoadException</code>: <code>... does not exist. Declared types are ...</code></td><td>no</td></tr>
+<tr><td>Export call names your own package instead of the base class package</td><td>same "does not exist"</td><td>no</td></tr>
+<tr><td>ROS 1 style <code>&lt;pbase plugin="${prefix}/plugins.xml"/&gt;</code> in <code>package.xml</code> only</td><td>same "does not exist"</td><td>no</td></tr>
+<tr><td>Wrong <code>base_class_type</code> in the XML (<code>pbase::Polygon</code>)</td><td>same "does not exist"</td><td>no</td></tr>
+<tr><td>Name typo in the XML (<code>p_typo::Sqaure</code>), code asks for <code>p_typo::Square</code></td><td>same "does not exist"</td><td>yes, as <code>p_typo::Sqaure</code></td></tr>
+<tr><td>XML has <code>name="p_named/Square"</code>, code asks for the C++ type <code>p_named::Square</code></td><td>same "does not exist"</td><td>yes, as <code>p_named/Square</code></td></tr>
+<tr><td>Plugin package built after the shell was sourced</td><td>same "does not exist"</td><td>no, until re-sourced</td></tr>
+<tr><td>Name that no installed package provides</td><td>same "does not exist"</td><td>no</td></tr>
+<tr><td>No <code>PLUGINLIB_EXPORT_CLASS</code> in the .cpp</td><td><code>CreateClassException</code>: <code>MultiLibraryClassLoader: Could not create object of class type p_nomacro::Square as no factory exists for it.</code></td><td>yes</td></tr>
+<tr><td>XML <code>type</code> is a class the macro didn't export</td><td><code>CreateClassException</code>, same "no factory exists" text</td><td>yes</td></tr>
+<tr><td>XML <code>&lt;library path&gt;</code> doesn't match the library name</td><td><code>LibraryLoadException</code>: <code>Could not find library corresponding to plugin p_badpath::Square. Make sure that the library 'p_badpath_wrong' actually exists.</code></td><td>yes</td></tr>
+<tr><td>ROS 1 style path <code>lib/libp_ros1path</code></td><td>a <code>[WARN]</code> line, then the same "Could not find library corresponding to plugin"</td><td>yes</td></tr>
+<tr><td>Library not installed (no <code>install(TARGETS ...)</code>)</td><td>same "Could not find library corresponding to plugin"</td><td>yes</td></tr>
+<tr><td>A virtual function declared but never defined</td><td><code>LibraryLoadException</code>: <code>Failed to load library /ws/install/p_undef/lib/libp_undef.so. Make sure that you are calling the PLUGINLIB_EXPORT_CLASS macro ... undefined symbol: _ZTVN7p_undef6SquareE</code></td><td>yes</td></tr>
+<tr><td>Workspace not sourced at all</td><td><code>ros2 run</code>: <code>Package 'pbase' not found</code>. Binary run directly: <code>ClassLoaderException</code>: <code>package 'pbase' not found, searching: [/opt/ros/humble]</code></td><td>-</td></tr>
+</tbody>
+</table>
+
+<p>The "does not exist" message is thrown as <code>pluginlib::LibraryLoadException</code>, even though no library was touched. If your code catches only <code>CreateClassException</code>, this one gets past it. In a node that doesn't catch it, the process aborts. <code>ros2 run</code> printed <code>[ros2run]: Aborted</code> with exit code 250.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-03 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images with no extra packages. The workspace had one base package, <code>pbase</code>. It holds an abstract class <code>pbase::RegularPolygon</code> (<code>initialize</code>, <code>area</code>) and a <code>loader</code> executable. The loader builds a <code>pluginlib::ClassLoader&lt;pbase::RegularPolygon&gt;("pbase", "pbase::RegularPolygon")</code>, prints <code>getDeclaredClasses()</code>, then calls <code>createSharedInstance()</code> for each name on the command line and prints the exception type and text. Next to it were 15 plugin packages, each a copy of the same <code>Square</code> class with one thing changed. All of them built cleanly with <code>colcon build</code> in 30 to 39 seconds on a 2 vCPU machine, so none of these mistakes shows up at build time. I ran 25 checks per distro. The results matched on all three, apart from two details listed under Version notes.</p>
+
+<table>
+<thead><tr><th>Check</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Correct package, ask for <code>p_good::Square</code></td><td><code>OK p_good::Square area=100</code></td></tr>
+<tr><td>XML <code>path="libp_libprefix"</code> (with the <code>lib</code> prefix)</td><td>loaded, with <code>[WARN] ... given plugin name 'libp_libprefix' should be 'p_libprefix' for better portability</code></td></tr>
+<tr><td>XML <code>name="p_named/Square"</code>, ask for <code>p_named/Square</code></td><td>loaded</td></tr>
+<tr><td>Ask for the typo'd XML name <code>p_typo::Sqaure</code></td><td><code>CreateClassException ... no factory exists for it</code></td></tr>
+<tr><td>Virtual function given a body (<code>p_undef_fixed</code>)</td><td>loaded</td></tr>
+<tr><td><code>p_noexport</code> fixed and rebuilt, same shell, no re-source</td><td>loaded</td></tr>
+<tr><td>New package <code>p_late</code> built after sourcing, old shell</td><td>"does not exist", not in the list</td></tr>
+<tr><td>Same, after <code>source install/setup.bash</code></td><td>loaded, now in the list</td></tr>
+<tr><td>Every broken package in the first table</td><td>the error shown there</td></tr>
+</tbody>
+</table>
+
+<h2>How pluginlib finds a plugin</h2>
+
+<p>It helps to know the order, because each error comes from a different step.</p>
+
+<ol>
+<li>The <code>ClassLoader</code> constructor asks the ament index for every package that registered a file under <code>&lt;base package&gt;__pluginlib__plugin</code>. In my workspace the index had 12 entries under <code>pbase__pluginlib__plugin</code> and one under <code>p_ownpkg__pluginlib__plugin</code>.</li>
+<li>It parses those XML files and keeps the classes whose <code>base_class_type</code> matches the loader's base class. This is the "Declared types" list.</li>
+<li>When you ask for a name, it looks it up in that list. Not there: "does not exist".</li>
+<li>It finds the library named in <code>&lt;library path&gt;</code> under the package's <code>lib</code> directory. Not found: "Could not find library corresponding to plugin".</li>
+<li>It opens the library with <code>dlopen</code>. Unresolved symbol: "Failed to load library ... undefined symbol".</li>
+<li>It asks the library for a factory for the XML <code>type</code>. The factory only exists if <code>PLUGINLIB_EXPORT_CLASS</code> registered that type: otherwise "no factory exists for it".</li>
+</ol>
+
+<p>The time spent was small. The constructor took 1.9 to 5.0 ms. A "does not exist" failure came back in under 0.1 ms. A first successful load took under 0.7 ms, and loading the same class again took about 0.01 ms.</p>
+
+<h2>"Does not exist" and the plugin is missing from the list</h2>
+
+<p>This is the registration step. Four of my mistakes ended here, and they look the same from outside.</p>
+
+<p><strong>No export call.</strong> In ROS 2, a <code>plugins.xml</code> file in your package does nothing on its own. <code>pluginlib_export_plugin_description_file()</code> installs it and creates the ament index entry. Without the call, <code>colcon build</code> succeeded and the plugin wasn't in the list. When I added the call and rebuilt that one package, the plugin loaded in the same shell without re-sourcing, because the package was already on <code>AMENT_PREFIX_PATH</code>.</p>
+
+<p><strong>Wrong first argument.</strong> The first argument is the package that owns the base class, because that's the package name the loader is built with. <code>pluginlib_export_plugin_description_file(p_ownpkg plugins.xml)</code> registered the file under <code>p_ownpkg__pluginlib__plugin</code>, where a loader for <code>pbase</code> never looks. For Nav2 the first argument is <code>nav2_core</code>. For ros2_control hardware it's <code>hardware_interface</code>, and for rviz2 displays and panels it's <code>rviz_common</code>. The package that owns the base class is the one named in the loader, so check what the error says your base class is and which package declares it.</p>
+
+<p><strong>ROS 1 export tag.</strong> <code>&lt;export&gt;&lt;pbase plugin="${prefix}/plugins.xml"/&gt;&lt;/export&gt;</code> in <code>package.xml</code> is how ROS 1 registered plugins. With only that line and no CMake call, the plugin wasn't found on any of the three distros.</p>
+
+<p><strong>Wrong base_class_type.</strong> With <code>base_class_type="pbase::Polygon"</code> the file was registered, 12 entries were in the index, and the class still didn't appear in the list. The loader skips classes declared for another base. Copy the base class from the error message, including its namespace.</p>
+
+<p>Two more causes are about the environment. A package built after the shell was sourced isn't on <code>AMENT_PREFIX_PATH</code>, so its index entry is invisible. In my run <code>p_late</code> was missing until I sourced <code>install/setup.bash</code> again. And if the plugin package isn't installed at all, you get the same message. That matches the TEB question below: TEB wasn't installed for Humble, so the declared list held only the four Nav2 controllers that were.</p>
+
+<h2>"Does not exist" but the plugin is in the list</h2>
+
+<p>Then the string you asked for differs from the one in the list. pluginlib looks up the <code>name</code> attribute. The <code>type</code> attribute is used only when <code>name</code> is missing. With <code>name="p_named/Square" type="p_named::Square"</code>, asking for <code>p_named/Square</code> worked and asking for <code>p_named::Square</code> failed. This is how <code>gazebo_ros2_control/GazeboSystem</code> is written: a slash, not <code>::</code>. Copy the string from the list or from the XML, not from the C++ class name.</p>
+
+<p>A typo in the XML can give a second error. When the XML said <code>p_typo::Sqaure</code> and I asked for that exact string, pluginlib found it in the list, opened the library, and threw "no factory exists for it", because the macro had exported <code>p_typo::Square</code>. The <code>type</code> attribute has to match the class in <code>PLUGINLIB_EXPORT_CLASS</code> exactly.</p>
+
+<h2>"No factory exists for it"</h2>
+
+<p>The library opened, but nothing in it registered the requested type. I got this with no <code>PLUGINLIB_EXPORT_CLASS</code> at all, and with an XML <code>type</code> naming a class the macro didn't export. The fix is one line at the end of the .cpp, outside any namespace, with the same fully qualified names as the XML:</p>
+
+<pre><code class="language-cpp">#include &lt;pluginlib/class_list_macros.hpp&gt;
+PLUGINLIB_EXPORT_CLASS(p_good::Square, pbase::RegularPolygon)</code></pre>
+
+<h2>"Could not find library corresponding to plugin"</h2>
+
+<p>The class is declared, but the file named in <code>&lt;library path="..."&gt;</code> isn't in the package's install. In ROS 2 the value is the CMake target name, <code>p_good</code> for <code>libp_good.so</code>. A wrong name failed. So did a missing <code>install(TARGETS ...)</code>: the library was built in <code>build/</code> but never copied to <code>install/</code>. The ROS 1 form <code>lib/libp_ros1path</code> failed on all three distros after a warning that it "should be '/libp_ros1path'". The form with only the <code>lib</code> prefix, <code>libp_libprefix</code>, loaded with a warning. Use the bare target name and the warning goes away.</p>
+
+<p>The install line that worked:</p>
+
+<pre><code class="language-cmake">install(TARGETS p_good LIBRARY DESTINATION lib ARCHIVE DESTINATION lib RUNTIME DESTINATION bin)</code></pre>
+
+<h2>"Failed to load library" with an undefined symbol</h2>
+
+<p>The text says to check <code>PLUGINLIB_EXPORT_CLASS</code>, but the cause in my run was something else. The last part, after <code>Error string:</code>, holds the real reason: <code>undefined symbol: _ZTVN7p_undef6SquareE</code>. That symbol is the vtable of <code>p_undef::Square</code>. I declared one non-pure virtual function and never defined it. A shared library is allowed to have undefined symbols at link time, so the build passed, and the failure only came when <code>dlopen</code> ran. Giving the function a body fixed it. The symbol is mangled. <code>_ZTV</code> means a vtable, and <code>c++filt</code> turns it back into a readable name. If you are moving CMake off <code>ament_target_dependencies</code>, the linking pattern I used is the one from <a href="https://huntlab.app/en/ros-2-lyrical-unknown-cmake-command-ament-target-dependencies/">the ament_target_dependencies replacement post</a>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Fixes</th><th>Needs rebuild</th><th>Needs re-source</th></tr></thead>
+<tbody>
+<tr><td>Add <code>pluginlib_export_plugin_description_file(&lt;base pkg&gt; plugins.xml)</code></td><td>missing, wrong-package or ROS 1-only export</td><td>yes</td><td>no, if the package was already built before this shell was sourced</td></tr>
+<tr><td>Copy the base class into <code>base_class_type</code></td><td>wrong base class</td><td>yes</td><td>no</td></tr>
+<tr><td>Ask for the exact string in "Declared types"</td><td>name typo, <code>/</code> vs <code>::</code></td><td>no</td><td>no</td></tr>
+<tr><td><code>source install/setup.bash</code> (or a new terminal)</td><td>package built after sourcing</td><td>no</td><td>yes</td></tr>
+<tr><td>Make <code>PLUGINLIB_EXPORT_CLASS</code> and the XML <code>type</code> match</td><td>"no factory exists for it"</td><td>yes</td><td>no</td></tr>
+<tr><td><code>&lt;library path="target_name"&gt;</code> and <code>install(TARGETS ...)</code></td><td>"Could not find library corresponding to plugin"</td><td>yes</td><td>no</td></tr>
+<tr><td>Define or link the missing symbol</td><td>"Failed to load library ... undefined symbol"</td><td>yes</td><td>no</td></tr>
+</tbody>
+</table>
+
+<p>A quick check before rebuilding: look for your package name in <code>install/&lt;pkg&gt;/share/ament_index/resource_index/&lt;base pkg&gt;__pluginlib__plugin/</code>. If the file is missing, the export call is missing or names the wrong package. If it's there and the error persists, compare the XML with what your code requests.</p>
+
+<h2>Version notes</h2>
+
+<p>Every message, exception type and declared list was the same on Humble (pluginlib 5.1.5, class_loader 2.2.0), Jazzy (pluginlib 5.4.6, class_loader 2.7.1) and Lyrical (pluginlib 5.8.5, class_loader 2.9.4). Only two things differed. The <code>dlopen</code> error ends with <code>at ./src/shared_library.c:99</code> on Humble and Jazzy and <code>:96</code> on Lyrical, so drop that part when you search. And on Lyrical, CMake 4.2.3 printed <code>CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required)</code> for each of my packages, which declared <code>VERSION 3.8</code>. The build still succeeded. Humble had CMake 3.22.1 and Jazzy 3.28.3, and neither warned.</p>
+
+<h2>Not tested</h2>
+
+<p>Real Nav2, MoveIt, ros2_control or rviz2 plugins (I reproduced the mechanism with a minimal base class), <code>rclcpp_components</code> and component containers, <code>--symlink-install</code>, <code>--merge-install</code>, multiple classes in one XML file, several XML files per package, plugins in Python, Windows and macOS, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "According to the loaded plugin descriptions the class X with base class type Y does not exist" mean?</h3>
+<p>pluginlib searched the plugin XML files registered for Y's package and found no entry named X. It never opened your library. The list after "Declared types are" shows what it did find, so check first whether your plugin is in it.</p>
+
+<h3>My plugin builds but is not in "Declared types are". Why?</h3>
+<p>In my run, four mistakes did that: no <code>pluginlib_export_plugin_description_file</code> call, the call naming your own package instead of the base class package, a ROS 1 export tag in <code>package.xml</code> only, and a wrong <code>base_class_type</code>. A package built after you sourced the workspace was also missing until I re-sourced.</p>
+
+<h3>My plugin is listed, but I still get "does not exist". Why?</h3>
+<p>The string you request is different from the listed one. pluginlib looks up the XML <code>name</code> attribute, and only falls back to <code>type</code> when there is no <code>name</code>. <code>p_named/Square</code> loaded and <code>p_named::Square</code> did not.</p>
+
+<h3>What does "no factory exists for it" mean?</h3>
+<p>The library opened but no <code>PLUGINLIB_EXPORT_CLASS</code> registered that class. Add the macro, and make sure the XML <code>type</code> is exactly the class it exports.</p>
+
+<h3>Do I need to source the workspace again after fixing a plugin?</h3>
+<p>Not after rebuilding a package that was already built when the shell was sourced. My fixed <code>p_noexport</code> loaded in the same shell. A package built for the first time after sourcing needed <code>source install/setup.bash</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does According to the loaded plugin descriptions the class X with base class type Y does not exist mean?", "acceptedAnswer": {"@type": "Answer", "text": "pluginlib searched the plugin XML files registered for the package of Y and found no entry named X. It never opened your library. The list after Declared types are shows what it did find, so check first whether your plugin is in it."}},
+{"@type": "Question", "name": "My plugin builds but is not in Declared types are. Why?", "acceptedAnswer": {"@type": "Answer", "text": "In my run, four mistakes did that: no pluginlib_export_plugin_description_file call, the call naming your own package instead of the base class package, a ROS 1 export tag in package.xml only, and a wrong base_class_type. A package built after you sourced the workspace was also missing until I re-sourced."}},
+{"@type": "Question", "name": "My plugin is listed, but I still get does not exist. Why?", "acceptedAnswer": {"@type": "Answer", "text": "The string you request is different from the listed one. pluginlib looks up the XML name attribute, and only falls back to type when there is no name. p_named/Square loaded and p_named::Square did not."}},
+{"@type": "Question", "name": "What does no factory exists for it mean?", "acceptedAnswer": {"@type": "Answer", "text": "The library opened but no PLUGINLIB_EXPORT_CLASS registered that class. Add the macro, and make sure the XML type is exactly the class it exports."}},
+{"@type": "Question", "name": "Do I need to source the workspace again after fixing a plugin?", "acceptedAnswer": {"@type": "Answer", "text": "Not after rebuilding a package that was already built when the shell was sourced. My fixed p_noexport loaded in the same shell. A package built for the first time after sourcing needed source install/setup.bash."}}
+]}
+</script>
+
+<p>Measured on 2026-11-03 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, pluginlib 5.1.5, class_loader 2.2.0, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, rmw_implementation 2.8.5), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, pluginlib 5.4.6, class_loader 2.7.1, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw_implementation 2.15.6) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, pluginlib 5.8.5, class_loader 2.9.4, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw_implementation 3.1.6), on a 2 vCPU machine. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-07-ros2-pluginlib-class-does-not-exist/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104822">Why TEB controller is not available in ros2 humble?</a>, <a href="https://robotics.stackexchange.com/questions/105880">ROS2/Gazebo/ros2_control: Class gazebo_ros2_control/GazeboSystem does not exist</a>, <a href="https://robotics.stackexchange.com/questions/105056">Nav2 Custom planner plugin does not exist</a>, <a href="https://robotics.stackexchange.com/questions/107980">the class gazebo_ros2_control/GazeboSystem with base class type hardware_interface::System</a>, <a href="https://robotics.stackexchange.com/questions/109535">MoveIt can't find custom moveit_controller_manager plugin in ROS2 Humble</a>, <a href="https://robotics.stackexchange.com/questions/110617">ROS2 "install" can't load plugins on other machines</a>.</p>
