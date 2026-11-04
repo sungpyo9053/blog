@@ -1,0 +1,203 @@
+<pre><code>Traceback (most recent call last):
+  File "&lt;ws&gt;/install/imp_pkg/lib/imp_pkg/n_bare", line 33, in &lt;module&gt;
+    sys.exit(load_entry_point('imp-pkg==0.0.0', 'console_scripts', 'n_bare')())
+  ...
+  File "&lt;ws&gt;/install/imp_pkg/lib/python3.10/site-packages/imp_pkg/n_bare.py", line 3, in &lt;module&gt;
+    import helper
+ModuleNotFoundError: No module named 'helper'
+[ros2run]: Process exited with failure 1</code></pre>
+
+<p>The same traceback ends in <code>No module named 'utils'</code>, <code>No module named 'imp_pkg.utils'</code> or <code>No module named 'configs'</code>, depending on how you import and how <code>setup.py</code> lists your packages. If the module file itself was never installed, <code>from imp_pkg import late</code> fails with <code>ImportError: cannot import name 'late' from 'imp_pkg'</code> instead. (<code>imp_pkg</code> is my test package. Yours will show its own name.)</p>
+
+<p>Short answer: <code>ros2 run</code> doesn't run your source file. It runs a wrapper script in <code>install/&lt;pkg&gt;/lib/&lt;pkg&gt;/</code>, which imports your node from <code>site-packages</code>. Your <code>src/</code> folder isn't on the path. Two things have to be true. First, every import of your own code must go through the package name. Second, <code>setup.py</code> must install every subfolder you import. This setup worked on Humble, Jazzy and Lyrical, with and without <code>--symlink-install</code>:</p>
+
+<pre><code class="language-python"># my_pkg/my_node.py
+from my_pkg import helper            # not: import helper
+from my_pkg.utils import common      # not: from utils import common
+# from . import helper also works under ros2 run</code></pre>
+
+<pre><code class="language-python"># setup.py
+from setuptools import setup, find_packages
+setup(
+    name='my_pkg',
+    packages=find_packages(exclude=['test']),   # not: packages=[package_name]
+    ...
+)
+# and put an empty __init__.py in every subfolder you import (my_pkg/utils/__init__.py)</code></pre>
+
+<p>Then rebuild once without <code>--symlink-install</code> and run the node again. A symlink build can hide a missing subfolder (see below). If the module that fails is a third-party library such as <code>torch</code>, this isn't your problem. Read <a href="https://huntlab.app/en/ros2-run-conda-venv-no-module-named-torch-shebang/">ros2 run ignores your conda or venv</a> instead.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row was the same on Humble, Jazzy and Lyrical.</p>
+
+<table>
+<thead><tr><th>Import in your node</th><th>Error under <code>ros2 run</code></th><th>Cause</th></tr></thead>
+<tbody>
+<tr><td><code>import helper</code> (file next to the node)</td><td><code>ModuleNotFoundError: No module named 'helper'</code></td><td>Bare sibling import. Failed in every setup.py variant and both build modes, except the <code>data_files</code> copy hack</td></tr>
+<tr><td><code>from utils import common</code> (subfolder)</td><td><code>ModuleNotFoundError: No module named 'utils'</code></td><td>Bare import of a subfolder. Failed in all 12 builds</td></tr>
+<tr><td><code>from imp_pkg.utils import common</code></td><td><code>ModuleNotFoundError: No module named 'imp_pkg.utils'</code></td><td>The subfolder wasn't installed: <code>packages=[package_name]</code>, or <code>find_packages()</code> with no <code>__init__.py</code> in the subfolder</td></tr>
+<tr><td><code>from configs import settings</code> (folder beside <code>imp_pkg/</code>)</td><td><code>ModuleNotFoundError: No module named 'configs'</code></td><td>The top-level folder isn't in <code>packages</code></td></tr>
+<tr><td><code>from imp_pkg import late</code></td><td><code>ImportError: cannot import name 'late' from 'imp_pkg' (.../site-packages/imp_pkg/__init__.py)</code></td><td>The file isn't in the installed copy. In my run it was added after the last build</td></tr>
+<tr><td><code>from . import helper</code>, run as <code>python3 my_node.py</code></td><td><code>ImportError: attempted relative import with no known parent package</code></td><td>Works under <code>ros2 run</code>. Fails only when you start the file directly</td></tr>
+</tbody>
+</table>
+
+<p>The traceback tells you which copy Python loaded. If the last <code>File</code> line points into <code>install/.../site-packages/</code>, you ran a normal build. If it points into <code>build/&lt;pkg&gt;/</code>, the build used <code>--symlink-install</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-04 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images. One <code>ament_python</code> package, <code>imp_pkg</code>, had this layout:</p>
+
+<pre><code>src/imp_pkg/
+  configs/__init__.py, settings.py      # top-level folder beside the package
+  imp_pkg/__init__.py
+  imp_pkg/helper.py
+  imp_pkg/utils/common.py               # (+ __init__.py in some variants)
+  imp_pkg/n_bare.py     import helper
+  imp_pkg/n_abs.py      from imp_pkg import helper
+  imp_pkg/n_rel.py      from . import helper
+  imp_pkg/n_sub.py      from imp_pkg.utils import common
+  imp_pkg/n_subbare.py  from utils import common
+  imp_pkg/n_cfg.py      from configs import settings
+  imp_pkg/n_late.py     from imp_pkg import late    # late.py doesn't exist yet
+  setup.py, setup.cfg, package.xml, resource/imp_pkg</code></pre>
+
+<p>Each node is a <code>console_scripts</code> entry point that prints the imported module's file and <code>sys.path[0]</code>. I built six <code>setup.py</code> variants, each with plain <code>colcon build</code> ("copy") and with <code>--symlink-install</code>. That's 12 builds per distro. Each one started from a clean environment, and every node then ran with <code>ros2 run</code>. Results, identical on all three distros:</p>
+
+<table>
+<thead><tr><th>Variant (<code>packages=</code>)</th><th>Mode</th><th>n_bare</th><th>n_abs / n_rel</th><th>n_sub</th><th>n_subbare</th><th>n_cfg</th></tr></thead>
+<tbody>
+<tr><td>V1 <code>[package_name]</code>, utils has <code>__init__.py</code></td><td>copy</td><td>fail</td><td>OK</td><td>fail</td><td>fail</td><td>fail</td></tr>
+<tr><td>V1</td><td>symlink</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>fail</td></tr>
+<tr><td>V2 <code>find_packages(exclude=['test'])</code>, with <code>__init__.py</code></td><td>copy</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>OK</td></tr>
+<tr><td>V2</td><td>symlink</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>OK</td></tr>
+<tr><td>V3 <code>find_packages(exclude=['test'])</code>, no <code>__init__.py</code> in utils</td><td>copy</td><td>fail</td><td>OK</td><td>fail</td><td>fail</td><td>OK</td></tr>
+<tr><td>V3</td><td>symlink</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>OK</td></tr>
+<tr><td>V4 <code>[package_name, package_name + '.utils']</code></td><td>copy</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>fail</td></tr>
+<tr><td>V4</td><td>symlink</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>fail</td></tr>
+<tr><td>V5 <code>find_namespace_packages(include=['imp_pkg*'])</code>, no <code>__init__.py</code></td><td>copy</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>fail</td></tr>
+<tr><td>V5</td><td>symlink</td><td>fail</td><td>OK</td><td>OK</td><td>fail</td><td>fail</td></tr>
+<tr><td>V6 <code>[package_name]</code> + <code>data_files</code> copying <code>imp_pkg/*.py</code> to <code>lib/imp_pkg</code></td><td>copy</td><td>OK</td><td>OK</td><td>fail</td><td>fail</td><td>fail</td></tr>
+<tr><td>V6</td><td>symlink</td><td>OK</td><td>OK</td><td>OK</td><td>fail</td><td>fail</td></tr>
+</tbody>
+</table>
+
+<p>Every build returned 0, and no build log had a line with "warn" in it. A broken <code>packages=</code> line builds cleanly, and the error only shows up when the node starts. Builds took 1.29 to 1.50 s (copy) and 1.63 to 1.66 s (symlink) on Humble, and 1.63 to 2.02 s on Jazzy and Lyrical. That's on a 2 vCPU host with the container capped at 1.5 CPUs.</p>
+
+<h2>Cause 1: a bare import of a sibling file</h2>
+
+<p><code>import helper</code> works when you start the file yourself from its folder. In my run, <code>python3 n_bare.py</code> from <code>src/imp_pkg/imp_pkg/</code> printed <code>OK helper ok</code> with <code>sys.path[0]</code> set to that source folder. Python always puts the started script's folder first on the path. <code>ros2 run</code> starts a different script. It runs a generated wrapper (<code>#!/usr/bin/python3</code>, marked <code>EASY-INSTALL-ENTRY-SCRIPT</code>) in <code>install/imp_pkg/lib/imp_pkg/</code>. In every run, <code>sys.path[0]</code> was <code>install/imp_pkg/lib/imp_pkg</code>, which holds only the wrappers. <code>helper.py</code> sits in <code>site-packages/imp_pkg/</code>, and only <code>site-packages</code> is on the path, not the folder inside it. So <code>import helper</code> finds nothing, while <code>from imp_pkg import helper</code> and <code>from . import helper</code> both loaded <code>site-packages/imp_pkg/helper.py</code>.</p>
+
+<p>That's also what the 13,000-view Stack Overflow question asks: how to keep writing <code>import SimpleOneTrailerSystem</code> instead of <code>import planner_pkg.SimpleOneTrailerSystem</code>. The prefix is the fix, not a workaround. The package name is the only name for your code that's on the path at run time.</p>
+
+<h2>Cause 2: the subfolder is never installed</h2>
+
+<p><code>packages=[package_name]</code> names one package and nothing below it. In V1 copy mode, <code>site-packages/imp_pkg/</code> got <code>__init__.py</code>, <code>helper.py</code> and the node files, but no <code>utils/</code> directory. So <code>from imp_pkg.utils import common</code> failed with <code>No module named 'imp_pkg.utils'</code>, even though <code>utils/__init__.py</code> existed in the source.</p>
+
+<p>Three fixes all installed <code>utils/common.py</code> and made <code>n_sub</code> work in copy mode:</p>
+
+<ul>
+<li><code>packages=find_packages(exclude=['test'])</code> with an <code>__init__.py</code> in <code>utils/</code> (V2).</li>
+<li>An explicit list, <code>[package_name, package_name + '.utils']</code> (V4). Every new subfolder needs a new entry.</li>
+<li><code>find_namespace_packages(include=['imp_pkg*'])</code> (V5). This one worked without an <code>__init__.py</code> in <code>utils/</code>.</li>
+</ul>
+
+<p><code>find_packages()</code> only counts folders with an <code>__init__.py</code>. In V3, I deleted <code>utils/__init__.py</code>. The build succeeded, <code>site-packages</code> had no <code>utils/</code>, and <code>n_sub</code> failed with the same <code>No module named 'imp_pkg.utils'</code>. If you switch to <code>find_packages</code> and the error doesn't change, check for that file.</p>
+
+<p><code>from utils import common</code> failed in all 12 builds. Even when <code>utils/</code> was installed, it sat inside <code>imp_pkg/</code>, so its import name is <code>imp_pkg.utils</code>. That's the case in the Robotics Stack Exchange question with <code>from utils import common_utils</code>.</p>
+
+<h2>Cause 3: a folder beside the package</h2>
+
+<p>The <code>configs/</code> folder in the "No module named 'configs'" question sits next to the package folder, not inside it. <code>packages=[package_name]</code>, the explicit list and <code>find_namespace_packages(include=['imp_pkg*'])</code> all left it out, and <code>from configs import settings</code> failed. <code>find_packages(exclude=['test'])</code> picked it up, because it has an <code>__init__.py</code>. It was installed as a second top-level package, <code>site-packages/configs/</code>, and the import worked.</p>
+
+<p>That works, but your package now ships a module called <code>configs</code> on the shared Python path. I didn't test what happens when two packages in one workspace both install a top-level <code>configs</code>. The safer move is to put the folder inside the package as <code>imp_pkg/configs/</code> and import <code>from imp_pkg.configs import settings</code>. If the folder holds YAML or JSON rather than Python, install it with <code>data_files</code> to <code>share/</code> instead. I didn't measure that here.</p>
+
+<h2>Cause 4: --symlink-install hides the mistake</h2>
+
+<p>This one explains "it works on my machine, but not in Docker or CI". With <code>--symlink-install</code>, colcon didn't copy anything into <code>site-packages</code>. It wrote one file, <code>imp-pkg.egg-link</code>, pointing at <code>build/imp_pkg</code>. And <code>build/imp_pkg/imp_pkg</code> was a symlink to <code>src/imp_pkg/imp_pkg</code>. Python then sees the whole source folder, whatever <code>packages=</code> says. In V1, V3 and V6, <code>n_sub</code> failed in copy mode but printed <code>OK common ok</code> with <code>--symlink-install</code>, loaded from <code>build/imp_pkg/imp_pkg/utils/common.py</code>. Nothing tells you that the release build will fail.</p>
+
+<p>The top-level <code>configs/</code> didn't get that pass. In symlink mode it was found only when <code>find_packages</code> had listed it (V2, V3). In V1, V4, V5 and V6 it failed as in copy mode.</p>
+
+<p>The same link changes when new files show up. I created <code>imp_pkg/late.py</code> after the build and ran <code>n_late</code> again without rebuilding:</p>
+
+<ul>
+<li>Copy mode: still <code>ImportError: cannot import name 'late' from 'imp_pkg'</code>, in all six variants. After <code>colcon build</code>, it printed <code>OK late ok</code>.</li>
+<li>Symlink mode: <code>OK late ok</code> right away, from <code>build/imp_pkg/imp_pkg/late.py</code>.</li>
+</ul>
+
+<p>So when an import fails right after you add a file, and you don't use <code>--symlink-install</code>, rebuild first. To check a <code>setup.py</code> before you ship it, build once without the flag in a clean workspace (<code>rm -rf build install</code>) and start every node.</p>
+
+<h2>Running the file directly vs ros2 run</h2>
+
+<p>People often test a node with <code>python3 my_node.py</code>, see it work, and then hit the error under <code>ros2 run</code>. The two start Python with different paths, so different imports work. With the workspace not sourced, from the source tree:</p>
+
+<table>
+<thead><tr><th>Command</th><th><code>import helper</code></th><th><code>from imp_pkg import helper</code></th><th><code>from . import helper</code></th><th><code>from utils import common</code></th></tr></thead>
+<tbody>
+<tr><td><code>cd src/imp_pkg/imp_pkg; python3 node.py</code></td><td>OK</td><td><code>No module named 'imp_pkg'</code></td><td><code>attempted relative import with no known parent package</code></td><td>OK</td></tr>
+<tr><td><code>cd src/imp_pkg; python3 -m imp_pkg.node</code></td><td><code>No module named 'helper'</code></td><td>OK</td><td>OK</td><td>Not tested</td></tr>
+<tr><td><code>ros2 run imp_pkg node</code> (V2 build)</td><td><code>No module named 'helper'</code></td><td>OK</td><td>OK</td><td><code>No module named 'utils'</code></td></tr>
+</tbody>
+</table>
+
+<p>The imports that work under <code>python3 node.py</code> are exactly the ones that fail under <code>ros2 run</code>. <code>python3 -m imp_pkg.node</code> from the package root matched <code>ros2 run</code> in every case I tried. Use that for quick tests outside colcon.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Result in my run</th><th>Catch</th></tr></thead>
+<tbody>
+<tr><td>Import through the package name (<code>from imp_pkg import helper</code>)</td><td>Worked in all 12 builds on all distros</td><td>Breaks <code>python3 node.py</code> from the source folder. Use <code>python3 -m</code></td></tr>
+<tr><td>Relative import (<code>from . import helper</code>)</td><td>Worked in all 12 builds</td><td>Same catch, with a different error</td></tr>
+<tr><td><code>packages=find_packages(exclude=['test'])</code> + <code>__init__.py</code> per subfolder</td><td>Installed <code>utils/</code> in copy mode</td><td>Also installs any top-level folder that has an <code>__init__.py</code>, such as <code>configs/</code></td></tr>
+<tr><td><code>find_namespace_packages(include=['imp_pkg*'])</code></td><td>Installed <code>utils/</code> with no <code>__init__.py</code></td><td>Leaves out folders outside <code>imp_pkg</code></td></tr>
+<tr><td>Explicit list <code>[package_name, package_name + '.utils']</code></td><td>Worked</td><td>Each new subfolder needs a new entry</td></tr>
+<tr><td><code>data_files</code> copying <code>imp_pkg/*.py</code> into <code>lib/imp_pkg</code></td><td>Made <code>import helper</code> work, loaded from <code>lib/imp_pkg/helper.py</code></td><td>Every module is installed twice. In copy mode, <code>utils/</code> still failed</td></tr>
+</tbody>
+</table>
+
+<p>I'd use the first and third rows together. The <code>data_files</code> trick shows up in older answers. It works for flat files, but it creates a second copy of each module. In my run, <code>n_bare</code> loaded <code>lib/imp_pkg/helper.py</code>, while <code>n_abs</code> loaded <code>site-packages/imp_pkg/helper.py</code>.</p>
+
+<h2>Another sourced workspace can hide it too</h2>
+
+<p>I sourced the V2 workspace and then the V1 workspace in one shell. <code>ros2 pkg prefix imp_pkg</code> reported the V1 install. But <code>n_cfg</code> printed <code>OK settings ok</code>, loaded from <code>/ws_V2copy/install/.../site-packages/configs/settings.py</code>, because the V2 path was still on <code>PYTHONPATH</code>. The broken V1 package only looked fine because of the other workspace. If an import works in one terminal and fails in a fresh one, open a new shell and source only the workspace you mean.</p>
+
+<h2>Version notes</h2>
+
+<p>The results were the same on all three distros. That covers the six error texts, the 12-build matrix, the egg-link plus symlinked <code>build/</code> layout under <code>--symlink-install</code>, and the <code>EASY-INSTALL-ENTRY-SCRIPT</code> wrapper with <code>#!/usr/bin/python3</code>. That held even though setuptools went from 59.6.0 (Humble) to 68.1.2 (Jazzy) to 78.1.1 (Lyrical), and Python from 3.10.12 to 3.12.3 to 3.14.4. colcon-core was 0.21.3 and colcon-ros 0.5.0 on all three. Only the traceback looked different. Python 3.12 and later add <code>^^^^</code> markers under each frame, Lyrical adds <code>~~~~</code> as well, and the <code>importlib</code> line numbers differ. Search for the final <code>ModuleNotFoundError</code> line, not the frames above it.</p>
+
+<h2>Not tested</h2>
+
+<p><code>ros2 launch</code> (the <code>configs</code> question uses it. Launch starts the same wrapper, but I didn't run it), <code>ament_cmake_python</code> packages and mixed C++/Python packages, <code>pyproject.toml</code>-only packages, <code>package_dir</code> or <code>src/</code> layouts, YAML or JSON files installed through <code>data_files</code>, two packages installing the same top-level module, compiled extension modules (the <code>iou3d_nms_cuda</code> case), <code>sys.path</code> edits inside the node, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does my node import its helper file fine with python3 but not with ros2 run?</h3>
+<p><code>python3 node.py</code> puts the source folder first on <code>sys.path</code>. <code>ros2 run</code> starts a wrapper in <code>install/&lt;pkg&gt;/lib/&lt;pkg&gt;/</code>, and that folder was <code>sys.path[0]</code> in every run. Your modules are in <code>site-packages/&lt;pkg&gt;/</code>, so they can only be reached as <code>&lt;pkg&gt;.helper</code>. Write <code>from my_pkg import helper</code>.</p>
+
+<h3>How do I import a module from a subfolder in a ROS 2 Python package?</h3>
+<p>Import it as <code>from my_pkg.utils import common</code>. Add an empty <code>__init__.py</code> to <code>utils/</code> and use <code>packages=find_packages(exclude=['test'])</code> in <code>setup.py</code>. The default <code>packages=[package_name]</code> didn't install <code>utils/</code> at all.</p>
+
+<h3>Why does it work with --symlink-install but fail in Docker or CI?</h3>
+<p>With <code>--symlink-install</code>, Python reads your source folder through a link, so subfolders missing from <code>packages=</code> still import. A normal build copies only the listed packages. In my run, <code>packages=[package_name]</code> passed with the flag and failed without it on all three distros.</p>
+
+<h3>I added a new .py file and get cannot import name from my package. Why?</h3>
+<p>Without <code>--symlink-install</code>, <code>ros2 run</code> uses the copy in <code>install/</code>, made at the last build. A file added later isn't there until you run <code>colcon build</code> again. With the flag, the new file worked right away.</p>
+
+<h3>Should I add my source folder to sys.path or PYTHONPATH?</h3>
+<p>It isn't needed. Importing through the package name with a complete <code>packages=</code> line worked in every build I ran. I didn't test <code>sys.path</code> edits. A leftover path from another sourced workspace was enough to make a broken package look fine in my run.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does my node import its helper file fine with python3 but not with ros2 run?", "acceptedAnswer": {"@type": "Answer", "text": "python3 node.py puts the source folder first on sys.path. ros2 run starts a wrapper in install/pkg/lib/pkg/, and that folder was sys.path[0] in every run. Your modules are in site-packages/pkg/, so they can only be reached as pkg.helper. Write from my_pkg import helper."}},
+{"@type": "Question", "name": "How do I import a module from a subfolder in a ROS 2 Python package?", "acceptedAnswer": {"@type": "Answer", "text": "Import it as from my_pkg.utils import common. Add an empty __init__.py to utils/ and use packages=find_packages(exclude=['test']) in setup.py. The default packages=[package_name] didn't install utils/ at all."}},
+{"@type": "Question", "name": "Why does it work with --symlink-install but fail in Docker or CI?", "acceptedAnswer": {"@type": "Answer", "text": "With --symlink-install, Python reads your source folder through a link, so subfolders missing from packages= still import. A normal build copies only the listed packages. In my run, packages=[package_name] passed with the flag and failed without it on all three distros."}},
+{"@type": "Question", "name": "I added a new .py file and get cannot import name from my package. Why?", "acceptedAnswer": {"@type": "Answer", "text": "Without --symlink-install, ros2 run uses the copy in install/, made at the last build. A file added later isn't there until you run colcon build again. With the flag, the new file worked right away."}},
+{"@type": "Question", "name": "Should I add my source folder to sys.path or PYTHONPATH?", "acceptedAnswer": {"@type": "Answer", "text": "It isn't needed. Importing through the package name with a complete packages= line worked in every build I ran. I didn't test sys.path edits. A leftover path from another sourced workspace was enough to make a broken package look fine in my run."}}
+]}
+</script>
+
+<p>Measured on 2026-11-04 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, setuptools 59.6.0, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, setuptools 68.1.2, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, setuptools 78.1.1, Python 3.14.4), colcon-core 0.21.3, default RMW (Fast DDS). Full digests are in <code>digests.txt</code>. The traceback at the top is shortened. The full one is in <code>out_humble.txt</code>, where the workspace path is shown as <code>&lt;ws&gt;</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-16-ros2-python-import-own-modules/evidence">evidence folder</a>. Questions this answers: <a href="https://stackoverflow.com/questions/57426715">Import modules in package in ROS2</a>, <a href="https://robotics.stackexchange.com/questions/108273">Ros2 can not import python modules located in subfolders</a>, <a href="https://robotics.stackexchange.com/questions/109579">Issue to import python modules in Ros2</a>, <a href="https://robotics.stackexchange.com/questions/102570">Cannot run a ROS2 node containing my custom .py scripts</a>, <a href="https://stackoverflow.com/questions/79477988">ROS2 ModuleNotFoundError "No module named 'configs'"</a>.</p>
