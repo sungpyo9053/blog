@@ -1,0 +1,168 @@
+<p>This is the warning most people search for. It is from ROS 1 Noetic, as posted in one of the questions below:</p>
+
+<pre><code>Warning: TF_REPEATED_DATA ignoring data with redundant timestamp for frame link_left_wheel at time 618.268000 according to authority unknown_publisher
+         at line 278 in /tmp/binarydeb/ros-noetic-tf2-0.7.5/src/buffer_core.cpp</code></pre>
+
+<p>And this is the tf2 warning I actually got in ROS 2. The first block is Humble, the second is Jazzy and Lyrical:</p>
+
+<pre><code>Warning: TF_OLD_DATA ignoring data from the past for frame base_link at time 1793777482.974166 according to authority default_authority
+Possible reasons are listed at http://wiki.ros.org/tf/Errors%20explained
+         at line 294 in ./src/buffer_core.cpp
+
+[WARN] [1793777718.090693172] []: TF_OLD_DATA ignoring data from the past for frame base_link at time 1793777698.089932 according to authority default_authority
+Possible reasons are listed at http://wiki.ros.org/tf/Errors%20explained</code></pre>
+
+<p>Short answer: ROS 2 does not print TF_REPEATED_DATA. I sent the same transform twice with the same timestamp, sent two different values with one timestamp, and ran two publishers on the same stamps. That produced zero warnings on Humble, Jazzy and Lyrical. When two transforms shared a stamp, a lookup returned the second one. The string <code>TF_REPEATED_DATA</code> isn't in <code>libtf2.so</code> on any of the three distros. If you see it, the process printing it uses ROS 1 tf2. The paths in the Noetic questions point to <code>ros-noetic-tf2</code>. In ROS 2 the warning you get is TF_OLD_DATA. It means a transform arrived more than <code>cache_time</code> (10 s by default) older than the newest one the listener already holds for that frame, so the listener dropped it. The fix is to stop the stamp from going back that far. With simulated time, a lookup after a jump back kept returning the old pre-jump data unless the buffer was cleared. The C++ listener <code>tf2_echo</code> cleared its buffer on all three distros. In Python, use <code>Buffer(node=node)</code> on Jazzy or Lyrical:</p>
+
+<pre><code class="language-python">from tf2_ros import Buffer, TransformListener
+buf = Buffer(node=node)          # Jazzy/Lyrical: clears itself when /clock jumps back
+TransformListener(buf, node)</code></pre>
+
+<p>On Humble, <code>Buffer(node=node)</code> did not clear. It warned and kept the stale data, the same as a plain <code>Buffer()</code>.</p>
+
+<h2>Find your case</h2>
+
+<p>Each row is 40 messages from a Python publisher on <code>/tf</code>, received by a Python <code>tf2_ros</code> listener with the default 10 s cache. Results were the same on Humble, Jazzy and Lyrical except where noted.</p>
+
+<table>
+<thead><tr><th>What the publisher did</th><th>Warnings in the listener</th><th>What a lookup returned</th></tr></thead>
+<tbody>
+<tr><td>Normal: fresh stamp every message</td><td>0</td><td>latest transform</td></tr>
+<tr><td>Same message published twice (80 sent)</td><td>0</td><td>latest transform</td></tr>
+<tr><td>Same stamp, x=1.0 then x=2.0</td><td>0</td><td>x=2.0, the second one</td></tr>
+<tr><td>20 Hz loop stamped with a 10 Hz stamp (every stamp sent twice)</td><td>0</td><td>latest transform</td></tr>
+<tr><td>Two publishers, same stamps, x=1.0 and x=2.0</td><td>0</td><td>one of the two (x=1.0 in the saved runs)</td></tr>
+<tr><td>One constant stamp on <code>/tf</code> for all 40</td><td>0</td><td>that stamp</td></tr>
+<tr><td>Same static transform 40 times on <code>/tf_static</code></td><td>0</td><td>stamp 0, as for any static transform</td></tr>
+<tr><td>Every second message 0.5 s older than the newest</td><td>0</td><td>latest transform</td></tr>
+<tr><td>One fresh message, then 39 that were 9 s old</td><td>0</td><td>fresh transform</td></tr>
+<tr><td>One fresh message, then 39 that were 11 s old</td><td>19 TF_OLD_DATA</td><td>fresh transform</td></tr>
+<tr><td>One fresh message, then 39 that were 20 s old</td><td>39 TF_OLD_DATA</td><td>fresh transform</td></tr>
+<tr><td>Same, listener with <code>cache_time</code> 30 s</td><td>0</td><td>fresh transform</td></tr>
+<tr><td><code>/clock</code> jumped back about 19 s, listener on sim time, plain <code>Buffer()</code></td><td>20 TF_OLD_DATA</td><td>the last pre-jump stamp, 1000.95</td></tr>
+<tr><td>Same, <code>Buffer(node=node)</code></td><td>Humble: 20. Jazzy, Lyrical: 0, plus "Detected jump back in time"</td><td>Humble: 1000.95. Jazzy, Lyrical: 981.95, the newest</td></tr>
+</tbody>
+</table>
+
+<p>So repeated timestamps don't do anything visible in ROS 2. The later message overwrites the earlier one. Old timestamps do, but only once they are past the cache window.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-04 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one container per distro, run one after another. The script writes two small Python programs:</p>
+
+<ul>
+<li><code>pub.py</code> publishes <code>tf2_msgs/TFMessage</code> from <code>odom</code> to <code>base_link</code> directly on <code>/tf</code> (or <code>/tf_static</code> with transient local durability). It sends one message every 50 ms, and the mode sets the stamp pattern: duplicates, a 10 Hz stamp grid, a constant stamp, stamps 9, 11 or 20 seconds old, or a <code>/clock</code> that jumps back.</li>
+<li><code>listen.py</code> is a node with a <code>tf2_ros.Buffer</code> and <code>TransformListener</code>. It spins for 7 seconds, then calls <code>lookup_transform('odom', 'base_link', Time())</code> and prints the translation and stamp it got.</li>
+</ul>
+
+<p>For each case I counted lines with <code>TF_REPEATED_DATA</code> and <code>TF_OLD_DATA</code> in the listener's output. I also ran <code>ros2 run tf2_ros tf2_echo odom base_link</code> as a C++ listener. Then I ran <code>strings</code> on <code>/opt/ros/$ROS_DISTRO/lib/libtf2.so</code> to list the warning texts compiled into tf2. On all three distros it returned the same six format strings: <code>TF_DENORMALIZED_QUATERNION</code>, <code>TF_NAN_INPUT</code>, <code>TF_NO_CHILD_FRAME_ID</code>, <code>TF_NO_FRAME_ID</code>, <code>TF_OLD_DATA</code> and <code>TF_SELF_TRANSFORM</code>. None of them is TF_REPEATED_DATA.</p>
+
+<h2>TF_REPEATED_DATA: a ROS 1 warning</h2>
+
+<p>The warning was added to ROS 1 tf2 for Noetic (<a href="https://github.com/ros/geometry2/issues/467">ros/geometry2 issue 467, "New warning message for repeated transforms"</a>). A later pull request in the same repository, "throttle TF_REPEATED_DATA to 10 seconds", followed. The Noetic questions show a <code>ros-noetic-tf2</code> source path in the second line, and they hit it while starting a navigation stack, running two TurtleBots in Gazebo, and replaying an old bag that published a transform repeatedly with one timestamp.</p>
+
+<p>ROS 2 tf2 handled all of those cases without a message:</p>
+
+<ul>
+<li><strong>The same message twice.</strong> 80 messages in 40 identical pairs, zero warnings, lookup fine.</li>
+<li><strong>A fast loop with a slow stamp.</strong> A 20 Hz loop stamped with a time that only changes at 10 Hz sends every stamp twice. Zero warnings. With a check that skips the send when the stamp equals the last one, 21 messages went out instead of 40 and the lookup result was the same.</li>
+<li><strong>Two publishers for one frame.</strong> Two processes published <code>base_link</code> on the same 100 ms stamps, one with x=1.0 and one with x=2.0. Zero warnings. The lookup returned x=1.0 in the saved run on all three distros. It depends on which message arrives last, so you can't rely on it.</li>
+<li><strong>Different values on one stamp.</strong> x=1.0 then x=2.0 with the same stamp returned x=2.0 every time. The second message replaced the first.</li>
+</ul>
+
+<p>That last point matters more than the missing warning. On ROS 2, two sources fighting over one frame don't print anything. The frame jumps between the two values and nothing tells you why. To find a second publisher, look at the graph instead of the logs. <code>ros2 topic info /tf --verbose</code> lists every publisher on <code>/tf</code>, and a frame that flickers in a lookup or a viewer is the symptom. I didn't measure <code>ros2 topic info</code> or any viewer in this run.</p>
+
+<h2>TF_OLD_DATA: the warning you will see in ROS 2</h2>
+
+<p>TF_OLD_DATA showed up in the listener when a transform's stamp was older than the newest stamp for that frame minus the cache length. The default cache is 10 seconds:</p>
+
+<ul>
+<li>9 s older than the newest: accepted, 0 warnings.</li>
+<li>11 s older: the first 19 were dropped with a warning. Each loop step moved "now" forward by 50 ms. After about 1 second the "11 s old" stamps were within 10 s of the first fresh stamp, and the rest were accepted.</li>
+<li>20 s older: all 39 were dropped, 39 warnings.</li>
+<li>0.5 s older, mixed with fresh messages: accepted, 0 warnings. Out-of-order data inside the window is fine.</li>
+</ul>
+
+<p>The listener prints one line for every message it drops. 119 old messages gave 119 warnings in about 6 seconds, on every distro, with no throttling. A replayed bag or a restarted simulator can therefore flood the terminal. The lookup kept working throughout and returned the newest valid transform. TF_OLD_DATA means "I ignored this message", not "the tree is broken". The data you wanted from that message, though, is gone.</p>
+
+<p>The publisher never printed anything. Only the process holding the buffer did. In a real system that is your node, Nav2 or RViz, not the driver that sent the old stamps. To find the sender, look for a node whose clock is behind: one on wall time while everything else uses <code>use_sim_time</code>, a bag played without <code>--clock</code>, or a machine whose clock is off. The <a href="https://huntlab.app/en/subtraction-leads-to-negative-time-ros-2-rclpy-use-sim-time/">use_sim_time and negative time post</a> shows the same clock mix-up from the other side.</p>
+
+<h2>Sim time jumping back: the case that leaves TF stuck</h2>
+
+<p>This is the common ROS 2 version of the problem. You loop a bag, reset Gazebo, or restart a simulator, and <code>/clock</code> goes back. To reproduce it I published <code>/clock</code> from 1000.00 to 1000.95 s, then jumped to 981.00 and kept going to 981.95, with matching <code>/tf</code> stamps. The listener ran with <code>-p use_sim_time:=true</code>.</p>
+
+<table>
+<thead><tr><th>Listener</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Python <code>Buffer()</code></td><td>20 TF_OLD_DATA, lookup stuck at 1000.95</td><td>20, stuck at 1000.95</td><td>20, stuck at 1000.95</td></tr>
+<tr><td>Python <code>Buffer(node=node)</code></td><td>20 TF_OLD_DATA, stuck at 1000.95</td><td>0, "Detected jump back in time. Clearing tf buffer.", lookup at 981.95</td><td>same as Jazzy</td></tr>
+<tr><td>C++ <code>tf2_echo</code></td><td>"Detected jump back in time. Clearing TF buffer." and 1 TF_OLD_DATA</td><td>the same message, 0 TF_OLD_DATA</td><td>the same message, 1 TF_OLD_DATA</td></tr>
+</tbody>
+</table>
+
+<p>The clearing message came from the <code>tf2_buffer</code> logger, as <code>[WARN] [...] [tf2_buffer]: Detected jump back in time. Clearing TF buffer.</code> In C++ and in Python with <code>node=</code> on Jazzy and Lyrical, a jump back clears the buffer and the tree is rebuilt from the new stamps. In two of the C++ runs one message was still dropped with TF_OLD_DATA right around the clear. I didn't track down why, and the next ones were accepted. A plain Python <code>Buffer()</code> has no clock to watch, so after the jump every new transform counted as about 19 to 20 s too old and was dropped. The lookup kept returning the last pre-jump transform with no error. That is worse than a warning, because code that only checks whether <code>lookup_transform</code> raised will keep using a stale pose.</p>
+
+<h2>Fixes compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>What it changed in my runs</th></tr></thead>
+<tbody>
+<tr><td>Make stamps move forward (stamp with the current time of the clock everyone uses)</td><td>No TF_OLD_DATA in the fresh-stamp cases. This is the real fix.</td></tr>
+<tr><td>Skip the send when the stamp equals the last one</td><td>21 messages instead of 40, same lookup result. Not needed in ROS 2 to stop a warning, but it removes the silent overwrite</td></tr>
+<tr><td>Larger <code>cache_time</code> (<code>Buffer(cache_time=Duration(seconds=30))</code>)</td><td>20 s old data accepted, 0 warnings. Only helps if the old data is useful and the gap is shorter than the cache</td></tr>
+<tr><td><code>Buffer(node=node)</code> in Python</td><td>Clears on a <code>/clock</code> jump on Jazzy and Lyrical. No change on Humble</td></tr>
+<tr><td><code>--ros-args --log-level error</code> on the listener</td><td>Hid TF_OLD_DATA on Jazzy and Lyrical (39 to 0). On Humble 39 lines remained, even with <code>fatal</code></td></tr>
+</tbody>
+</table>
+
+<p>Lowering the log level only hides the message. The old transforms were still dropped. Use it when you know the old data is useless, such as the first second of a bag loop. Don't use it to make a clock problem go away.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble (tf2 0.25.24).</strong> TF_OLD_DATA goes through console_bridge: it starts with <code>Warning:</code>, has a "Possible reasons" line and ends with <code>at line 294 in ./src/buffer_core.cpp</code>. All 39 lines went to stderr. <code>--log-level error</code> and <code>--log-level fatal</code> did not hide it. Python <code>Buffer(node=node)</code> did not clear on a <code>/clock</code> jump.</li>
+<li><strong>Jazzy (tf2 0.36.23) and Lyrical (tf2 0.45.10).</strong> TF_OLD_DATA is a normal ROS log line, <code>[WARN] [time] []:</code>, with an empty logger name, still on stderr. <code>--log-level error</code> hid it. Python <code>Buffer(node=node)</code> cleared on a jump back and logged "Clearing tf buffer." with a lowercase "tf", while C++ logged "Clearing TF buffer."</li>
+<li><strong>All three.</strong> No TF_REPEATED_DATA text in <code>libtf2.so</code>. The same-stamp overwrite, the 10 s window, one warning per dropped message, and C++ <code>tf2_echo</code> clearing on a jump were identical.</li>
+<li><strong>"according to authority".</strong> The Python listener reported <code>default_authority</code>. C++ <code>tf2_echo</code> reported <code>Authority undetectable</code>. Neither names the publishing node, so the authority field won't help you find the sender in ROS 2.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>ROS 1 Noetic itself. The TF_REPEATED_DATA text and the throttling come from the linked issue and questions, not from my runs.</li>
+<li>RViz2, Nav2, robot_state_publisher, Gazebo and a real <code>ros2 bag play --loop</code>. The bag loop was simulated by publishing <code>/clock</code> by hand.</li>
+<li>A <code>tf2_ros::Buffer</code> and <code>TransformListener</code> in your own rclcpp node. The only C++ listener was <code>tf2_echo</code>.</li>
+<li>RMWs other than each image's default, and multiple machines with different clocks.</li>
+<li>Ways to hide the Humble console_bridge line other than the ROS log level, such as redirecting stderr.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why do I not see TF_REPEATED_DATA in ROS 2 when my frames have duplicate timestamps?</h3>
+<p>ROS 2 tf2 on Humble, Jazzy and Lyrical doesn't have that warning. Duplicate stamps gave zero warnings, and when the two values differed, the second one replaced the first. The text TF_REPEATED_DATA wasn't in libtf2.so on any of the three.</p>
+
+<h3>What does TF_OLD_DATA ignoring data from the past mean in ROS 2?</h3>
+<p>The listener got a transform whose stamp was more than its cache time (10 s by default) older than the newest stamp it holds for that frame, and dropped it. 9 s old data was accepted and 11 s old data was dropped. The warning is printed once per dropped message by the listening process, never by the publisher.</p>
+
+<h3>Why is TF stuck after looping a bag or resetting the simulation?</h3>
+<p>The clock jumped back but the buffer still held the newer pre-jump transforms, so every new transform looked too old. A plain Python Buffer() kept returning the last pre-jump transform on all three distros. The C++ tf2_echo listener on all three, and Python Buffer(node=node) on Jazzy and Lyrical, printed Detected jump back in time and cleared.</p>
+
+<h3>How do I silence TF_OLD_DATA?</h3>
+<p>On Jazzy and Lyrical, <code>--ros-args --log-level error</code> on the listening node hid it. On Humble it did not, because the line goes through console_bridge. In both cases the data is still dropped, so fix the clock first.</p>
+
+<h3>What does according to authority Authority undetectable mean?</h3>
+<p>It is the placeholder the C++ listener uses when it can't tell who sent the transform. The Python listener printed default_authority instead. In ROS 2 neither one names the publishing node.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why do I not see TF_REPEATED_DATA in ROS 2 when my frames have duplicate timestamps?", "acceptedAnswer": {"@type": "Answer", "text": "ROS 2 tf2 on Humble, Jazzy and Lyrical doesn't have that warning. Duplicate stamps gave zero warnings, and when the two values differed, the second one replaced the first. The text TF_REPEATED_DATA wasn't in libtf2.so on any of the three."}},
+{"@type": "Question", "name": "What does TF_OLD_DATA ignoring data from the past mean in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "The listener got a transform whose stamp was more than its cache time (10 s by default) older than the newest stamp it holds for that frame, and dropped it. 9 s old data was accepted and 11 s old data was dropped. The warning is printed once per dropped message by the listening process, never by the publisher."}},
+{"@type": "Question", "name": "Why is TF stuck after looping a bag or resetting the simulation?", "acceptedAnswer": {"@type": "Answer", "text": "The clock jumped back but the buffer still held the newer pre-jump transforms, so every new transform looked too old. A plain Python Buffer() kept returning the last pre-jump transform on all three distros. The C++ tf2_echo listener on all three, and Python Buffer(node=node) on Jazzy and Lyrical, printed Detected jump back in time and cleared."}},
+{"@type": "Question", "name": "How do I silence TF_OLD_DATA?", "acceptedAnswer": {"@type": "Answer", "text": "On Jazzy and Lyrical, --ros-args --log-level error on the listening node hid it. On Humble it did not, because the line goes through console_bridge. In both cases the data is still dropped, so fix the clock first."}},
+{"@type": "Question", "name": "What does according to authority Authority undetectable mean?", "acceptedAnswer": {"@type": "Answer", "text": "It is the placeholder the C++ listener uses when it can't tell who sent the transform. The Python listener printed default_authority instead. In ROS 2 neither one names the publishing node."}}
+]}
+</script>
+
+<p>Measured on 2026-11-04 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, tf2 and tf2_ros 0.25.24, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, tf2 0.36.23, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, tf2 0.45.10, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2), each image's default RMW. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-19-ros2-tf-repeated-data/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/99001">TF_REPEATED_DATA ignoring data with redundant timestamp for frame link_left_wheel</a>, <a href="https://robotics.stackexchange.com/questions/99446">Suppress TF_REPEATED_DATA warnings?</a>, <a href="https://robotics.stackexchange.com/questions/100262">TF_REPEATED_DATA warnings</a>, <a href="https://robotics.stackexchange.com/questions/99626">[ROS2] tf2 "authority undetectable" / "no authority available"</a>, <a href="https://robotics.stackexchange.com/questions/114915">How to solve "Warning: TF_OLD_DATA ignoring data from the past for frame"</a>, <a href="https://github.com/ros/geometry2/issues/467">New warning message for repeated transforms (ros/geometry2 467)</a>.</p>
