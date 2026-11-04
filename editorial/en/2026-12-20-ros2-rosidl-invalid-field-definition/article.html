@@ -1,0 +1,183 @@
+<pre><code>CMake Error at /opt/ros/humble/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:59 (message):
+  ...
+  Error with: v_no_name TwistAccel geometry_msgs/Twist
+  ...
+  rosidl_adapter.parser.InvalidFieldDefinition: geometry_msgs/Twist</code></pre>
+
+<p>The same build step also stops with <code>NameError: 'maxSpeed' is an invalid field name. It should have the pattern '^(?!.*__)(?!.*_$)[a-z][a-z0-9_]*$'</code>, with <code>InvalidResourceName</code>, or with <code>InvalidServiceSpecification: Could not find separator</code>. All of these come from one parser reading your <code>.msg</code>, <code>.srv</code> or <code>.action</code> file.</p>
+
+<p>Short answer: <code>InvalidFieldDefinition</code> means a line in your interface file has a type but no field name. Every line needs both, type first, then a name:</p>
+
+<pre><code># msg/TwistAccel.msg
+geometry_msgs/Twist twist
+geometry_msgs/Accel accel</code></pre>
+
+<p>Write the type as <code>geometry_msgs/Twist</code>, not <code>geometry_msgs/msg/Twist</code>. Use lowercase <code>snake_case</code> for field names, and use the ROS primitive names (<code>float64</code>, <code>int32</code>), not C names (<code>double</code>, <code>int</code>). If you use a type from another package, add <code>find_package(geometry_msgs REQUIRED)</code> and <code>DEPENDENCIES geometry_msgs</code> to <code>rosidl_generate_interfaces()</code>. With those changes the package built and imported on Humble, Jazzy and Lyrical.</p>
+
+<h2>Find your error</h2>
+
+<p>The last exception line in the colcon output names the mistake. Each row below gave the same text on all three distros. Every <code>rosidl_adapter</code> error stopped the build at CMake configure time, about 1.3 to 1.7 seconds after the build started, before anything was compiled.</p>
+
+<table>
+<thead><tr><th>Line in the interface file</th><th>Last exception line</th></tr></thead>
+<tbody>
+<tr><td><code>geometry_msgs/Twist</code> (type, no name)</td><td><code>rosidl_adapter.parser.InvalidFieldDefinition: geometry_msgs/Twist</code></td></tr>
+<tr><td><code>geometry_msgs/msg/Twist twist</code></td><td><code>rosidl_adapter.parser.InvalidResourceName: geometry_msgs/msg/Twist</code></td></tr>
+<tr><td><code>geometry_msgs/twist twist</code> (lowercase type)</td><td><code>InvalidResourceName: 'twist' is an invalid message name. It should have the pattern '^[A-Z][A-Za-z0-9]*$'</code></td></tr>
+<tr><td><code>float speed</code>, <code>int count</code>, <code>double speed</code></td><td><code>InvalidResourceName: 'float' is an invalid message name.</code> (or <code>'int'</code>, <code>'double'</code>)</td></tr>
+<tr><td><code>float64 Speed</code>, <code>maxSpeed</code>, <code>max__speed</code>, <code>speed_</code>, <code>2d_speed</code>, <code>max-speed</code></td><td><code>NameError: 'Speed' is an invalid field name. It should have the pattern '^(?!.*__)(?!.*_$)[a-z][a-z0-9_]*$'</code></td></tr>
+<tr><td><code>float64 [] values</code> (space before <code>[]</code>)</td><td><code>NameError: '[]' is an invalid field name.</code></td></tr>
+<tr><td><code>int32 count</code> twice</td><td><code>ValueError: the fields iterable contains duplicate names: count</code></td></tr>
+<tr><td><code>int32 max_count=10</code> (lowercase constant)</td><td><code>NameError: 'max_count' is an invalid constant name. It should have the pattern '^[A-Z]([A-Z0-9_]?[A-Z0-9]+)*$'</code></td></tr>
+<tr><td><code>int32 count 1.5</code> (default of the wrong type)</td><td><code>rosidl_adapter.parser.InvalidValue: value '1.5' can not be converted to type 'int32': must be a valid integer value &gt;= -2147483648 and &lt;= 2147483647</code></td></tr>
+<tr><td><code>.srv</code> with no <code>---</code>, or with <code>----</code></td><td><code>InvalidServiceSpecification: Could not find separator '---' between request and response</code></td></tr>
+<tr><td><code>.srv</code> with two <code>---</code> lines</td><td><code>InvalidServiceSpecification: Could not find unique separator '---' between request and response</code></td></tr>
+<tr><td><code>.action</code> with one <code>---</code></td><td><code>InvalidActionSpecification: Number of '---' separators nonconformant with action definition</code></td></tr>
+</tbody>
+</table>
+
+<p>Three mistakes got past the parser and failed later, during compilation. They show up as C or Python errors, not as <code>rosidl_adapter</code> errors:</p>
+
+<table>
+<thead><tr><th>Mistake</th><th>Humble</th><th>Jazzy and Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Field named <code>class</code></td><td><code>speed__struct.h:23:16: error: expected identifier before ‘;’ token</code></td><td>Same error at <code>speed__struct.h:25:16</code></td></tr>
+<tr><td>No <code>find_package(geometry_msgs REQUIRED)</code> and no <code>DEPENDENCIES</code></td><td><code>fatal error: geometry_msgs/msg/detail/twist__struct.h: No such file or directory</code></td><td><code>KeyError: 'geometry_msgs'</code> from <code>rosidl_generator_type_description</code></td></tr>
+<tr><td><code>find_package</code> present, <code>DEPENDENCIES geometry_msgs</code> left out</td><td>Same <code>No such file or directory</code></td><td>Same <code>KeyError: 'geometry_msgs'</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-05 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images on a 2 vCPU Ubuntu host. The script made 31 small <code>ament_cmake</code> interface packages. Each package held one <code>.msg</code>, <code>.srv</code> or <code>.action</code> file and called <code>rosidl_generate_interfaces()</code>. I built each package in its own workspace with <code>colcon build --parallel-workers 1</code> and kept the exit code, the build time and the error lines. Then I sourced the packages that built and checked them with <code>ros2 interface show</code> and a Python import. These inputs built on all three distros:</p>
+
+<table>
+<thead><tr><th>Input</th><th>Result</th><th>Build time (Humble / Jazzy / Lyrical)</th></tr></thead>
+<tbody>
+<tr><td><code>geometry_msgs/Twist twist</code> and <code>geometry_msgs/Accel accel</code>, with the dependency declared</td><td>built; Python import gave <code>Twist Accel</code></td><td>8.6 s / 10.8 s / 11.8 s</td></tr>
+<tr><td>Constants <code>int32 MAX_COUNT=10</code> and <code>string NAME="robot"</code></td><td>built; Python read <code>10 robot</code></td><td>8.7 s / 11.2 s / 12.1 s</td></tr>
+<tr><td>Defaults <code>int32 count 5</code>, <code>float64 speed 1.5</code>, <code>string label "hi"</code></td><td>built; a new message held <code>5 1.5 hi</code></td><td>8.9 s / 12.0 s / 12.1 s</td></tr>
+<tr><td>Full-line comment and inline <code># comment</code></td><td>built</td><td>8.7 s / 11.1 s / 12.0 s</td></tr>
+<tr><td>Tab between type and name</td><td>built; field <code>speed</code> of type <code>double</code></td><td>9.8 s / 11.0 s / 12.6 s</td></tr>
+<tr><td>Windows line endings (CRLF)</td><td>built; fields <code>{'speed': 'double', 'count': 'int32'}</code></td><td>8.6 s / 11.0 s / 11.6 s</td></tr>
+<tr><td>Field named <code>type</code></td><td>built; Python field <code>type</code> read <code>0.0</code></td><td>8.8 s / 10.7 s / 11.7 s</td></tr>
+<tr><td><code>.srv</code> with one <code>---</code></td><td>built</td><td>8.8 s / 12.1 s / 13.3 s</td></tr>
+</tbody>
+</table>
+
+<p>Every input in the first table failed on all three distros with the error shown there. The two missing-dependency inputs and the <code>class</code> field also failed on all three, in 2.4 to 5.6 seconds, with the errors in the second table.</p>
+
+<h2>InvalidFieldDefinition: the line has a type but no name</h2>
+
+<p>This is the <a href="https://stackoverflow.com/questions/71970577">Stack Overflow case</a>. The file had two lines, <code>geometry_msgs/Twist</code> and <code>geometry_msgs/Accel</code>, with no names after them. The parser splits each line into a type and a name. If there is only one token, it raises <code>InvalidFieldDefinition</code> and prints that line. The <code>Error with: v_no_name TwistAccel geometry_msgs/Twist</code> line above it gives the package, the message and the line.</p>
+
+<p>One answer there blamed missing dependencies. In my run, a missing dependency fails later and with a different error (see below), so <code>InvalidFieldDefinition</code> always means the file itself. The asker also tried <code>geometry_msgs/msg/Twist</code>. That doesn't help. Inside a <code>.msg</code> file the type is <code>package/Type</code>. The <code>/msg/</code> part belongs to the C++ include path and the Python import, not to the interface file. Even with a name added, <code>geometry_msgs/msg/Twist twist</code> failed with <code>InvalidResourceName: geometry_msgs/msg/Twist</code>.</p>
+
+<p>The fix is a name after each type: <code>geometry_msgs/Twist twist</code>. The interface docs (<a href="https://docs.ros.org/en/jazzy/Concepts/Basic/About-Interfaces.html">About ROS 2 interfaces</a>) say: "Each field consists of a type and a name, separated by a space".</p>
+
+<h2>"is an invalid field name": lowercase snake_case only</h2>
+
+<p>Field names must match <code>^(?!.*__)(?!.*_$)[a-z][a-z0-9_]*$</code>. In words, a name starts with a lowercase letter and then uses only lowercase letters, digits and underscores. It can't contain two underscores in a row, and it can't end with an underscore. All six names I tried that break one of these rules failed with the same <code>NameError</code>: <code>Speed</code>, <code>maxSpeed</code>, <code>max__speed</code>, <code>speed_</code>, <code>2d_speed</code> and <code>max-speed</code>. A ROS 1 message with <code>maxSpeed</code> needs <code>max_speed</code> when you port it.</p>
+
+<p>The same error appeared for <code>float64 [] values</code>. The space before <code>[]</code> made <code>[]</code> the second token, so the parser read it as the field name. Write <code>float64[] values</code>, with no space.</p>
+
+<p>Two fields with the same name gave <code>ValueError: the fields iterable contains duplicate names: count</code>. The message names the field but not the line, so search the file for that name.</p>
+
+<h2>"is an invalid message name" on a field line: the type is wrong</h2>
+
+<p>This one is easy to misread. <code>float speed</code> failed with <code>'float' is an invalid message name</code>, even though the file was named <code>Speed.msg</code>, which is valid. The parser didn't know <code>float</code> as a primitive. It treated it as the name of another message and then rejected it because message names must start with a capital letter. <code>int</code> and <code>double</code> failed the same way. Use <code>float32</code> or <code>float64</code>, and <code>int32</code> or <code>int64</code>. The full list of primitives is on the interfaces page linked above.</p>
+
+<p>A lowercase type from another package, <code>geometry_msgs/twist twist</code>, failed with the same error for <code>'twist'</code>. Type names keep their CamelCase form in the file, even though the generated C++ header is <code>twist.hpp</code>.</p>
+
+<p>When the error quotes a word that isn't your file name, look for that word as a type on one of your lines. Whether the file name itself is valid is a separate check. This post doesn't cover it.</p>
+
+<h2>Constants and default values</h2>
+
+<p>A constant is <code>type NAME=value</code>, and the name must be uppercase. It has to match <code>^[A-Z]([A-Z0-9_]?[A-Z0-9]+)*$</code>. <code>int32 max_count=10</code> failed with <code>'max_count' is an invalid constant name</code>, and <code>int32 MAX_COUNT=10</code> built. A default value has no <code>=</code>. It is a third token: <code>int32 count 5</code>. The value has to fit the type. <code>int32 count 1.5</code> failed with <code>InvalidValue: value '1.5' can not be converted to type 'int32'</code>. Above that line the log has two Python <code>ValueError: invalid literal for int()</code> lines. They are part of the same failure, not separate problems. String defaults in double quotes worked, and so did the string constant <code>NAME="robot"</code>.</p>
+
+<h2>Services and actions: the --- separators</h2>
+
+<p>A <code>.srv</code> file needs exactly one line that is exactly <code>---</code>, between the request and the response. With none I got <code>Could not find separator '---' between request and response</code>. That is the error in <a href="https://robotics.stackexchange.com/questions/102396">CMake Error could not find Seperator</a>. Four dashes (<code>----</code>) gave the same message, because the line has to match exactly. Two <code>---</code> lines gave <code>Could not find unique separator</code>.</p>
+
+<p>An <code>.action</code> file needs two separators, for goal, result and feedback. With one I got <code>InvalidActionSpecification: Number of '---' separators nonconformant with action definition</code>.</p>
+
+<h2>A field named class: the parser accepts it, the compiler doesn't</h2>
+
+<p><code>int32 class</code> matches the field-name pattern, so <code>rosidl_adapter</code> accepted it. The build then failed in the generated C header: <code>speed__struct.h:23:16: error: expected identifier before ‘;’ token</code> on Humble, and the same error at line 25 on Jazzy and Lyrical. More errors followed in the generated C and C++ code, such as <code>expected unqualified-id before ‘class’</code>. The <a href="https://robotics.stackexchange.com/questions/113929">reserved words question</a> hit the same thing with a field named <code>register</code>. Renaming the field fixed it there. The parser let <code>class</code> through, and only the compiler rejected it. In my run a field named <code>type</code> was fine, and Python read it as <code>m.type</code>. If you get compiler errors in a <code>__struct.h</code> file under <code>build/</code>, look at the field named on that line and rename it.</p>
+
+<h2>Missing dependency: a different error on each distro</h2>
+
+<p>When <code>geometry_msgs/Twist</code> was used without <code>find_package(geometry_msgs REQUIRED)</code> and <code>DEPENDENCIES geometry_msgs</code>, the parser had no complaint. On Humble the compiler then failed with <code>fatal error: geometry_msgs/msg/detail/twist__struct.h: No such file or directory</code>. On Jazzy and Lyrical it failed earlier, in the type description generator, with only <code>KeyError: 'geometry_msgs'</code>. Leaving out just <code>DEPENDENCIES geometry_msgs</code> gave the same results. <code>find_package</code> alone isn't enough. The fixed <code>CMakeLists.txt</code> part looked like this:</p>
+
+<pre><code>find_package(rosidl_default_generators REQUIRED)
+find_package(geometry_msgs REQUIRED)
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/TwistAccel.msg"
+  DEPENDENCIES geometry_msgs
+)</code></pre>
+
+<p>My <code>package.xml</code> had <code>&lt;depend&gt;geometry_msgs&lt;/depend&gt;</code>, <code>&lt;buildtool_depend&gt;rosidl_default_generators&lt;/buildtool_depend&gt;</code>, <code>&lt;exec_depend&gt;rosidl_default_runtime&lt;/exec_depend&gt;</code> and <code>&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;</code>. I didn't test those tags one at a time.</p>
+
+<h2>What did not cause errors</h2>
+
+<p>Three suspects turned out fine. Comments, both full-line and inline, built. A tab between type and name built. A file with Windows CRLF line endings built, and the field names came out clean (<code>speed</code>, <code>count</code>, no trailing <code>\r</code>). If your file came from Windows and fails, the line endings aren't the cause. Look for one of the errors above.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Error</th><th>Fix that built</th></tr></thead>
+<tbody>
+<tr><td><code>InvalidFieldDefinition</code></td><td>Add a field name after the type</td></tr>
+<tr><td><code>InvalidResourceName</code> for <code>pkg/msg/Type</code></td><td>Drop <code>/msg/</code>: <code>geometry_msgs/Twist</code></td></tr>
+<tr><td><code>'float' is an invalid message name</code></td><td>Use a ROS primitive: <code>float64</code>, <code>int32</code></td></tr>
+<tr><td><code>is an invalid field name</code></td><td>Lowercase snake_case, no <code>__</code>, no trailing <code>_</code>, no space before <code>[]</code></td></tr>
+<tr><td><code>is an invalid constant name</code></td><td>Uppercase constant name</td></tr>
+<tr><td><code>InvalidValue</code></td><td>A default that fits the type (<code>5</code>, not <code>1.5</code>, for <code>int32</code>)</td></tr>
+<tr><td><code>Could not find separator</code></td><td>One line that is exactly <code>---</code> in a <code>.srv</code>, two in an <code>.action</code></td></tr>
+<tr><td>Compiler error in <code>__struct.h</code></td><td>Rename a field that is a C or C++ keyword</td></tr>
+<tr><td><code>twist__struct.h: No such file</code> or <code>KeyError: 'geometry_msgs'</code></td><td><code>find_package</code> plus <code>DEPENDENCIES</code> in <code>rosidl_generate_interfaces()</code></td></tr>
+</tbody>
+</table>
+
+<p>Each of my test files had one mistake, and the error named that line or field. After each fix, build again with <code>colcon build --packages-select your_msgs</code>. In my run every parser error came back in under two seconds, so this loop is fast.</p>
+
+<p>If <code>rosidl_adapter</code> fails with a Python <code>AttributeError</code> about <code>em</code> instead, the cause is your Python environment, not the interface file. That case isn't covered here. For other ROS 2 build and runtime errors measured the same way, see the <a href="https://huntlab.app/en/">HuntLab English index</a>.</p>
+
+<h2>Version notes</h2>
+
+<p>All parser errors had the same text on Humble (<code>rosidl_adapter</code> 3.1.9), Jazzy (4.6.9) and Lyrical (5.2.1). Three things changed between distros. The CMake line is <code>rosidl_adapt_interfaces.cmake:59</code> on Humble and <code>:57</code> on Jazzy and Lyrical. On Lyrical (Python 3.14) the traceback also prints the source line of the message, for example <code>"'{}' is an invalid field name. It should have the pattern '{}'".format(</code>. Search for the line with your field name in it, not this template line. And a missing dependency fails with <code>No such file or directory</code> on Humble but <code>KeyError: 'geometry_msgs'</code> on Jazzy and Lyrical. Builds that succeeded took 8.6 to 9.8 seconds on Humble, 10.7 to 12.1 on Jazzy and 11.6 to 13.3 on Lyrical on this host.</p>
+
+<h2>Not tested</h2>
+
+<p>The message file name rules, <code>.idl</code> files, bounded strings and arrays (<code>string&lt;=10</code>, <code>int32[&lt;=5]</code>), a service with an empty request, keywords other than <code>class</code> and <code>type</code>, nested messages from the same package, <code>ament_cmake_python</code> packages that mix nodes and interfaces, <code>package.xml</code> tags one at a time, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does rosidl_adapter.parser.InvalidFieldDefinition mean?</h3>
+<p>A line in your <code>.msg</code> or <code>.srv</code> file has a type and no field name, for example <code>geometry_msgs/Twist</code> on its own. Add a name: <code>geometry_msgs/Twist twist</code>. The error prints the line it couldn't parse.</p>
+
+<h3>Why is my field name invalid in a ROS 2 message?</h3>
+<p>Field names must be lowercase snake_case: a lowercase first letter, then lowercase letters, digits and underscores, with no double underscore and no trailing underscore. <code>Speed</code>, <code>maxSpeed</code>, <code>max__speed</code>, <code>speed_</code>, <code>2d_speed</code> and <code>max-speed</code> all failed. <code>max_speed</code> works.</p>
+
+<h3>Why does float speed give "'float' is an invalid message name"?</h3>
+<p><code>float</code> isn't a ROS primitive, so the parser treated it as a message type and rejected the lowercase name. Use <code>float32</code> or <code>float64</code>. <code>int</code> and <code>double</code> failed the same way.</p>
+
+<h3>How do I fix "Could not find separator" in a .srv file?</h3>
+<p>Put one line containing exactly <code>---</code> between the request and response fields. Four dashes gave the same error. Two separator lines gave "Could not find unique separator". An <code>.action</code> file needs two separators.</p>
+
+<h3>Should I write geometry_msgs/msg/Twist in a .msg file?</h3>
+<p>No. Inside interface files the type is <code>geometry_msgs/Twist</code>. <code>geometry_msgs/msg/Twist twist</code> failed with <code>InvalidResourceName</code> on Humble, Jazzy and Lyrical. Declare the package with <code>find_package</code> and <code>DEPENDENCIES</code> in <code>rosidl_generate_interfaces()</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does rosidl_adapter.parser.InvalidFieldDefinition mean?", "acceptedAnswer": {"@type": "Answer", "text": "A line in your .msg or .srv file has a type and no field name, for example geometry_msgs/Twist on its own. Add a name: geometry_msgs/Twist twist. The error prints the line it couldn't parse."}},
+{"@type": "Question", "name": "Why is my field name invalid in a ROS 2 message?", "acceptedAnswer": {"@type": "Answer", "text": "Field names must be lowercase snake_case: a lowercase first letter, then lowercase letters, digits and underscores, with no double underscore and no trailing underscore. Speed, maxSpeed, max__speed, speed_, 2d_speed and max-speed all failed. max_speed works."}},
+{"@type": "Question", "name": "Why does float speed give 'float' is an invalid message name?", "acceptedAnswer": {"@type": "Answer", "text": "float isn't a ROS primitive, so the parser treated it as a message type and rejected the lowercase name. Use float32 or float64. int and double failed the same way."}},
+{"@type": "Question", "name": "How do I fix Could not find separator in a .srv file?", "acceptedAnswer": {"@type": "Answer", "text": "Put one line containing exactly --- between the request and response fields. Four dashes gave the same error. Two separator lines gave Could not find unique separator. An .action file needs two separators."}},
+{"@type": "Question", "name": "Should I write geometry_msgs/msg/Twist in a .msg file?", "acceptedAnswer": {"@type": "Answer", "text": "No. Inside interface files the type is geometry_msgs/Twist. geometry_msgs/msg/Twist twist failed with InvalidResourceName on Humble, Jazzy and Lyrical. Declare the package with find_package and DEPENDENCIES in rosidl_generate_interfaces()."}}
+]}
+</script>
+
+<p>Measured on 2026-11-05 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rosidl_adapter 3.1.9, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, Python 3.10.12, CMake 3.22.1), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rosidl_adapter 4.6.9, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, Python 3.12.3, CMake 3.28.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rosidl_adapter 5.2.1, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, Python 3.14.4, CMake 4.2.3). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-20-ros2-rosidl-invalid-field-definition/evidence">evidence folder</a>. Questions this answers: <a href="https://stackoverflow.com/questions/71970577">ROS2 Custom Messages Build Failed with InvalidFieldDefinition</a>, <a href="https://robotics.stackexchange.com/questions/102396">CMake Error could not find Seperator</a>, <a href="https://robotics.stackexchange.com/questions/113929">Is there a ROS 2 (Jazzy) interface definition reserved words list?</a>, <a href="https://robotics.stackexchange.com/questions/93265">Building Custom Message on Dashing Fails</a>.</p>
