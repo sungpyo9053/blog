@@ -1,0 +1,154 @@
+=== distro=lyrical
+ros-lyrical-message-filters 7.4.2-1resolute.20260915.064044
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+message_filters.py /opt/ros/lyrical/lib/python3.14/site-packages/message_filters/__init__.py
+SIG Subscriber (self, node: rclpy.node.Node, msg_type: Type[~MsgT], topic: str, qos_profile: rclpy.qos.QoSProfile | int = <rclpy.qos.QoSProfile object at 0x734fff7b9e00>, *, callback_group: rclpy.callback_groups.CallbackGroup | None = None, event_callbacks: rclpy.event_handler.SubscriptionEventCallbacks | None = None, qos_overriding_options: rclpy.qos_overriding_options.QoSOverridingOptions | None = None, raw: bool = False, content_filter_options: rclpy.subscription_content_filter_options.ContentFilterOptions | None = None) -> None
+SIG TimeSynchronizer (self, fs, queue_size)
+SIG ApproximateTimeSynchronizer (self, fs, queue_size, slop, queue_offset=False, allow_headerless=False, sync_arrival_time=False)
+=== BUILD probe_h_include rc=2
+/ws/src/probe_h_include/src/node.cpp:3:10: fatal error: message_filters/subscriber.h: No such file or directory
+=== BUILD probe_ts_queue_last rc=2
+/ws/src/probe_ts_queue_last/src/node.cpp:7:53: error: no matching function for call to ‘message_filters::TimeSynchronizer<geometry_msgs::msg::PointStamped_<std::allocator<void> >, geometry_msgs::msg::PointStamped_<std::allocator<void> > >::TimeSynchronizer(message_filters::Subscriber<geometry_msgs::msg::PointStamped_<std::allocator<void> > >&, message_filters::Subscriber<geometry_msgs::msg::PointStamped_<std::allocator<void> > >&, int)’
+=== BUILD probe_ts_queue_first rc=0
+=== BUILD probe_lambda_cb rc=0
+=== BUILD probe_rmw_qos rc=2
+/ws/src/probe_rmw_qos/src/node.cpp:6:14: error: no matching function for call to ‘message_filters::Subscriber<geometry_msgs::msg::PointStamped_<std::allocator<void> > >::subscribe(std::__shared_ptr<rclcpp::Node, __gnu_cxx::_S_atomic>::element_type*, const char [2], const rmw_qos_profile_t&)’
+=== BUILD probe_rclcpp_qos rc=0
+=== BUILD probe_no_qos rc=2
+/ws/src/probe_no_qos/src/node.cpp:6:14: error: no matching function for call to ‘message_filters::Subscriber<geometry_msgs::msg::PointStamped_<std::allocator<void> > >::subscribe(std::__shared_ptr<rclcpp::Node, __gnu_cxx::_S_atomic>::element_type*, const char [2])’
+=== BUILD sync_cpp rc=0
+not found: "/ws/install/probe_h_include/share/probe_h_include/local_setup.bash"
+not found: "/ws/install/probe_no_qos/share/probe_no_qos/local_setup.bash"
+not found: "/ws/install/probe_rmw_qos/share/probe_rmw_qos/local_setup.bash"
+not found: "/ws/install/probe_ts_queue_last/share/probe_ts_queue_last/local_setup.bash"
+=== CASE P1_exact_same_stamp | sub: python3 /sub.py kind=exact | pub: 
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.0
+=== CASE P2_exact_offset_1ms | sub: python3 /sub.py kind=exact | pub: offset_ms=1
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=0 first_sync_s=None
+=== CASE P3_exact_two_now_calls | sub: python3 /sub.py kind=exact | pub: separate=1
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=0 first_sync_s=None
+=== CASE P4_approx_slop0.1_off1ms | sub: python3 /sub.py kind=approx slop=0.1 | pub: offset_ms=1
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.11
+=== CASE P5_approx_slop0.1_off50 | sub: python3 /sub.py kind=approx slop=0.1 | pub: offset_ms=50
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.11
+=== CASE P6_approx_slop0.01_off50 | sub: python3 /sub.py kind=approx slop=0.01 | pub: offset_ms=50
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=0 first_sync_s=None
+=== CASE P7_approx_two_now_calls | sub: python3 /sub.py kind=approx slop=0.01 | pub: separate=1
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.06
+=== CASE P8_besteffort_pub_default | sub: python3 /sub.py kind=exact | pub: qos=best_effort
+exit=0
+      1 [WARN] [t] [sync_py]: New publisher discovered on topic 'a', offering incompatible QoS. No messages will be received from it. Last incompatible policy: RELIABILITY
+      1 [WARN] [t] [sync_py]: New publisher discovered on topic 'b', offering incompatible QoS. No messages will be received from it. Last incompatible policy: RELIABILITY
+warn_lines=2
+RESULT py a=0 b=0 sync=0 first_sync_s=None
+=== CASE P9_besteffort_pub_sensor | sub: python3 /sub.py kind=exact qos=sensor | pub: qos=best_effort
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.11
+=== CASE P10_reliable_pub_sensor | sub: python3 /sub.py kind=exact qos=sensor | pub: 
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.11
+=== CASE P11_approx_b_stamp_zero | sub: python3 /sub.py kind=approx slop=0.1 | pub: zero_b=1
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=0 first_sync_s=None
+=== CASE P12_approx_lag500_q1 | sub: python3 /sub.py kind=approx slop=0.1 queue=1 | pub: offset_ms=-500
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=0 first_sync_s=None
+=== CASE P13_approx_lag500_q3 | sub: python3 /sub.py kind=approx slop=0.1 queue=3 | pub: offset_ms=-500
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=0 first_sync_s=None
+=== CASE P14_approx_lag500_q10 | sub: python3 /sub.py kind=approx slop=0.1 queue=10 | pub: offset_ms=-500
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=45 first_sync_s=1.61
+=== CASE P15_approx_rates_10_1 | sub: python3 /sub.py kind=approx slop=0.1 | pub: rate_a=10 rate_b=1
+exit=0
+warn_lines=0
+RESULT py a=50 b=4 sync=4 first_sync_s=1.97
+=== CASE P16_exact_rates_10_1 | sub: python3 /sub.py kind=exact | pub: rate_a=10 rate_b=1
+exit=0
+warn_lines=0
+RESULT py a=50 b=4 sync=0 first_sync_s=None
+=== CASE P17_headerless_default | sub: python3 /sub.py kind=approx slop=0.1 type=string | pub: type=string
+exit=0
+    100 [WARN] [t] [message_filters_approx]: can not use message filters messages without timestamp infomation when "allow_headerless" is disabled. auto assign ROSTIME to headerless messages once enabling constructor option of "allow_headerless".
+warn_lines=100
+RESULT py a=50 b=50 sync=0 first_sync_s=None
+=== CASE P18_headerless_allowed | sub: python3 /sub.py kind=approx slop=0.1 type=string headerless=1 | pub: type=string
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.1
+=== CASE P19_sync_not_stored | sub: python3 /sub.py kind=exact store=0 | pub: 
+exit=0
+warn_lines=0
+RESULT py a=50 b=50 sync=50 first_sync_s=1.11
+=== CASE C1_exact_same_stamp | sub: ros2 run sync_cpp node exact default member | pub: 
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=50 first_sync_s=1.15
+=== CASE C2_exact_offset_1ms | sub: ros2 run sync_cpp node exact default member | pub: offset_ms=1
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=0 first_sync_s=-1.00
+=== CASE C3_approx_off50 | sub: ros2 run sync_cpp node approx default member | pub: offset_ms=50
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=49 first_sync_s=1.25
+=== CASE C4_approx_off900 | sub: ros2 run sync_cpp node approx default member | pub: offset_ms=900
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=41 first_sync_s=2.07
+=== CASE C5_approx_b_stamp_zero | sub: ros2 run sync_cpp node approx default member | pub: zero_b=1
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=0 first_sync_s=-1.00
+=== CASE C6_besteffort_pub_default | sub: ros2 run sync_cpp node exact default member | pub: qos=best_effort
+exit=0
+      1 [WARN] [t] [sync_cpp]: New publisher discovered on topic '/a', offering incompatible QoS. No messages will be sent to it. Last incompatible policy: RELIABILITY_QOS_POLICY
+      1 [WARN] [t] [sync_cpp]: New publisher discovered on topic '/b', offering incompatible QoS. No messages will be sent to it. Last incompatible policy: RELIABILITY_QOS_POLICY
+warn_lines=2
+RESULT cpp a=0 b=0 sync=0 first_sync_s=-1.00
+=== CASE C7_besteffort_pub_sensor | sub: ros2 run sync_cpp node exact sensor member | pub: qos=best_effort
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=50 first_sync_s=1.16
+=== CASE C8_sync_local | sub: ros2 run sync_cpp node exact default localsync | pub: 
+exit=0
+      1 [INFO] [t] [sync_cpp]: synchronizer was a local in the constructor
+warn_lines=0
+RESULT cpp a=50 b=50 sync=0 first_sync_s=-1.00
+=== CASE C9_subscribers_local | sub: ros2 run sync_cpp node exact default localsubs | pub: 
+exit=124
+      1 [INFO] [t] [sync_cpp]: subscribers were locals in the constructor
+warn_lines=0
+RESULT cpp a=0 b=0 sync=0 first_sync_s=-1.00
+=== CASE C10_approx_lag500_q1 | sub: ros2 run sync_cpp node approx default member 1 | pub: offset_ms=-500
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=0 first_sync_s=-1.00
+=== CASE C11_approx_lag500_q10 | sub: ros2 run sync_cpp node approx default member 10 | pub: offset_ms=-500
+exit=0
+warn_lines=0
+RESULT cpp a=50 b=50 sync=44 first_sync_s=1.76
+=== done lyrical

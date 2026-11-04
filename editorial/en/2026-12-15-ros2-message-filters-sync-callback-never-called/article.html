@@ -1,0 +1,186 @@
+<pre><code>import message_filters
+sa = message_filters.Subscriber(node, PointStamped, 'a')
+sb = message_filters.Subscriber(node, PointStamped, 'b')
+ts = message_filters.TimeSynchronizer([sa, sb], 10)
+ts.registerCallback(callback)   # never called, no error printed</code></pre>
+
+<p>Most of the time a message_filters synchronizer that never fires prints nothing. In two of the cases I measured you get one of these instead:</p>
+
+<pre><code>[WARN] [sync_py]: New publisher discovered on topic 'a', offering incompatible QoS. No messages will be received from it. Last incompatible policy: RELIABILITY
+
+[WARN] [message_filters_approx]: can not use message filters for messages without timestamp infomation when 'allow_headerless' is disabled. auto assign ROSTIME to headerless messages once enabling constructor option of 'allow_headerless'.</code></pre>
+
+<p>Short answer: check three things in this order. First, does each input <code>Subscriber</code> get messages at all? Register a plain callback on each one. If the count is 0, it's QoS: pass the publisher's QoS to the message_filters <code>Subscriber</code>. Second, if both inputs get messages, compare the <code>header.stamp</code> values. <code>TimeSynchronizer</code> needs stamps that are equal to the nanosecond. If yours differ even by 1 ms, use <code>ApproximateTimeSynchronizer</code> with a <code>slop</code> larger than the real gap. Third, if one topic lags the other, make <code>queue_size</code> bigger than lag times rate. This Python setup fired on every message in my runs, on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-python">from rclpy.qos import qos_profile_sensor_data
+sa = message_filters.Subscriber(node, PointStamped, 'a', qos_profile=qos_profile_sensor_data)
+sb = message_filters.Subscriber(node, PointStamped, 'b', qos_profile=qos_profile_sensor_data)
+ts = message_filters.ApproximateTimeSynchronizer([sa, sb], queue_size=10, slop=0.1)
+ts.registerCallback(callback)</code></pre>
+
+<p>In C++, also keep the <code>Subscriber</code> objects and the synchronizer as class members. A synchronizer created as a local variable in the constructor got 0 callbacks, and local subscribers crashed the node on Humble.</p>
+
+<h2>Find your cause</h2>
+
+<p>Each case ran for 5 seconds with a 10 Hz publisher on two topics, so 50 messages per topic. "a / b" is how many messages each input <code>Subscriber</code> received. "sync" is how many times the synchronized callback ran. Python and C++ gave the same counts on all three distros unless the row says otherwise.</p>
+
+<table>
+<thead><tr><th>Setup</th><th>a / b</th><th>sync</th><th>What you see</th></tr></thead>
+<tbody>
+<tr><td>Exact sync, both stamps identical</td><td>50 / 50</td><td>50</td><td>works</td></tr>
+<tr><td>Exact sync, stamp of b 1 ms later</td><td>50 / 50</td><td>0</td><td>nothing</td></tr>
+<tr><td>Exact sync, each message stamped with its own <code>now()</code> call</td><td>50 / 50</td><td>0</td><td>nothing</td></tr>
+<tr><td>Approximate, slop 0.01 s, stamps 50 ms apart</td><td>50 / 50</td><td>0</td><td>nothing (Python)</td></tr>
+<tr><td>Publisher best effort, message_filters subscriber left at default QoS</td><td>0 / 0</td><td>0</td><td>one "incompatible QoS" warning per topic</td></tr>
+<tr><td>Stamp of b left at zero, approximate sync</td><td>50 / 50</td><td>0</td><td>nothing</td></tr>
+<tr><td>b stamped 500 ms in the past, queue_size 1 or 3</td><td>50 / 50</td><td>0</td><td>nothing</td></tr>
+<tr><td>Message type with no header (<code>std_msgs/String</code>), Python approximate</td><td>50 / 50</td><td>0</td><td>100 <code>allow_headerless</code> warnings</td></tr>
+<tr><td>a at 10 Hz, b at 1 Hz, exact sync</td><td>50 / 4</td><td>0</td><td>nothing</td></tr>
+<tr><td>C++: synchronizer is a local variable in the constructor</td><td>50 / 50</td><td>0</td><td>nothing</td></tr>
+<tr><td>C++: Subscribers are local variables in the constructor</td><td>0 / 0</td><td>0</td><td>Humble: <code>Segmentation fault</code>. Jazzy: nothing. Lyrical: nothing, and the process didn't exit</td></tr>
+</tbody>
+</table>
+
+<p>And the setups that worked:</p>
+
+<table>
+<thead><tr><th>Setup</th><th>a / b</th><th>sync</th></tr></thead>
+<tbody>
+<tr><td>Approximate, slop 0.1 s, stamps 1 ms or 50 ms apart (Python)</td><td>50 / 50</td><td>50</td></tr>
+<tr><td>Approximate, slop 0.01 s, each message stamped with its own <code>now()</code> call (Python)</td><td>50 / 50</td><td>50</td></tr>
+<tr><td>Best-effort publisher, subscriber given <code>qos_profile_sensor_data</code></td><td>50 / 50</td><td>50</td></tr>
+<tr><td>Reliable publisher, subscriber given <code>qos_profile_sensor_data</code> (Python)</td><td>50 / 50</td><td>50</td></tr>
+<tr><td>b stamped 500 ms in the past, queue_size 10</td><td>50 / 50</td><td>45 (Python), 44 or 45 (C++)</td></tr>
+<tr><td>a at 10 Hz, b at 1 Hz, approximate, slop 0.1 s (Python)</td><td>50 / 4</td><td>4</td></tr>
+<tr><td>No header, <code>allow_headerless=True</code> (Python)</td><td>50 / 50</td><td>50</td></tr>
+<tr><td>Python: synchronizer not kept on <code>self</code> (deleted after <code>registerCallback</code>)</td><td>50 / 50</td><td>50</td></tr>
+<tr><td>C++ ApproximateTime policy, stamps 50 ms apart</td><td>50 / 50</td><td>49</td></tr>
+<tr><td>C++ ApproximateTime policy, stamps 900 ms apart</td><td>50 / 50</td><td>41</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-04 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another, with the default RMW (Fast DDS). A Python publisher sent <code>geometry_msgs/PointStamped</code> on <code>/a</code> and <code>/b</code> at 10 Hz for 5 seconds. Its arguments set the stamp offset of <code>/b</code>, the QoS, the two rates, a zero stamp, or a header-less <code>std_msgs/String</code>. Two subscribers ran against it, one in rclpy and one in rclcpp. Each started 1 second before the publisher and ran for 7 seconds. Each counted the raw messages on both inputs and the synchronized callbacks. The script ran 19 Python cases and 11 C++ cases per distro. It also built eight small C++ packages that only check whether a given API call compiles. The script, <code>repro.sh</code>, is in the evidence folder.</p>
+
+<h2>Exact time means the same nanosecond</h2>
+
+<p><code>TimeSynchronizer</code> uses the ExactTime policy. It only pairs messages whose <code>header.stamp</code> values are equal. A 1 ms difference gave 0 callbacks, and so did the common pattern of stamping each message with its own <code>get_clock().now()</code> call in the same timer callback. Those two calls are microseconds apart, which is enough. Nothing warns you. Both input subscribers kept counting up to 50 while the synchronized count stayed at 0.</p>
+
+<p>Exact sync only fits when both messages get their stamp from one source. The stereo pair from one driver or an image with its <code>camera_info</code> are examples. If the stamps come from two sensors or two <code>now()</code> calls, switch to <code>ApproximateTimeSynchronizer</code>. If you control the publisher, the other fix is to read the clock once and copy the stamp into both messages. That's the case that gave 50 out of 50 above.</p>
+
+<h2>slop is a hard limit in Python, and C++ has none by default</h2>
+
+<p>In rclpy, <code>ApproximateTimeSynchronizer(fs, queue_size, slop)</code> drops any set whose stamps are further apart than <code>slop</code> seconds. With stamps 50 ms apart, <code>slop=0.1</code> gave 50 callbacks and <code>slop=0.01</code> gave 0. Two separate <code>now()</code> calls were close enough for <code>slop=0.01</code>, which gave 50. Set slop above the real gap between your sensors and below the period of the fastest topic, so each message can only pair with one partner.</p>
+
+<p>The C++ <code>sync_policies::ApproximateTime</code> constructor takes only a queue size. In my runs it paired messages 50 ms apart (49 callbacks) and also messages 900 ms apart (41 callbacks) on all three distros. So in C++ the usual problem isn't a missed pair. You may get pairs that are too far apart. The policy has a <code>setMaxIntervalDuration()</code> call for a hard limit, but I didn't test it.</p>
+
+<p>Both languages gave 0 callbacks when one topic left <code>header.stamp</code> at zero, and neither printed a warning. If one of your drivers doesn't fill in the stamp, approximate sync can't fix that. Fill in the stamp at the source.</p>
+
+<h2>QoS: the input Subscriber has its own QoS</h2>
+
+<p>A <code>message_filters.Subscriber</code> creates a normal subscription. In Python its default is <code>QoSProfile(depth=10)</code>, which is reliable. In my run, a best-effort publisher, which is what most sensor drivers use, was rejected before message_filters saw anything. Both inputs counted 0 messages, and the only sign was one "incompatible QoS" warning per topic at startup. Passing <code>qos_profile=qos_profile_sensor_data</code> fixed it (50 / 50 / 50). A best-effort subscriber also received from a reliable publisher in my run, so the sensor profile is the safer choice when you don't know the publisher's QoS. Run <code>ros2 topic info -v /your_topic</code> to see what the publisher offers.</p>
+
+<p>C++ gave the same 0 / 0 / 0 result with a warning ending in <code>RELIABILITY_QOS_POLICY</code>. Which QoS type the C++ API takes depends on the distro:</p>
+
+<table>
+<thead><tr><th>Code</th><th>Humble (4.3.20)</th><th>Jazzy (4.11.17)</th><th>Lyrical (7.4.2)</th></tr></thead>
+<tbody>
+<tr><td><code>sub.subscribe(node, "a", rmw_qos_profile_sensor_data)</code></td><td>builds</td><td>builds</td><td><code>error: no matching function for call to ... subscribe(..., const rmw_qos_profile_t&amp;)</code></td></tr>
+<tr><td><code>sub.subscribe(node, "a", rclcpp::SensorDataQoS())</code></td><td><code>error: no matching function for call to ... subscribe(..., rclcpp::SensorDataQoS)</code></td><td>same error</td><td>builds</td></tr>
+<tr><td><code>sub.subscribe(node, "a")</code> (no QoS)</td><td>builds</td><td>builds</td><td><code>error: no matching function for call to ... subscribe(..., const char [2])</code></td></tr>
+</tbody>
+</table>
+
+<p>So on Humble and Jazzy you pass an <code>rmw_qos_profile_t</code>, and on Lyrical you pass an <code>rclcpp::QoS</code>, which is now required. My test node built on all three with a compile-time switch. The <code>.h</code> headers are missing on Lyrical, which makes them a usable marker:</p>
+
+<pre><code class="language-cpp">#if __has_include(&lt;message_filters/subscriber.h&gt;)   // Humble, Jazzy
+  sub_a_.subscribe(this, "a", rmw_qos_profile_sensor_data);
+#else                                                 // Lyrical
+  sub_a_.subscribe(this, "a", rclcpp::SensorDataQoS());
+#endif</code></pre>
+
+<h2>queue_size has to cover the lag</h2>
+
+<p>When one topic arrives late, for example a processed point cloud stamped with the time its scan started, the synchronizer has to keep the other topic's messages until the late one shows up. I stamped <code>/b</code> 500 ms in the past at 10 Hz, so the matching <code>/a</code> message was 5 messages back. With <code>slop=0.1</code>, queue sizes 1 and 3 gave 0 callbacks in Python. Queue size 10 gave 45, and the first callback came about 0.5 s later than in the no-lag cases. The C++ ApproximateTime policy behaved the same way: 0 with queue 1, 44 or 45 with queue 10.</p>
+
+<p>The rule from this run is simple: queue_size has to be more than lag times rate. Here that's 0.5 s × 10 Hz = 5. When the rates differ, the synchronizer can't fire faster than the slowest topic. With <code>/a</code> at 10 Hz and <code>/b</code> at 1 Hz, approximate sync gave 4 callbacks for the 4 <code>/b</code> messages received, and exact sync gave 0.</p>
+
+<h2>Messages without a header</h2>
+
+<p>Python's <code>ApproximateTimeSynchronizer</code> printed one warning per message for <code>std_msgs/String</code>, 100 in total, and never fired. With <code>allow_headerless=True</code> it gave 50 callbacks, pairing by arrival time. That's only useful when the arrival time is a good enough timestamp. Note the typo "infomation" if you search for this warning. Lyrical also changed the quoting from <code>'allow_headerless'</code> to <code>"allow_headerless"</code>. I didn't test header-less types in C++.</p>
+
+<h2>C++: object lifetime and the callback form</h2>
+
+<p>This is the answer to the C++ questions where the callback is "never called" or "stops after a while". A <code>TimeSynchronizer</code> declared as a local variable in the node constructor connected to the inputs and was destroyed when the constructor returned. Both inputs still received 50 messages, but the synchronized callback ran 0 times and nothing was logged. Making the <code>message_filters::Subscriber</code> objects locals was worse. Humble ended with <code>[ros2run]: Segmentation fault</code> (exit code 245). Jazzy received nothing and exited normally. Lyrical received nothing, printed its result, and was still running when my 20-second <code>timeout</code> killed it (exit 124). Keep the subscribers as members and the synchronizer as a member or a <code>std::shared_ptr</code> member.</p>
+
+<p>In Python, deleting the synchronizer object after <code>registerCallback</code> made no difference: 50 out of 50. The input subscribers hold a reference to it. Storing it on <code>self</code> is still the clean way to write it.</p>
+
+<p>The callback form matters too. On Humble and Jazzy, <code>sync.registerCallback([](const P::ConstSharedPtr &amp;, const P::ConstSharedPtr &amp;) {...})</code> with a lambda did not compile. The error was long, from <code>signal9.h</code>: <code>no matching function for call to ... addCallback</code>, then <code>wrong number of template arguments (9, should be 1)</code>. On Humble it starts with <code>forming pointer to reference type</code>. The member function form, <code>sync-&gt;registerCallback(&amp;MyNode::callback, this)</code>, built and ran on all three distros. On Lyrical, the lambda form built too.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Problem</th><th>Fix that worked</th><th>Measured result</th></tr></thead>
+<tbody>
+<tr><td>Inputs receive 0, QoS warning</td><td>Pass <code>qos_profile_sensor_data</code> (Python), <code>rmw_qos_profile_sensor_data</code> (C++ Humble/Jazzy) or <code>rclcpp::SensorDataQoS()</code> (C++ Lyrical)</td><td>0 → 50</td></tr>
+<tr><td>Stamps differ slightly, exact sync</td><td>Copy one stamp into both messages</td><td>0 → 50</td></tr>
+<tr><td>Stamps differ slightly, exact sync</td><td><code>ApproximateTimeSynchronizer</code>, slop 0.1 s (Python)</td><td>0 → 50</td></tr>
+<tr><td>Slop smaller than the gap (Python)</td><td>Raise slop from 0.01 to 0.1 s for a 50 ms gap</td><td>0 → 50</td></tr>
+<tr><td>One topic lags 500 ms at 10 Hz</td><td>queue_size 10 instead of 1 or 3</td><td>0 → 44 or 45</td></tr>
+<tr><td>Message type has no header (Python)</td><td><code>allow_headerless=True</code></td><td>0 → 50</td></tr>
+<tr><td>C++ synchronizer created as a local</td><td>Make it a member</td><td>0 → 50</td></tr>
+<tr><td>Stamp left at zero</td><td>None in the subscriber. Fill in the stamp at the publisher.</td><td>0 in every variant I ran</td></tr>
+</tbody>
+</table>
+
+<p>If your synchronized callback runs but the pairs are odd, check the stamps' clocks. A related post covers <a href="https://huntlab.app/en/ros2-message-filter-dropping-message-clock-mismatch/">tf2's "Message Filter dropping message" and mismatched clocks</a>. That's a different filter, but stamps from the wrong clock break it in the same way.</p>
+
+<h2>Version notes</h2>
+
+<p>The Python counts were the same on Humble, Jazzy and Lyrical. The only difference was one lost <code>/b</code> message in the Humble header-less run (50 / 49). The Python API grew on Lyrical. <code>ApproximateTimeSynchronizer</code> takes <code>queue_offset=False</code> and <code>sync_arrival_time=False</code> after <code>allow_headerless</code>, and <code>Subscriber</code> takes keyword-only <code>callback_group</code>, <code>event_callbacks</code> and <code>qos_overriding_options</code>. On Humble and Jazzy, <code>Subscriber</code> takes <code>**kwargs</code> that it passes on to <code>create_subscription</code>. I didn't test any of these new arguments.</p>
+
+<p>The C++ API changed a lot on Lyrical (message_filters 7.4.2):</p>
+
+<ul>
+<li>The <code>.h</code> headers are gone. <code>#include &lt;message_filters/subscriber.h&gt;</code> gives <code>fatal error: message_filters/subscriber.h: No such file or directory</code>. Humble and Jazzy ship both <code>.h</code> and <code>.hpp</code>, and the <code>.h</code> include built without a warning on both. Use <code>.hpp</code> everywhere.</li>
+<li>The <code>TimeSynchronizer</code> queue size moved to the front. <code>TimeSynchronizer&lt;A, B&gt; s(sub_a, sub_b, 10)</code> builds on Humble and Jazzy and fails on Lyrical with <code>no matching function for call to ... TimeSynchronizer(... Subscriber&amp;, ... Subscriber&amp;, int)</code>. <code>s(10, sub_a, sub_b)</code> is the reverse: it builds only on Lyrical.</li>
+<li><code>subscribe()</code> takes <code>rclcpp::QoS</code> and no longer has a default QoS, as in the table above.</li>
+</ul>
+
+<p>The runtime behavior of the C++ policies was the same on all three: exact 50 and 0, approximate 49 and 41, and queue 1 vs 10 gave 0 vs 44 or 45.</p>
+
+<h2>Not tested</h2>
+
+<p><code>ApproximateTime::setMaxIntervalDuration()</code>, the Lyrical-only <code>queue_offset</code> and <code>sync_arrival_time</code> arguments, <code>TimeSequencer</code>, <code>Cache</code>, three or more inputs, image topics through <code>image_transport</code> subscribers, <code>use_sim_time</code> and bag playback, multi-threaded executors and callback groups, Cyclone DDS and Zenoh, header-less types in C++, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why is my message_filters TimeSynchronizer callback never called?</h3>
+<p>In my runs there were three causes. The stamps weren't exactly equal (even 1 ms apart gave 0 callbacks), the input subscribers got no messages because of a QoS mismatch, or, in C++, the synchronizer was a local variable that went out of scope. Count messages on each input first to tell these apart.</p>
+
+<h3>How do I set QoS for a message_filters Subscriber in ROS 2?</h3>
+<p>Python: <code>message_filters.Subscriber(node, Msg, 'topic', qos_profile=qos_profile_sensor_data)</code>. C++ on Humble and Jazzy: <code>sub.subscribe(this, "topic", rmw_qos_profile_sensor_data)</code>. C++ on Lyrical: <code>sub.subscribe(this, "topic", rclcpp::SensorDataQoS())</code>. Passing the other type is a compile error on each distro.</p>
+
+<h3>What slop should I use for ApproximateTimeSynchronizer?</h3>
+<p>Larger than the real gap between your stamps and smaller than the period of the fastest topic. With stamps 50 ms apart, slop 0.1 gave 50 callbacks and slop 0.01 gave 0. The C++ ApproximateTime policy has no slop argument and paired stamps 900 ms apart.</p>
+
+<h3>How big should queue_size be?</h3>
+<p>More than the lag between the topics times the message rate. With one topic 500 ms behind at 10 Hz, queue sizes 1 and 3 gave 0 callbacks and 10 gave 44 or 45.</p>
+
+<h3>Why does my C++ message_filters code not compile on ROS 2 Lyrical?</h3>
+<p>Lyrical's message_filters 7.4.2 removed the .h headers, moved the TimeSynchronizer queue size to the first argument, and takes rclcpp::QoS in subscribe() with no default. Use the .hpp headers, write TimeSynchronizer(10, sub_a, sub_b), and pass a QoS object.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why is my message_filters TimeSynchronizer callback never called?", "acceptedAnswer": {"@type": "Answer", "text": "In my runs there were three causes. The stamps weren't exactly equal (even 1 ms apart gave 0 callbacks), the input subscribers got no messages because of a QoS mismatch, or, in C++, the synchronizer was a local variable that went out of scope. Count messages on each input first to tell these apart."}},
+{"@type": "Question", "name": "How do I set QoS for a message_filters Subscriber in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "Python: message_filters.Subscriber(node, Msg, 'topic', qos_profile=qos_profile_sensor_data). C++ on Humble and Jazzy: sub.subscribe(this, topic, rmw_qos_profile_sensor_data). C++ on Lyrical: sub.subscribe(this, topic, rclcpp::SensorDataQoS()). Passing the other type is a compile error on each distro."}},
+{"@type": "Question", "name": "What slop should I use for ApproximateTimeSynchronizer?", "acceptedAnswer": {"@type": "Answer", "text": "Larger than the real gap between your stamps and smaller than the period of the fastest topic. With stamps 50 ms apart, slop 0.1 gave 50 callbacks and slop 0.01 gave 0. The C++ ApproximateTime policy has no slop argument and paired stamps 900 ms apart."}},
+{"@type": "Question", "name": "How big should queue_size be?", "acceptedAnswer": {"@type": "Answer", "text": "More than the lag between the topics times the message rate. With one topic 500 ms behind at 10 Hz, queue sizes 1 and 3 gave 0 callbacks and 10 gave 44 or 45."}},
+{"@type": "Question", "name": "Why does my C++ message_filters code not compile on ROS 2 Lyrical?", "acceptedAnswer": {"@type": "Answer", "text": "Lyrical's message_filters 7.4.2 removed the .h headers, moved the TimeSynchronizer queue size to the first argument, and takes rclcpp::QoS in subscribe() with no default. Use the .hpp headers, write TimeSynchronizer(10, sub_a, sub_b), and pass a QoS object."}}
+]}
+</script>
+
+<p>Measured on 2026-11-04 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, message_filters 4.3.20, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, message_filters 4.11.17, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, message_filters 7.4.2, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS), on a 2 vCPU Linux host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-15-ros2-message-filters-sync-callback-never-called/evidence">evidence folder</a>. Questions this answers: <a href="https://stackoverflow.com/questions/76786102">How to use QoS in Subscriber with message_filters in ROS2 and C++?</a>, <a href="https://robotics.stackexchange.com/questions/103702">ROS2: How to synchronize two topics with message_filters and a defined QoS</a>, <a href="https://robotics.stackexchange.com/questions/97695">ROS 2 message_filters TimeSynchronizer minimal example does not reach callback function</a>, <a href="https://stackoverflow.com/questions/62267850">Approximate Time Synchronizer callback not working in node member class (sync goes out of scope)</a>, <a href="https://stackoverflow.com/questions/54792606">message_filters doesn't call the callback function</a>, <a href="https://github.com/ros2/message_filters/issues/36">callback is not executed with message filters</a>.</p>
