@@ -1,0 +1,217 @@
+=== distro=jazzy
+dpkg-query: no packages found matching ros-jazzy-cv-bridge
+ros-jazzy-ament-cmake 2.5.6-2noble.20260225.222913
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-rmw 7.3.4-1noble.20260911.050254
+ros-jazzy-ros2cli 0.32.13-1noble.20261006.033947
+ros-jazzy-tf2 0.36.23-1noble.20260915.172312
+ros-jazzy-tf2-eigen 0.36.23-1noble.20260915.174549
+ros-jazzy-tf2-geometry-msgs 0.36.23-1noble.20260915.174516
+ros-jazzy-tf2-ros 0.36.23-1noble.20260915.173839
+cmake version 3.28.3
+g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+=== header survey: where tf2_geometry_msgs headers live
+tf2_geometry_msgs/tf2_geometry_msgs/tf2_geometry_msgs.hpp
+=== header survey: .h files in tf2 packages that print a warning when included
+  count of .h files under tf2, tf2_ros, tf2_geometry_msgs, tf2_eigen: 33
+  count of those with #warning/#pragma message: 0
+=== exported CMake targets / include dirs
+-- PROBE tf2_geometry_msgs_INCLUDE_DIRS=/opt/ros/DISTRO/include/tf2_geometry_msgs;/opt/ros/DISTRO/include/geometry_msgs;/usr/include/eigen3;/opt/ros/DISTRO/include/tf2;/opt/ros/DISTRO/include/tf2_ros
+-- PROBE tf2_geometry_msgs_TARGETS=tf2_geometry_msgs::tf2_geometry_msgs
+-- PROBE target tf2_geometry_msgs::tf2_geometry_msgs exists
+=== python: import tf2_geometry_msgs
+import ok /opt/ros/DISTRO/lib/python3.12/site-packages/tf2_geometry_msgs/__init__.py
+=== ros2 pkg create --build-type ament_cmake --dependencies rclcpp geometry_msgs tf2_geometry_msgs --node-name node t14_pkg_create
+pkg create exit=0
+  cmake_minimum_required(VERSION 3.8)
+  project(t14_pkg_create)
+  if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-Wall -Wextra -Wpedantic)
+  endif()
+  find_package(ament_cmake REQUIRED)
+  find_package(rclcpp REQUIRED)
+  find_package(geometry_msgs REQUIRED)
+  find_package(tf2_geometry_msgs REQUIRED)
+  add_executable(node src/node.cpp)
+  target_include_directories(node PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+  target_compile_features(node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+  ament_target_dependencies(
+    node
+    "rclcpp"
+    "geometry_msgs"
+    "tf2_geometry_msgs"
+  )
+  install(TARGETS node
+    DESTINATION lib/${PROJECT_NAME})
+  if(BUILD_TESTING)
+    find_package(ament_lint_auto REQUIRED)
+    set(ament_cmake_copyright_FOUND TRUE)
+    set(ament_cmake_cpplint_FOUND TRUE)
+    ament_lint_auto_find_test_dependencies()
+  endif()
+  ament_package()
+--- case=t01_ok_hpp rc=0 seconds=6.2
+  lines with 'error': 0  lines with 'warning': 0
+--- end t01_ok_hpp
+--- case=t02_dot_h rc=2 seconds=2.6
+src/t02_dot_h/src/node.cpp:4:10: fatal error: tf2_geometry_msgs/tf2_geometry_msgs.h: No such file or directory
+    4 | #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end t02_dot_h
+--- case=t03_dot_h_werror rc=2 seconds=2.3
+src/t03_dot_h_werror/src/node.cpp:4:10: fatal error: tf2_geometry_msgs/tf2_geometry_msgs.h: No such file or directory
+    4 | #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 2  lines with 'warning': 0
+--- end t03_dot_h_werror
+--- case=t04_no_find rc=2 seconds=2.1
+src/t04_no_find/src/node.cpp:4:10: fatal error: tf2_geometry_msgs/tf2_geometry_msgs.hpp: No such file or directory
+    4 | #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end t04_no_find
+--- case=t05_find_nolink rc=2 seconds=2.3
+src/t05_find_nolink/src/node.cpp:4:10: fatal error: tf2_geometry_msgs/tf2_geometry_msgs.hpp: No such file or directory
+    4 | #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end t05_find_nolink
+--- case=t06_atd rc=0 seconds=6.4
+  lines with 'error': 0  lines with 'warning': 0
+--- end t06_atd
+--- case=t07_incdirs rc=2 seconds=6.0
+node.cpp:(.text._ZN3tf216gmTransformToKDLERKN13geometry_msgs3msg17TransformStamped_ISaIvEEE[_ZN3tf216gmTransformToKDLERKN13geometry_msgs3msg17TransformStamped_ISaIvEEE]+0x92): undefined reference to `KDL::Rotation::Quaternion(double, double, double, double)'
+collect2: error: ld returned 1 exit status
+gmake[2]: *** [CMakeFiles/node.dir/build.make:178: node] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:137: CMakeFiles/node.dir/all] Error 2
+  lines with 'error': 1  lines with 'warning': 0
+--- end t07_incdirs
+--- case=t08_opt_include rc=2 seconds=2.1
+src/t08_opt_include/src/node.cpp:4:10: fatal error: tf2_geometry_msgs/tf2_geometry_msgs.hpp: No such file or directory
+    4 | #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end t08_opt_include
+--- case=t09_vars_link rc=0 seconds=6.1
+  lines with 'error': 0  lines with 'warning': 0
+--- end t09_vars_link
+--- case=t10_buf_noheader rc=2 seconds=7.7
+node.cpp:(.text._ZNK7tf2_ros15BufferInterface9transformIN13geometry_msgs3msg13PointStamped_ISaIvEEEEERT_RKS7_S8_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEE[_ZNK7tf2_ros15BufferInterface9transformIN13geometry_msgs3msg13PointStamped_ISaIvEEEEERT_RKS7_S8_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENSt6chrono8durationIlSt5ratioILl1
+/usr/bin/ld: node.cpp:(.text._ZNK7tf2_ros15BufferInterface9transformIN13geometry_msgs3msg13PointStamped_ISaIvEEEEERT_RKS7_S8_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEE[_ZNK7tf2_ros15BufferInterface9transformIN13geometry_msgs3msg13PointStamped_ISaIvEEEEERT_RKS7_S8_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENSt6chrono8durationI
+/usr/bin/ld: node.cpp:(.text._ZNK7tf2_ros15BufferInterface9transformIN13geometry_msgs3msg13PointStamped_ISaIvEEEEERT_RKS7_S8_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEE[_ZNK7tf2_ros15BufferInterface9transformIN13geometry_msgs3msg13PointStamped_ISaIvEEEEERT_RKS7_S8_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENSt6chrono8durationI
+collect2: error: ld returned 1 exit status
+  lines with 'error': 1  lines with 'warning': 0
+--- end t10_buf_noheader
+--- case=t11_buf_header rc=0 seconds=7.1
+  lines with 'error': 0  lines with 'warning': 0
+--- end t11_buf_header
+--- case=t12_has_include rc=0 seconds=6.1
+  lines with 'error': 0  lines with 'warning': 0
+--- end t12_has_include
+--- case=t13_wrong_name rc=2 seconds=2.3
+src/t13_wrong_name/src/node.cpp:4:10: fatal error: tf2_geometry_msgs/tf2_geometry_msgs/tf2_geometry_msgs.hpp: No such file or directory
+    4 | #include <tf2_geometry_msgs/tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end t13_wrong_name
+--- case=t14_pkg_create rc=0 seconds=6.1
+  lines with 'error': 0  lines with 'warning': 0
+--- end t14_pkg_create
+not found: "/ws/install/t02_dot_h/share/t02_dot_h/local_setup.bash"
+not found: "/ws/install/t03_dot_h_werror/share/t03_dot_h_werror/local_setup.bash"
+not found: "/ws/install/t04_no_find/share/t04_no_find/local_setup.bash"
+not found: "/ws/install/t05_find_nolink/share/t05_find_nolink/local_setup.bash"
+not found: "/ws/install/t07_incdirs/share/t07_incdirs/local_setup.bash"
+not found: "/ws/install/t08_opt_include/share/t08_opt_include/local_setup.bash"
+not found: "/ws/install/t10_buf_noheader/share/t10_buf_noheader/local_setup.bash"
+not found: "/ws/install/t13_wrong_name/share/t13_wrong_name/local_setup.bash"
+=== run t01_ok_hpp
+[INFO]  [tf_node]: RESULT x=1.50 frame=base_link
+exit=0
+=== run t06_atd
+[INFO]  [tf_node]: RESULT x=1.50 frame=base_link
+exit=0
+=== run t09_vars_link
+[INFO]  [tf_node]: RESULT x=1.50 frame=base_link
+exit=0
+=== run t11_buf_header
+[INFO]  [tf_node]: RESULT x=1.50 frame=base_link
+exit=0
+=== run t12_has_include
+[INFO]  [tf_node]: RESULT x=1.50 frame=base_link
+exit=0
+=== run t14_pkg_create
+[INFO]  [tf_node]: RESULT x=1.50 frame=base_link
+exit=0
+=== tf2_geometry_msgs include paths given to the compiler (flags.make)
+  t01_ok_hpp: /opt/ros/DISTRO/include/tf2_geometry_msgs 
+  t05_find_nolink: 
+  t08_opt_include: -I/opt/ros/DISTRO/include 
+=== cv_bridge: before install
+--- case=c1_cv_missing (cv_bridge not installed) rc=1 seconds=1.6
+CMake Error at CMakeLists.txt:7 (find_package):
+  By not providing "Findcv_bridge.cmake" in CMAKE_MODULE_PATH this project
+  has asked CMake to find a package configuration file provided by
+  "cv_bridge", but CMake did not find one.
+  lines with 'error': 1  lines with 'warning': 0
+--- end c1_cv_missing
+--- case=c2_cv_nofind (cv_bridge not installed, no find_package) rc=2 seconds=2.1
+src/c2_cv_nofind/src/node.cpp:2:10: fatal error: cv_bridge/cv_bridge.hpp: No such file or directory
+    2 | #include <cv_bridge/cv_bridge.hpp>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end c2_cv_nofind
+=== apt install ros-jazzy-cv-bridge
+apt exit=0 seconds=103
+libopencv-core-dev 4.6.0+dfsg-13.1ubuntu1
+ros-jazzy-cv-bridge 4.1.0-1noble.20260911.143610
+  cv_bridge headers: cv_bridge/cv_bridge/cv_bridge.hpp 
+--- case=c1_cv_missing rc=0 seconds=8.7
+  lines with 'error': 0  lines with 'warning': 0
+--- end c1_cv_missing
+--- case=c3_cv_dot_h rc=2 seconds=2.2
+src/c3_cv_dot_h/src/node.cpp:2:10: fatal error: cv_bridge/cv_bridge.h: No such file or directory
+    2 | #include <cv_bridge/cv_bridge.h>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end c3_cv_dot_h
+--- case=c4_cv_hpp rc=0 seconds=8.5
+  lines with 'error': 0  lines with 'warning': 0
+--- end c4_cv_hpp
+--- case=c5_cv_nolink rc=2 seconds=2.4
+src/c5_cv_nolink/src/node.cpp:2:10: fatal error: cv_bridge/cv_bridge.hpp: No such file or directory
+    2 | #include <cv_bridge/cv_bridge.hpp>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+  lines with 'error': 1  lines with 'warning': 0
+--- end c5_cv_nolink
+not found: "/ws/install/c2_cv_nofind/share/c2_cv_nofind/local_setup.bash"
+not found: "/ws/install/c3_cv_dot_h/share/c3_cv_dot_h/local_setup.bash"
+not found: "/ws/install/c5_cv_nolink/share/c5_cv_nolink/local_setup.bash"
+not found: "/ws/install/t02_dot_h/share/t02_dot_h/local_setup.bash"
+not found: "/ws/install/t03_dot_h_werror/share/t03_dot_h_werror/local_setup.bash"
+not found: "/ws/install/t04_no_find/share/t04_no_find/local_setup.bash"
+not found: "/ws/install/t05_find_nolink/share/t05_find_nolink/local_setup.bash"
+not found: "/ws/install/t07_incdirs/share/t07_incdirs/local_setup.bash"
+not found: "/ws/install/t08_opt_include/share/t08_opt_include/local_setup.bash"
+not found: "/ws/install/t10_buf_noheader/share/t10_buf_noheader/local_setup.bash"
+not found: "/ws/install/t13_wrong_name/share/t13_wrong_name/local_setup.bash"
+=== run c1_cv_missing
+[INFO]  [cv_node]: RESULT 6x4 bgr8
+exit=0
+=== run c4_cv_hpp
+[INFO]  [cv_node]: RESULT 6x4 bgr8
+exit=0
+=== done
