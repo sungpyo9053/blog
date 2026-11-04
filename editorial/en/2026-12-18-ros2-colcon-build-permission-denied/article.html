@@ -1,0 +1,168 @@
+<pre><code>Traceback (most recent call last):
+  File "/usr/bin/colcon", line 33, in &lt;module&gt;
+    sys.exit(load_entry_point('colcon-core==0.21.3', 'console_scripts', 'colcon')())
+  ...
+  File "/usr/lib/python3/dist-packages/colcon_core/location.py", line 181, in create_log_path
+    os.makedirs(str(path))
+  ...
+PermissionError: [Errno 13] Permission denied: 'log/build_2026-11-04_06-10-49'</code></pre>
+
+<p>The other form, from the CMake install step:</p>
+
+<pre><code>--- stderr: perm_cpp
+CMake Error at cmake_install.cmake:60 (file):
+  file INSTALL cannot copy file "/ws7/build/perm_cpp/hello" to
+  "/lib/perm_cpp/hello": Permission denied.</code></pre>
+
+<p>Short answer: some or all of your workspace's <code>log/</code>, <code>build/</code> and <code>install/</code> folders belong to root. That's what <code>sudo colcon build</code> leaves behind, and so does a Docker container that builds as root on a bind-mounted workspace. Your normal user can't write there anymore. Give the workspace back to your user and build again without sudo:</p>
+
+<pre><code>cd ~/ros2_ws
+sudo chown -R $USER:$USER .
+colcon build</code></pre>
+
+<p>If the path in the CMake error starts with <code>/lib/</code> or <code>/share/</code> instead of your workspace, the cause is different. An <code>install()</code> line in your <code>CMakeLists.txt</code> uses an absolute path. Change <code>DESTINATION /lib/${PROJECT_NAME}</code> to <code>DESTINATION lib/${PROJECT_NAME}</code>, without the leading slash. Running sudo again "fixes" both cases in the sense that the build passes. But it leaves everything owned by root, and in the absolute-path case it puts your executable outside the workspace, where <code>ros2 run</code> can't find it.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every row below came out the same on Humble, Jazzy and Lyrical. "Root-owned" means a root build ran first and then the normal user ran <code>colcon build</code> in the same workspace.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>First error you see</th></tr></thead>
+<tbody>
+<tr><td><code>log/</code> root-owned (a full sudo build leaves this)</td><td><code>PermissionError: [Errno 13] Permission denied: 'log/build_&lt;date&gt;'</code> from <code>create_log_path</code>. No package starts.</td></tr>
+<tr><td>Workspace folder itself made by root (<code>sudo mkdir</code>)</td><td><code>PermissionError: [Errno 13] Permission denied: 'log'</code></td></tr>
+<tr><td>Only <code>build/</code> root-owned</td><td><code>Exception in shell extension 'sh': [Errno 13] Permission denied: '.../build/perm_cpp/colcon_command_prefix_build.sh'</code>, then <code>Could not find a shell extension for the command environment</code></td></tr>
+<tr><td>Only <code>install/</code> root-owned</td><td>Last line of the run: <code>[Errno 13] Permission denied: '.../install/perm_cpp/share/colcon-core/packages/perm_cpp'</code>, plus one error per <code>install/local_setup.*</code> file</td></tr>
+<tr><td><code>build/</code> and <code>install/</code> root-owned, <code>log/</code> deleted</td><td>Same <code>install/.../colcon-core/packages/perm_cpp</code> line, plus <code>Permission denied: '.../build/perm_cpp/colcon_build.rc'</code></td></tr>
+<tr><td><code>DESTINATION /lib/${PROJECT_NAME}</code>, nothing there yet</td><td><code>file cannot create directory: /lib/perm_cpp.  Maybe need administrative privileges.</code></td></tr>
+<tr><td>Same, after one root build created <code>/lib/perm_cpp</code>, source unchanged</td><td><code>file INSTALL cannot set permissions on "/lib/perm_cpp/hello": Operation not permitted.</code></td></tr>
+<tr><td>Same, after the source changed</td><td><code>file INSTALL cannot copy file "/ws7/build/perm_cpp/hello" to "/lib/perm_cpp/hello": Permission denied.</code></td></tr>
+<tr><td>Absolute path in <code>data_files</code> of an ament_python <code>setup.py</code></td><td><code>assert not os.path.isabs(dest)</code> then <code>AssertionError</code>. Not a permission error, and root got it too.</td></tr>
+</tbody>
+</table>
+
+<p>The message changes with the folder that is root-owned, and that's the useful part. Read the path in the error. If it's inside your workspace, it's an ownership problem. If it's under <code>/lib</code>, <code>/share</code> or another system folder, it's an absolute install path.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-04 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another. Each container ran as root and created a normal user <code>dev</code> (uid 1500). Root stood in for <code>sudo colcon build</code>: both run colcon as uid 0, so the files they create belong to root. The test workspace had two small packages. <code>perm_cpp</code> is ament_cmake with a one-file C++ executable. <code>perm_py</code> is ament_python with one console script. Every case started from a fresh copy of the workspace owned by <code>dev</code>. Then I changed one thing and ran <code>colcon build --parallel-workers 1</code>.</p>
+
+<table>
+<thead><tr><th>Case</th><th>Result as dev</th></tr></thead>
+<tbody>
+<tr><td>Clean workspace, dev builds</td><td>2 packages finished, both executables run</td></tr>
+<tr><td>Root builds first, then dev builds</td><td>fails at <code>create_log_path</code>, rc=1, same error on a second try</td></tr>
+<tr><td>Same workspace, dev only sources and runs</td><td>works, <code>HELLO-CPP</code> and <code>HELLO-PY</code> printed</td></tr>
+<tr><td><code>log/</code> deleted, <code>build/</code> and <code>install/</code> still root's</td><td>fails, <code>perm_cpp</code> failed, 1 package not processed</td></tr>
+<tr><td>Only <code>install/</code> root's</td><td>fails the same way</td></tr>
+<tr><td>Only <code>build/</code> root's</td><td>fails at <code>colcon_command_prefix_build.sh</code></td></tr>
+<tr><td>Workspace folder owned by root, mode 755</td><td>fails at <code>'log'</code></td></tr>
+<tr><td>Root-built, dev rebuilds one package with <code>--log-base /tmp/...</code></td><td>still fails on <code>build/</code> and <code>install/</code></td></tr>
+<tr><td><code>sudo chown -R</code> back to dev, rebuild</td><td>works, both executables run</td></tr>
+<tr><td>Delete <code>build install log</code> as root, rebuild as dev</td><td>works</td></tr>
+<tr><td>Separate <code>--log-base</code>, <code>--build-base</code> and <code>--install-base</code> for dev</td><td>works, <code>source install_dev/setup.bash</code> runs the node</td></tr>
+<tr><td>Build as root a second time</td><td>works, but the tree stays root's: <code>touch: cannot touch 'install/x': Permission denied</code></td></tr>
+<tr><td>Absolute <code>DESTINATION /lib/...</code>, as root</td><td>build passes, then <code>ros2 run perm_cpp hello</code> prints <code>No executable found</code></td></tr>
+</tbody>
+</table>
+
+<h2>Cause 1: log/ belongs to root</h2>
+
+<p>This is the error most people hit, and it's the one in the <a href="https://github.com/rosflight/rosflight_ros_pkgs/issues/263">rosflight</a> and <a href="https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/issues/160">Isaac ROS</a> issues. The first thing <code>colcon build</code> does is create a folder for this run's log, <code>log/build_&lt;date&gt;</code>. If <code>log/</code> was created by root, that <code>os.makedirs</code> call fails and colcon stops. No <code>Starting &gt;&gt;&gt;</code> line is printed and no package is touched. Running it again gives the same traceback.</p>
+
+<p>A full sudo build makes all three folders root-owned, so you see the <code>log/</code> error first. Delete <code>log/</code> on its own and the build gets one step further, then fails on <code>build/</code> and <code>install/</code>. That's why "I deleted the log folder and now there's a different error" is common. Each folder fails in its own place.</p>
+
+<p>The root-built result is still readable. As dev, <code>source install/setup.bash</code> and <code>ros2 run</code> both worked in the root-owned workspace. The problem shows up only when you build again, which is why it often appears days after the sudo build.</p>
+
+<h2>Cause 2: build/ or install/ belongs to root</h2>
+
+<p>With only <code>build/</code> root-owned, colcon couldn't write <code>build/perm_cpp/colcon_command_prefix_build.sh</code>. That file holds the environment for the CMake call. It's the same line as in the <a href="https://github.com/Livox-SDK/livox_ros_driver2/issues/18">Livox driver issue</a>. colcon then printed <code>Could not find a shell extension for the command environment</code>, which sounds like a broken colcon install but isn't one. It also couldn't write <code>build/perm_cpp/colcon_build.rc</code>, the file where it records the package's result.</p>
+
+<p>With only <code>install/</code> root-owned, the failure is in <code>install/perm_cpp/share/colcon-core/packages/perm_cpp</code> and in each <code>install/local_setup.*</code> file (<code>.ps1</code>, <code>.sh</code>, <code>.bash</code>, <code>.zsh</code>). Each of those gets its own traceback, so the output is long. The useful line is the last one, printed after the summary. In the Humble output the CMake step also printed <code>file INSTALL cannot set permissions on "/ws3/install/perm_cpp/lib/perm_cpp/hello": Operation not permitted.</code> The Jazzy and Lyrical output I kept is cut before that point, so I can't say if it appeared there too.</p>
+
+<h2>Cause 3: the workspace folder itself belongs to root</h2>
+
+<p>If you made the workspace with <code>sudo mkdir</code>, or copied it in with sudo, the user can read <code>src/</code> but can't create anything next to it. colcon fails before any package with <code>PermissionError: [Errno 13] Permission denied: 'log'</code>. That's the path without a date, which is how you tell it apart from Cause 1. The fix is the same <code>chown -R</code>, run on the workspace folder.</p>
+
+<h2>Cause 4: an absolute install path</h2>
+
+<p>The <a href="https://robotics.stackexchange.com/questions/25181">Robotics Stack Exchange question</a> shows <code>file INSTALL cannot copy file ".../build/gesture_recognition/image_publisher_node" to "/lib/gesture_recognition/image_publisher_node": Permission denied</code>. The target is <code>/lib/...</code>, not <code>~/ros2_ws/install/...</code>. I reproduced exactly that text at the same line, <code>cmake_install.cmake:60</code>, by writing:</p>
+
+<pre><code class="language-cmake">install(TARGETS hello DESTINATION /lib/${PROJECT_NAME})   # wrong: absolute
+install(TARGETS hello DESTINATION lib/${PROJECT_NAME})    # right: relative to install/&lt;pkg&gt;</code></pre>
+
+<p>The error text depended on the history of <code>/lib/perm_cpp</code>:</p>
+
+<ul>
+<li>Never built as root: <code>file cannot create directory: /lib/perm_cpp.  Maybe need administrative privileges.</code></li>
+<li>Built once as root with the same source: <code>file INSTALL cannot set permissions on "/lib/perm_cpp/hello": Operation not permitted.</code></li>
+<li>Built once as root, then the source changed: <code>file INSTALL cannot copy file ... Permission denied.</code>, the text from the question.</li>
+</ul>
+
+<p>So "cannot copy file" to a system path points to the sequence in that question. The absolute path was there already, and a sudo build at some point created the target folder. As root the build "works". It wrote <code>/lib/perm_cpp/hello</code>, <code>install/perm_cpp/lib</code> did not exist, and <code>ros2 run perm_cpp hello</code> printed <code>No executable found</code>. A relative <code>DESTINATION</code> is the only fix. Delete the stray files in <code>/lib/&lt;pkg&gt;</code> afterwards.</p>
+
+<p>The ament_python version of this mistake behaves differently. With <code>('/share/perm_py', ['package.xml'])</code> in <code>data_files</code>, colcon-core fails at <code>assert not os.path.isabs(dest)</code> in <code>colcon_core/task/python/__init__.py</code> with a bare <code>AssertionError</code>, for root and for dev. It never gets to a permission check. Use <code>'share/' + package_name</code>, no leading slash.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Result</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>sudo chown -R $USER:$USER ~/ros2_ws</code>, then <code>colcon build</code></td><td>works on all three</td><td>Keeps the build cache. chown took 0.005 s (Humble, Jazzy) and 0.015 s (Lyrical) here. The rebuild took 1.4 s, 1.8 s and 1.8 s.</td></tr>
+<tr><td><code>sudo rm -rf build install log</code>, then <code>colcon build</code></td><td>works on all three</td><td>Full rebuild: 2.2 s, 2.6 s and 2.7 s for these two tiny packages. On a real workspace this is the slow option.</td></tr>
+<tr><td><code>colcon --log-base /tmp/x build</code></td><td>fails</td><td>Gets past the <code>log/</code> error, then fails on <code>build/</code> and <code>install/</code>.</td></tr>
+<tr><td><code>--log-base log_dev</code>, <code>--build-base build_dev</code>, <code>--install-base install_dev</code></td><td>works on all three</td><td>Builds a second tree next to the root one. Useful if you can't use sudo. Source <code>install_dev/setup.bash</code>.</td></tr>
+<tr><td>Run <code>sudo colcon build</code> again</td><td>"works"</td><td>The build passes, but everything stays root's and the next normal build fails again.</td></tr>
+<tr><td>Relative <code>DESTINATION</code></td><td>the only fix for Cause 4</td><td>chown doesn't help when the target is <code>/lib</code>.</td></tr>
+</tbody>
+</table>
+
+<p>The timings come from two packages that compile in about a second. They show which option rebuilds and which one only fixes ownership. They don't predict times for your workspace. On a large workspace the gap between chown and a clean rebuild is the full compile time.</p>
+
+<p>To avoid the problem with Docker, build as the same user that owns the bind-mounted folder, for example <code>docker run --user $(id -u):$(id -g)</code>. Otherwise run the chown once at the end of the container's build step. If <code>sudo colcon build</code> also triggered "listing git files failed", that's a separate ownership check by git, covered in <a href="https://huntlab.app/en/colcon-build-listing-git-files-failed-pretending-there-arent-any/">listing git files failed in ament_python packages</a>.</p>
+
+<h2>Version notes</h2>
+
+<p>All three images ship the same colcon: colcon-core 0.21.3, colcon-cmake 0.2.30 and colcon-ros 0.5.0. Every case passed or failed the same way on all three distros, with the same final error line. The differences:</p>
+
+<ul>
+<li>CMake is 3.22.1 on Humble, 3.28.3 on Jazzy and 4.2.3 on Lyrical. On Lyrical every build of <code>perm_cpp</code> also printed <code>CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required): Compatibility with CMake &lt; 3.10 will be removed from a future version of CMake.</code> That comes from my <code>cmake_minimum_required(VERSION 3.8)</code> and is unrelated to permissions. It makes colcon report "1 package had stderr output" even on a successful build.</li>
+<li>Python is 3.10 on Humble and 3.14 on Lyrical, so Lyrical tracebacks have the <code>~~~^^^</code> markers and <code>&lt;frozen os&gt;</code> frames. The <code>PermissionError</code> line at the bottom is identical.</li>
+<li>In the build-only case on Lyrical, colcon's log prefix showed a broken timestamp, <code>[-1793772945407441664.000s]</code>, where Humble and Jazzy showed <code>[0.308s]</code> and <code>[0.242s]</code>. The error after it was the same.</li>
+<li>setuptools is 59.6.0, 68.1.2 and 78.1.1. The data_files <code>AssertionError</code> happened on all three. It comes from colcon-core, which is the same version everywhere.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Real <code>sudo</code> (I ran as root directly, so sudo's environment reset was not involved), Docker bind mounts with a host user, rootless Docker or Podman, <code>--symlink-install</code> and <code>--merge-install</code>, NFS or other network filesystems, ACLs and umask settings, Windows, and Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does colcon build say Permission denied: 'log/build_...'?</h3>
+<p>The workspace's <code>log/</code> folder was created by root, usually by <code>sudo colcon build</code> or a root Docker container. colcon makes a new log folder before it builds anything and can't do it there. Run <code>sudo chown -R $USER:$USER</code> on the workspace and build again without sudo.</p>
+
+<h3>Is it safe to run sudo colcon build?</h3>
+<p>The build passes, but every file in <code>build/</code>, <code>install/</code> and <code>log/</code> then belongs to root. The next build as your own user fails, and in my run it failed every time. There is no reason to build a normal workspace with sudo.</p>
+
+<h3>How do I fix "file INSTALL cannot copy file ... to /lib/...: Permission denied"?</h3>
+<p>An <code>install()</code> call in <code>CMakeLists.txt</code> uses an absolute path such as <code>/lib/${PROJECT_NAME}</code>. Remove the leading slash so the file goes into <code>install/&lt;pkg&gt;/lib/&lt;pkg&gt;</code>. Then delete the files that an earlier sudo build left in <code>/lib/&lt;pkg&gt;</code>. chown does not fix this one.</p>
+
+<h3>I deleted the log folder and now get a different Permission denied error. Why?</h3>
+<p><code>build/</code> and <code>install/</code> are still root's. With <code>log/</code> gone, colcon starts the package and fails on <code>colcon_command_prefix_build.sh</code>, <code>colcon_build.rc</code> or <code>install/.../colcon-core/packages</code>. Change the owner of the whole workspace, not one folder.</p>
+
+<h3>Can I build without sudo when I can't change the owner?</h3>
+<p>Yes. Give colcon fresh folders: <code>colcon --log-base log_dev build --build-base build_dev --install-base install_dev</code>, then source <code>install_dev/setup.bash</code>. That worked on all three distros. <code>--log-base</code> by itself did not.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does colcon build say Permission denied: log/build_...?", "acceptedAnswer": {"@type": "Answer", "text": "The workspace's log/ folder was created by root, usually by sudo colcon build or a root Docker container. colcon makes a new log folder before it builds anything and can't do it there. Run sudo chown -R $USER:$USER on the workspace and build again without sudo."}},
+{"@type": "Question", "name": "Is it safe to run sudo colcon build?", "acceptedAnswer": {"@type": "Answer", "text": "The build passes, but every file in build/, install/ and log/ then belongs to root. The next build as your own user fails, and in my run it failed every time. There is no reason to build a normal workspace with sudo."}},
+{"@type": "Question", "name": "How do I fix file INSTALL cannot copy file ... to /lib/...: Permission denied?", "acceptedAnswer": {"@type": "Answer", "text": "An install() call in CMakeLists.txt uses an absolute path such as /lib/${PROJECT_NAME}. Remove the leading slash so the file goes into install/pkg/lib/pkg. Then delete the files that an earlier sudo build left in /lib/pkg. chown does not fix this one."}},
+{"@type": "Question", "name": "I deleted the log folder and now get a different Permission denied error. Why?", "acceptedAnswer": {"@type": "Answer", "text": "build/ and install/ are still root's. With log/ gone, colcon starts the package and fails on colcon_command_prefix_build.sh, colcon_build.rc or install/.../colcon-core/packages. Change the owner of the whole workspace, not one folder."}},
+{"@type": "Question", "name": "Can I build without sudo when I can't change the owner?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Give colcon fresh folders: colcon --log-base log_dev build --build-base build_dev --install-base install_dev, then source install_dev/setup.bash. That worked on all three distros. --log-base by itself did not."}}
+]}
+</script>
+
+<p>Measured on 2026-11-04 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, CMake 3.22.1), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, CMake 3.28.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, CMake 4.2.3), all with colcon-core 0.21.3, colcon-cmake 0.2.30 and colcon-ros 0.5.0. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-18-ros2-colcon-build-permission-denied/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/25181">PERMISSION ERROR : colcon build</a>, <a href="https://github.com/rosflight/rosflight_ros_pkgs/issues/263">Colcon Build permissions within docker</a>, <a href="https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/issues/160">problem with colcon build (PermissionError in create_log_path)</a>, <a href="https://github.com/Livox-SDK/livox_ros_driver2/issues/18">Permission denied on driver building</a>.</p>

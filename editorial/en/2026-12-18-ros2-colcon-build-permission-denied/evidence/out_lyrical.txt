@@ -1,0 +1,761 @@
+=== distro=lyrical
+ros-lyrical-ament-cmake 2.8.8-1resolute.20260728.175713
+ros-lyrical-ament-package 0.18.3-3resolute.20260430.010336
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+cmake 4.2.3-2ubuntu2
+python3-colcon-cmake 0.2.30+upstream-1
+python3-colcon-core 0.21.3+upstream-1
+python3-colcon-ros 0.5.0+upstream-1
+python3-setuptools 78.1.1-0.1build1
+uid=1500(dev) gid=1500(dev) groups=1500(dev)
+
+################ C0 baseline: dev builds a clean workspace
+--- [dev] colcon build --parallel-workers 1  (in /ws0)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< perm_cpp [1.23s]
+Starting >>> perm_py
+Finished <<< perm_py [1.24s]
+
+Summary: 2 packages finished [2.63s]
+  1 package had stderr output: perm_cpp
+rc=0
+--- [dev] source install/setup.bash && ros2 run perm_cpp hello && ros2 run perm_py hello  (in /ws0)
+HELLO-CPP
+HELLO-PY
+rc=0
+
+################ C1 root built first (sudo colcon build), then dev
+--- [root] colcon build --parallel-workers 1  (in /ws1)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< perm_cpp [1.10s]
+Starting >>> perm_py
+Finished <<< perm_py [1.22s]
+
+Summary: 2 packages finished [2.47s]
+  1 package had stderr output: perm_cpp
+rc=0
+owners in /ws1:
+  root build
+  root install
+  root log
+--- [dev] colcon build --parallel-workers 1  (in /ws1)
+Traceback (most recent call last):
+  File "/usr/bin/colcon", line 33, in <module>
+    sys.exit(load_entry_point('colcon-core==0.21.3', 'console_scripts', 'colcon')())
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3/dist-packages/colcon_core/command.py", line 130, in main
+    return _main(
+        command_name=command_name, argv=argv,
+        verb_group_name=verb_group_name,
+        environment_variable_group_name=environment_variable_group_name,
+        default_verb=default_verb, default_log_base=default_log_base)
+  File "/usr/lib/python3/dist-packages/colcon_core/command.py", line 219, in _main
+    create_log_path(args.verb_name)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/location.py", line 181, in create_log_path
+    os.makedirs(str(path))
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "<frozen os>", line 236, in makedirs
+PermissionError: [Errno 13] Permission denied: 'log/build_2026-11-04_06-15-34'
+rc=1
+-- C1 a second time (same error?)
+--- [dev] colcon build --parallel-workers 1  (in /ws1)
+  File "/usr/lib/python3/dist-packages/colcon_core/command.py", line 219, in _main
+    create_log_path(args.verb_name)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/location.py", line 181, in create_log_path
+    os.makedirs(str(path))
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "<frozen os>", line 236, in makedirs
+PermissionError: [Errno 13] Permission denied: 'log/build_2026-11-04_06-15-35'
+rc=1
+-- C1 dev can still use the root-built install (read-only use)
+--- [dev] source install/setup.bash && ros2 run perm_cpp hello && ros2 run perm_py hello  (in /ws1)
+HELLO-CPP
+HELLO-PY
+rc=0
+
+################ C2 only build/ and install/ root-owned (log/ removed)
+--- [root] colcon build --parallel-workers 1  (in /ws2)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< perm_cpp [1.11s]
+Starting >>> perm_py
+Finished <<< perm_py [1.19s]
+
+Summary: 2 packages finished [2.45s]
+  1 package had stderr output: perm_cpp
+rc=0
+owners in /ws2:
+  root build
+  root install
+  stat: cannot statx 'log': No such file or directory
+--- [dev] colcon build --parallel-workers 1  (in /ws2)
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws2/install/local_setup.ps1'
+
+[-1793772938288248320.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'sh': [Errno 13] Permission denied: '/ws2/install/local_setup.sh'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/sh.py", line 43, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.sh.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws2/install/local_setup.sh'
+
+[-1793772938288248320.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'bash': [Errno 13] Permission denied: '/ws2/install/local_setup.bash'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_bash/shell/bash.py", line 29, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.bash.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws2/install/local_setup.bash'
+
+[-1793772938288248320.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'zsh': [Errno 13] Permission denied: '/ws2/install/local_setup.zsh'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_zsh/shell/zsh.py", line 29, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.zsh.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws2/install/local_setup.zsh'
+
+
+Summary: 0 packages finished [0.17s]
+  1 package failed: perm_cpp
+  1 package had stderr output: perm_cpp
+  1 package not processed
+[Errno 13] Permission denied: '/ws2/install/perm_cpp/share/colcon-core/packages/perm_cpp'
+rc=1
+
+################ C3 only install/ root-owned
+--- [root] colcon build --parallel-workers 1  (in /ws3)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< perm_cpp [1.11s]
+Starting >>> perm_py
+Finished <<< perm_py [1.26s]
+
+Summary: 2 packages finished [2.51s]
+  1 package had stderr output: perm_cpp
+rc=0
+owners in /ws3:
+  dev build
+  root install
+  dev log
+--- [dev] colcon build --parallel-workers 1  (in /ws3)
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws3/install/local_setup.ps1'
+
+[-1793772941822639616.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'sh': [Errno 13] Permission denied: '/ws3/install/local_setup.sh'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/sh.py", line 43, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.sh.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws3/install/local_setup.sh'
+
+[-1793772941822639616.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'bash': [Errno 13] Permission denied: '/ws3/install/local_setup.bash'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_bash/shell/bash.py", line 29, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.bash.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws3/install/local_setup.bash'
+
+[-1793772941822639616.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'zsh': [Errno 13] Permission denied: '/ws3/install/local_setup.zsh'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_zsh/shell/zsh.py", line 29, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.zsh.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws3/install/local_setup.zsh'
+
+
+Summary: 0 packages finished [0.27s]
+  1 package failed: perm_cpp
+  1 package had stderr output: perm_cpp
+  1 package not processed
+[Errno 13] Permission denied: '/ws3/install/perm_cpp/share/colcon-core/packages/perm_cpp'
+rc=1
+
+################ C4 only build/ root-owned
+--- [root] colcon build --parallel-workers 1  (in /ws4)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< perm_cpp [1.11s]
+Starting >>> perm_py
+Finished <<< perm_py [1.21s]
+
+Summary: 2 packages finished [2.45s]
+  1 package had stderr output: perm_cpp
+rc=0
+owners in /ws4:
+  root build
+  dev install
+  dev log
+--- [dev] colcon build --parallel-workers 1  (in /ws4)
+Starting >>> perm_cpp
+[-1793772945407441664.000s] ERROR:colcon.colcon_core.shell:Exception in shell extension 'sh': [Errno 13] Permission denied: '/ws4/build/perm_cpp/colcon_command_prefix_build.sh'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/__init__.py", line 310, in get_command_environment
+    return await extension.generate_command_environment(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        task_name, Path(build_base), dependencies)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/sh.py", line 148, in generate_command_environment
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'command_prefix.sh.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        hook_path,
+        ^^^^^^^^^^
+        {'dependencies': dependencies})
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws4/build/perm_cpp/colcon_command_prefix_build.sh'
+
+[-1793772945407441664.000s] ERROR:colcon.colcon_cmake.task.cmake.build:Could not find a shell extension for the command environment
+Failed   <<< perm_cpp [0.02s, exited with code 1]
+[-1793772945407441664.000s] ERROR:colcon.colcon_core.event_reactor:Exception in event handler extension 'store_result': [Errno 13] Permission denied: '/ws4/build/perm_cpp/colcon_build.rc'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/event_reactor.py", line 78, in _notify_observers
+    retval = observer(event)
+  File "/usr/lib/python3/dist-packages/colcon_package_selection/package_selection/previous/event_handler.py", line 53, in __call__
+    set_result(job.task_context.args.build_base, verb_name, result)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_package_selection/package_selection/previous/__init__.py", line 36, in set_result
+    path.write_text(str(result) + '\n')
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 810, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws4/build/perm_cpp/colcon_build.rc'
+
+
+Summary: 0 packages finished [0.15s]
+  1 package failed: perm_cpp
+  1 package not processed
+rc=1
+
+################ C5 workspace folder itself created by root (sudo mkdir), src readable
+root 755 /ws5
+--- [dev] colcon build --parallel-workers 1  (in /ws5)
+Traceback (most recent call last):
+  File "/usr/bin/colcon", line 33, in <module>
+    sys.exit(load_entry_point('colcon-core==0.21.3', 'console_scripts', 'colcon')())
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3/dist-packages/colcon_core/command.py", line 130, in main
+    return _main(
+        command_name=command_name, argv=argv,
+        verb_group_name=verb_group_name,
+        environment_variable_group_name=environment_variable_group_name,
+        default_verb=default_verb, default_log_base=default_log_base)
+  File "/usr/lib/python3/dist-packages/colcon_core/command.py", line 219, in _main
+    create_log_path(args.verb_name)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/location.py", line 181, in create_log_path
+    os.makedirs(str(path))
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "<frozen os>", line 226, in makedirs
+  File "<frozen os>", line 236, in makedirs
+PermissionError: [Errno 13] Permission denied: 'log'
+rc=1
+
+################ C6 root-built, dev edits one package and rebuilds only it, logs elsewhere
+--- [root] colcon build --parallel-workers 1  (in /ws6)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< perm_cpp [1.10s]
+Starting >>> perm_py
+Finished <<< perm_py [1.20s]
+
+Summary: 2 packages finished [2.43s]
+  1 package had stderr output: perm_cpp
+rc=0
+--- [dev] colcon --log-base /tmp/devlog6 build --parallel-workers 1 --packages-select perm_cpp  (in /ws6)
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws6/install/local_setup.sh'
+
+[-1793772949353391360.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'bash': [Errno 13] Permission denied: '/ws6/install/local_setup.bash'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_bash/shell/bash.py", line 29, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.bash.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws6/install/local_setup.bash'
+
+[-1793772949353391360.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'zsh': [Errno 13] Permission denied: '/ws6/install/local_setup.zsh'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_zsh/shell/zsh.py", line 29, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.zsh.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/ws6/install/local_setup.zsh'
+
+
+Summary: 0 packages finished [0.16s]
+  1 package failed: perm_cpp
+  1 package had stderr output: perm_cpp
+[Errno 13] Permission denied: '/ws6/install/perm_cpp/share/colcon-core/packages/perm_cpp'
+rc=1
+
+################ C7 absolute install DESTINATION /lib/${PROJECT_NAME} (CMake)
+5:install(TARGETS hello DESTINATION /lib/${PROJECT_NAME})
+--- [dev] colcon build --parallel-workers 1 --packages-select perm_cpp  (in /ws7)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Error at cmake_install.cmake:60 (file):
+  file cannot create directory: /lib/perm_cpp.  Maybe need administrative
+  privileges.
+
+
+---
+Failed   <<< perm_cpp [1.09s, exited with code 1]
+
+Summary: 0 packages finished [1.22s]
+  1 package failed: perm_cpp
+  1 package had stderr output: perm_cpp
+rc=1
+-- C7 same as root: succeeds?
+--- [root] colcon build --parallel-workers 1 --packages-select perm_cpp  (in /ws7r)
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+Finished <<< perm_cpp [1.10s]
+
+Summary: 1 package finished [1.23s]
+  1 package had stderr output: perm_cpp
+rc=0
+  total 16
+  -rwxr-xr-x 1 root root 15952 Nov  4 06:15 hello
+  install lib: ls: cannot access '/ws7r/install/perm_cpp/lib': No such file or directory
+--- [root] source install/setup.bash && ros2 run perm_cpp hello  (in /ws7r)
+No executable found
+rc=1
+-- C7 dev again, now that root has created /lib/perm_cpp
+--- [dev] colcon build --parallel-workers 1 --packages-select perm_cpp  (in /ws7)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Error at cmake_install.cmake:60 (file):
+  file INSTALL cannot set permissions on "/lib/perm_cpp/hello": Operation not
+  permitted.
+
+
+---
+Failed   <<< perm_cpp [0.12s, exited with code 1]
+
+Summary: 0 packages finished [0.24s]
+  1 package failed: perm_cpp
+  1 package had stderr output: perm_cpp
+rc=1
+-- C7 dev after editing hello.cpp (binary differs from the root-installed one)
+--- [dev] colcon build --parallel-workers 1 --packages-select perm_cpp  (in /ws7)
+Starting >>> perm_cpp
+--- stderr: perm_cpp
+CMake Error at cmake_install.cmake:60 (file):
+  file INSTALL cannot copy file "/ws7/build/perm_cpp/hello" to
+  "/lib/perm_cpp/hello": Permission denied.
+
+
+---
+Failed   <<< perm_cpp [0.21s, exited with code 1]
+
+Summary: 0 packages finished [0.34s]
+  1 package failed: perm_cpp
+  1 package had stderr output: perm_cpp
+rc=1
+
+################ C8 absolute data_files path ('/share/perm_py') in setup.py
+4:                  ('/share/perm_py', ['package.xml'])],
+--- [dev] colcon build --parallel-workers 1 --packages-select perm_py  (in /ws8)
+Starting >>> perm_py
+--- stderr: perm_py
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/executor/__init__.py", line 91, in __call__
+    rc = await self.task(*args, **kwargs)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/task/__init__.py", line 120, in __call__
+    return await task_method(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_ros/task/ament_python/build.py", line 54, in build
+    data_files = get_data_files_mapping(
+        setup_py_data.get('data_files', []) or [])
+  File "/usr/lib/python3/dist-packages/colcon_core/task/python/__init__.py", line 38, in get_data_files_mapping
+    assert not os.path.isabs(dest)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+---
+Failed   <<< perm_py [0.26s, exited with code 1]
+
+Summary: 0 packages finished [0.39s]
+  1 package failed: perm_py
+  1 package had stderr output: perm_py
+
+rc=1
+-- C8 as root
+--- [root] colcon build --parallel-workers 1 --packages-select perm_py  (in /ws8r)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_ros/task/ament_python/build.py", line 54, in build
+    data_files = get_data_files_mapping(
+        setup_py_data.get('data_files', []) or [])
+  File "/usr/lib/python3/dist-packages/colcon_core/task/python/__init__.py", line 38, in get_data_files_mapping
+    assert not os.path.isabs(dest)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+---
+Failed   <<< perm_py [0.25s, exited with code 1]
+
+Summary: 0 packages finished [0.40s]
+  1 package failed: perm_py
+  1 package had stderr output: perm_py
+
+rc=1
+  ls: cannot access '/share/perm_py': No such file or directory
+  install share: hook
+
+################ F1 fix: chown -R dev:dev the workspace, rebuild
+--- [root] colcon build --parallel-workers 1  (in /wf1)
+
+Summary: 2 packages finished [2.63s]
+  1 package had stderr output: perm_cpp
+rc=0
+owners in /wf1:
+  root build
+  root install
+  root log
+chown took 0.015 s
+--- [dev] s=$(date +%s.%N); colcon build --parallel-workers 1 | tail -n 3; python3 -c "print('rebuild elapsed %.1f s' % ($(date +%s.%N)-$s))"  (in /wf1)
+Finished <<< perm_py [1.22s]
+
+Summary: 2 packages finished [1.47s]
+rebuild elapsed 1.8 s
+rc=0
+--- [dev] source install/setup.bash && ros2 run perm_cpp hello && ros2 run perm_py hello  (in /wf1)
+HELLO-CPP
+HELLO-PY
+rc=0
+
+################ F2 fix: delete build install log (as root), rebuild as dev
+--- [root] colcon build --parallel-workers 1  (in /wf2)
+
+Summary: 2 packages finished [2.47s]
+  1 package had stderr output: perm_cpp
+rc=0
+--- [root] rm -rf build install log  (in /wf2)
+rc=0
+--- [dev] s=$(date +%s.%N); colcon build --parallel-workers 1 | tail -n 3; python3 -c "print('rebuild elapsed %.1f s' % ($(date +%s.%N)-$s))"  (in /wf2)
+--- stderr: perm_cpp
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+---
+
+Summary: 2 packages finished [2.43s]
+  1 package had stderr output: perm_cpp
+rebuild elapsed 2.7 s
+rc=0
+
+################ F3 workaround: --log-base only
+--- [root] colcon build --parallel-workers 1  (in /wf3)
+
+Summary: 2 packages finished [2.43s]
+  1 package had stderr output: perm_cpp
+rc=0
+--- [dev] colcon --log-base /tmp/devlog3 build --parallel-workers 1  (in /wf3)
+
+[-1793772972308286464.000s] ERROR:colcon.colcon_core.verb:Exception in shell extension 'zsh': [Errno 13] Permission denied: '/wf3/install/local_setup.zsh'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/verb/build.py", line 225, in _create_prefix_scripts
+    scripts = extension.create_prefix_script(
+        Path(install_base), merge_install)
+  File "/usr/lib/python3/dist-packages/colcon_zsh/shell/zsh.py", line 29, in create_prefix_script
+    expand_template(
+    ~~~~~~~~~~~~~~~^
+        Path(__file__).parent / 'template' / 'prefix.zsh.em',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+            'package_script_no_ext': 'package',
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        })
+        ^^
+  File "/usr/lib/python3/dist-packages/colcon_core/shell/template/__init__.py", line 68, in expand_template
+    with destination_path.open('w') as h:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 772, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/wf3/install/local_setup.zsh'
+
+
+Summary: 0 packages finished [0.17s]
+  1 package failed: perm_cpp
+  1 package had stderr output: perm_cpp
+  1 package not processed
+[Errno 13] Permission denied: '/wf3/install/perm_cpp/share/colcon-core/packages/perm_cpp'
+rc=1
+
+################ F4 workaround: separate bases for dev
+--- [root] colcon build --parallel-workers 1  (in /wf4)
+
+Summary: 2 packages finished [2.46s]
+  1 package had stderr output: perm_cpp
+rc=0
+--- [dev] colcon --log-base log_dev build --parallel-workers 1 --build-base build_dev --install-base install_dev  (in /wf4)
+
+---
+Finished <<< perm_cpp [1.11s]
+Starting >>> perm_py
+Finished <<< perm_py [1.22s]
+
+Summary: 2 packages finished [2.46s]
+  1 package had stderr output: perm_cpp
+rc=0
+--- [dev] source install_dev/setup.bash && ros2 run perm_cpp hello  (in /wf4)
+HELLO-CPP
+rc=0
+
+################ F5 'fix' by building as root again (sudo colcon build): what dev is left with
+--- [root] colcon build --parallel-workers 1  (in /wf5)
+
+Summary: 2 packages finished [2.47s]
+  1 package had stderr output: perm_cpp
+rc=0
+--- [root] colcon build --parallel-workers 1  (in /wf5)
+Starting >>> perm_py
+Finished <<< perm_py [1.20s]
+
+Summary: 2 packages finished [1.47s]
+rc=0
+owners in /wf5:
+  root build
+  root install
+  root log
+--- [dev] touch install/x  (in /wf5)
+touch: cannot touch 'install/x': Permission denied
+rc=1
+=== done lyrical
