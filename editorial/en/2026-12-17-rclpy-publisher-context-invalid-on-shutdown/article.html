@@ -1,0 +1,170 @@
+<pre><code>rclpy._rclpy_pybind11.RCLError: Failed to publish: publisher's context is invalid, at ./src/rcl/publisher.c:389</code></pre>
+
+<p>If you log from the same place, you get a second line too: <code>Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:389</code>. The line number is 389 on Humble, 423 on Jazzy and 427 on Lyrical. The rest of the text is the same.</p>
+
+<p>Short answer: by the time your <code>except KeyboardInterrupt:</code> block runs, rclpy's own signal handler has already shut the context down, so any publish fails. If you want to send a last message, such as a zero velocity command, you have to keep the context alive yourself. In Python, start rclpy without its signal handlers, publish in the <code>except</code> block, wait for the message to be acknowledged, and then shut down. This worked in every run on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-python">import signal
+import rclpy
+from rclpy.duration import Duration
+from rclpy.signals import SignalHandlerOptions
+
+def main():
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+    # with NO, SIGTERM (kill, docker stop, launch) would kill the process outright
+    def on_term(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, on_term)
+
+    node = MyNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.pub.publish(stop_msg)                         # context is still valid here
+        node.pub.wait_for_all_acked(Duration(seconds=1))   # let it leave the process
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()</code></pre>
+
+<p>In C++ the same fix is <code>rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None)</code> plus your own signal flag. A pre-shutdown callback also works there. C++ has a worse trap, though: a publish after Ctrl+C throws nothing, prints nothing and sends nothing.</p>
+
+<h2>Find your case</h2>
+
+<p>A separate listener process counted how many stop messages actually arrived. Each row is 10 runs per distro unless marked otherwise. Default RMW (Fast DDS) on all three.</p>
+
+<table>
+<thead><tr><th>What the node did</th><th>What you see</th><th>Stop messages received (Humble / Jazzy / Lyrical)</th></tr></thead>
+<tbody>
+<tr><td>Python, default <code>rclpy.init()</code>, publish in <code>except KeyboardInterrupt</code></td><td><code>RCLError: Failed to publish: publisher's context is invalid</code> (9 of 10 on Humble, 10 of 10 on Jazzy and Lyrical)</td><td>1 / 0 / 0</td></tr>
+<tr><td>Python, <code>get_logger().info()</code> in the same block</td><td>The line prints on the console, then <code>Failed to publish log message to rosout</code></td><td>(not a topic message)</td></tr>
+<tr><td>Python, default init, stopped with SIGTERM</td><td><code>ExternalShutdownException</code>, the <code>KeyboardInterrupt</code> branch never runs (3 of 3)</td><td>0 / 0 / 0</td></tr>
+<tr><td>Python, publish in <code>context.on_shutdown()</code></td><td>Nothing. The callback never ran</td><td>0 / 0 / 0</td></tr>
+<tr><td>Python, <code>SignalHandlerOptions.NO</code>, Ctrl+C</td><td>Publish succeeds, <code>rclpy.ok()</code> is still True</td><td>10 / 10 / 10</td></tr>
+<tr><td>Python, <code>SignalHandlerOptions.NO</code> plus <code>wait_for_all_acked</code></td><td>Publish succeeds, ack returns True</td><td>10 / 10 / 10</td></tr>
+<tr><td>Python, <code>SignalHandlerOptions.NO</code>, SIGTERM, no handler of your own</td><td>Exit code 143, no traceback, <code>finally</code> never runs (3 of 3)</td><td>0 / 0 / 0</td></tr>
+<tr><td>Python, <code>SignalHandlerOptions.NO</code>, own SIGTERM handler, SIGTERM</td><td>Publish succeeds</td><td>9 / 10 / 10</td></tr>
+<tr><td>C++, default <code>rclcpp::init</code>, publish after <code>spin()</code> returns</td><td>No exception, no error. <code>publish()</code> just returns</td><td>0 / 0 / 0</td></tr>
+<tr><td>C++, publish in <code>rclcpp::on_shutdown()</code></td><td>Callback runs, <code>publish()</code> returns</td><td>0 / 0 / 0</td></tr>
+<tr><td>C++, publish in <code>add_pre_shutdown_callback()</code></td><td>Callback runs</td><td>10 / 10 / 10</td></tr>
+<tr><td>C++, <code>SignalHandlerOptions::None</code> plus own flag, Ctrl+C (and SIGTERM, 3 runs)</td><td>Publish returns, <code>wait_for_all_acked</code> returns true</td><td>10 / 10 / 10 (TERM: 3 / 3 / 3)</td></tr>
+</tbody>
+</table>
+
+<p>The one Humble message that got through in the first row came from a run where the <code>KeyboardInterrupt</code> arrived before the context was shut down (<code>rclpy.ok()</code> was still True). That is a race. Don't count on it.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-04 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one container per distro, run one after another. A Python talker and a C++ talker each publish <code>std_msgs/String</code> "tick" on <code>cmd</code> at 10 Hz and try to publish "STOP" when they are stopped. A Python listener in a second process subscribes to <code>cmd</code> (reliable, depth 100) and prints every STOP it receives.</p>
+
+<p>For each run the script starts the listener, waits 1.5 s, starts the talker, waits 2.5 s and sends <code>SIGINT</code> (what Ctrl+C sends) or <code>SIGTERM</code> (what <code>kill</code>, <code>docker stop</code> and launch's escalation send) to the talker. It then waits for the talker to exit, gives the listener 1 more second, and counts the STOP lines. The talker prints what happened at each step: which exception reached it, whether <code>rclpy.ok()</code> was still True, and whether <code>publish()</code> raised. The script runs 129 runs per distro: 14 variants, mostly 10 runs each, plus 20 runs of a 1 kHz timer case.</p>
+
+<p>The script uses bash job control (<code>set -m</code>). Without it, bash starts background processes with SIGINT ignored, and Python then doesn't install its <code>KeyboardInterrupt</code> handler. A process started from a terminal behaves like the job control case. Keep this in mind if you test shutdown code from a script.</p>
+
+<h2>Why the publish fails in Python</h2>
+
+<p>When you call <code>rclpy.init()</code> with no options, rclpy installs handlers for SIGINT and SIGTERM. On Ctrl+C its handler shuts down the default context. Python's own handler then raises <code>KeyboardInterrupt</code> out of <code>rclpy.spin()</code>. Your <code>except</code> block runs after the context is gone. Every publisher, and the <code>/rosout</code> publisher that logging uses, belongs to that context, so <code>publish()</code> raises <code>RCLError</code>. My talker printed <code>CAUGHT KeyboardInterrupt ok=False</code> in 29 of 30 default runs across the three distros.</p>
+
+<p>Logging behaves a little differently. <code>get_logger().info("stopping")</code> still printed <code>[INFO] [...] [talker]: stopping</code> on the console in every run. Only the copy to <code>/rosout</code> failed, which is the <code>Failed to publish log message to rosout</code> line. It is a message, not an exception, so your code keeps running. If all you want is a log line on Ctrl+C, you can ignore it. If you need the line in a bag or in rqt_console, it won't be there.</p>
+
+<p>SIGTERM takes a different path. With the default handlers, SIGTERM made <code>rclpy.spin()</code> raise <code>ExternalShutdownException</code> on all three distros (3 of 3 each). It is not a <code>KeyboardInterrupt</code>, so a stop message placed in <code>except KeyboardInterrupt</code> is never even tried. Ctrl+C, <code>kill</code> and <code>ros2 launch</code> shutdown all take different paths through the same code. The earlier HuntLab article on <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">Ctrl+C, SIGTERM and "rcl_shutdown already called"</a> covers those exit paths and exit codes. This article only covers getting a message out.</p>
+
+<h2>context.on_shutdown() does not run on Ctrl+C</h2>
+
+<p>The obvious hook is <code>node.context.on_shutdown(callback)</code>. In my runs the callback never ran: no publish attempt, no error, 0 of 10 on each distro. The talker still exited with code 0, so nothing tells you it was skipped. This matches <a href="https://github.com/ros2/rclpy/issues/532">ros2/rclpy#532</a>, "rclpy Context.on_shutdown callbacks are not called when Ctrl-C is pressed". It was opened in 2020 and was still open when I checked on 2026-11-04. Even if it did run, the callback is tied to the shutdown itself, so it would be too late to publish.</p>
+
+<h2>Fix 1 (Python): SignalHandlerOptions.NO</h2>
+
+<p><code>rclpy.init(signal_handler_options=SignalHandlerOptions.NO)</code> tells rclpy not to install its handlers. Python's default SIGINT handler is then the only one. Ctrl+C raises <code>KeyboardInterrupt</code> out of <code>spin()</code>, the context is still valid, and you decide when to shut it down. In every run with this option the talker printed <code>ok=True</code>, <code>publish()</code> succeeded, and the listener received the STOP message: 10 of 10 on each distro.</p>
+
+<p>There is a catch. <code>NO</code> means no SIGTERM handler either, and Python doesn't install one. In my SIGTERM runs with <code>NO</code> and nothing else, the talker died at once with exit code 143. It printed nothing after <code>READY</code>. Its <code>finally</code> block never ran, and no stop message was sent (3 of 3, every distro). That is the signal you get from <code>docker stop</code>, systemd and launch's escalation. So add a SIGTERM handler. The one in the short answer raises <code>KeyboardInterrupt</code>, so both signals end up in the same <code>except</code> block. With it, SIGTERM runs delivered 10 of 10 on Jazzy and Lyrical and 9 of 10 on Humble. The tenth Humble run is the next section.</p>
+
+<h2>Fix 2 (Python): wait for the ack before you shut down</h2>
+
+<p>A successful <code>publish()</code> only means the message was handed to the middleware. If the process tears the node down right after, the message can still be lost. In one Humble run (SIGTERM, own handler) the talker printed <code>PUBLISH_OK</code> and exited cleanly, but the listener got nothing. Across the three <code>SignalHandlerOptions.NO</code> variants without an ack wait (30 runs per distro), 29 of 30 messages arrived on Humble and 30 of 30 on Jazzy and Lyrical.</p>
+
+<p><code>Publisher.wait_for_all_acked(timeout)</code> blocks until every reliable subscriber has acknowledged what was sent, or until the timeout. With it, 10 of 10 arrived on every distro and the call returned <code>True</code> every time. It took 0.675–0.806 s on Humble, 0.005–0.110 s on Jazzy and 0.005–0.006 s on Lyrical. I didn't look into why Humble is so much slower. Either way it fits inside launch's default 5 s SIGINT timeout. Use a timeout so a missing subscriber can't block your shutdown. The rcl documentation says it returns at once for a best-effort publisher. My publisher and listener were both reliable, so I didn't test that case.</p>
+
+<h2>The C++ trap: publish() after shutdown is silent</h2>
+
+<p>The same pattern in C++ (default <code>rclcpp::init</code>, publish after <code>rclcpp::spin()</code> returns) gave no exception and no error message in 30 of 30 runs. <code>publish()</code> returned normally. The listener received nothing in any of them. rclcpp does this on purpose. In <code>publisher.hpp</code> (Humble branch), when <code>rcl_publish</code> returns <code>RCL_RET_PUBLISHER_INVALID</code> and the context is no longer valid, it returns without throwing. The comment there reads <code>// publisher is invalid due to context being shutdown</code>. A C++ node that "publishes a stop command on Ctrl+C" this way has never sent one, and nothing in its output says so.</p>
+
+<p>The only visible sign is the log line. <code>RCLCPP_INFO</code> right after the publish printed <code>Failed to publish log message to rosout: publisher's context is invalid</code> in 7 of 10 runs on Humble, 1 of 10 on Jazzy and 0 of 10 on Lyrical. So the warning is not reliable. On Lyrical you get no warning at all.</p>
+
+<h2>Fix options in C++</h2>
+
+<p><code>rclcpp::on_shutdown(callback)</code> ran 10 of 10 times on each distro, but its publish reached the listener 0 times. The header says why: these callbacks run "as the second to last step in shutdown()", after the context is no longer usable for publishing.</p>
+
+<p><code>add_pre_shutdown_callback</code> on the context runs before that. Registered on the global context, it delivered 10 of 10 on all three distros, including Humble (rclcpp 16.0.21):</p>
+
+<pre><code class="language-cpp">rclcpp::contexts::get_global_default_context()->add_pre_shutdown_callback(
+  [pub]() {
+    std_msgs::msg::String m;
+    m.data = "STOP";
+    pub-&gt;publish(m);
+  });</code></pre>
+
+<p>The header notes that when shutdown comes from the signal handler, "these callbacks are run asynchronously in the dedicated signal handling thread". Your executor may still be running a callback on another thread at that moment, so protect shared state.</p>
+
+<p>The other option matches the Python fix. Call <code>rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None)</code>, set an atomic flag from <code>std::signal</code> handlers for SIGINT and SIGTERM, and loop on <code>exec.spin_once(100ms)</code> until the flag is set. Then publish, call <code>pub-&gt;wait_for_all_acked(1000ms)</code> and call <code>rclcpp::shutdown()</code>. That delivered 10 of 10 for SIGINT and 3 of 3 for SIGTERM on every distro. The ack returned true in 0.575–0.605 s on Humble and in 0.005–0.006 s on Jazzy and Lyrical. Of the two, this gives you the most control: the publish runs in your main thread, after the executor has stopped.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Ctrl+C delivered</th><th>SIGTERM delivered</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Python: publish in <code>except</code>, default init</td><td>1 of 30</td><td>0 of 9</td><td>RCLError. The one success was a race</td></tr>
+<tr><td>Python: <code>context.on_shutdown</code></td><td>0 of 30</td><td>Not tested</td><td>Callback never ran</td></tr>
+<tr><td>Python: <code>SignalHandlerOptions.NO</code>, no SIGTERM handler</td><td>30 of 30</td><td>0 of 9</td><td>SIGTERM kills it with exit code 143</td></tr>
+<tr><td>Python: <code>NO</code> + own SIGTERM handler</td><td>30 of 30</td><td>29 of 30</td><td>The loss was on Humble, without an ack wait</td></tr>
+<tr><td>Python: <code>NO</code> + <code>wait_for_all_acked</code></td><td>30 of 30</td><td>Not tested together</td><td>Ack True every time, at most 0.806 s</td></tr>
+<tr><td>C++: publish after <code>spin()</code>, default init</td><td>0 of 30</td><td>Not tested</td><td>Silent. No exception</td></tr>
+<tr><td>C++: <code>rclcpp::on_shutdown</code></td><td>0 of 30</td><td>Not tested</td><td>Runs too late</td></tr>
+<tr><td>C++: <code>add_pre_shutdown_callback</code></td><td>30 of 30</td><td>Not tested</td><td>Runs in the signal handling thread</td></tr>
+<tr><td>C++: <code>SignalHandlerOptions::None</code> + own flag + ack</td><td>30 of 30</td><td>9 of 9</td><td>Most control</td></tr>
+</tbody>
+</table>
+
+<h2>The timer race I couldn't reproduce</h2>
+
+<p>One archived <a href="https://answers.ros.org/question/408908/ros2-humble-shutdown-causes-rclerror-publishers-context-is-invalid/">ROS Answers question</a> shows the same RCLError coming from inside a timer callback during <code>rclpy.spin()</code>, not from cleanup code. The theory is that a timer callback runs between the context shutdown and <code>spin()</code> returning. I tried to provoke it with a 1 kHz timer that publishes on every tick and a SIGINT after 2.5 s. In 20 runs per distro the traceback never appeared. That doesn't prove it can't happen, only that it was rare or absent in this setup. In 3 of 20 runs on Humble and Jazzy and 2 of 20 on Lyrical, <code>rclpy.ok()</code> was already False when <code>KeyboardInterrupt</code> reached the <code>except</code> block. In the rest it was still True. So the order of those two steps is not fixed. If a sensor callback in your node publishes, wrapping that one <code>publish()</code> in a <code>try</code> that ignores <code>RCLError</code> during shutdown is a reasonable guard. With <code>SignalHandlerOptions.NO</code> the context can't go away under a running callback, because only your code shuts it down.</p>
+
+<h2>Version notes</h2>
+
+<p>Every variant gave the same outcome on all three distros, with a few small differences, all on Humble. One default Python run on Humble got its message through by the race described above. Delivery without an ack wait lost 1 of 30 messages on Humble and none on Jazzy or Lyrical. Acknowledgements on Humble took about 0.6–0.8 s, against about 5 ms on the newer distros (one Jazzy Python run took 0.110 s). The C++ rosout warning showed up in 7, 1 and 0 of 10 runs. Some text changed too: the rcl line number in the error (389, 423, 427). And rclcpp's own signal log reads <code>signal_handler(SIGINT/SIGTERM)</code> on Humble and Jazzy but <code>signal_handler(signum=2)</code> on Lyrical. <code>SignalHandlerOptions.NO</code>, <code>wait_for_all_acked</code> and <code>add_pre_shutdown_callback</code> all existed and worked on Humble, so the fixes above don't need a newer distro.</p>
+
+<p>One difference from the earlier HuntLab shutdown article: there, SIGTERM on Lyrical gave an <code>RCLError</code> about the wait set instead of <code>ExternalShutdownException</code>. In this setup Lyrical gave <code>ExternalShutdownException</code> in 3 of 3 SIGTERM runs. The nodes differ, and 3 runs is a small sample, so I don't read much into it.</p>
+
+<h2>Not tested</h2>
+
+<p>Nodes started through <code>ros2 launch</code> or <code>ros2 run</code> (signals were sent straight to the process), a real Ctrl+C in a terminal (the script used <code>kill -INT</code> with job control), Cyclone DDS and Zenoh, best-effort subscribers, <code>SignalHandlerOptions.SIGINT</code> or <code>SIGTERM</code> (install only one handler), lifecycle nodes, the multi-threaded executor, a stop message sent with <code>wait_for_all_acked</code> after SIGTERM in Python, SIGTERM for the C++ <code>pre_shutdown</code> and <code>on_shutdown</code> variants, and whether a robot driver acts on a single stop message. Don't rely on a stop message alone for safety. Use a command timeout in the driver as well.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "publisher's context is invalid" mean?</h3>
+<p>The rcl context that owns the publisher has been shut down, usually by rclpy's signal handler after Ctrl+C or SIGTERM. Nothing created from that context can send messages. In my runs it happened in 29 of 30 default Python runs when publishing from <code>except KeyboardInterrupt</code>.</p>
+
+<h3>How do I publish a zero velocity command when my ROS 2 Python node is stopped?</h3>
+<p>Call <code>rclpy.init(signal_handler_options=SignalHandlerOptions.NO)</code>, add a SIGTERM handler that raises <code>KeyboardInterrupt</code>, then publish in the <code>except</code> block, call <code>wait_for_all_acked</code> with a timeout, and only then shut down. That delivered the message in every run on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why is my rclpy on_shutdown callback not called?</h3>
+<p>On Ctrl+C, <code>context.on_shutdown</code> callbacks did not run at all in 30 runs. This is the open rclpy issue #532. Put the cleanup in your own <code>except</code> or <code>finally</code> block instead.</p>
+
+<h3>Why does my C++ node not send its stop message, with no error?</h3>
+<p>After the context is shut down, rclcpp's <code>publish()</code> returns without throwing and without sending. Publish from <code>add_pre_shutdown_callback</code>, or use <code>SignalHandlerOptions::None</code> with your own signal flag. Publishing from <code>rclcpp::on_shutdown</code> delivered nothing in 30 runs.</p>
+
+<h3>Can I ignore "Failed to publish log message to rosout"?</h3>
+<p>Usually yes. The log line still printed on the console in every run. Only the copy to <code>/rosout</code> failed, so the line won't show up in bags or rqt_console.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does publisher's context is invalid mean?", "acceptedAnswer": {"@type": "Answer", "text": "The rcl context that owns the publisher has been shut down, usually by rclpy's signal handler after Ctrl+C or SIGTERM. Nothing created from that context can send messages. In my runs it happened in 29 of 30 default Python runs when publishing from except KeyboardInterrupt."}},
+{"@type": "Question", "name": "How do I publish a zero velocity command when my ROS 2 Python node is stopped?", "acceptedAnswer": {"@type": "Answer", "text": "Call rclpy.init(signal_handler_options=SignalHandlerOptions.NO), add a SIGTERM handler that raises KeyboardInterrupt, then publish in the except block, call wait_for_all_acked with a timeout, and only then shut down. That delivered the message in every run on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why is my rclpy on_shutdown callback not called?", "acceptedAnswer": {"@type": "Answer", "text": "On Ctrl+C, context.on_shutdown callbacks did not run at all in 30 runs. This is the open rclpy issue 532. Put the cleanup in your own except or finally block instead."}},
+{"@type": "Question", "name": "Why does my C++ node not send its stop message, with no error?", "acceptedAnswer": {"@type": "Answer", "text": "After the context is shut down, rclcpp's publish() returns without throwing and without sending. Publish from add_pre_shutdown_callback, or use SignalHandlerOptions::None with your own signal flag. Publishing from rclcpp::on_shutdown delivered nothing in 30 runs."}},
+{"@type": "Question", "name": "Can I ignore Failed to publish log message to rosout?", "acceptedAnswer": {"@type": "Answer", "text": "Usually yes. The log line still printed on the console in every run. Only the copy to /rosout failed, so the line won't show up in bags or rqt_console."}}
+]}
+</script>
+
+<p>Measured on 2026-11-04 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, rcl 5.3.13, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, rcl 9.2.11, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, rcl 10.4.5, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS), on a 2 vCPU Linux host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-17-rclpy-publisher-context-invalid-on-shutdown/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/107351">ROS 2 Humble: RCLError: Failed to publish: Publisher's context is invalid</a>, <a href="https://answers.ros.org/question/408908/ros2-humble-shutdown-causes-rclerror-publishers-context-is-invalid/">ROS2 Humble: Shutdown causes RCLError: publisher's context is invalid</a>, <a href="https://robotics.stackexchange.com/questions/109947">ros2 humble: how to log a message after CTRL+C</a>, <a href="https://answers.ros.org/question/388526/logging-in-on_shutdown-callback/">logging in on_shutdown callback</a>, <a href="https://github.com/ros2/rclpy/issues/532">rclpy Context.on_shutdown callbacks are not called when Ctrl-C is pressed</a>.</p>
