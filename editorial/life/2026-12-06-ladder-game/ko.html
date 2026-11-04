@@ -1,0 +1,208 @@
+<p><strong>사다리타기는 세로줄 사이에 가로줄을 긋고 위에서 아래로 따라 내려가 짝을 정하는 제비뽑기다.</strong> 가로줄을 어떻게 긋든 한 사람이 결과 두 개를 받거나 아무도 안 받는 결과가 생기지 않는다. 다만 가로줄이 적으면 공정하지 않다. 가로줄을 아무 데나 하나씩 긋는다고 하면, 6명이 한 줄씩 6개를 그었을 때 1번 자리 사람이 1번 결과를 받을 확률은 1/6(16.7%)이 아니라 46.4%다. 아래에 이름과 결과만 넣으면 바로 돌아가는 온라인 사다리 게임과, 사람 수와 가로줄 개수로 공정도를 계산하는 계산기를 함께 붙였다.</p>
+<p><strong>목차</strong></p>
+<ul class="huntlab-toc">
+<li><a href="#summary">30초 핵심 요약</a></li>
+<li><a href="#game">온라인 사다리타기 게임</a></li>
+<li><a href="#howto">사용하는 법</a></li>
+<li><a href="#math">가로줄 하나는 옆 칸끼리 자리 바꾸기</a></li>
+<li><a href="#fair">사다리타기는 공정할까</a></li>
+<li><a href="#calculator">사다리 공정도 계산기</a></li>
+<li><a href="#table">사람 수별 필요한 가로줄 개수</a></li>
+<li><a href="#this-ladder">이 페이지 사다리가 정확히 1/N인 이유</a></li>
+<li><a href="#uses">당번·내기·자리 배치에 쓰는 법</a></li>
+<li><a href="#tips">종이 사다리를 공정하게 만드는 요령</a></li>
+<li><a href="#faq">자주 묻는 질문</a></li>
+</ul>
+<h2 id="summary">30초 핵심 요약</h2>
+<ul>
+<li><strong>항상 일대일:</strong> 가로줄 하나는 이웃한 두 세로줄의 자리를 맞바꾸는 일이다. 자리 바꾸기를 몇 번 하든 결과는 사람과 결과가 하나씩 짝지어진다.</li>
+<li><strong>가로줄이 적으면 치우친다:</strong> 가로줄은 이웃한 칸으로만 사람을 옮기므로, 몇 개 없으면 대부분 제자리 근처에서 끝난다. 사람 수만큼 그으면 1번 자리 사람이 1번 결과를 받을 확률이 37.5~49.5%(3~12명)다.</li>
+<li><strong>필요한 개수:</strong> 모든 사람의 확률이 1/N의 ±10% 안에 들어오려면 4명 14개, 6명 54개, 10명 272개, 12명 480개가 필요하다.</li>
+<li><strong>2명이면 개수가 전부다:</strong> 가로줄이 짝수 개면 제자리, 홀수 개면 서로 바뀐다.</li>
+<li><strong>이 페이지 사다리:</strong> crypto.getRandomValues로 고른 무작위 순서를 가로줄로 풀어 넣어, 누구든 각 결과를 받을 확률이 정확히 1/N이다.</li>
+</ul>
+<p class="huntlab-checked-date"><small>자료 확인일: 2026년 11월 5일 · 공식 출처 기준</small></p>
+<div class="wp-block-buttons huntlab-official-links"><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://doi.org/10.1080/07468342.1992.11973487" target="_blank" rel="noopener">Lange·Miller(1992) 사다리 논문</a></div><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://ko.wikipedia.org/wiki/%EC%82%AC%EB%8B%A4%EB%A6%AC_%ED%83%80%EA%B8%B0" target="_blank" rel="noopener">위키백과 사다리타기</a></div><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://en.wikipedia.org/wiki/Amidakuji" target="_blank" rel="noopener">Ghost leg 수학 성질</a></div></div>
+<h2 id="game">온라인 사다리타기 게임</h2>
+<p>이름과 결과를 한 줄에 하나씩(또는 쉼표로 나눠) 넣고 '사다리 만들기'를 누른다. 2명부터 12명까지 된다. 결과 칸이 이름보다 적으면 남는 칸은 '통과'로 채운다.</p>
+<div id="ld-game" style="border:1px solid #d0d7de;border-radius:8px;padding:16px;margin:16px 0">
+<p style="margin:0 0 10px"><label>참가자 이름<br><textarea id="ld-names" rows="5" style="width:100%;max-width:280px">민수
+지영
+현우
+서연</textarea></label></p>
+<p style="margin:0 0 10px"><label>결과<br><textarea id="ld-results" rows="5" style="width:100%;max-width:280px">청소 당번
+통과
+통과
+통과</textarea></label></p>
+<p style="margin:0 0 10px"><button type="button" id="ld-draw">사다리 만들기</button> <button type="button" id="ld-all">전체 결과 보기</button></p>
+<p id="ld-msg" style="margin:0 0 10px;color:#b42318"></p>
+<p style="margin:0 0 6px">이름을 누르면 그 사람의 길을 따라 내려간다.</p>
+<div id="ld-people" style="margin:0 0 10px"></div>
+<canvas id="ld-canvas" width="600" height="420" style="width:100%;max-width:600px;height:auto;border:1px solid #eaeef2;background:#fff"></canvas>
+<ul id="ld-out" aria-live="polite" style="font-weight:700"></ul>
+</div>
+<h2 id="howto">사용하는 법</h2>
+<h3>1. 이름과 결과 넣기</h3>
+<p>이름 수와 결과 수를 맞추는 것이 기본이다. 당번 한 명만 뽑는다면 결과에 '청소 당번' 한 줄만 쓰고 나머지는 비워 둬도 된다. 비운 칸은 '통과'가 된다. 이름이 겹치면 구분이 안 되니 '민수A', '민수B'처럼 나눠 쓴다.</p>
+<h3>2. 사다리 만들기와 다시 뽑기</h3>
+<p>'사다리 만들기'를 누를 때마다 가로줄을 새로 긋는다. 이름이나 결과를 고친 뒤에도 이 버튼을 눌러야 반영된다. 결과가 마음에 안 든다고 다시 누르면 그건 사다리가 아니라 사람이 고른 셈이 되니, 몇 번째 사다리로 정할지 먼저 합의해 두는 편이 낫다.</p>
+<h3>3. 한 명씩 따라가기와 전체 결과</h3>
+<p>이름 버튼을 누르면 그 사람의 길이 색깔 선으로 내려가고, 도착하면 아래 목록에 '이름 → 결과'가 붙는다. 한 명씩 확인하는 재미가 필요 없으면 '전체 결과 보기'로 한 번에 펼친다.</p>
+<h2 id="math">가로줄 하나는 옆 칸끼리 자리 바꾸기</h2>
+<h3>결과가 겹치지 않는 이유</h3>
+<p>세로줄마다 사람이 한 명씩 서 있다고 보자. 가로줄을 만나면 그 줄 양쪽 두 사람이 자리를 맞바꾼다. 맞바꾸기는 사람 수도, 칸 수도 바꾸지 않으므로 몇 번을 하든 한 칸에 한 사람이 남는다. 그래서 두 사람이 같은 결과에 도착하거나 비는 결과가 생기는 일은 구조상 없다. 영어 위키백과 Ghost leg 문서도 맨 위의 두 항목이 맨 아래에서 같은 항목에 대응하는 일은 없고, 가로줄을 몇 개 더하든 일대일 대응이 유지된다고 설명한다.</p>
+<h3>순열로 보기</h3>
+<p>수학에서는 이렇게 순서를 바꿔 늘어놓는 것을 순열이라 한다. 한국어 위키백과는 가로줄 하나를 "두 인접한 원소 사이의 치환"으로 보고, 사다리 전체는 그 치환의 곱이라 역시 n개 원소의 치환이라고 정리한다. 거꾸로 어떤 순열이든 옆 칸 바꾸기를 이어 붙여 만들 수 있으므로, 어떤 배정 결과든 그것이 나오는 사다리가 존재한다.</p>
+<h3>짝수·홀수 성질</h3>
+<p>자리 바꾸기를 한 번 할 때마다 순열의 짝·홀이 뒤집힌다. 가로줄이 짝수 개면 짝순열, 홀수 개면 홀순열만 나온다. 가로줄 개수를 미리 정해 두면 가능한 배정의 절반은 처음부터 나올 수 없다는 뜻이다. 사람이 많으면 체감하기 어렵지만, 2명일 때는 이 성질 하나로 결과가 정해진다.</p>
+<h2 id="fair">사다리타기는 공정할까</h2>
+<p>여기서 공정하다는 말은 누구든 각 결과를 받을 확률이 1/N이라는 뜻이다. 일대일 대응은 언제나 성립하지만 이 조건은 가로줄 수에 달려 있다. 계산은 단순한 모형으로 한다. 가로줄 하나하나를 이웃한 세로줄 N-1쌍 가운데 한 곳에 같은 확률로, 서로 다른 높이에 긋는다고 본다.</p>
+<h3>가로줄이 적으면 제자리 근처에서 끝난다</h3>
+<p>1번 자리 사람은 가로줄 하나를 만날 때 한 칸만 움직인다. 1번 자리는 맨 끝이라 1-2번 사이 가로줄만 만나고, 그 확률은 가로줄 하나마다 1/(N-1)이다. 6명이면 가로줄 하나가 1번 자리 사람을 건드릴 확률이 1/5이라, 6개를 그어도 한 번도 안 움직일 확률만 (4/5)^6 ≈ 26.2%다. 움직였다가 돌아오는 경우까지 더하면 1번 결과에 도착할 확률은 46.4%가 된다.</p>
+<h3>마르코프 체인으로 정확히 계산한다</h3>
+<p>한 사람의 위치만 보면, 다음 가로줄 뒤의 위치는 지금 위치에만 달려 있다. 왼쪽으로 1/(N-1), 오른쪽으로 1/(N-1), 나머지 확률로 제자리다. 이런 과정을 마르코프 체인이라 하고, 가로줄 K개 뒤의 확률은 이 이동 규칙을 K번 곱해서 정확히 구한다. 사다리를 마르코프 체인으로 분석한 글로는 Lange·Miller의 1992년 논문 "A Random Ladder Game: Permutations, Eigenvalues, and Convergence of Markov Chains"(The College Mathematics Journal 23권 5호)가 있다. 가로줄이 늘수록 확률은 1/N으로 다가가지만, 사람이 많을수록 훨씬 많이 그어야 한다.</p>
+<h3>두 명이면 가로줄 개수가 결과다</h3>
+<p>세로줄이 2개면 가로줄은 늘 같은 두 줄 사이에 놓이고, 만날 때마다 반드시 자리가 바뀐다. 짝수 개면 제자리, 홀수 개면 맞바뀐다. 둘이 한 줄씩 그으면 언제나 제자리다. 두 사람이 정할 때는 가로줄 개수를 서로 모르게 하거나 동전을 던지는 편이 낫다.</p>
+<h2 id="calculator">사다리 공정도 계산기</h2>
+<p>사람 수와 가로줄 개수를 넣으면 1번 자리 사람이 각 결과 칸에 도착할 확률을 정확히 계산한다. 위 모형(가로줄마다 이웃한 쌍 중 한 곳을 같은 확률로 고름)을 따른다.</p>
+<div id="ld-fair-box" style="border:1px solid #d0d7de;border-radius:8px;padding:16px;margin:16px 0">
+<p style="margin:0 0 10px"><label>사람 수(N) <input id="ld-n" type="number" min="2" max="12" step="1" value="6" style="width:70px"></label> <label>가로줄 개수(K) <input id="ld-k" type="number" min="0" max="5000" step="1" value="6" style="width:90px"></label></p>
+<div id="ld-fair" aria-live="polite" style="font-weight:700"></div>
+</div>
+<script>
+(function(){
+var C=window.crypto||null;
+function rnd(n){var a=new Uint32Array(1),lim=4294967296-(4294967296%n);do{C.getRandomValues(a)}while(a[0]>=lim);return a[0]%n}
+function shuffle(a){for(var i=a.length-1;i>0;i--){var j=rnd(i+1),t=a[i];a[i]=a[j];a[j]=t}return a}
+function gen(n,extra){var r=[],i,t=[],s=[];for(i=0;i!==extra;i++)r.push(rnd(n-1));for(i=0;i!==n;i++)t.push(i);shuffle(t);
+while(true){var d=[];for(i=0;i!==n-1;i++){if(t[i]>t[i+1])d.push(i)}if(!d.length)break;var g=d[rnd(d.length)],x=t[g];t[g]=t[g+1];t[g+1]=x;s.push(g)}
+return r.concat(s.reverse())}
+function ends(n,rungs){var c=[],e=[],i;for(i=0;i!==n;i++)c.push(i);rungs.forEach(function(g){var x=c[g];c[g]=c[g+1];c[g+1]=x});for(i=0;i!==n;i++)e[c[i]]=i;return e}
+function ident(n){var P=[],i,j;for(i=0;i!==n;i++){P.push([]);for(j=0;j!==n;j++)P[i].push(i===j?1:0)}return P}
+function step(P,n){var q=1/(n-1);return P.map(function(p){var o=[],j;for(j=0;j!==n;j++)o.push(0);for(j=0;j!==n;j++){var m=0;if(j>0){o[j-1]+=p[j]*q;m+=q}if(j!==n-1){o[j+1]+=p[j]*q;m+=q}o[j]+=p[j]*(1-m)}return o})}
+function exact(n,k){var P=ident(n);for(var i=0;i!==k;i++)P=step(P,n);return P}
+function dev(P,n){var d=0;P.forEach(function(p){p.forEach(function(v){d=Math.max(d,Math.abs(v*n-1))})});return d}
+function need(n,tol){if(n!==Math.max(n,3))return -1;var P=ident(n);for(var k=0;k!==20001;k++){if(dev(P,n)<=tol)return k;P=step(P,n)}return -1}
+function layout(n,rungs){var last=[],rows=[],R=0,i;for(i=0;i!==n-1;i++)last.push(-1);rungs.forEach(function(g){var r=last[g];if(g>0)r=Math.max(r,last[g-1]);if(g!==n-2)r=Math.max(r,last[g+1]);r+=1;last[g]=r;rows.push(r);R=Math.max(R,r+1)});return {rows:rows,R:R}}
+window.ladder={rnd:rnd,gen:gen,ends:ends,exact:exact,need:need,layout:layout};
+var $=function(i){return document.getElementById(i)};
+var cv=$('ld-canvas');
+if(!cv)return;
+var ctx=cv.getContext('2d'),COL=['#d1242f','#0969da','#1a7f37','#8250df','#bc4c00','#bf3989','#0a7a8a','#6e7781','#9a6700','#4b2bb8','#116329','#a40e26'];
+var S=null;
+function parse(v){return v.split(/[\n,]/).map(function(s){return s.trim()}).filter(function(s){return s.length})}
+function short(s){return s.length>5?s.slice(0,4)+'…':s}
+function X(i){return S.W*(i+0.5)/S.n}
+function build(){
+var names=parse($('ld-names').value),res=parse($('ld-results').value),msg=$('ld-msg');msg.textContent='';
+if(names.length>12){msg.textContent='이름은 12명까지 넣을 수 있습니다.';return}
+if(2>names.length){msg.textContent='이름을 2명 이상 넣어 주세요.';return}
+if(res.length>names.length){msg.textContent='결과가 이름보다 많습니다. 결과 수를 이름 수 이하로 줄여 주세요.';return}
+while(names.length>res.length)res.push('통과');
+var n=names.length,rungs=gen(n,n),L=layout(n,rungs),rowH=Math.max(12,Math.min(32,360/Math.max(L.R,1))),top=50,H=top*2+L.R*rowH;
+var list=rungs.map(function(g,i){return {g:g,y:top+(L.rows[i]+0.5+(rnd(41)-20)/100)*rowH}});
+list.sort(function(a,b){return a.y-b.y});
+S={n:n,names:names,res:res,list:list,W:600,H:H,top:top,bot:H-top,ends:ends(n,rungs),shown:{},anim:null};
+cv.width=600;cv.height=H;
+var pp=$('ld-people');pp.innerHTML='';
+names.forEach(function(nm,i){var b=document.createElement('button');b.type='button';b.textContent=nm;b.style.margin='0 6px 6px 0';b.style.borderColor=COL[i];b.addEventListener('click',function(){play(i)});pp.appendChild(b)});
+$('ld-out').innerHTML='';draw(null,0)}
+function path(p){var c=p,pts=[[X(c),S.top]];S.list.forEach(function(r){if(r.g===c){pts.push([X(c),r.y],[X(c+1),r.y]);c+=1}else if(r.g===c-1){pts.push([X(c),r.y],[X(c-1),r.y]);c-=1}});pts.push([X(c),S.bot]);return pts}
+function len(pts){var L=0;for(var i=1;i!==pts.length;i++)L+=Math.abs(pts[i][0]-pts[i-1][0])+Math.abs(pts[i][1]-pts[i-1][1]);return L}
+function stroke(pts,col,upto){ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);var left=upto;for(var i=1;i!==pts.length;i++){var a=pts[i-1],b=pts[i],d=Math.abs(b[0]-a[0])+Math.abs(b[1]-a[1]);if(d>=left){var f=d?left/d:1;ctx.lineTo(a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f);break}ctx.lineTo(b[0],b[1]);left-=d}ctx.stroke()}
+function draw(cur,prog){
+ctx.fillStyle='#ffffff';ctx.fillRect(0,0,S.W,S.H);ctx.strokeStyle='#57606a';ctx.lineWidth=2;
+for(var i=0;i!==S.n;i++){ctx.beginPath();ctx.moveTo(X(i),S.top);ctx.lineTo(X(i),S.bot);ctx.stroke()}
+S.list.forEach(function(r){ctx.beginPath();ctx.moveTo(X(r.g),r.y);ctx.lineTo(X(r.g+1),r.y);ctx.stroke()});
+Object.keys(S.shown).forEach(function(k){var p=path(+k);stroke(p,COL[+k],len(p))});
+if(cur!==null){var pt=path(cur);stroke(pt,COL[cur],len(pt)*prog)}
+ctx.font='13px sans-serif';ctx.textAlign='center';
+for(i=0;i!==S.n;i++){ctx.fillStyle=COL[i];ctx.fillText(short(S.names[i]),X(i),30);ctx.fillStyle='#24292f';ctx.fillText(short(S.res[i]),X(i),S.H-20)}}
+function addOut(p){if(S.shown[p])return;S.shown[p]=true;var li=document.createElement('li');li.textContent=S.names[p]+' → '+S.res[S.ends[p]];li.style.color=COL[p];$('ld-out').appendChild(li)}
+function play(p){if(!S)return;if(S.anim)cancelAnimationFrame(S.anim);var t0=null,dur=Math.min(2600,700+len(path(p))*1.2);
+function f(t){if(t0===null)t0=t;var k=Math.min(1,(t-t0)/dur);draw(p,k);if(k>=1){S.anim=null;addOut(p);draw(null,0);return}S.anim=requestAnimationFrame(f)}
+S.anim=requestAnimationFrame(f)}
+function all(){if(!S)return;if(S.anim){cancelAnimationFrame(S.anim);S.anim=null}for(var i=0;i!==S.n;i++)addOut(i);draw(null,0)}
+function pct(v){return (Math.round(v*1000)/10).toFixed(1)+'%'}
+function fair(){var n=parseInt($('ld-n').value,10),k=parseInt($('ld-k').value,10),o=$('ld-fair'),L=[];
+if(!(n>=2)||n>12||!(k>=0)||k>5000){L.push('사람 수는 2~12명, 가로줄은 0~5,000개로 넣어 주세요.')}else if(n===2){L.push('2명은 가로줄이 짝수면 제자리, 홀수면 서로 바뀝니다. 가로줄 '+k+'개면 1번 자리 사람이 1번 결과를 받을 확률은 '+(k%2?'0%':'100%')+'입니다.')}else{
+var p=exact(n,k)[0];L.push('공정한 확률(1/'+n+'): '+pct(1/n));L.push('1번 자리 → 1번 결과: '+pct(p[0]));
+L.push('1번 자리 사람의 결과 칸별 확률: 가장 높은 칸 '+pct(Math.max.apply(null,p))+', 가장 낮은 칸 '+pct(Math.min.apply(null,p)));
+L.push('모든 확률이 1/N의 ±10% 안: 가로줄 '+need(n,0.1)+'개부터, ±5% 안: '+need(n,0.05)+'개부터')}
+o.innerHTML='';L.forEach(function(s){var q=document.createElement('p');q.style.margin='0 0 6px';q.textContent=s;o.appendChild(q)})}
+$('ld-draw').addEventListener('click',build);$('ld-all').addEventListener('click',all);
+['ld-n','ld-k'].forEach(function(i){$(i).addEventListener('input',fair);$(i).addEventListener('change',fair)});
+build();fair()})();
+</script>
+<h2 id="table">사람 수별 필요한 가로줄 개수</h2>
+<p>같은 모형으로 계산한 값이다. '±10% 안'은 모든 시작 자리와 모든 결과 칸에서 확률이 1/N의 0.9배~1.1배 사이라는 뜻이다. 예를 들어 10명이면 9~11% 사이다.</p>
+<table>
+<thead><tr><th>사람 수</th><th>공정한 확률(1/N)</th><th>가로줄 N개일 때 1번→1번</th><th>가로줄 3N개일 때 1번→1번</th><th>±10% 안에 드는 가로줄</th><th>±5% 안에 드는 가로줄</th></tr></thead>
+<tbody>
+<tr><td>3명</td><td>33.3%</td><td>37.5%</td><td>33.4%</td><td>5개</td><td>6개</td></tr>
+<tr><td>4명</td><td>25.0%</td><td>43.2%</td><td>28.1%</td><td>14개</td><td>17개</td></tr>
+<tr><td>5명</td><td>20.0%</td><td>45.1%</td><td>28.1%</td><td>29개</td><td>36개</td></tr>
+<tr><td>6명</td><td>16.7%</td><td>46.4%</td><td>28.7%</td><td>54개</td><td>66개</td></tr>
+<tr><td>7명</td><td>14.3%</td><td>47.3%</td><td>29.1%</td><td>88개</td><td>109개</td></tr>
+<tr><td>8명</td><td>12.5%</td><td>47.9%</td><td>29.5%</td><td>135개</td><td>166개</td></tr>
+<tr><td>9명</td><td>11.1%</td><td>48.5%</td><td>29.7%</td><td>196개</td><td>241개</td></tr>
+<tr><td>10명</td><td>10.0%</td><td>48.9%</td><td>30.0%</td><td>272개</td><td>336개</td></tr>
+<tr><td>11명</td><td>9.1%</td><td>49.2%</td><td>30.1%</td><td>366개</td><td>451개</td></tr>
+<tr><td>12명</td><td>8.3%</td><td>49.5%</td><td>30.3%</td><td>480개</td><td>591개</td></tr>
+</tbody>
+</table>
+<p>한 사람이 세 줄씩 그어도 10명이면 1번 자리 사람이 1번 결과를 받을 확률이 30.0%로, 공정한 값 10%의 세 배다. 손으로 그리는 사다리에서 수백 개를 긋기는 어려우니, 사람이 많을수록 가로줄 개수보다 다른 방법으로 공정함을 챙겨야 한다. 방법은 아래 요령에 정리했다.</p>
+<h2 id="this-ladder">이 페이지 사다리가 정확히 1/N인 이유</h2>
+<h3>브라우저의 암호용 난수를 쓴다</h3>
+<p>가로줄 위치는 Math.random이 아니라 브라우저의 crypto.getRandomValues로 뽑는다. 원하는 범위로 줄일 때 생기는 치우침은 범위를 벗어나는 값을 버리고 다시 뽑는 방식으로 없앴다.</p>
+<h3>무작위 순열을 가로줄로 풀어 넣는다</h3>
+<p>사다리 위쪽에는 사람 수만큼 가로줄을 아무 데나 긋는다. 아래쪽에는 모든 순서가 같은 확률로 나오도록 섞은 순열을 하나 고르고, 그 순열이 나올 때까지 옆 칸 바꾸기를 무작위 순서로 이어 붙인다. 아래쪽 순열이 이미 고르게 섞여 있으면, 위쪽에서 무엇을 하든 전체 결과도 고르게 섞인다. 고르게 섞인 카드 한 벌을 어떤 정해진 순서로 다시 늘어놓아도 여전히 고르게 섞여 있는 것과 같다. 그래서 6명 기준 가로줄이 많아야 21개(위쪽 6개, 아래쪽 최대 15개)라도 각 결과의 확률이 정확히 1/N이다. 검산 파일에서 4명 사다리를 20만 번 만들어 24가지 배정이 모두 약 1/24씩 나오는 것을 확인했다.</p>
+<h2 id="uses">당번·내기·자리 배치에 쓰는 법</h2>
+<h3>당번 정하기</h3>
+<p>청소나 설거지 당번처럼 한두 명만 뽑을 때는 결과에 당번만 적고 나머지를 비운다. 주마다 돌아가며 정한다면 지난주 당번을 빼고 돌리는 식으로 규칙을 먼저 정해 두면 다툼이 줄어든다.</p>
+<h3>커피·밥값 내기</h3>
+<p>'커피 사기' 한 칸에 나머지는 '통과'로 두는 것이 가장 흔한 쓰임이다. 금액을 나눠 낼 때는 '1만원', '5천원'처럼 결과에 금액을 적으면 된다. 각 결과 칸의 확률은 정확히 1/N이므로 어느 이름 자리에 서든 유리하지 않다.</p>
+<h3>자리·순서 배치</h3>
+<p>결과에 '1번 자리'부터 'N번 자리'까지 적으면 자리 배치표가 된다. 발표 순서나 조 편성도 같은 방식이다. 조를 나눌 때는 결과에 'A조', 'A조', 'B조', 'B조'처럼 같은 이름을 여러 번 써도 된다.</p>
+<h2 id="tips">종이 사다리를 공정하게 만드는 요령</h2>
+<h3>시작 자리는 가로줄을 다 그은 뒤에 고른다</h3>
+<p>표에서 봤듯이 가로줄이 적으면 사람은 대체로 제자리 근처로 간다. 사다리 모양을 본 뒤 자리를 고르면 원하는 결과를 노릴 수 있다. 가로줄을 다 긋고 가운데를 접어 가린 다음 자리를 고르게 한다.</p>
+<h3>결과 칸은 마지막에 섞어 적는다</h3>
+<p>가로줄이 적어도, 결과를 적는 순서를 가로줄과 상관없이 정하면 치우침이 사라진다. 사다리를 다 그린 뒤 결과를 쪽지로 섞어 뽑아 아래 칸에 적으면, 결과 칸 배치 자체가 고르게 섞인 순열 역할을 한다. 이 페이지 사다리가 아래쪽에서 쓰는 원리와 같다.</p>
+<h3>가로줄은 넉넉히, 긋는 사람은 여럿</h3>
+<p>한 사람이 몰아서 그으면 원하는 쪽으로 길을 낼 수 있다. 모두 돌아가며 여러 줄씩 긋고, 가장자리 자리까지 가로줄이 고루 닿게 한다.</p>
+<h2 id="faq">자주 묻는 질문</h2>
+<h3>사다리타기에서 두 사람이 같은 결과에 갈 수 있나?</h3>
+<p>갈 수 없다. 가로줄 하나는 이웃한 두 사람의 자리를 맞바꿀 뿐이라, 몇 개를 긋든 한 결과에 한 사람만 도착한다. 남는 결과도 생기지 않는다.</p>
+<h3>가로줄은 몇 개를 그어야 공정한가?</h3>
+<p>가로줄을 무작위 위치에 하나씩 긋는다고 할 때, 모든 확률을 1/N의 ±10% 안에 넣으려면 4명 14개, 6명 54개, 10명 272개, 12명 480개가 필요하다. 손으로 그리기 어려운 개수라 결과 칸을 마지막에 섞어 적는 편이 현실적이다.</p>
+<h3>맨 끝자리가 불리한가?</h3>
+<p>유리하거나 불리하다기보다, 가로줄이 적으면 끝자리 사람은 끝쪽 결과로 갈 가능성이 크다. 끝자리는 가로줄을 한쪽에서만 만나 덜 움직이기 때문이다. 그 자리에 무엇이 적혀 있는지에 따라 유불리가 갈린다.</p>
+<h3>두 명이 사다리를 타면 어떻게 되나?</h3>
+<p>가로줄 개수가 짝수면 제자리, 홀수면 서로 바뀐다. 개수를 아는 사람이 있으면 결과도 아는 셈이니 두 명이면 다른 방법을 쓰는 편이 낫다.</p>
+<h3>이 페이지 사다리 결과는 미리 정해져 있나?</h3>
+<p>'사다리 만들기'를 누르는 순간 브라우저에서 새로 뽑는다. 이름을 입력하기 전에 정해 두는 결과는 없고, 서버로 보내는 값도 없다. 누를 때마다 다른 사다리가 나온다.</p>
+<h3>결과를 다시 뽑아도 되나?</h3>
+<p>도구는 몇 번이든 다시 뽑아 준다. 다만 마음에 들 때까지 다시 누르면 공정함이 사라지니, 처음 나온 결과로 정한다고 미리 합의해 두는 것이 좋다.</p>
+<h3>휴대폰에서도 되나?</h3>
+<p>된다. 사다리는 화면 폭에 맞춰 줄어든다. 12명처럼 사람이 많으면 이름이 그림 안에서 잘릴 수 있는데, 아래 결과 목록에는 전체 이름이 나온다.</p>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"사다리타기에서 두 사람이 같은 결과에 갈 수 있나?","acceptedAnswer":{"@type":"Answer","text":"갈 수 없다. 가로줄 하나는 이웃한 두 사람의 자리를 맞바꿀 뿐이라, 몇 개를 긋든 한 결과에 한 사람만 도착한다. 남는 결과도 생기지 않는다."}},
+{"@type":"Question","name":"가로줄은 몇 개를 그어야 공정한가?","acceptedAnswer":{"@type":"Answer","text":"가로줄을 무작위 위치에 하나씩 긋는다고 할 때, 모든 확률을 1/N의 ±10% 안에 넣으려면 4명 14개, 6명 54개, 10명 272개, 12명 480개가 필요하다. 손으로 그리기 어려운 개수라 결과 칸을 마지막에 섞어 적는 편이 현실적이다."}},
+{"@type":"Question","name":"맨 끝자리가 불리한가?","acceptedAnswer":{"@type":"Answer","text":"유리하거나 불리하다기보다, 가로줄이 적으면 끝자리 사람은 끝쪽 결과로 갈 가능성이 크다. 끝자리는 가로줄을 한쪽에서만 만나 덜 움직이기 때문이다. 그 자리에 무엇이 적혀 있는지에 따라 유불리가 갈린다."}},
+{"@type":"Question","name":"두 명이 사다리를 타면 어떻게 되나?","acceptedAnswer":{"@type":"Answer","text":"가로줄 개수가 짝수면 제자리, 홀수면 서로 바뀐다. 개수를 아는 사람이 있으면 결과도 아는 셈이니 두 명이면 다른 방법을 쓰는 편이 낫다."}},
+{"@type":"Question","name":"이 페이지 사다리 결과는 미리 정해져 있나?","acceptedAnswer":{"@type":"Answer","text":"'사다리 만들기'를 누르는 순간 브라우저에서 새로 뽑는다. 이름을 입력하기 전에 정해 두는 결과는 없고, 서버로 보내는 값도 없다. 누를 때마다 다른 사다리가 나온다."}},
+{"@type":"Question","name":"결과를 다시 뽑아도 되나?","acceptedAnswer":{"@type":"Answer","text":"도구는 몇 번이든 다시 뽑아 준다. 다만 마음에 들 때까지 다시 누르면 공정함이 사라지니, 처음 나온 결과로 정한다고 미리 합의해 두는 것이 좋다."}},
+{"@type":"Question","name":"휴대폰에서도 되나?","acceptedAnswer":{"@type":"Answer","text":"된다. 사다리는 화면 폭에 맞춰 줄어든다. 12명처럼 사람이 많으면 이름이 그림 안에서 잘릴 수 있는데, 아래 결과 목록에는 전체 이름이 나온다."}}
+]}
+</script>
+<h2>같이 보면 좋은 글</h2>
+<ul>
+<li><a href="https://huntlab.app/percent-calculator-2026/">퍼센트 계산기: 비율·증감률 바로 계산</a></li>
+<li><a href="https://huntlab.app/lottery-prize-tax-calculator-2026/">로또 당첨금 세금 계산기</a></li>
+<li><a href="https://huntlab.app/character-count-calculator-2026/">글자수 세기 계산기</a></li>
+<li><a href="https://huntlab.app/date-day-count-calculator/">날짜 계산기: 며칠 남았는지·며칠 지났는지</a></li>
+<li><a href="https://huntlab.app/time-calculator-2026/">시간 계산기</a></li>
+</ul>
+<p>출처: <a href="https://doi.org/10.1080/07468342.1992.11973487">Les Lange, James W. Miller, "A Random Ladder Game: Permutations, Eigenvalues, and Convergence of Markov Chains", The College Mathematics Journal 23(5), 1992, pp. 373-385</a> · <a href="https://ko.wikipedia.org/wiki/%EC%82%AC%EB%8B%A4%EB%A6%AC_%ED%83%80%EA%B8%B0">위키백과 사다리타기</a> · <a href="https://en.wikipedia.org/wiki/Amidakuji">Wikipedia Ghost leg</a>. 사다리타기는 정부 기관이 정한 규칙이 없는 놀이라, 확률 값은 위 모형의 공식으로 직접 계산하고 node 시뮬레이션으로 검산했다. 실제 종이 사다리는 긋는 사람의 습관에 따라 이 모형과 다를 수 있다.</p>
