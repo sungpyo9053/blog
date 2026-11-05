@@ -1,0 +1,509 @@
+=== distro=jazzy 2026-11-05 07:21:43 UTC
+ros-jazzy-launch 3.4.12-1noble.20260920.232232
+ros-jazzy-launch-ros 0.26.13-1noble.20260920.233704
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-rmw-fastrtps-cpp 8.4.4-1noble.20260911.100940
+ros-jazzy-rmw-implementation 2.15.6-1noble.20260911.103206
+ros-jazzy-ros2cli 0.32.13-1noble.20261006.033947
+ros-jazzy-ros2run 0.32.13-1noble.20261006.034826
+compiler: g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0; python: Python 3.12.3
+RMW_IMPLEMENTATION=unset
+core pattern: |/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E; ulimit -c: 0
+colcon build  rc=0 in 6 s
+binary has debug info (default build): 0 debug_info sections
+
+##### A. Without launch: the binary directly, and ros2 run
+direct binary mode=segv exit=139; last lines:
+/work/repro.sh: line 188:   205 Segmentation fault      (core dumped) /ws/install/crash_demo/lib/crash_demo/crasher --ros-args -p mode:=$m > /tmp/d.log 2>&1
+  | [INFO] [1793863310.010664959] [crasher]: started, mode=segv, crashing in 1 s
+  | [INFO] [1793863311.010998244] [crasher]: about to crash (segv)
+ros2 run mode=segv exit=245; last 2 lines:
+  | [INFO] [1793863312.468928714] [crasher]: about to crash (segv)
+  | [ros2run]: Segmentation fault
+/work/repro.sh: line 188:   245 Aborted                 (core dumped) /ws/install/crash_demo/lib/crash_demo/crasher --ros-args -p mode:=$m > /tmp/d.log 2>&1
+direct binary mode=throw exit=134; last lines:
+  | terminate called after throwing an instance of 'std::runtime_error'
+  |   what():  sensor driver returned -1
+ros2 run mode=throw exit=250; last 2 lines:
+  |   what():  sensor driver returned -1
+  | [ros2run]: Aborted
+direct binary mode=abort exit=134; last lines:
+/work/repro.sh: line 188:   283 Aborted                 (core dumped) /ws/install/crash_demo/lib/crash_demo/crasher --ros-args -p mode:=$m > /tmp/d.log 2>&1
+  | [INFO] [1793863315.279309332] [crasher]: started, mode=abort, crashing in 1 s
+  | [INFO] [1793863316.279592489] [crasher]: about to crash (abort)
+ros2 run mode=abort exit=250; last 2 lines:
+  | [INFO] [1793863317.654846104] [crasher]: about to crash (abort)
+  | [ros2run]: Aborted
+direct binary mode=exit1 exit=1; last lines:
+  | [INFO] [1793863318.872188169] [crasher]: about to crash (exit1)
+  | [ERROR] [1793863318.872272644] [crasher]: giving up
+ros2 run mode=exit1 exit=1; last 2 lines:
+  | [ERROR] [1793863320.195620334] [crasher]: giving up
+  | [ros2run]: Process exited with failure 1
+bash -c with the segv binary (what an interactive shell prints):
+  | bash: line 1:   362 Segmentation fault      (core dumped) /ws/install/crash_demo/lib/crash_demo/crasher --ros-args -p mode:=segv > /dev/null 2>&1
+  | exit=139
+ros2 run py_crasher mode=raise exit=1; last 3 lines:
+  |     raise ValueError('sensor driver returned -1')
+  | ValueError: sensor driver returned -1
+  | [ros2run]: Process exited with failure 1
+ros2 run py_crasher mode=segv exit=245; last 3 lines:
+  | [INFO] [1793863323.892995217] [crasher]: started, mode=segv, crashing in 1 s
+  | [INFO] [1793863324.894239788] [crasher]: about to crash (segv)
+  | [ros2run]: Segmentation fault
+ros2 run py_crasher mode=exit2 exit=2; last 3 lines:
+  | [INFO] [1793863325.517390077] [crasher]: started, mode=exit2, crashing in 1 s
+  | [INFO] [1793863326.518507143] [crasher]: about to crash (exit2)
+  | [ros2run]: Process exited with failure 2
+
+##### B. Each crash under ros2 launch (default output, companion process sleep 6)
+
+--- case=cpp_segv args=[exe:=crasher mode:=segv] load=0.81
+ros2 launch exit=0 after 6430 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [447]
+  | [INFO] [companion-2]: process started with pid [448]
+  | [crasher-1] [INFO] [1793863327.113686782] [crasher]: started, mode=segv, crashing in 1 s
+  | [crasher-1] [INFO] [1793863328.113954089] [crasher]: about to crash (segv)
+  | [ERROR] [crasher-1]: process has died [pid 447, exit code -11, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_q4xhxxmn'].
+  | [INFO] [launch.user]: HANDLER returncode=-11
+  | [INFO] [companion-2]: process has finished cleanly [pid 448]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_throw args=[exe:=crasher mode:=throw] load=0.75
+ros2 launch exit=0 after 6381 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [508]
+  | [INFO] [companion-2]: process started with pid [509]
+  | [crasher-1] [INFO] [1793863333.543148273] [crasher]: started, mode=throw, crashing in 1 s
+  | [crasher-1] [INFO] [1793863334.543428166] [crasher]: about to crash (throw)
+  | [crasher-1] terminate called after throwing an instance of 'std::runtime_error'
+  | [crasher-1]   what():  sensor driver returned -1
+  | [ERROR] [crasher-1]: process has died [pid 508, exit code -6, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_hr097m5p'].
+  | [INFO] [launch.user]: HANDLER returncode=-6
+  | [INFO] [companion-2]: process has finished cleanly [pid 509]
+  log dir files: launch.log 
+  'sensor driver returned': screen=1, log dir=1
+  'terminate called': screen=1, log dir=1
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_abort args=[exe:=crasher mode:=abort] load=0.69
+ros2 launch exit=0 after 6375 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [569]
+  | [INFO] [companion-2]: process started with pid [570]
+  | [crasher-1] [INFO] [1793863339.966895447] [crasher]: started, mode=abort, crashing in 1 s
+  | [crasher-1] [INFO] [1793863340.967169965] [crasher]: about to crash (abort)
+  | [ERROR] [crasher-1]: process has died [pid 569, exit code -6, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_1xp5k4go'].
+  | [INFO] [launch.user]: HANDLER returncode=-6
+  | [INFO] [companion-2]: process has finished cleanly [pid 570]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_exit1 args=[exe:=crasher mode:=exit1] load=0.63
+ros2 launch exit=0 after 6382 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [630]
+  | [INFO] [companion-2]: process started with pid [631]
+  | [crasher-1] [INFO] [1793863346.390747889] [crasher]: started, mode=exit1, crashing in 1 s
+  | [crasher-1] [INFO] [1793863347.391040239] [crasher]: about to crash (exit1)
+  | [crasher-1] [ERROR] [1793863347.391112237] [crasher]: giving up
+  | [ERROR] [crasher-1]: process has died [pid 630, exit code 1, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_vwiaihix'].
+  | [INFO] [launch.user]: HANDLER returncode=1
+  | [INFO] [companion-2]: process has finished cleanly [pid 631]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_oom args=[exe:=crasher mode:=oom] load=0.61
+ros2 launch exit=0 after 6429 ms (timeout 40s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [691]
+  | [INFO] [companion-2]: process started with pid [692]
+  | [crasher-1] [INFO] [1793863352.819661894] [crasher]: started, mode=oom, crashing in 1 s
+  | [crasher-1] [INFO] [1793863353.819924417] [crasher]: about to crash (oom)
+  | [ERROR] [crasher-1]: process has died [pid 691, exit code -9, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_x3ajwohn'].
+  | [INFO] [launch.user]: HANDLER returncode=-9
+  | [INFO] [companion-2]: process has finished cleanly [pid 692]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=py_raise args=[exe:=py_crasher.py mode:=raise] load=0.56
+ros2 launch exit=0 after 6475 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [py_crasher.py-1]: process started with pid [752]
+  | [INFO] [companion-2]: process started with pid [753]
+  | [py_crasher.py-1] [INFO] [1793863359.826897086] [crasher]: started, mode=raise, crashing in 1 s
+  | [py_crasher.py-1] [INFO] [1793863360.827932957] [crasher]: about to crash (raise)
+  | [py_crasher.py-1] Traceback (most recent call last):
+  | [py_crasher.py-1]   File "/ws/install/crash_demo/lib/crash_demo/py_crasher.py", line 22, in <module>
+  | [py_crasher.py-1]     main()
+  | [py_crasher.py-1]   File "/ws/install/crash_demo/lib/crash_demo/py_crasher.py", line 21, in main
+  | [py_crasher.py-1]     rclpy.spin(PyCrasher())
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+  | [py_crasher.py-1]     executor.spin_once()
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+  | [py_crasher.py-1]     self._spin_once_impl(timeout_sec)
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 918, in _spin_once_impl
+  | [py_crasher.py-1]     raise handler.exception()
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/task.py", line 286, in _execute_coroutine_step
+  | [py_crasher.py-1]     result = coro.send(None)
+  | [py_crasher.py-1]              ^^^^^^^^^^^^^^^
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 592, in handler
+  | [py_crasher.py-1]     await call_coroutine()
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 454, in _execute
+  | [py_crasher.py-1]     await await_or_execute(tmr.callback)
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 115, in await_or_execute
+  | [py_crasher.py-1]     return callback(*args)
+  | [py_crasher.py-1]            ^^^^^^^^^^^^^^^
+  | [py_crasher.py-1]   File "/ws/install/crash_demo/lib/crash_demo/py_crasher.py", line 14, in tick
+  | [py_crasher.py-1]     raise ValueError('sensor driver returned -1')
+  | [py_crasher.py-1] ValueError: sensor driver returned -1
+  | [ERROR] [py_crasher.py-1]: process has died [pid 752, exit code 1, cmd '/ws/install/crash_demo/lib/crash_demo/py_crasher.py --ros-args -r __node:=crasher --params-file /tmp/launch_params_ag0bplo5'].
+  | [INFO] [launch.user]: HANDLER returncode=1
+  | [INFO] [companion-2]: process has finished cleanly [pid 753]
+  log dir files: launch.log 
+  'sensor driver returned': screen=2, log dir=2
+  'Traceback': screen=1, log dir=1
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=py_segv args=[exe:=py_crasher.py mode:=segv] load=0.51
+ros2 launch exit=0 after 6373 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [py_crasher.py-1]: process started with pid [813]
+  | [INFO] [companion-2]: process started with pid [814]
+  | [py_crasher.py-1] [INFO] [1793863366.039692726] [crasher]: started, mode=segv, crashing in 1 s
+  | [py_crasher.py-1] [INFO] [1793863367.040704997] [crasher]: about to crash (segv)
+  | [ERROR] [py_crasher.py-1]: process has died [pid 813, exit code -11, cmd '/ws/install/crash_demo/lib/crash_demo/py_crasher.py --ros-args -r __node:=crasher --params-file /tmp/launch_params_djczrne9'].
+  | [INFO] [launch.user]: HANDLER returncode=-11
+  | [INFO] [companion-2]: process has finished cleanly [pid 814]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=py_exit2 args=[exe:=py_crasher.py mode:=exit2] load=0.43
+ros2 launch exit=0 after 6375 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [py_crasher.py-1]: process started with pid [874]
+  | [INFO] [companion-2]: process started with pid [875]
+  | [py_crasher.py-1] [INFO] [1793863372.464948002] [crasher]: started, mode=exit2, crashing in 1 s
+  | [py_crasher.py-1] [INFO] [1793863373.466074769] [crasher]: about to crash (exit2)
+  | [ERROR] [py_crasher.py-1]: process has died [pid 874, exit code 2, cmd '/ws/install/crash_demo/lib/crash_demo/py_crasher.py --ros-args -r __node:=crasher --params-file /tmp/launch_params_o0666crx'].
+  | [INFO] [launch.user]: HANDLER returncode=2
+  | [INFO] [companion-2]: process has finished cleanly [pid 875]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_throw_screen args=[exe:=crasher mode:=throw output:=screen] load=0.40
+ros2 launch exit=0 after 6377 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [935]
+  | [INFO] [companion-2]: process started with pid [936]
+  | [crasher-1] [INFO] [1793863378.671577827] [crasher]: started, mode=throw, crashing in 1 s
+  | [crasher-1] [INFO] [1793863379.671836865] [crasher]: about to crash (throw)
+  | [crasher-1] terminate called after throwing an instance of 'std::runtime_error'
+  | [crasher-1]   what():  sensor driver returned -1
+  | [ERROR] [crasher-1]: process has died [pid 935, exit code -6, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_cmthlkym'].
+  | [INFO] [launch.user]: HANDLER returncode=-6
+  | [INFO] [companion-2]: process has finished cleanly [pid 936]
+  log dir files: launch.log 
+  'sensor driver returned': screen=1, log dir=0
+  'terminate called': screen=1, log dir=0
+  'process has died': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=lib_ok args=[exe:=needs_lib] load=0.37
+ros2 launch exit=0 after 6370 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [needs_lib-1]: process started with pid [996]
+  | [INFO] [companion-2]: process started with pid [997]
+  | [INFO] [needs_lib-1]: process has finished cleanly [pid 996]
+  | [INFO] [launch.user]: HANDLER returncode=0
+  | [INFO] [companion-2]: process has finished cleanly [pid 997]
+  log dir files: launch.log 
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=lib_missing args=[exe:=needs_lib] load=0.34
+ros2 launch exit=0 after 6374 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [needs_lib-1]: process started with pid [1044]
+  | [ERROR] [needs_lib-1]: process has died [pid 1044, exit code 127, cmd '/ws/install/crash_demo/lib/crash_demo/needs_lib --ros-args -r __node:=crasher --params-file /tmp/launch_params_tf23nozf'].
+  | [INFO] [companion-2]: process started with pid [1045]
+  | [INFO] [launch.user]: HANDLER returncode=127
+  | [needs_lib-1] /ws/install/crash_demo/lib/crash_demo/needs_lib: error while loading shared libraries: libcrash_helper.so: cannot open shared object file: No such file or directory
+  | [INFO] [companion-2]: process has finished cleanly [pid 1045]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'error while loading shared': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cmd_missing args=[cmd:=no_such_program] load=0.36
+ros2 launch exit=0 after 6358 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [ERROR] [plain-1]: exception occurred while executing process:
+  | Traceback (most recent call last):
+  |   File "/opt/ros/jazzy/lib/python3.12/site-packages/launch/actions/execute_local.py", line 569, in __execute_process
+  |     transport, self._subprocess_protocol = await async_execute_process(
+  |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/opt/ros/jazzy/lib/python3.12/site-packages/osrf_pycommon/process_utils/async_execute_process_asyncio/impl.py", line 139, in async_execute_process
+  |     transport, protocol = await _async_execute_process_nopty(
+  |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/opt/ros/jazzy/lib/python3.12/site-packages/osrf_pycommon/process_utils/async_execute_process_asyncio/impl.py", line 45, in _async_execute_process_nopty
+  |     transport, protocol = await loop.subprocess_exec(
+  |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/usr/lib/python3.12/asyncio/base_events.py", line 1744, in subprocess_exec
+  |     transport = await self._make_subprocess_transport(
+  |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/usr/lib/python3.12/asyncio/unix_events.py", line 211, in _make_subprocess_transport
+  |     transp = _UnixSubprocessTransport(self, protocol, args, shell,
+  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/usr/lib/python3.12/asyncio/base_subprocess.py", line 36, in __init__
+  |     self._start(args=args, shell=shell, stdin=stdin, stdout=stdout,
+  |   File "/usr/lib/python3.12/asyncio/unix_events.py", line 820, in _start
+  |     self._proc = subprocess.Popen(
+  |                  ^^^^^^^^^^^^^^^^^
+  |   File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
+  |     self._execute_child(args, executable, preexec_fn, close_fds,
+  |   File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
+  |     raise child_exception_type(errno_num, err_msg, err_filename)
+  | FileNotFoundError: [Errno 2] No such file or directory: 'no_such_program'
+  | 
+  | [INFO] [companion-2]: process started with pid [1093]
+  | [INFO] [companion-2]: process has finished cleanly [pid 1093]
+  log dir files: launch.log 
+  'Traceback': screen=1, log dir=1
+
+##### C. Options
+
+--- case=py_segv_faulthandler args=[exe:=py_crasher.py mode:=segv faulthandler:=true] load=0.33
+ros2 launch exit=0 after 6377 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [py_crasher.py-1]: process started with pid [1139]
+  | [INFO] [companion-2]: process started with pid [1140]
+  | [py_crasher.py-1] [INFO] [1793863404.552609845] [crasher]: started, mode=segv, crashing in 1 s
+  | [py_crasher.py-1] [INFO] [1793863405.553606500] [crasher]: about to crash (segv)
+  | [py_crasher.py-1] Fatal Python error: Segmentation fault
+  | [py_crasher.py-1] 
+  | [py_crasher.py-1] Current thread 0x000076822c684300 (most recent call first):
+  | [py_crasher.py-1]   File "/usr/lib/python3.12/ctypes/__init__.py", line 525 in string_at
+  | [py_crasher.py-1]   File "/ws/install/crash_demo/lib/crash_demo/py_crasher.py", line 16 in tick
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 115 in await_or_execute
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 454 in _execute
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 592 in handler
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/task.py", line 286 in _execute_coroutine_step
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/task.py", line 270 in __call__
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 916 in _spin_once_impl
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926 in spin_once
+  | [py_crasher.py-1]   File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247 in spin
+  | [py_crasher.py-1]   File "/ws/install/crash_demo/lib/crash_demo/py_crasher.py", line 21 in main
+  | [py_crasher.py-1]   File "/ws/install/crash_demo/lib/crash_demo/py_crasher.py", line 22 in <module>
+  | [py_crasher.py-1] 
+  | [py_crasher.py-1] Extension modules: yaml._yaml, numpy.core._multiarray_umath, numpy.core._multiarray_tests, numpy.linalg._umath_linalg, numpy.fft._pocketfft_internal, numpy.random._common, numpy.random.bit_generator, numpy.random._bounded_integers, numpy.random._mt19937, numpy.random.mtrand, numpy.random._philox, numpy.random._pcg64, numpy.random._sfc64, numpy.random._generator, rcl_interfaces.rcl_interfaces_s__rosidl_typesupport_c, builtin_interfaces.builtin_interfaces_s__rosidl_typesupport_c, service_msgs.service_msgs_s__rosidl_typesupport_c, type_description_interfaces.type_description_interfaces_s__rosidl_typesupport_c (total: 18)
+  | [ERROR] [py_crasher.py-1]: process has died [pid 1139, exit code -11, cmd '/ws/install/crash_demo/lib/crash_demo/py_crasher.py --ros-args -r __node:=crasher --params-file /tmp/launch_params_nas_qceh'].
+  | [INFO] [launch.user]: HANDLER returncode=-11
+  | [INFO] [companion-2]: process has finished cleanly [pid 1140]
+  log dir files: launch.log 
+  'process has died': screen=1, log dir=1
+  'Fatal Python error': screen=1, log dir=1
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_segv_shutdown args=[exe:=crasher mode:=segv shutdown:=true companion:=20] load=0.30
+ros2 launch exit=0 after 1566 ms (timeout 25s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [1200]
+  | [INFO] [companion-2]: process started with pid [1201]
+  | [crasher-1] [INFO] [1793863410.756176584] [crasher]: started, mode=segv, crashing in 1 s
+  | [crasher-1] [INFO] [1793863411.756449873] [crasher]: about to crash (segv)
+  | [ERROR] [crasher-1]: process has died [pid 1200, exit code -11, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_v8auyydo'].
+  | [INFO] [launch.user]: HANDLER returncode=-11
+  | [INFO] [launch]: process[crasher-1] was required: shutting down launched system
+  | [INFO] [companion-2]: sending signal 'SIGINT' to process[companion-2]
+  | [ERROR] [companion-2]: process has died [pid 1201, exit code -2, cmd 'sleep 20'].
+  log dir files: launch.log 
+  'process has died': screen=2, log dir=2
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_segv_respawn args=[exe:=crasher mode:=segv respawn:=true respawn_delay:=1.0 companion:=30] load=0.28
+ros2 launch exit=124 after 9058 ms (timeout 9s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [crasher-1]: process started with pid [1261]
+  | [INFO] [companion-2]: process started with pid [1262]
+  | [crasher-1] [INFO] [1793863412.363367359] [crasher]: started, mode=segv, crashing in 1 s
+  | [crasher-1] [INFO] [1793863413.363632462] [crasher]: about to crash (segv)
+  | [ERROR] [crasher-1]: process has died [pid 1261, exit code -11, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_o76iu06f'].
+  | [INFO] [launch.user]: HANDLER returncode=-11
+  | [INFO] [crasher-1]: process started with pid [1277]
+  | [crasher-1] [INFO] [1793863414.551888690] [crasher]: started, mode=segv, crashing in 1 s
+  | [crasher-1] [INFO] [1793863415.552166060] [crasher]: about to crash (segv)
+  | [ERROR] [crasher-1]: process has died [pid 1277, exit code -11, cmd '/ws/install/crash_demo/lib/crash_demo/crasher --ros-args -r __node:=crasher --params-file /tmp/launch_params_o76iu06f'].
+  | [INFO] [launch.user]: HANDLER returncode=-11
+  | [INFO] [crasher-1]: process started with pid [1292]
+  | [crasher-1] [INFO] [1793863416.744747338] [crasher]: started, mode=segv, crashing in 1 s
+  | [crasher-1] [INFO] [1793863417.745043759] [crasher]: about to crash (segv)
+  log dir files: launch.log 
+  'process has died': screen=5, log dir=5
+  'HANDLER returncode': screen=4, log dir=4
+  'process started' lines: 5; 'process has died' lines: 5
+
+##### D. gdb as a prefix
+gdb: GNU gdb (Ubuntu 15.1-1ubuntu1~24.04.1) 15.1
+
+--- case=cpp_segv_gdb_default_build args=[exe:=crasher mode:=segv output:=screen prefix:=gdb -batch -ex run -ex bt --args] load=0.34
+ros2 launch exit=0 after 6379 ms (timeout 60s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [gdb-1]: process started with pid [1693]
+  | [INFO] [companion-2]: process started with pid [1694]
+  | [gdb-1] warning: Error disabling address space randomization: Operation not permitted
+  | [gdb-1] [Thread debugging using libthread_db enabled]
+  | [gdb-1] Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+  | [gdb-1] [New Thread 0x7da0d29036c0 (LWP 1701)]
+  | [gdb-1] [New Thread 0x7da0d21026c0 (LWP 1702)]
+  | [gdb-1] [New Thread 0x7da0d088a6c0 (LWP 1703)]
+  | [gdb-1] [New Thread 0x7da0d00896c0 (LWP 1704)]
+  | [gdb-1] [New Thread 0x7da0cf8886c0 (LWP 1705)]
+  | [gdb-1] [New Thread 0x7da0cf0006c0 (LWP 1706)]
+  | [gdb-1] [New Thread 0x7da0ce7ff6c0 (LWP 1707)]
+  | [gdb-1] [New Thread 0x7da0cdffe6c0 (LWP 1708)]
+  | [gdb-1] [New Thread 0x7da0cd7f06c0 (LWP 1709)]
+  | [gdb-1] [New Thread 0x7da0ccfef6c0 (LWP 1710)]
+  | [gdb-1] [New Thread 0x7da0cc72e6c0 (LWP 1711)]
+  | [gdb-1] [New Thread 0x7da0cbf0f6c0 (LWP 1712)]
+  | [gdb-1] [New Thread 0x7da0cb70e6c0 (LWP 1713)]
+  | [gdb-1] [New Thread 0x7da0caf0d6c0 (LWP 1714)]
+  | [gdb-1] [INFO] [1793863435.481018867] [crasher]: started, mode=segv, crashing in 1 s
+  | [gdb-1] [INFO] [1793863436.481314373] [crasher]: about to crash (segv)
+  | [gdb-1] 
+  | [gdb-1] Thread 1 "crasher" received signal SIGSEGV, Segmentation fault.
+  | [gdb-1] 0x000059424ad72c19 in write_through_null(int*) ()
+  | [gdb-1] #0  0x000059424ad72c19 in write_through_null(int*) ()
+  | [gdb-1] #1  0x000059424ad74b7d in Crasher::tick() ()
+  | [gdb-1] #2  0x000059424ad74229 in Crasher::Crasher()::{lambda()#1}::operator()() const ()
+  | [gdb-1] #3  0x000059424ad7b268 in void rclcpp::GenericTimer<Crasher::Crasher()::{lambda()#1}, (void*)0>::execute_callback_delegate<Crasher::Crasher()::{lambda()#1}, (void*)0>(rcl_timer_call_info_s const&) ()
+  | [gdb-1] #4  0x000059424ad7b0dd in rclcpp::GenericTimer<Crasher::Crasher()::{lambda()#1}, (void*)0>::execute_callback(std::shared_ptr<void> const&) ()
+  | [gdb-1] #5  0x00007da0d33587a1 in rclcpp::Executor::execute_any_executable(rclcpp::AnyExecutable&) () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #6  0x00007da0d3383344 in rclcpp::executors::SingleThreadedExecutor::spin() () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #7  0x00007da0d3362349 in rclcpp::spin(std::shared_ptr<rclcpp::node_interfaces::NodeBaseInterface>) () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #8  0x00007da0d3362493 in rclcpp::spin(std::shared_ptr<rclcpp::Node>) () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #9  0x000059424ad72d65 in main ()
+  | [INFO] [gdb-1]: process has finished cleanly [pid 1693]
+  | [INFO] [launch.user]: HANDLER returncode=0
+  | [INFO] [companion-2]: process has finished cleanly [pid 1694]
+  log dir files: launch.log 
+  'HANDLER returncode': screen=1, log dir=1
+
+--- case=cpp_throw_gdb_default_build args=[exe:=crasher mode:=throw output:=screen prefix:=gdb -batch -ex run -ex bt --args] load=0.31
+ros2 launch exit=0 after 6487 ms (timeout 60s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [gdb-1]: process started with pid [1760]
+  | [INFO] [companion-2]: process started with pid [1761]
+  | [gdb-1] warning: Error disabling address space randomization: Operation not permitted
+  | [gdb-1] [Thread debugging using libthread_db enabled]
+  | [gdb-1] Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+  | [gdb-1] [New Thread 0x7cc6e91576c0 (LWP 1768)]
+  | [gdb-1] [New Thread 0x7cc6e89566c0 (LWP 1769)]
+  | [gdb-1] [New Thread 0x7cc6e70de6c0 (LWP 1770)]
+  | [gdb-1] [New Thread 0x7cc6e68dd6c0 (LWP 1771)]
+  | [gdb-1] [New Thread 0x7cc6e60dc6c0 (LWP 1772)]
+  | [gdb-1] [New Thread 0x7cc6e58546c0 (LWP 1773)]
+  | [gdb-1] [New Thread 0x7cc6e50536c0 (LWP 1774)]
+  | [gdb-1] [New Thread 0x7cc6e48526c0 (LWP 1775)]
+  | [gdb-1] [New Thread 0x7cc6e40446c0 (LWP 1776)]
+  | [gdb-1] [New Thread 0x7cc6e38436c0 (LWP 1777)]
+  | [gdb-1] [New Thread 0x7cc6e2f826c0 (LWP 1778)]
+  | [gdb-1] [New Thread 0x7cc6e27636c0 (LWP 1779)]
+  | [gdb-1] [New Thread 0x7cc6e1f626c0 (LWP 1780)]
+  | [gdb-1] [New Thread 0x7cc6e17616c0 (LWP 1781)]
+  | [gdb-1] [INFO] [1793863442.718277926] [crasher]: started, mode=throw, crashing in 1 s
+  | [gdb-1] [INFO] [1793863443.718578524] [crasher]: about to crash (throw)
+  | [gdb-1] terminate called after throwing an instance of 'std::runtime_error'
+  | [gdb-1]   what():  sensor driver returned -1
+  | [gdb-1] 
+  | [gdb-1] Thread 1 "crasher" received signal SIGABRT, Aborted.
+  | [gdb-1] __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+  | [gdb-1] warning: 44	./nptl/pthread_kill.c: No such file or directory
+  | [gdb-1] #0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+  | [gdb-1] #1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+  | [gdb-1] #2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+  | [gdb-1] #3  0x00007cc6e959227e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+  | [gdb-1] #4  0x00007cc6e95758ff in __GI_abort () at ./stdlib/abort.c:79
+  | [gdb-1] #5  0x00007cc6e9835ff5 in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+  | [gdb-1] #6  0x00007cc6e984b0da in ?? () from /lib/x86_64-linux-gnu/libstdc++.so.6
+  | [gdb-1] #7  0x00007cc6e9835a55 in std::terminate() () from /lib/x86_64-linux-gnu/libstdc++.so.6
+  | [gdb-1] #8  0x00007cc6e984b391 in __cxa_throw () from /lib/x86_64-linux-gnu/libstdc++.so.6
+  | [gdb-1] #9  0x00005936a73d3c68 in read_sensor() ()
+  | [gdb-1] #10 0x00005936a73d5baa in Crasher::tick() ()
+  | [gdb-1] #11 0x00005936a73d5229 in Crasher::Crasher()::{lambda()#1}::operator()() const ()
+  | [gdb-1] #12 0x00005936a73dc268 in void rclcpp::GenericTimer<Crasher::Crasher()::{lambda()#1}, (void*)0>::execute_callback_delegate<Crasher::Crasher()::{lambda()#1}, (void*)0>(rcl_timer_call_info_s const&) ()
+  | [gdb-1] #13 0x00005936a73dc0dd in rclcpp::GenericTimer<Crasher::Crasher()::{lambda()#1}, (void*)0>::execute_callback(std::shared_ptr<void> const&) ()
+  | [gdb-1] #14 0x00007cc6e9bac7a1 in rclcpp::Executor::execute_any_executable(rclcpp::AnyExecutable&) () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #15 0x00007cc6e9bd7344 in rclcpp::executors::SingleThreadedExecutor::spin() () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #16 0x00007cc6e9bb6349 in rclcpp::spin(std::shared_ptr<rclcpp::node_interfaces::NodeBaseInterface>) () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #17 0x00007cc6e9bb6493 in rclcpp::spin(std::shared_ptr<rclcpp::Node>) () from /opt/ros/jazzy/lib/librclcpp.so
+  | [gdb-1] #18 0x00005936a73d3d65 in main ()
+  | [INFO] [gdb-1]: process has finished cleanly [pid 1760]
+  | [INFO] [launch.user]: HANDLER returncode=0
+  | [INFO] [companion-2]: process has finished cleanly [pid 1761]
+  log dir files: launch.log 
+  'sensor driver returned': screen=1, log dir=0
+  'terminate called': screen=1, log dir=0
+  'HANDLER returncode': screen=1, log dir=1
+colcon build -DCMAKE_BUILD_TYPE=RelWithDebInfo rc=0 in 8 s
+binary has debug info (RelWithDebInfo): 1 debug_info sections
+
+--- case=cpp_segv_gdb_relwithdebinfo args=[exe:=crasher mode:=segv output:=screen prefix:=gdb -batch -ex run -ex bt --args] load=0.39
+ros2 launch exit=124 after 60181 ms (timeout 60s; 124 = stopped by the timeout's SIGINT)
+  | [INFO] [gdb-1]: process started with pid [1995]
+  | [INFO] [companion-2]: process started with pid [1996]
+  | [gdb-1] warning: Error disabling address space randomization: Operation not permitted
+  | [gdb-1] [Thread debugging using libthread_db enabled]
+  | [gdb-1] Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+  | [gdb-1] [New Thread 0x7d850d07c6c0 (LWP 2003)]
+  | [gdb-1] [New Thread 0x7d850c87b6c0 (LWP 2004)]
+  | [gdb-1] [New Thread 0x7d850b0036c0 (LWP 2005)]
+  | [gdb-1] [New Thread 0x7d850a8026c0 (LWP 2006)]
+  | [gdb-1] [New Thread 0x7d850a0016c0 (LWP 2007)]
+  | [gdb-1] [New Thread 0x7d85097796c0 (LWP 2008)]
+  | [gdb-1] [New Thread 0x7d8508f786c0 (LWP 2009)]
+  | [gdb-1] [New Thread 0x7d85087776c0 (LWP 2010)]
+  | [gdb-1] [New Thread 0x7d8507f696c0 (LWP 2011)]
+  | [gdb-1] [New Thread 0x7d85077686c0 (LWP 2012)]
+  | [gdb-1] [New Thread 0x7d8506ea76c0 (LWP 2013)]
+  | [gdb-1] [New Thread 0x7d85066886c0 (LWP 2014)]
+  | [gdb-1] [New Thread 0x7d8505e876c0 (LWP 2015)]
+  | [gdb-1] [New Thread 0x7d85056866c0 (LWP 2016)]
+  | [gdb-1] [INFO] [1793863456.720275417] [crasher]: started, mode=segv, crashing in 1 s
+  | [gdb-1] [INFO] [1793863457.720578955] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863458.720576407] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863459.720577702] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863460.720583642] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863461.720584732] [crasher]: about to crash (segv)
+  | [INFO] [companion-2]: process has finished cleanly [pid 1996]
+  | [gdb-1] [INFO] [1793863462.720581130] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863463.720579017] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863464.720586382] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863465.720573562] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863466.720535182] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863467.720587072] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863468.720572128] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863469.720568609] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863470.720590997] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863471.720579618] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863472.720566619] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863473.720587182] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863474.720581713] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863475.720624306] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863476.720554583] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863477.720578199] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863478.720622893] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863479.720571683] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863480.720585439] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863481.720574842] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863482.720577488] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863483.720563540] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863484.720588568] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863485.720574494] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863486.720575915] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863487.720580771] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863488.720564177] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863489.720580018] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863490.720568063] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863491.720579258] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863492.720580671] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863493.720577533] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863494.720581684] [crasher]: about to crash (segv)
+  | [gdb-1] [INFO] [1793863495.720615979] [crasher]: about to crash (segv)
+  log dir files: launch.log 
+  'HANDLER returncode': screen=1, log dir=1
+
+=== done 2026-11-05 07:25:16 UTC
