@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+	<link rel="shortcut icon" href="/images/favicon.ico" type="image/x-icon" />
+    <title>국세청 통합검색</title>
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="국세청">
+    <meta property="og:description" content="국세청">
+    <meta property="og:url" content="https://www.nts.go.kr/">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+	<link rel="stylesheet" type="text/css" href="/css/search/jquery-ui.css" >
+	<link rel="stylesheet" href="/js/keyboard/keyboard.css" media="all">
+    <link rel="stylesheet" type="text/css" href="/css/search/search.css?ver=1" />
+	<script type="text/javascript" src="/js/jquery.min.js"></script>
+	<script type="text/javascript" src="/js/jquery-ui.min.js"></script>
+	<script type="text/javascript" src="/js/jquery.form.min.js"></script>
+	<script type="text/javascript" src="/js/search/enc.js"></script>
+	<script>var lawDomain = "https://taxlaw.nts.go.kr";</script>
+    <script type="text/javascript" src="/js/search/search.js"></script>
+	<script type="text/javascript" src="/js/search/iclSearch.js"></script><!-- icl -->
+	<link href="/js/calendar/css/datepicker.css" rel="stylesheet">
+	<script src="/js/calendar/js/lang/kr.js"></script>
+	<script src="/js/calendar/js/datepicker.min.js"></script>
+	<script type="text/javascript" src="/js/keyboard/keyboard.min.js"></script>
+	
+	<script src="/js/search/ntsSearch.js"></script>	
+	
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+    <![endif]-->
+</head>
+	<script type="text/javascript">
+		$(document).ready(function() {
+			getPopkeyword();
+			// 내가 찾은 검색어
+			getMyKeyword("개인종합자산관리계좌", 647);
+			// 클릭한 정렬 탭으로 스크롤 이동
+			$(window).scrollTop($('#tabSortScrollTop').val());
+			
+			//20210903 bluewish 자동완성
+			$("#query").initAutocomplate();
+		});
+		
+		function getPopkeyword() {
+			//주간인기검색
+			var target		= "popword";
+			var range		= "W";
+			var collection  = "_ALL_";
+		    var datatype   = "xml";
+			var num = 10;		//인기검색어 출력 개수
+			$.ajax({
+			  type: "POST",
+			  url: "/search/popword/popword.jsp",
+			  dataType: "xml",
+			  data: { "target" : target, "range" : range, "collection" : collection , "datatype" : datatype },
+			  success: function(xml) {
+				var str = "";
+				var numCheck = "";
+				str += "<ol>";
+				$(xml).find("Query").each(function(i){
+					//console.log(i.);
+		 			if(i<=num){
+						if(i <= 4){
+							numCheck = "top5";
+						}else{
+							numCheck = "";
+						}
+						str += "<li class='"+$(this).attr("updown")+"'><a href=\"javascript:void(0);\" onclick=\"javascript:doKeyword('" + $(this).text() + "');\" title=\""+$(this).text()+"\">";
+						if($(this).text().length > 15){ 
+							str += "<em class='num "+numCheck+"'>"+(i+1)+"</em><span>"+$(this).text().substring(0,15)+"..</span>";
+						}else{
+							str += "<em class='num "+numCheck+"'>"+(i+1)+"</em><span>"+$(this).text()+"</span>";
+						}
+						str += "</a></li>";
+					}
+				});
+				str += "</ol>";
+				$("#searchkeyWord2").html(str);
+			  }
+			});
+			//일간
+			range = "D";
+			$.ajax({
+			  type: "POST",
+			  url: "/search/popword/popword.jsp",
+			  dataType: "xml",
+			  data: { "target" : target, "range" : range, "collection" : collection , "datatype" : datatype },
+			  success: function(xml) {
+				var str = "";
+				var numCheck = "";
+				str += "<ol>";
+				$(xml).find("Query").each(function(i){
+		 			if(i<=num){
+						if(i <= 4){
+							numCheck = "top5";
+						}else{
+							numCheck = "";
+						}
+						str += "<li class='"+$(this).attr("updown")+"'><a href=\"javascript:void(0);\" onclick=\"javascript:doKeyword('" + $(this).text() + "');\" title=\""+$(this).text()+"\">";
+						if($(this).text().length > 15){ 
+							str += "<em class='num "+numCheck+"'>"+(i+1)+"</em><span>"+$(this).text().substring(0,15)+"..</span>";
+						}else{
+							str += "<em class='num "+numCheck+"'>"+(i+1)+"</em><span>"+$(this).text()+"</span>";
+						}
+						str += "</a></li>";
+					}
+				});
+				$("#searchkeyWord").html(str);
+			  }
+			});
+		}
+		function auto_date_format(e, oThis){
+			var num_arr = [
+				97,98,99,100,101,102,103,104,105,96,
+				48,49,50,51,52,53,54,55,56,57
+			]
+			var key_code =(e.which)? e.which : e.keyCode;
+			if(num_arr.indexOf(Number(key_code)) != -1){
+				var len = oThis.value.length;
+				if(len == 4) oThis.value += ".";
+				if(len == 7) oThis.value += ".";
+
+			}
+		}
+	</script>
+<body>
+
+<form name="statuteForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstBscId" value="" />
+	<input type="hidden" name="ntstSysClCd" value="" />
+	<input type="hidden" name="ntstTlawClCd" value="" />
+	<input type="hidden" name="rgtYr" value="" />
+	<input type="hidden" name="ntstExrBaseSn" value="" />
+	<input type="hidden" name="ntstTextUqno" value="" />
+	
+	<input type="hidden" name="query" value="개인종합자산관리계좌" />
+</form>
+<form name="examruleForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstDcmId" value=""/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<form name="examrule_answerForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstDcmId" value=""/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+
+<form name="dicisioncaseForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstDcmId" value=""/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<form name="gosiForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="title" value=""/>
+	<input type="hidden" name="ntarBscId" value=""/>
+	<input type="hidden" name="ntarClCd" value=""/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<form name="appendForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstAtFrmlClCd" value=""/>
+
+	<input type="hidden" name="ntstAtFrmlSn" value=""/>
+	<input type="hidden" name="ntstBrkdId" value=""/>
+	<input type="hidden" name="ntstBscId" value=""/>
+	
+	<input type="hidden" name="ntarBscId" value=""/>
+	<input type="hidden" name="ntarBrkdId" value=""/>
+	<input type="hidden" name="ntarFrmlNo" value=""/>
+	
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<form name="explainForm"  method="post" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="node_id" value=""/>
+	<input type="hidden" name="lawid" value=""/>
+	<input type="hidden" name="jomunkey" value=""/>
+	<input type="hidden" name="name" value=""/>
+	<input type="hidden" name="jomun_nm" value=""/>
+	<input type="hidden" name="searchengine" value="Y"/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<form name="accountsForm"  method="post" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="acc_field_cd" value=""/>
+	<input type="hidden" name="acc_info_gubun" value=""/>
+	<input type="hidden" name="acc_sno" value=""/>
+	<input type="hidden" name="gubun" value="4"/>
+	<input type="hidden" name="searchengine" value="Y"/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<form name="magazineForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstFleId"/>
+	<input type="hidden" name="ntstPlcnBkId"/>
+	<input type="hidden" name="pageNum"/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<!-- 신규 추가 2011.05.12 세법집행기준 -->
+<form name="executionForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstBscId"/>
+	<input type="hidden" name="rgtYr"/>
+	<input type="hidden" name="ntstExrBaseSn"/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<!-- 신규 추가 2011.05.12 세법적용기준 -->
+<form name="taxapplyForm"  method="post" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="publish_sno"/>
+	<input type="hidden" name="publish_no"/>
+	<input type="hidden" name="book_title"/>
+	<input type="hidden" name="publish_ilja"/>
+	<input type="hidden" name="field_cd"/>
+	<input type="hidden" name="tabofcon_sno"/>
+	<input type="hidden" name="searchengine" value="Y"/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+	
+</form>
+<!--신규추가 2011.05.03  용어사전 -->
+<form name="glossaryForm"  method="get" target="NEWLINKWINDOW" action="#">
+	<input type="hidden" name="ntstTrgyDictBrkdId"/>
+	<input type="hidden" name="pageForm"/>
+	<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+<!--  조문 3단 팝업 -->
+<form name="jomun_detail"  method="post" target="jomun_popup_3dan" action="#">
+	<input type="hidden" name="law_id"/>
+	<input type="hidden" name="public_ilja"/>
+	<input type="hidden" name="public_no"/>
+	<input type="hidden" name="jomun_key"/>
+</form>
+<!-- 신규추가 2011.05.11  팝업 -->
+<form name="popup_form" method="post">
+<input type="hidden" name="case_kind" />
+<input type="hidden" name="docu_key" />
+<input type="hidden" name="query" value="개인종합자산관리계좌"/>
+</form>
+
+<!-- icl form -->
+<form name="iclForm1" method="post">
+<input type="hidden" name="query" id="iclQuery1" value="CLT=RGM;^QS=개인종합자산관리계좌;^"/>
+</form>
+<form name="iclForm2" method="post">
+<input type="hidden" name="query" id="iclQuery2" value="CLT=ANNC;^QS=개인종합자산관리계좌;^"/>
+</form>
+<form name="iclForm3" method="post">
+<input type="hidden" name="query" id="iclQuery3" value="CLT=WHD;^QS=개인종합자산관리계좌;^"/>
+</form>
+<form name="iclForm4" method="post">
+<input type="hidden" name="query" id="iclQuery4" value="CLT=FAQ;^QS=개인종합자산관리계좌;^"/>
+</form>
+<form name="iclForm5" method="post">
+<input type="hidden" name="query" id="iclQuery5" value="CLT=RPSC;^QS=개인종합자산관리계좌;^"/>
+</form>
+
+
+
+<form name="search" id="search" action="/search/search.jsp" class="clearfix" method="post" onsubmit="return false;">
+<input type="hidden" name="startCount" value="0">
+<input type="hidden" name="mode" value="basic">
+<input type="hidden" name="sortOrder" value="DESC">
+<input type="hidden" name="collection" value="ALL">
+<input type="hidden" name="decIclQuery" value="개인종합자산관리계좌"/>
+<input type="hidden" name="encIclQuery" value="%B0%B3%C0%CE%C1%BE%C7%D5%C0%DA%BB%EA%B0%FC%B8%AE%B0%E8%C1%C2"/>
+<!-- order 순서 -->
+<input type="hidden" name="teMenuOrder" value="DATE"/>
+<input type="hidden" name="teBbsOrder" value="DATE"/>
+<input type="hidden" name="teErmsOrder" value="RANK"/>
+<input type="hidden" name="mainNoticeOrder" value="DATE"/>
+<input type="hidden" name="mainCommOrder" value="DATE"/>
+<input type="hidden" name="mainReportOrder" value="DATE"/>
+<input type="hidden" name="mainPolicyOrder" value="DATE"/>
+<input type="hidden" name="mainInfoOrder" value="DATE"/>
+<input type="hidden" name="mainOpeninfoOrder" value="DATE"/>
+<input type="hidden" name="mainIntroOrder" value="DATE"/>
+<input type="hidden" name="webpageOrder" value="DATE"/>
+<input type="hidden" name="fileOrder" value="DATE"/>
+<input type="hidden" name="menuOrder" value="DATE"/>
+<input type="hidden" name="webtvOrder" value="DATE"/>
+<input type="hidden" name="boardOrder" value="DATE"/>
+<input type="hidden" name="snsOrder" value="DATE"/>
+<input type="hidden" name="statuteOrder" value="DATE"/>
+<input type="hidden" name="preansOrder" value="DATE"/>
+<input type="hidden" name="qnaOrder" value="DATE"/>
+<input type="hidden" name="reviewOrder" value="DATE"/>
+<input type="hidden" name="precedentOrder" value="DATE"/>
+<input type="hidden" name="ccourtOrder" value="DATE"/>
+<input type="hidden" name="executionOrder" value="DATE"/>
+<input type="hidden" name="noticeOrder" value="DATE"/>
+<input type="hidden" name="appendOrder" value="DATE"/>
+<input type="hidden" name="formOrder" value="DATE"/>
+<input type="hidden" name="orderOrder" value="DATE"/>
+<input type="hidden" name="oftenformOrder" value="DATE"/>
+<input type="hidden" name="magazineOrder" value="DATE"/>
+<input type="hidden" name="glossaryOrder" value="DATE"/>
+<input type="hidden" name="iclWebOrder" value="DATE"/>
+<input type="hidden" name="iclNoticeOrder" value="DATE"/>
+<input type="hidden" name="iclInfoOrder" value="DATE"/>
+<input type="hidden" name="iclFaqOrder" value="DATE"/>
+<input type="hidden" name="iclDownOrder" value="DATE"/>
+<!-- 국세법령 order -->
+<input type="hidden" name="callLawqnaOrder" value="DATE"/>
+<input type="hidden" name="callLawvideoOrder" value="DATE"/>
+<input type="hidden" name="callLawreferOrder" value="DATE"/>
+<input type="hidden" name="callHometaxqnaOrder" value="DATE"/>
+<input type="hidden" name="callHometaxvideoOrder" value="DATE"/>
+<input type="hidden" name="callHometaxreferOrder" value="DATE"/>
+<input type="hidden" name="callHottopicOrder" value="DATE"/>
+<input type="hidden" name="callCardnewsOrder" value="DATE"/>
+<input type="hidden" name="callVideoOrder" value="DATE"/>
+<!-- order 순서 -->
+<input type="hidden" name="reQuery" />
+<input type="hidden" name="sortAll" value="DATE"/>
+<input type="hidden" name="sortAllChk" value="N"/>
+<input type="hidden" name="realQuery" id="realQuery" value="개인종합자산관리계좌" />
+<input type="hidden" name="sysid" value="nts" />
+<input type="hidden" name="searchKeywordTab" value="day" />
+<input type="hidden" name="tabSortScrollTop" id="tabSortScrollTop" value="0" />
+<input type="hidden" name="koreanYn" id="koreanYn" value="Y" />
+<input type="hidden" name="methodTypeChk" id="methodTypeChk" value="" />
+
+<!-- 바로가기 -->
+<div id="skipNav">
+	<a href="#gnb">주메뉴 바로가기</a>
+	<a href="#search_result">본문으로 바로가기</a>
+</div>
+<!-- //바로가기 -->
+
+<div id="wrap"> 
+	<!-- header  -->
+	<header id="header">
+		<div class="container">
+			<div class="search">
+				<div class="search_wrap">
+					<fieldset>
+						<legend>통합검색</legend>
+						<div class="search_left">
+							<input name="query" id="query" type="search" value="개인종합자산관리계좌" onKeypress="javascript:pressCheck((event),this);" autocomplete="off" class="inp_txt" placeholder="검색어 입력" title="검색어 입력"/>
+							<div id="hunminKbArea"></div>
+							<a href="#none" id="openKeyBoard" title="가상키보드 레이어 열림"><img src="/images/web/nts/layout/icon-keyboard.png" alt="키보드"></a>
+						</div>
+
+						<button type="submit" class="btn_search" onClick="javascript:doSearch();">검색</button>
+						<!-- <button type="button" class="btn_deSearch" aria-controls="detailList">상세검색</button> -->
+						<div class="btn_reSearch">
+							<label for="reChk"><input type="checkbox" name="reChk" id="reChk" onClick="checkReSearch();">결과 내 재검색</label>
+						</div>
+					</fieldset>
+				</div>
+			</div>
+		</div>
+		<div class="header_bottom">
+			<!-- <div class="top_list"></div> -->
+			<div class="bottom_list" id="detailList">
+				<div class="container">
+					<h2><span>상세검색</span></h2>
+					<ul>
+						<li>
+							<button type="button" aria-controls="detailInner01">정렬</button>
+							<ul id="detailInner01">
+								<li class="""><a href="javascript:" onclick="searchSort('RANK');" title="선택됨">정확도순</a></li>
+								<li class="on""><a href="javascript:" onclick="searchSort('DATE');">최신순</a></li>
+							</ul>
+						</li>
+						<li>
+							<button type="button" aria-controls="detailInner02">기간</button>
+							<ul id="detailInner02">
+								<li><input name="range" id="range1" type="radio" value="A" onClick="setDate('A');" checked="checked"><label for="range1">전체</label></li>
+								<li><input name="range" id="range3" type="radio" value="W" onClick="setDate('W');" ><label for="range3">1주</label></li>
+								<li><input name="range" id="range4" type="radio" value="M" onClick="setDate('M');" ><label for="range4">1개월</label></li>
+								<li><input name="range" id="range5" type="radio" value="Y" onClick="setDate('Y');" ><label for="range5">1년</label></li>
+								<li><input name="range" id="range6" type="radio" value="S" onClick="setDate('S');" ><label for="range6">직접입력</label></li>
+								<li>
+									<div class="select_date">
+										<p>직접입력</p>
+											<input name="startDate" id="startDate" type="text" value="" class="inp_txt" title="검색 기간 시작일" onkeyup="auto_date_format(event, this)" onkeypress="auto_date_format(event, this)"/>
+											<input name="endDate" id="endDate" type="text" value="" class="inp_txt" title="검색 기간 종료일"  onkeyup="auto_date_format(event, this)" onkeypress="auto_date_format(event, this)"/>
+										<button type="button" class="btn_apply" onclick="return doDetailSearch();">적용하기</button>
+									</div>
+								</li>
+							</ul>
+						</li>
+						<li>
+							<button type="button" aria-controls="detailInner03">방법</button>
+							<ul id="detailInner03">
+								<li>
+									<div class="select_method">
+										<label for="radioSearchMethodOr"><input type="radio" name="radioSearchMethod" id="radioSearchMethodOr">하나라도 포함(OR)</label>
+										<label for="radioSearchMethodNot"><input type="radio" name="radioSearchMethod" id="radioSearchMethodNot">다음단어 제외</label>
+										<input type="text" name="txtSearchMethod" id="txtSearchMethod" title="단어 입력" value="">
+										<button type="button" class="btn_apply" id="btnSearchMethod">적용하기</button>
+										<button type="button" class="btn_reset" id="btnSearchMethodReset">초기화</button>
+									</div>
+								</li>
+							</ul>
+						</li>
+						<li>
+							<button type="button" aria-controls="detailInner04">범위</button>
+							<ul id="detailInner04">
+								<li>
+									<div class="select_field">
+										<label for="searchField1"><input name="searchField" id="searchField1" type="radio" value="ALL" checked="checked">전체</label>
+										<label for="searchField2"><input name="searchField" id="searchField2" type="radio" value="SJ" >제목</label>
+										<label for="searchField3"><input name="searchField" id="searchField3" type="radio" value="CN" >내용</label>
+										<button type="button" class="btn_apply" onclick="return doDetailSearch();">적용하기</button>
+									</div>
+								</li>
+							</ul>
+						</li>
+					</ul>
+				</div>
+			</div>
+			<div class="result_desc">
+				<div class="container">
+					<p>적용된 검색어 <strong>'개인종합자산관리계좌'</strong> / 전체 (<em>647</em>건)</p>
+					<!--<div id="spell"><script>getSpell('');</script></div>-->
+					
+				</div>
+			</div>
+		</div>
+	</header>
+	<!-- //header  -->
+	 
+	<!-- container -->
+	<div id="body" role="main">
+		<div class="container">
+			<div class="left_area">
+				<!-- 검색메뉴 -->
+				<nav class="left_menu" id="gnb">
+					<ul>
+						<li class="on"><a href="#none" onClick="javascript:doCollection('ALL');">통합검색 </a></li>
+						<li>
+							<a href="#more">국세청<span></span></a>
+							<ul class="search_dep02">
+								<li class=""><a href="#none" onClick="javascript:doCollection('main_notice');" title="알림·소식"><strong>알림·소식</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('main_comm');" title="국민소통"><strong>국민소통</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('main_report');" title="국세신고안내"><strong>국세신고안내</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('main_policy');" title="국세정책 · 제도"><strong>국세정책 · 제도</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('main_info');" title="정보공개"><strong>정보공개</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('main_openinfo');" title="국민소통"><strong>국민소통</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('main_intro');" title="국세청소개"><strong>국세청소개</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('menu');" title="메뉴검색"><strong>메뉴검색</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('board');" title="게시판"><strong>게시판</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('webpage');" title="웹문서"><strong>웹문서</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('file');" title="첨부파일"><strong>첨부파일</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('webtv');" title="동영상TV"><strong>동영상TV</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('sns');" title="국세청블로그"><strong>국세청블로그</strong></a></li>
+			
+								</ul>
+						</li>
+						<li>
+							<a href="#more">홈택스<span></span></a>
+							<ul class="search_dep02">
+								<li class=""><a href="#none" onClick="javascript:doCollection('te_menu');" title="메뉴안내"><strong>메뉴안내</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('te_bbs');" title="공지 및 자료실"><strong>공지 및 자료실</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('te_erms');" title="상담사례"><strong>상담사례</strong></a></li>
+			
+								</ul>
+						</li>
+						<li>
+							<a href="#more">국세법령정보<span></span></a>
+							<ul class="search_dep02">
+								<li class=""><a href="#none" onClick="javascript:doCollection('statute');" title="법령"><strong>법령</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('preans');" title="사전답변"><strong>사전답변</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('qna');" title="질의회신"><strong>질의회신</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('review');" title="심사청구"><strong>심사청구</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('precedent');" title="판례"><strong>판례</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('ccourt');" title="헌재"><strong>헌재</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('execution');" title="세법집행"><strong>세법집행</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('notice');" title="고시"><strong>고시</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('append');" title="별표"><strong>별표</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('form');" title="서식"><strong>서식</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('order');" title="훈령"><strong>훈령</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('oftenform');" title="자주찾는서식"><strong>자주찾는서식</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('magazine');" title="발간책자"><strong>발간책자</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('glossary');" title="용어사전"><strong>용어사전</strong></a></li>
+			
+								</ul>
+						</li>
+						<li>
+							<a href="#more">취업 후 학자금 상환<span></span></a>
+							<ul class="search_dep02">
+								<li><a href="https://www.icl.go.kr/websquare/websquare.html?w2xPath=/xml/sub.xml&nextUrl=/ui/hp/a/a/UIEHPAAA01.xml&searchWord=%B0%B3%C0%CE%C1%BE%C7%D5%C0%DA%BB%EA%B0%FC%B8%AE%B0%E8%C1%C2&category=RGM" target="_blank" title="취업후 학자금 상환 제도안내(새창)"><strong>제도안내</strong></a></li>
+								<li><a href="https://www.icl.go.kr/websquare/websquare.html?w2xPath=/xml/sub.xml&nextUrl=/ui/hp/a/a/UIEHPAAA01.xml&searchWord=%B0%B3%C0%CE%C1%BE%C7%D5%C0%DA%BB%EA%B0%FC%B8%AE%B0%E8%C1%C2&category=ANNC" target="_blank" title="취업후 학자금 상환 공지사항(새창)"><strong>공지사항</strong></a></li>
+								<li><a href="https://www.icl.go.kr/websquare/websquare.html?w2xPath=/xml/sub.xml&nextUrl=/ui/hp/a/a/UIEHPAAA01.xml&searchWord=%B0%B3%C0%CE%C1%BE%C7%D5%C0%DA%BB%EA%B0%FC%B8%AE%B0%E8%C1%C2&category=WHD" target="_blank" title="취업후 학자금 상환 원천공제의무자(새창)"><strong>원천공제의무자</strong></a></li>
+								<li><a href="https://www.icl.go.kr/websquare/websquare.html?w2xPath=/xml/sub.xml&nextUrl=/ui/hp/a/a/UIEHPAAA01.xml&searchWord=%B0%B3%C0%CE%C1%BE%C7%D5%C0%DA%BB%EA%B0%FC%B8%AE%B0%E8%C1%C2&category=FAQ" target="_blank" title="취업후 학자금 상환 자주묻는질문(새창)"><strong>자주묻는질문</strong></a></li>
+								<li><a href="https://www.icl.go.kr/websquare/websquare.html?w2xPath=/xml/sub.xml&nextUrl=/ui/hp/a/a/UIEHPAAA01.xml&searchWord=%B0%B3%C0%CE%C1%BE%C7%D5%C0%DA%BB%EA%B0%FC%B8%AE%B0%E8%C1%C2&category=RPSC" target="_blank" title="취업후 학자금 상환 주요상환서비스안내(새창)"><strong>주요상환서비스안내</strong></a></li>
+								</ul>
+						</li>
+						<li>
+							<a href="#more">국세상담센터<span></span></a>
+							<ul class="search_dep02">
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_lawQna');" title="세법상담 자주묻는 Q&A"><strong>세법상담 자주묻는 Q&A</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_lawVideo');" title="세법상담 동영상자료실"><strong>세법상담 동영상자료실</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_lawRefer');" title="세법상담 참고자료"><strong>세법상담 참고자료</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_hometaxQna');" title="홈택스이용 자주묻는 Q&A"><strong>홈택스이용 자주묻는 Q&A</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_hometaxVideo');" title="홈택스이용 동영상자료실"><strong>홈택스이용 동영상자료실</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_hometaxRefer');" title="홈택스이용 참고자료"><strong>홈택스이용 참고자료</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_hotTopic');" title="핫토픽"><strong>핫토픽</strong></a></li>
+		
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_cardNews');" title="카드뉴스"><strong>카드뉴스</strong></a></li>
+			
+								<li class=""><a href="#none" onClick="javascript:doCollection('call_video');" title="동영상"><strong>동영상</strong></a></li>
+			
+								</ul>
+						</li>
+					</ul>
+				</nav>
+				<!-- //검색메뉴 --> 
+			</div>
+			<div class="middle_area">
+				<!-- 검색 결과 영역 -->
+				<div class="search_result" id="search_result">
+					<div class="tab">
+						<div class="inner">
+							<ul>
+							<li>
+									<a href="#none"><strong>국세청</strong></a>
+									<ul>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('main_notice');" title="알림·소식(8)건">알림·소식<strong>(8)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('main_comm');" title="국민소통(0)건">국민소통<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('main_report');" title="국세신고안내(2)건">국세신고안내<strong>(2)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('main_policy');" title="국세정책 · 제도(0)건">국세정책 · 제도<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('main_info');" title="정보공개(0)건">정보공개<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('main_openinfo');" title="국민소통(0)건">국민소통<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('main_intro');" title="국세청소개(0)건">국세청소개<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('menu');" title="메뉴검색(0)건">메뉴검색<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('board');" title="게시판(63)건">게시판<strong>(63)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('webpage');" title="웹문서(4)건">웹문서<strong>(4)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('file');" title="첨부파일(2)건">첨부파일<strong>(2)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('webtv');" title="동영상TV(1)건">동영상TV<strong>(1)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('sns');" title="국세청블로그(4)건">국세청블로그<strong>(4)</strong>
+											</a>
+										</li>
+									</ul>
+								</li>
+								<li>
+									<a href="#none"><strong>홈택스</strong></a>
+									<ul>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('te_menu');" title="메뉴안내(0)건">메뉴안내<strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('te_bbs');" title="공지 및 자료실(2)건">공지 및 자료실<strong>(2)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('te_erms');" title="상담사례(83)건">상담사례<strong>(83)</strong>
+											</a>
+										</li>
+										
+									</ul>
+								</li>
+								<li>
+									<a href="#none"><strong>국세법령정보</strong></a>
+									<ul>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('statute');" title="법령(19)건">법령<strong>(19)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('preans');" title="사전답변(4)건">사전답변<strong>(4)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('qna');" title="질의회신(7)건">질의회신<strong>(7)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('review');" title="심사청구(0)건">심사청구<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('precedent');" title="판례(0)건">판례<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('ccourt');" title="헌재(0)건">헌재<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('execution');" title="세법집행(0)건">세법집행<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('notice');" title="고시(0)건">고시<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('append');" title="별표(0)건">별표<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('form');" title="서식(2)건">서식<strong>(2)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('order');" title="훈령(1)건">훈령<strong>(1)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('oftenform');" title="자주찾는서식(0)건">자주찾는서식<strong>(0)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('magazine');" title="발간책자(443)건">발간책자<strong>(443)</strong>
+											</a>
+										</li>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('glossary');" title="용어사전(1)건">용어사전<strong>(1)</strong>
+											</a>
+										</li>
+									</ul>
+								</li>
+								<li>
+									<a href="#none"><strong>취업 후 학자금 상환</strong></a>
+									<ul>
+										<li id="iclFormRGM"></li>
+										<li id="iclFormANNC"></li>
+										<li id="iclFormWHD"></li>
+										<li id="iclFormFAQ"></li>
+										<li id="iclFormRPSC"></li>
+									</ul>
+								</li>
+								<li>
+									<a href="#none"><strong>국세상담센터</strong></a>
+									<ul>
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_lawQna');" title="세법상담 자주묻는 Q&A(1)건">세법상담 자주묻는 Q&A<strong>(1)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_lawVideo');" title="세법상담 동영상자료실(0)건">세법상담 동영상자료실<strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_lawRefer');" title="세법상담 참고자료(0)건">세법상담 참고자료<strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_hometaxQna');" title="홈택스이용 자주묻는 Q&A(0)건">홈택스이용 자주묻는 Q&A<strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_hometaxVideo');" title="홈택스이용 동영상자료실(0)건">홈택스이용 동영상자료실<strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_hometaxRefer');" title="홈택스이용 참고자료(0)건">홈택스이용 참고자료<strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_hotTopic');" title="핫토픽(0)건"><strong>핫토픽</strong><strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_cardNews');" title="카드뉴스(0)건"><strong>카드뉴스</strong><strong>(0)</strong>
+											</a>
+										</li>
+										
+									<li>
+											<a href="#none" onClick="javascript:doCollection('call_video');" title="동영상(0)건"><strong>동영상</strong><strong>(0)</strong>
+											</a>
+										</li>
+										
+									</ul>
+								</li>
+							</ul>
+							</div>
+					</div>
+					<ul class="list_wrap">
+						<!-- 국세청 -->
+						<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세청 알림&middot;소식</span> 검색결과 <em>총(<span>8</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('main_notice');" title="국세청 알림/소식 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('main_notice', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('main_notice', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+					<p class="tit"><a href="/nts/na/ntt/selectNttInfo.do?mi=2207&nttSn=38130" title="세무서를 방문할 필요 없는 편리한 국세증명 발급 바로가기(새창)" target="_blank">세무서를 방문할 필요 없는 편리한 국세증명 발급</a></p>
+					<p class="date">2020.02.25</p>
+					<p class="category">국세청 &gt; 알림·소식 &gt; 공지사항</p>
+					<p class="txt">번호 관할세무서 시도 설치 지자체 번호 관할세무서 시도 설치 지자체 1 영월 강원 정선군청 14 영주 경북 봉화군청 2 화성 경기 화성시청 15 남대구 대구 달성군청 3 의정부 경...</p>
+				</li>
+				<li>
+					<p class="tit"><a href="/nts/na/ntt/selectNttInfo.do?mi=6420&nttSn=96178" title="원천징수사무처리규정 개정사항(안) 행정예고 바로가기(새창)" target="_blank">원천징수사무처리규정 개정사항(안) 행정예고</a></p>
+					<p class="date">2017.09.08</p>
+					<p class="category">국세청 &gt; 고시∙공고∙행정예고 &gt; 훈령∙고시 행정예고</p>
+					<p class="txt">2017  년  「  원천징수사무처리규정  」  개정안을 아래와 같이 행정예고합니다  .  1.  개정 이유  ○「  조세특례제한법」  등 법령 개정사항과  ISA  등 새로운 제...</p>
+				</li>
+				<li>
+					<p class="tit"><a href="/nts/na/ntt/selectNttInfo.do?mi=2201&nttSn=103868" title="외국계펀드 조사관련 검찰고발 바로가기(새창)" target="_blank">외국계펀드 조사관련 검찰고발</a></p>
+					<p class="date">2005.10.06</p>
+					<p class="category">국세청 &gt; 알림·소식 &gt; 보도자료</p>
+					<p class="txt">제목 없음  □배 경  ○ 국세청(청장 이주성)은 내&middot;외국자본을 구분할 실익이 없는 완전 개방경제 하에서 세금을  탈루한 내&middot;외국자본에 대해서는 차별 없이...</p>
+				</li>
+				</ul>
+		</li>
+			<!-- paginate -->
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세청 국세신고안내</span> 검색결과 <em>총(<span>2</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('main_report');" title="국세청 국세신고안내 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('main_report', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('main_report', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+					<p class="category">국세청 &gt; 연금소득 &gt; 연금소득의 범위</p>
+					<p class="txt"><a href="/nts/cm/cntnts/cntntsView.do?mi=6449&cntntsId=7885" title="연금소득의 범위 바로가기(새창)" target="_blank" >연금소득의 범위  공적연금 관련법에 따른 연금(공적연금소득)  과세기준일(2002.1.1.) 이후에 납입된 기여금 등을 기초로 하여 받는 연금소득  (과세기준일)  재직기간 합산제...</a></p>
+				</li>
+				<li>
+					<p class="category">국세청 &gt; 근로소득 &gt; 세액공제</p>
+					<p class="txt"><a href="/nts/cm/cntnts/cntntsView.do?mi=6439&cntntsId=7875" title="세액공제 바로가기(새창)" target="_blank" >세액공제  근로소득세액공제  거주자의 근로소득에 대한 <font color='red'>종합</font>소득산출세액에서 공제  거주자의 근로소득에 대한 <font color='red'>종합</font>소득산출세액에서 공제 - 산출세액, 공제세액 포함  산출세액  공제세액...</a></p>
+				</li>
+				</ul>
+		</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세청 게시판정보</span> 검색결과 <em>총(<span>63</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('board');" title="게시판정보 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('board', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('board', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+					<p class="tit"><a href="https://s.nts.go.kr/gangnam/na/ntt/selectNttInfo.do?mi=5806&nttSn=1307512" title="9월 세정홍보 바로가기(새창)" target="_blank">9월 세정홍보</a></p>
+					<p class="date">2022.09.02</p>
+					<p class="category">강남세무서 &gt; 알림·소식 &gt; 공지사항</p>
+					<p class="txt">
+						순서홍 보 내 용표 출 문 안해당국실1국선대리인 제도 안내영세납세자가 세액 3천만원 이하의 과세전적부심사청구, 이의신청 및 심사청구를 하는 경우 무료로 국선대리인의 도움을 받을 수 있습니다.☞ 문의 ☎ 126(→3번) 각 세무서 납세자보호담당관실납세자보호관실2세금포인트제도 안내세금포인트 특별한 혜택!세금포인트로 박물관․수목원 입장료 할인받으세요☞ 홈택스(www.hometax.go.kr) ▶ 조회/발급 ▶ 세금포인트 혜택납세자보호관실3종합부동산세합산배제 신고 및 과세특례 신청 안내2022년 종합부동산세 합산배제 및 특례를 9월 30일까지 신고(신청)하세요신고(신청)기간 : 2022.9.16.∼2022.9.30.자세한 사항은 홈택스 또는 국세청 홈페이지를 참조하세요자산과세국4탈세제보 방법 및 포상금 안내작은 관심이 투명한 사회를 만듭니다.탈세제보 포상금 최고 40억원!! ♧ 신고방법 : 홈택스 > 상담/제보 > 탈세제보, 서면 등세원정보과5차명계좌신고 포상금제도안내차명계좌가 뭐지?사업자 본인의 계좌가 아니면 차명계좌입니다.예를 들면 가족, 종업원, 법인 대표자 개인 계좌 등은 차명계좌입니다. ♧신고방법 : 홈택스 > 상담/제보 > 차명계좌 신고, 서면 등세원정보과6해외금융계좌 신고포상금제도 안내미신고 해외금융계좌 제보 시 최대 20억원의 포상금이 지급됩니다. ☞홈택스(www.hometax.go.kr) ▶상담/제보 ▶해외금융계좌 신고의무 위반행위 제보역외정보과7용역제공자에 관한 과세자료 제출안내'22년 8월에 대리기사, 캐디 등에게 사업장을 제공하거나, 용역을 알선·중개한 사업자는 '22년 9월 30일까지 용역제공자에 관한 과세자료를 제출해야 합니다. 소득자료관리단8일용근로소득지급명세서· 사업소득 간이지급명세서 제출안내'22년 8월에 일용근로자 또는 인적용역 사업자에게 소득을 지급한 사업자는 '22년 9월 30일까지 일용근로소득지급명세서 또는 간이지급명세서(거주자의 사업소득)를 제출해야 합니다. 소득자료관리단9현금영수증 의무발행업종 확대 안내2022년 1월부터 건강보조식품 소매업 등 8개 업종이 현금영수증 의무발행업종에 추가됩니다.자세한 문의는 ☎126(→1번)전자세원과10현금영수증발급의무 위반신고안내현금영수증 미발급·발급거부 신고, 현금거래 확인신청은 홈택스(www.hometax.go.kr) 또는 모바일 홈택스 앱으로 편리하게 하세요.전자세원과11전자세금계산서 의무발급 대상자직전년도 공급가액 합계액 2억원 이상인 개인사업자는 2022.7.1.부터 전자세금계산서 의무발급 사업자에 해당합니다.자세한 문의는 ☎126(→1번)전자세원과12현금영수증 발급사실 알림서비스 안내현금영수증 발급사실 알림서비스 신청하세요! 발급일의 다음날 알림 수신으로 간편하게 확인할 수 있습니다(손택스 앱→설정→수신동의)전자세원과13착한 임대인 세액공제착한임대인 세액공제 기간이 '22.12.31.까지 연장되었습니다.상가임대료 인하액의 최대 70%를 세액공제 받을 수 있습니다.☞ 문의 ☎ 126(→6번)소득세과14근로장려금반기신청2022년 상반기분 근로장려금 신청 - 근로소득자는 9월 15일(목)까지 신청하세요!* 신청방법: 손택스,홈택스,☎1544-9944장려세제신청과15상환금명세서제출 안내취업 후 학자금 상환! 고용주는 급여 지급시 채무자별로 원천 공제하여 다음달 10일까지 납부하고 상환금명세서를 관할세무서에 제출해야 합니다. 문의 ☎126 → ① → ④학자금 상환과</p>
+				</li>
+<li>
+					<p class="tit"><a href="https://b.nts.go.kr/dongnae/na/ntt/selectNttInfo.do?mi=5155&nttSn=168499" title="무인민원발급기를 이용한 국세증명 발급 바로가기(새창)" target="_blank">무인민원발급기를 이용한 국세증명 발급</a></p>
+					<p class="date">2020.03.25</p>
+					<p class="category">동래세무서 &gt; 알림·소식 &gt; 공지사항</p>
+					<p class="txt">
+						무인민원발급 서비스란  지방자치단체에서 운영하는 전국  4  천  1  백여대의 무인민원  발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서  국세증명  (13  종  )  및 각종 민원증명  (73  종  )  을 한 자리에서 발급  받을 수 있는 서비스입니다  .  무인민원발급 대상 국세증명  (13  종  )  ①  사업자등록증명  ②  휴업사실증명  ③  폐업사실증명  ④  납세증명서  ⑤  납부내역증명  ⑥  소득금액증명  ⑦  부가가치세과세표준증명  ⑧  부가가치세면세사업자수입금액증명  ⑨  소득확인증명서  (  개인종합자산관리계좌가입용  )  ⑩  연금보험료 등 소득  ,  세액공제확인서  ⑪  모범납세자증명  ⑫  사업자단위과세 적용 종된사업장 증명  ⑬  근로  (  자녀  )  장려금 수급사실 증명</p>
+				</li>
+<li>
+					<p class="tit"><a href="/nts/na/ntt/selectNttInfo.do?mi=2207&nttSn=38130" title="세무서를 방문할 필요 없는 편리한 국세증명 발급 바로가기(새창)" target="_blank">세무서를 방문할 필요 없는 편리한 국세증명 발급</a></p>
+					<p class="date">2020.02.25</p>
+					<p class="category">국세청 &gt; 알림·소식 &gt; 공지사항</p>
+					<p class="txt">
+						 개인종합자산관리계좌 가입용) ⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외 □ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증 스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다. 1.「국세청 손택스」앱 실행 2. 「민원증명」선택 3. 「즉시발급증명」 신청 4.민원목록에서 증명서 선택 5. 회원가입 및 (인증서)로그인 6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제 공 하는서비스 종 류 서비스 내용 (현재) 즉시발급증명 신청 ○ 사업자등록증명 등 국세증명(15종) 발급 신청 사실증명 신청 ○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리) 민원신청 결과 조회 ○ 모바일에서 처리된 사무가 모두 조회 민원서류발급제한(해지) 신청 ○ 타인이 부당 발급받을 가능성을 차단하는 서비스 민원증명 원본확인 (수요처 조회) ○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요 민원실 대기인원 조회 ○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공 민원증명 발급예약(방문수령) ○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능) 사업자 등록증 조회 ○ 사업자 등록증 조회 및 팩스발송 기타증명 신청 ○ 거주자증명서 발급신청서 ○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명 ○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황 ○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란 지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법 무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함 무인민원발급시스템 첫 화면 무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내 국세·지방세 통합민원실 국세·지방세 통합민원실이란? 지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군)  번호 관할세무서 시도 설치 지자체 번호 관할세무서 시도 설치 지자체 1 영월 강원 정선군청 14 영주 경북 봉화군청 2 화성 경기 화성시청 15 남대구 대구 달성군청 3 의정부 경기 양주시청 16 금정 부산 기장군청 4 남양주 경기 남양주시청 17 부산진 부산 부산진구청 5 양산 경남 양산시청 18 울산 울산 울주군청 6 마산 경남 창녕군청 19 서광주 전남 영광군청 7 김해 경남 김해시청 20 목포 전남 무안군청 8 통영 경남 고성군청 21 순천 전남 구례군청 9 서대구 경북 고령군청 22 남원 전북 장수군청 10 상주 경북 문경시청 23 논산 충남 부여군청 11 영주 경북 예천군청 24 동청주 충북 증평군청 12 안동 경북 군위군청 25 동청주 충북 괴산군청 13 안동 경북 의성군 26 청주 충북 진천군청 인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송 접수 접수 우체국 민원발급 기관배달 우체국 익일 특급발송 민원인 세무서 배달 우체국 접수 우체국 익일 특급배달 회송접수 국세증명을 발급받는 다양한 방법 국세증명 온라인 발급 시간 발급 창구 방문 홈택스 모바일 무인 민원 정부 24 민원 우편 어디 서나 ①사업자등록증명 ②휴업사실증명 ③폐업사실증명 연중무휴 24시간 ○ ○ ○ ○ ○ ○ ○ ④납세증명서 ⑤납부내역증명 ⑥소득금액증명 ⑦부가가치세과세표준증명 ⑧부가가치세면세사업자수입금액증명 ⑨소득확인증명서(개인종합자산관리계좌가입용) 연중무휴 08:00~ 22:00 ⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144800979_87284.png" border="0" vspace="0" hspace="0">      개인종합자산관리계좌 가입용) ⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외 □ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증 스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다. 1.「국세청 손택스」앱 실행 2. 「민원증명」선택 3. 「즉시발급증명」 신청 4.민원목록에서 증명서 선택 5. 회원가입 및 (인증서)로그인 6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제 공 하는서비스 종 류 서비스 내용 (현재) 즉시발급증명 신청 ○ 사업자등록증명 등 국세증명(15종) 발급 신청 사실증명 신청 ○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리) 민원신청 결과 조회 ○ 모바일에서 처리된 사무가 모두 조회 민원서류발급제한(해지) 신청 ○ 타인이 부당 발급받을 가능성을 차단하는 서비스 민원증명 원본확인 (수요처 조회) ○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요 민원실 대기인원 조회 ○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공 민원증명 발급예약(방문수령) ○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능) 사업자 등록증 조회 ○ 사업자 등록증 조회 및 팩스발송 기타증명 신청 ○ 거주자증명서 발급신청서 ○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명 ○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황 ○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란 지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법 무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함 무인민원발급시스템 첫 화면 무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내 국세·지방세 통합민원실 국세·지방세 통합민원실이란? 지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군)  번호 관할세무서 시도 설치 지자체 번호 관할세무서 시도 설치 지자체 1 영월 강원 정선군청 14 영주 경북 봉화군청 2 화성 경기 화성시청 15 남대구 대구 달성군청 3 의정부 경기 양주시청 16 금정 부산 기장군청 4 남양주 경기 남양주시청 17 부산진 부산 부산진구청 5 양산 경남 양산시청 18 울산 울산 울주군청 6 마산 경남 창녕군청 19 서광주 전남 영광군청 7 김해 경남 김해시청 20 목포 전남 무안군청 8 통영 경남 고성군청 21 순천 전남 구례군청 9 서대구 경북 고령군청 22 남원 전북 장수군청 10 상주 경북 문경시청 23 논산 충남 부여군청 11 영주 경북 예천군청 24 동청주 충북 증평군청 12 안동 경북 군위군청 25 동청주 충북 괴산군청 13 안동 경북 의성군 26 청주 충북 진천군청 인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송 접수 접수 우체국 민원발급 기관배달 우체국 익일 특급발송 민원인 세무서 배달 우체국 접수 우체국 익일 특급배달 회송접수 국세증명을 발급받는 다양한 방법 국세증명 온라인 발급 시간 발급 창구 방문 홈택스 모바일 무인 민원 정부 24 민원 우편 어디 서나 ①사업자등록증명 ②휴업사실증명 ③폐업사실증명 연중무휴 24시간 ○ ○ ○ ○ ○ ○ ○ ④납세증명서 ⑤납부내역증명 ⑥소득금액증명 ⑦부가가치세과세표준증명 ⑧부가가치세면세사업자수입금액증명 ⑨소득확인증명서(개인종합자산관리계좌가입용) 연중무휴 08:00~ 22:00 ⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144821073_78100.png" border="0" vspace="0" hspace="0">      개인종합자산관리계좌 가입용) ⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외 □ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증 스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다. 1.「국세청 손택스」앱 실행 2. 「민원증명」선택 3. 「즉시발급증명」 신청 4.민원목록에서 증명서 선택 5. 회원가입 및 (인증서)로그인 6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제 공 하는서비스 종 류 서비스 내용 (현재) 즉시발급증명 신청 ○ 사업자등록증명 등 국세증명(15종) 발급 신청 사실증명 신청 ○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리) 민원신청 결과 조회 ○ 모바일에서 처리된 사무가 모두 조회 민원서류발급제한(해지) 신청 ○ 타인이 부당 발급받을 가능성을 차단하는 서비스 민원증명 원본확인 (수요처 조회) ○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요 민원실 대기인원 조회 ○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공 민원증명 발급예약(방문수령) ○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능) 사업자 등록증 조회 ○ 사업자 등록증 조회 및 팩스발송 기타증명 신청 ○ 거주자증명서 발급신청서 ○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명 ○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황 ○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란 지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법 무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함 무인민원발급시스템 첫 화면 무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내 국세·지방세 통합민원실 국세·지방세 통합민원실이란? 지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군)  번호 관할세무서 시도 설치 지자체 번호 관할세무서 시도 설치 지자체 1 영월 강원 정선군청 14 영주 경북 봉화군청 2 화성 경기 화성시청 15 남대구 대구 달성군청 3 의정부 경기 양주시청 16 금정 부산 기장군청 4 남양주 경기 남양주시청 17 부산진 부산 부산진구청 5 양산 경남 양산시청 18 울산 울산 울주군청 6 마산 경남 창녕군청 19 서광주 전남 영광군청 7 김해 경남 김해시청 20 목포 전남 무안군청 8 통영 경남 고성군청 21 순천 전남 구례군청 9 서대구 경북 고령군청 22 남원 전북 장수군청 10 상주 경북 문경시청 23 논산 충남 부여군청 11 영주 경북 예천군청 24 동청주 충북 증평군청 12 안동 경북 군위군청 25 동청주 충북 괴산군청 13 안동 경북 의성군 26 청주 충북 진천군청 인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송 접수 접수 우체국 민원발급 기관배달 우체국 익일 특급발송 민원인 세무서 배달 우체국 접수 우체국 익일 특급배달 회송접수 국세증명을 발급받는 다양한 방법 국세증명 온라인 발급 시간 발급 창구 방문 홈택스 모바일 무인 민원 정부 24 민원 우편 어디 서나 ①사업자등록증명 ②휴업사실증명 ③폐업사실증명 연중무휴 24시간 ○ ○ ○ ○ ○ ○ ○ ④납세증명서 ⑤납부내역증명 ⑥소득금액증명 ⑦부가가치세과세표준증명 ⑧부가가치세면세사업자수입금액증명 ⑨소득확인증명서(개인종합자산관리계좌가입용) 연중무휴 08:00~ 22:00 ⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144832541_08508.png" border="0" vspace="0" hspace="0">   개인종합자산관리계좌 가입용) ⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외 □ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증 스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다. 1.「국세청 손택스」앱 실행 2. 「민원증명」선택 3. 「즉시발급증명」 신청 4.민원목록에서 증명서 선택 5. 회원가입 및 (인증서)로그인 6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제 공 하는서비스 종 류 서비스 내용 (현재) 즉시발급증명 신청 ○ 사업자등록증명 등 국세증명(15종) 발급 신청 사실증명 신청 ○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리) 민원신청 결과 조회 ○ 모바일에서 처리된 사무가 모두 조회 민원서류발급제한(해지) 신청 ○ 타인이 부당 발급받을 가능성을 차단하는 서비스 민원증명 원본확인 (수요처 조회) ○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요 민원실 대기인원 조회 ○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공 민원증명 발급예약(방문수령) ○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능) 사업자 등록증 조회 ○ 사업자 등록증 조회 및 팩스발송 기타증명 신청 ○ 거주자증명서 발급신청서 ○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명 ○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황 ○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란 지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법 무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함 무인민원발급시스템 첫 화면 무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내 국세·지방세 통합민원실 국세·지방세 통합민원실이란? 지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군)  번호 관할세무서 시도 설치 지자체 번호 관할세무서 시도 설치 지자체 1 영월 강원 정선군청 14 영주 경북 봉화군청 2 화성 경기 화성시청 15 남대구 대구 달성군청 3 의정부 경기 양주시청 16 금정 부산 기장군청 4 남양주 경기 남양주시청 17 부산진 부산 부산진구청 5 양산 경남 양산시청 18 울산 울산 울주군청 6 마산 경남 창녕군청 19 서광주 전남 영광군청 7 김해 경남 김해시청 20 목포 전남 무안군청 8 통영 경남 고성군청 21 순천 전남 구례군청 9 서대구 경북 고령군청 22 남원 전북 장수군청 10 상주 경북 문경시청 23 논산 충남 부여군청 11 영주 경북 예천군청 24 동청주 충북 증평군청 12 안동 경북 군위군청 25 동청주 충북 괴산군청 13 안동 경북 의성군 26 청주 충북 진천군청 인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송 접수 접수 우체국 민원발급 기관배달 우체국 익일 특급발송 민원인 세무서 배달 우체국 접수 우체국 익일 특급배달 회송접수 국세증명을 발급받는 다양한 방법 국세증명 온라인 발급 시간 발급 창구 방문 홈택스 모바일 무인 민원 정부 24 민원 우편 어디 서나 ①사업자등록증명 ②휴업사실증명 ③폐업사실증명 연중무휴 24시간 ○ ○ ○ ○ ○ ○ ○ ④납세증명서 ⑤납부내역증명 ⑥소득금액증명 ⑦부가가치세과세표준증명 ⑧부가가치세면세사업자수입금액증명 ⑨소득확인증명서(개인종합자산관리계좌가입용) 연중무휴 08:00~ 22:00 ⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144855401_44240.png" border="0" vspace="0" hspace="0">   개인종합자산관리계좌 가입용) ⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외 □ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증 스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다. 1.「국세청 손택스」앱 실행 2. 「민원증명」선택 3. 「즉시발급증명」 신청 4.민원목록에서 증명서 선택 5. 회원가입 및 (인증서)로그인 6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제 공 하는서비스 종 류 서비스 내용 (현재) 즉시발급증명 신청 ○ 사업자등록증명 등 국세증명(15종) 발급 신청 사실증명 신청 ○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리) 민원신청 결과 조회 ○ 모바일에서 처리된 사무가 모두 조회 민원서류발급제한(해지) 신청 ○ 타인이 부당 발급받을 가능성을 차단하는 서비스 민원증명 원본확인 (수요처 조회) ○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요 민원실 대기인원 조회 ○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공 민원증명 발급예약(방문수령) ○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능) 사업자 등록증 조회 ○ 사업자 등록증 조회 및 팩스발송 기타증명 신청 ○ 거주자증명서 발급신청서 ○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명 ○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황 ○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란 지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법 무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함 무인민원발급시스템 첫 화면 무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내 국세·지방세 통합민원실 국세·지방세 통합민원실이란? 지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군)  번호 관할세무서 시도 설치 지자체 번호 관할세무서 시도 설치 지자체 1 영월 강원 정선군청 14 영주 경북 봉화군청 2 화성 경기 화성시청 15 남대구 대구 달성군청 3 의정부 경기 양주시청 16 금정 부산 기장군청 4 남양주 경기 남양주시청 17 부산진 부산 부산진구청 5 양산 경남 양산시청 18 울산 울산 울주군청 6 마산 경남 창녕군청 19 서광주 전남 영광군청 7 김해 경남 김해시청 20 목포 전남 무안군청 8 통영 경남 고성군청 21 순천 전남 구례군청 9 서대구 경북 고령군청 22 남원 전북 장수군청 10 상주 경북 문경시청 23 논산 충남 부여군청 11 영주 경북 예천군청 24 동청주 충북 증평군청 12 안동 경북 군위군청 25 동청주 충북 괴산군청 13 안동 경북 의성군 26 청주 충북 진천군청 인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송 접수 접수 우체국 민원발급 기관배달 우체국 익일 특급발송 민원인 세무서 배달 우체국 접수 우체국 익일 특급배달 회송접수 국세증명을 발급받는 다양한 방법 국세증명 온라인 발급 시간 발급 창구 방문 홈택스 모바일 무인 민원 정부 24 민원 우편 어디 서나 ①사업자등록증명 ②휴업사실증명 ③폐업사실증명 연중무휴 24시간 ○ ○ ○ ○ ○ ○ ○ ④납세증명서 ⑤납부내역증명 ⑥소득금액증명 ⑦부가가치세과세표준증명 ⑧부가가치세면세사업자수입금액증명 ⑨소득확인증명서(개인종합자산관리계좌가입용) 연중무휴 08:00~ 22:00 ⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144908994_11511.png" border="0" vspace="0" hspace="0">      개인종합자산관리계좌 가입용)⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외□ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다.1.「국세청 손택스」앱 실행2. 「민원증명」선택3. 「즉시발급증명」 신청4.민원목록에서 증명서 선택5. 회원가입 및 (인증서)로그인6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제공하는서비스종 류서비스 내용 (현재)즉시발급증명 신청○ 사업자등록증명 등 국세증명(15종) 발급 신청사실증명 신청○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리)민원신청 결과 조회○ 모바일에서 처리된 사무가 모두 조회민원서류발급제한(해지) 신청○ 타인이 부당 발급받을 가능성을 차단하는 서비스민원증명 원본확인 (수요처 조회)○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요민원실 대기인원 조회○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공민원증명 발급예약(방문수령)○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능)사업자 등록증 조회○ 사업자 등록증 조회 및 팩스발송기타증명 신청○ 거주자증명서 발급신청서○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함무인민원발급시스템 첫 화면무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내국세·지방세 통합민원실 국세·지방세 통합민원실이란?지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군) 번호관할세무서시도설치 지자체번호관할세무서시도설치 지자체1영월강원정선군청14영주경북봉화군청2화성경기화성시청15남대구대구달성군청3의정부경기양주시청16금정부산기장군청4남양주경기남양주시청17부산진부산부산진구청5양산경남양산시청18울산울산울주군청6마산경남창녕군청19서광주전남영광군청7김해경남김해시청20목포전남무안군청8통영경남고성군청21순천전남구례군청9서대구경북고령군청22남원전북장수군청10상주경북문경시청23논산충남부여군청11영주경북예천군청24동청주충북증평군청12안동경북군위군청25동청주충북괴산군청13안동경북의성군26청주충북진천군청인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송접수접수 우체국민원발급기관배달 우체국익일 특급발송민원인세무서배달 우체국접수 우체국익일 특급배달회송접수국세증명을 발급받는 다양한 방법국세증명온라인발급시간발급 창구방문홈택스모바일무인민원정부24민원우편어디서나①사업자등록증명②휴업사실증명③폐업사실증명연중무휴24시간○○○○○○○④납세증명서⑤납부내역증명⑥소득금액증명⑦부가가치세과세표준증명⑧부가가치세면세사업자수입금액증명⑨소득확인증명서(개인종합자산관리계좌가입용)연중무휴08:00~22:00⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144926479_50848.png" border="0" vspace="0" hspace="0">     개인종합자산관리계좌 가입용)⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외□ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다.1.「국세청 손택스」앱 실행2. 「민원증명」선택3. 「즉시발급증명」 신청4.민원목록에서 증명서 선택5. 회원가입 및 (인증서)로그인6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제공하는서비스종 류서비스 내용 (현재)즉시발급증명 신청○ 사업자등록증명 등 국세증명(15종) 발급 신청사실증명 신청○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리)민원신청 결과 조회○ 모바일에서 처리된 사무가 모두 조회민원서류발급제한(해지) 신청○ 타인이 부당 발급받을 가능성을 차단하는 서비스민원증명 원본확인 (수요처 조회)○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요민원실 대기인원 조회○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공민원증명 발급예약(방문수령)○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능)사업자 등록증 조회○ 사업자 등록증 조회 및 팩스발송기타증명 신청○ 거주자증명서 발급신청서○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함무인민원발급시스템 첫 화면무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내국세·지방세 통합민원실 국세·지방세 통합민원실이란?지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군) 번호관할세무서시도설치 지자체번호관할세무서시도설치 지자체1영월강원정선군청14영주경북봉화군청2화성경기화성시청15남대구대구달성군청3의정부경기양주시청16금정부산기장군청4남양주경기남양주시청17부산진부산부산진구청5양산경남양산시청18울산울산울주군청6마산경남창녕군청19서광주전남영광군청7김해경남김해시청20목포전남무안군청8통영경남고성군청21순천전남구례군청9서대구경북고령군청22남원전북장수군청10상주경북문경시청23논산충남부여군청11영주경북예천군청24동청주충북증평군청12안동경북군위군청25동청주충북괴산군청13안동경북의성군26청주충북진천군청인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송접수접수 우체국민원발급기관배달 우체국익일 특급발송민원인세무서배달 우체국접수 우체국익일 특급배달회송접수국세증명을 발급받는 다양한 방법국세증명온라인발급시간발급 창구방문홈택스모바일무인민원정부24민원우편어디서나①사업자등록증명②휴업사실증명③폐업사실증명연중무휴24시간○○○○○○○④납세증명서⑤납부내역증명⑥소득금액증명⑦부가가치세과세표준증명⑧부가가치세면세사업자수입금액증명⑨소득확인증명서(개인종합자산관리계좌가입용)연중무휴08:00~22:00⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144941963_27492.png" border="0" vspace="0" hspace="0">     개인종합자산관리계좌 가입용)⑭근로(장려)장려금 수급사실 증명 * 소득확인증명서(청년우대형 주택청약종합저축 가입 및 과세특례 신청용) 및 소관과를 경유해야 하는 증명발급 제외□ 구비서류 ○ 본 인 : 신분증 ○ 대리인 :① 위임장 ② 위임인의 신분증 등 ③ 위임받은 사람의 신분증스마트폰으로 국세증명 발급하기 국세청 손택스란? ① 스마트폰과 홈택스의 혼용어로, 스마트폰에서 홈택스 서비스를 이용할 수 있도록 구현한 앱을 명칭합니다. ② 국세증명 발급 신청·열람 등 각종 민원 서비스를 스마트폰을 통해 제공받을 수 있습니다.1.「국세청 손택스」앱 실행2. 「민원증명」선택3. 「즉시발급증명」 신청4.민원목록에서 증명서 선택5. 회원가입 및 (인증서)로그인6. 신청내용 입력 국세청 손택스 「민원증명」 서비스 제공하는서비스종 류서비스 내용 (현재)즉시발급증명 신청○ 사업자등록증명 등 국세증명(15종) 발급 신청사실증명 신청○ 사실증명(12유형)에 대해 발급 신청 * 사실여부 검토 필요(신청 후 3시간 근무시간 내 처리)민원신청 결과 조회○ 모바일에서 처리된 사무가 모두 조회민원서류발급제한(해지) 신청○ 타인이 부당 발급받을 가능성을 차단하는 서비스민원증명 원본확인 (수요처 조회)○ 발급번호 혹은 바코드로 원본 확인 * 바코드로 확인시 마크애니(MaSmartDetector) 설치 필요민원실 대기인원 조회○ 별도 로그인 없이 실시간 대기인원 조회 * 민원이 집중되는 50개 세무서에서만 현황 제공민원증명 발급예약(방문수령)○ 민원증명을 예약신청하고 편리한 시간에 방문 수령 * 평일 09:00~21:00, 토요일 09:00~13:00 수령 가능 (단, 인천공항 납세지원센터는 평일 09:00~18:00까지 가능)사업자 등록증 조회○ 사업자 등록증 조회 및 팩스발송기타증명 신청○ 거주자증명서 발급신청서○ 비거주자 등의 국내원천소득에 대한 소득세(법인세) 납세사실증명○ 임대차 정보제공 요청서 서면(방문,우편등) 접수현황○ 방문·우편 등 서면으로 제출한 민원서류 접수내역 확인 발급(출력) 방법 무인민원발급기를 이용한 국세증명 발급 무인민원발급서비스란지방자치단체에서 운영하는 전국 4천 1백여 대의 무인민원발급기를 통해서 세무서에 방문하지 않고도 생활근거지에서 국세증명(13종) 및 각종 민원증명(73종)을 한 자리에서 발급받을 수 있는 서비스입니다 이용방법무인민원발급기의 LCD 화면의 지시에 따라 본인의 해당되는 항목을 손가락으로 터치하여 국세 증명을 발급함무인민원발급시스템 첫 화면무인민원발급시스템 국세증명 선택 화면 국세증명 발급 이용대상 ○ 근로소득자 등 일반국민 ○ 개인사업자 ○ 법인사업자(법인은 대표자가 이용가능) * 주민등록번호와 지문(指紋)으로 본인(법인 대표자)임을 확인한 후 서비스 제공 무인민원발급기 설치장소 ○ 정부민원포털 「정부24」에서 확인 가능 * 정부24(www.gov.kr) 누리집 Home 〉고객센터 〉서비스지원 〉무인민원발급안내국세·지방세 통합민원실 국세·지방세 통합민원실이란?지자체(시군구청) 민원업무 사무실 내에 지자체 직원과 세무서 직원이 함께 근무하면서 국세와 지방세 민원업무를 한 장소에서 제공하는 서비스 주요업무 ○ 각종신고서 접수, 사업자등록 신청·발급, 국세·지방세 제 증명 발급 * 세부적인 세무 상담과 소관과를 경유해야 하는 증명발급 제외 ○ '17년 첫 통합민원실 개장 이후 현재까지 26개소가 운영 중이며 계속 확대해 나가고 있습니다 - '20년 상반기 중 9개소 신설 예정 (원주시, 포천시, 부천시, 화성시(동탄), 횡성군, 천안시(서북구), 예산군, 부안군, 산청군) 번호관할세무서시도설치 지자체번호관할세무서시도설치 지자체1영월강원정선군청14영주경북봉화군청2화성경기화성시청15남대구대구달성군청3의정부경기양주시청16금정부산기장군청4남양주경기남양주시청17부산진부산부산진구청5양산경남양산시청18울산울산울주군청6마산경남창녕군청19서광주전남영광군청7김해경남김해시청20목포전남무안군청8통영경남고성군청21순천전남구례군청9서대구경북고령군청22남원전북장수군청10상주경북문경시청23논산충남부여군청11영주경북예천군청24동청주충북증평군청12안동경북군위군청25동청주충북괴산군청13안동경북의성군26청주충북진천군청인터넷 및 우체국을 이용한 국세증명 발급 국세청 홈택스 증명발급 ○ 민원인이 인터넷 홈택스(www.hometax.go.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 - 각 증명에 따라 아이디 또는 공인인증서 로그인만으로 발급 가능 * (회원가입 없이 공인인증서 로그인만으로 발급 가능한 증명) 국세증명 9종(②~⑥, ⑨, ⑩, ⑫, ⑬), 사실증명 12종(⑴~⑿) * (공인인증서 필요없이 아이디 로그인만으로 발급 가능한 증명) 국세증명 5종(①~④, ⑬) ○ (민원증명 이용절차) 정부24 국세증명 발급 ○ 「정부24」는 행정안전부에서 운영하는 정부기관의 각종 민원증명을 온라인으로 제공하는 누리집 ○ 민원인이 인터넷 정부24(www.gov.kr)에서 회원가입 후 공인인증서로 로그인하여 국세증명 신청 및 발급 * (발급 가능한 증명) 국세증명 14종(⑩은 제외) 및 사실증명 2종(⑴,⑵만 가능) 민원우편제 ○ 민원인이 온라인이 아닌 우체국에서 '민원우편'을 이용하여 국세증명을 자택 등 원하는 곳에서 우편으로 받아볼 수 있는 서비스 ○ (이용방법) 「민원우편제」를 통한 국세증명 발급 방법 익일 특급발송접수접수 우체국민원발급기관배달 우체국익일 특급발송민원인세무서배달 우체국접수 우체국익일 특급배달회송접수국세증명을 발급받는 다양한 방법국세증명온라인발급시간발급 창구방문홈택스모바일무인민원정부24민원우편어디서나①사업자등록증명②휴업사실증명③폐업사실증명연중무휴24시간○○○○○○○④납세증명서⑤납부내역증명⑥소득금액증명⑦부가가치세과세표준증명⑧부가가치세면세사업자수입금액증명⑨소득확인증명서(개인종합자산관리계좌가입용)연중무휴08:00~22:00⑩소득확인" src="/upload/old/file/wtsnts_upload/dext5data/2020/02/20200225_144954432_15368.png" border="0" vspace="0" hspace="0">  </p>
+				</li>
+</ul>
+		</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세청 웹페이지 정보</span> 검색결과 <em>총(<span>4</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('webpage');" title="웹페이지 정보 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('webpage', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('webpage', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+					<p class="category"><a href="/nts/cm/cntnts/cntntsView.do?mi=6596&cntntsId=7875" title="세액공제 바로가기(새창)" target="_blank">국세청 &gt; 근로소득 &gt; 세액공제</a></p>
+					<p class="txt"><a href="/nts/cm/cntnts/cntntsView.do?mi=6596&cntntsId=7875" title="세액공제 바로가기(새창)" target="_blank">세액공제  근로소득세액공제  거주자의 근로소득에 대한 종합소득산출세액에서 공제  거주자의 근로소득에 대한 종합소득산출세액에서 공제 - 산출세액, 공제세액 포함  산출세액  공제세액...</a></p>
+				</li>
+<li>
+					<p class="category"><a href="/nts/cm/cntnts/cntntsView.do?mi=6439&cntntsId=7875" title="세액공제 바로가기(새창)" target="_blank">국세청 &gt; 근로소득 &gt; 세액공제</a></p>
+					<p class="txt"><a href="/nts/cm/cntnts/cntntsView.do?mi=6439&cntntsId=7875" title="세액공제 바로가기(새창)" target="_blank">세액공제  근로소득세액공제  거주자의 근로소득에 대한 종합소득산출세액에서 공제  거주자의 근로소득에 대한 종합소득산출세액에서 공제 - 산출세액, 공제세액 포함  산출세액  공제세액...</a></p>
+				</li>
+<li>
+					<p class="category"><a href="/nts/cm/cntnts/cntntsView.do?mi=6605&cntntsId=7885" title="연금소득의 범위 바로가기(새창)" target="_blank">국세청 &gt; 연금소득 &gt; 연금소득의 범위</a></p>
+					<p class="txt"><a href="/nts/cm/cntnts/cntntsView.do?mi=6605&cntntsId=7885" title="연금소득의 범위 바로가기(새창)" target="_blank">연금소득의 범위  공적연금 관련법에 따른 연금(공적연금소득)  과세기준일(2002.1.1.) 이후에 납입된 기여금 등을 기초로 하여 받는 연금소득  (과세기준일)  재직기간 합산제...</a></p>
+				</li>
+</ul>
+		</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세청 첨부파일</span> 검색결과 <em>총(<span>2</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('file');" title="첨부파일 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('file', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('file', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<div class="btnBox_wrap">
+				<div class="btnBox">
+<div class="btn filedown">
+					<p class="category">국세청 &gt; 세무서식 &gt; 훈령·고시서식</p>
+					<strong class=""><font color='red'>개인종합자산관리계좌</font> 가입유형 검토결과...</strong>
+					<a href="https://law.go.kr/LSW/flDownload.do?flSeq=170333531">
+						<img src="/images/web/nts/sub/i_hwp.png">한글 다운로드
+					</a>
+					<a href="https://law.go.kr/DRF/lawService.do?OC=master&target=admbyl&ID=3319755&type=HTML&mobileYn=" target="popup" onclick="window.open('', 'popup', 'width=1000, height=600').focus();" title="새창팝업 파일 다운로드" >
+						<img src="/images/web/nts/sub/i_pdf.png">다운로드 새창
+					</a>
+				</div>					
+				<div class="btn filedown">
+					<p class="category">국세청 &gt; 세무서식 &gt; 법령서식</p>
+					<strong class="">소득확인증명서(<font color='red'>개인종합자산관리계좌</font> 가...</strong>
+					<a href="https://law.go.kr/LSW/flDownload.do?flSeq=168824117">
+						<img src="/images/web/nts/sub/i_hwp.png">한글 다운로드
+					</a>
+					<a href="https://law.go.kr/DRF/lawService.do?OC=master&target=licbyl&ID=18437953&type=HTML&mobileYn=" target="popup" onclick="window.open('', 'popup', 'width=1000, height=600').focus();" title="새창팝업 파일 다운로드" >
+						<img src="/images/web/nts/sub/i_pdf.png">다운로드 새창
+					</a>
+				</div>					
+				</div>
+			</div>
+		</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>웹TV</span> 검색결과 <em>총(<span>1</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('webtv');" title="웹TV 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('webtv', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('webtv', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul class="video_type2">
+<li>
+					<a href="/webtv/na/ntt/selectNttList.do?bbsId=30150&nttSn=852108" title="'서민형 <!HS>개인종합자산관리계좌<!HE> 가입용 소득확인증명서' 발급 바로가기(새창)" target="_blank">
+						<span class="imgbox">
+							<img src="http://img.youtube.com/vi/4TQk-dNCuOE/0.jpg" alt=""/>
+							</span>
+						<span class="titbox"><span class="tit">'서민형 <!HS>개인종합자산관리계좌<!HE> 가입용 소득확인증명서' 발급</span></span>
+					</a>
+				</li>
+</ul>
+		</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세청블로그</span> 검색결과 <em>총(<span>4</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('sns');" title="게시판정보 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('sns', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('sns', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+					<p class="tit"><a href="https://blog.naver.com/ntscafe/221939561709" title="금융소득 2,000만 원 넘으면 세금 얼마나 더 내야 하나요? 바로가기(새창)" target="_blank">금융소득 2,000만 원 넘으면 세금 얼마나 더 내야 하나요?</a></p>
+					<p class="date">2020.05.01</p>
+					<p class="txt">[국세청 공식 블로그 '아름다운 세(稅)상']</p>
+					<p class="txt">작년 금융소득이 2,000만 원이 넘었다는 걸 알게 된 직장인 김 씨는 5월에 <font color='red'>종합</font>소득세 확정신고를 앞두고 걱정이 이만저만이 아닙니다. 금융소득<font color='red'>종합</font>과세 대상이 된 것은 처음이라 세금을 얼마나 더 내야 할지 감이 오질 않아서입니다. 금융소득이 2,000만 원 넘으면 세금을 얼마나 더 내야 하나요?​작년 금융소득이 2,000만 원을 넘었다면, 올해 5월에 <font color='red'>종합</font>소득세 신고해야 매년 5월은 <font color='red'>개인</font>들이 직전년도 소득에 대한 <font color='red'>종합</font>소득세를 신고하고 납부하는 달입니다. 근로소득만 있는 사람은 연말정산으로 세금의 신고와 납부가 끝납니다. 하지만 근로소득 말고도 사업소득 등 다른 소득이 있는 사람은 <font color='red'>종합</font>소득세 신고를 반드시 해야 합니다.  ​금융소득<font color='red'>종합</font>과세 대상자도 마찬가지입니다. 2019년도 금융소득이 2,000만 원을 넘으면 금융소득<font color='red'>종합</font>과세 대상에 해당하여 다른 소득과 합산하여 이번 5월에 <font color='red'>종합</font>소득세 신고 및 납부를 해야 하는데요. 금융소득에 대한 세금은 어떻게 과세하고 금융소득<font color='red'>종합</font>과세로 인해 더 내야 할 세금은 얼마일지, 금융소득 절세 방법은 어떤 것들이 있는지 살펴볼까요?​금융소득<font color='red'>종합</font>과세란?​이자소득과 배당소득을 합쳐서 '금융소득'이라고 합니다. CMA(<font color='red'>종합</font><font color='red'>자산</font><font color='red'>관리</font><font color='red'>계좌</font>) 또는 예금, 적금이나 채권투자에서 나오는 소득을 '이자소득'이라고 하고, 주식에서 받는 배당금이나 펀드 투자나 ELS에서 나오는 소득은 '배당소득'이라고 합니다. 이러한 금융소득은 다음과 같이 세 가지로 구분하여 과세됩니다. <font color='red'>종합</font>과세대상 금융소득, 분리과세, 비과세가 그것인데요.  ​결론부터 말하자면,​ <font color='red'>종합</font>과세대상 금융소득이 2,000만 원이 넘을 경우 금융소득<font color='red'>종합</font>과세 대상자가 되는 것입니...</p>
+					</li>
+<li>
+					<p class="tit"><a href="https://blog.naver.com/ntscafe/221384192932" title="소득금액증명원 발급, 홈택스에서 쉽고, 편하게! 바로가기(새창)" target="_blank">소득금액증명원 발급, 홈택스에서 쉽고, 편하게!</a></p>
+					<p class="date">2018.10.24</p>
+					<p class="txt">[국세청 공식 블로그 '아름다운 세(稅)상']</p>
+					<p class="txt">은행에서 대출을 신청 시 제출 서류로 소득금액증명을 요구하는 경우가 있습니다. 소득금액증명원은 어떤 서류이며, 어디서 발급받을 수 있는지 알아보겠습니다.소득금액증명은<font color='red'>종합</font>소득이있는 자가과세된소득에대한소득금액을증명받고자신청하는민원입니다.소득금액증명은 국문/ 영문으로 발급 가능하며(법인 사업자 불가), 세무서 방문, 무인민원 발급기, 인터넷 홈택스와 민원 24시 등의 방법으로 발급 가능합니다.홈택스에서 소득금액증명원 발급하기 홈택스에서소득금액증명을발급받기위해서는공인인증서가필요합니다.국세청 홈택스 첫 화면에서 민원증명으로 이동합니다.소득금액증명 발급은 연중무휴이나 이용시간이08:00시부터 22:00시까지입니다.민원증명신청 중 소득금액증명으로 이동합니다. <font color='red'>개인</font>종합자산<font color='red'>관리</font>(ISA)가입을 위한 소득확인증명서 발급은 홈택스 → 민원증명→ 소득확인증명서(<font color='red'>개인</font>종합자산<font color='red'>관리</font> <font color='red'>계좌</font> 가입용)화면을 통해 발급받으시면 됩니다.기본 인적 사항은 자동으로 입력이 되어 보여지며, 발급유형,증명구분,과세기간등 신청내용을꼼꼼히채워주세요.그리고신청하기를눌러주면 신청 완료입니다.신청 후 인터넷 접수목록조회 화면으로 자동 이동되며, 처리상태가 '처리완료' 시 발급번호 클릭하여 출력(4자리-3자리-4자리-3자리 파란색 숫자)하면 됩니다.2017년귀속근로소득자용,연말정산한사업소득자용,연말정산한연금소득자용소득금액증명은2018.5.1부터발급 가능하며,2017년귀속<font color='red'>종합</font>소득세신고자용소득금액증명은2018.7.3부터발급 가능합니다.국세청에서는행정자치부와부처간협업을통해국민이 편리해지는 맞춤형 서비스를 제공하기 위해 민원24에도 소득금액증명원의...</p>
+					</li>
+<li>
+					<p class="tit"><a href="https://blog.naver.com/ntscafe/221037898633" title="국세청 홈택스에서 소득금액증명원 발급하기 바로가기(새창)" target="_blank">국세청 홈택스에서 소득금액증명원 발급하기</a></p>
+					<p class="date">2017.06.26</p>
+					<p class="txt">[국세청 공식 블로그 '아름다운 세(稅)상']</p>
+					<p class="txt">"소득금액증명"은<font color='red'>종합</font>소득이있는 자가과세된소득에대한소득금액을증명받고자신청하는민원이에요.상황에 따라 다르지만,대출과 같은 금융업무 진행시 소득금액증명원을 필요서류로 요구를하는 경우가 종종 있습니다.국세청 홈택스에서 쉽게소득금액증명 민원 발급받는 방법 알아보겠습니다.홈택스에서소득금액증명을 발급받기 위해서는공인인증서가 필요합니다.홈페이지 첫 화면에서민원증명으로 이동해주세요.소득금액증명 카테고리로 이동합니다.현재 소득금액증명원은2016년귀속근로소득자용,연말정산한사업소득자용소득금액증명이 발급가능합니다. (2017.5.1부터)그리고 2016년귀속<font color='red'>종합</font>소득세신고자용소득금액증명은2017.7.1부터발급가능하니참고해주세요.발급유형, 증명 구분, 과세기간 등신청내용을 꼼꼼히 채워주세요그리고 신청하기를 눌러주시면 됩니다.정말 쉽고 간단하죠?소득금액증명은국문/영문발급가능하며,(법인사업자불가) 수임등록시타소득포함으로선택한의뢰인(<font color='red'>개인</font>,<font color='red'>개인</font>사업자)만발급 가능합니다.소득금액증명과<font color='red'>개인종합자산관리계좌</font>가입용인소득확인증명서은 다른 민원이니착오 없으시길 바랍니다.연중무휴로 오전 9시부터 오후 10시까지홈택스에서소득금액증명원을발급 받을 수 잇습니다.이제 세무서 방문 없이홈택스에서 민원증명 발급받으세요!무인민원발급기로도국세증명발급받을 수 있어요! ▼http://blog.naver.com/ntscafe/220941832367</p>
+					</li>
+</ul>
+		</li>
+			<!-- 홈택스 메뉴 검색-->
+						<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>홈택스 공지 및 자료실</span> 검색결과 <em>총(<span>2</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('te_bbs');" title="홈택스 공지 및 자료실 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('te_bbs', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('te_bbs', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+                   <p class="tit"><a href="https://www.hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&tmIdx=16&tm2lIdx=1602000000&tm3lIdx=" title="[전자신고]원천세이행상황신고서 전산매체 제출요령(2025.3.26)(새창으로 이동됩니다.)">[전자신고]원천세이행상황신고서 전산매체 제출요령(2025.3.26)</a></p>
+                   <p class="date">2025.04.03</p>
+                   <p class="txt">※ 원천세이행상황신고 전산매체 제출요령 공지  1. 내용 : 원천세징수이행상황신고서 시행규칙 개정과 관련하여 자기 개발업체와 회계프로그램 개발업체를  위한 원천세이행상황신고 개정서...</p>
+				</li>
+<li>
+                   <p class="tit"><a href="https://www.hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&tmIdx=16&tm2lIdx=1602000000&tm3lIdx=" title="[전자신고] 원천세이행상황신고서 전산매체 제출요령(2023.5.10 수정)(새창으로 이동됩니다.)">[전자신고] 원천세이행상황신고서 전산매체 제출요령(2023.5.10 수정)</a></p>
+                   <p class="date">2023.08.01</p>
+                   <p class="txt">※ 원천세이행상황신고 전산매체 제출요령 공지  1. 내용 : 원천세징수이행상황신고서 시행규칙 개정과 관련해 개발업체와 회계프로그램 개발업체를  위한 원천세이행상황신고 개정서식 및 ...</p>
+				</li>
+</ul>
+		</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>홈택스 상담사례</span> 검색결과 <em>총(<span>83</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('te_erms');" title="홈택스 상담사례 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent " onClick="doOrdering('te_erms', 'DATE');" title="최신순">최신순</a>
+					<a href="javascript:;" class="btn_matching on" onClick="doOrdering('te_erms', 'RANK');" title="정확도순(선택되었습니다.)">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+                   <p class="tit"><a href="javascript:" onclick="encB64('11084708');" title="소득확인증명서(<!HS>개인종합자산관리계좌<!HE> 가입용) 발급 오류(새창으로 이동됩니다.)">소득확인증명서(<font color='red'>개인종합자산관리계좌</font> 가입용) 발급 오류</a></p>
+                   <p class="date">2019.06.03</p>
+                   <p class="txt">안녕하세요.홈텍스를 통하여 소득확인증명서(<font color='red'>개인종합자산관리계좌</font> 가입용) 발급을 받으려고 하는데,계속 통신 오류 메시지가 뜨고 있어서 어떻게 해야 할지 문의 드립니다.&quot;[E-04-2] 수신 프로그램에서 오류가 발생하였습니다. 데이터 송신이 실패하였습니다.&quot;라고 나오는데,통합설치프로그램은 모두 설치 완료한 상태이며, 다른 인터넷 통신 사용에는 아무 지장이 없습니다.내용 확인 부탁 드리겠습니다. 감사합니다.</p><br/>
+				   <p class="tit"><strong>지급명세서-증명발급/일반세무서류 신청 관련</strong></p>
+				</li>
+<li>
+                   <p class="tit"><a href="javascript:" onclick="encB64('10364154');" title="소득확인증명서(서민형 <!HS>개인종합자산관리계좌<!HE> 가입용:ISA) 처리 불가(새창으로 이동됩니다.)">소득확인증명서(서민형 <font color='red'>개인종합자산관리계좌</font> 가입용:ISA) 처리 불가</a></p>
+                   <p class="date">2016.03.16</p>
+                   <p class="txt">민원 증명에서 소득확인증명서(서민형 <font color='red'>개인종합자산관리계좌</font> 가입용:ISA)를 발급받으려고하는데 처리 불가로 뜹니다.혹시 이유를 알 수 있을까요?</p><br/>
+				   <p class="tit"><strong>지급명세서-증명발급/일반세무서류 신청 관련</strong></p>
+				</li>
+<li>
+                   <p class="tit"><a href="javascript:" onclick="encB64('12879966');" title="<!HS>개인종합자산관리계좌<!HE>(ISA<!HS>계좌<!HE>) 연금<!HS>계좌<!HE> 전환 특례(새창으로 이동됩니다.)"><font color='red'>개인종합자산관리계좌</font>(ISA<font color='red'>계좌</font>) 연금<font color='red'>계좌</font> 전환 특례</a></p>
+                   <p class="date">2025.02.14</p>
+                   <p class="txt">저희 회사 중도입사자의 전직장에서 DC형 퇴직금을 ISA<font color='red'>계좌</font>로 적립하고 있었고 퇴직 시 ISA<font color='red'>계좌</font>에서 IRP(<font color='red'>개인</font>형퇴직연금)<font color='red'>계좌</font>로 퇴직급여를 지급했다고 합니다.퇴직의 사유로 ISA<font color='red'>계좌</font>에서 IRP<font color='red'>계좌</font>로 전환된 전직장에서 납입한 퇴직급여도 세액 공제가 가능한가요???홈택스 간소화 자료에서 퇴직연금 자료 조회는 없었으며 근로자는 IRP<font color='red'>계좌</font>에 &apos;퇴직급여&apos;로 찍힌 거래내역서를 증빙 서류로 제출하였습니다.</p><br/>
+				   <p class="tit"><strong>원천징수(연말정산)-세액공제-연금계좌세액공제</strong></p>
+				</li>
+</ul>
+		</li>
+			<!-- 법령정보 -->
+						<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세법령정보 법령</span> 검색결과 <em>총(<span>19</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('statute');" title="국세법령정보 법령 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('statute', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('statute', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+		<div class="bbs_ListA">
+			<table>
+				<caption>국세법령정보 법령 : 종류, 세목, 제목 및 요지, 문서번호 정보</caption>
+				<colgroup>
+					<col style="width: 10%;">
+					<col style="width: 8%;">
+					<col style="width: 30%;">
+					<col style="width: 10%;">
+				</colgroup>
+				<thead>
+					<tr>
+						<th scope="col">종류</th>
+						<th scope="col">세목</th>
+						<th scope="col">제목 및 요지</th>
+						<th scope="col">문서번호</th>
+					</tr>
+				</thead>
+				<tbody>
+<tr>
+						<td class="txt">조세법령</td>
+						<td class="txt">기타</td>
+						<td class="txt al"><a href="javascript:" onclick="javascript:statute_new('/st/USESTA002M.do?ntstTlawClCd=ZZZ&ntstSysClCd=02&ntstBscId=100000000000010817&ntstTextUqno=0098005');return false;" title="자본시장과 금융투자업에 관한 법률 시행령 제98조 계약의 체결(새창으로 열립니다.)">[자본시장과 금융투자업에 관한 법률 시행령 제98조 계약의 체결]<br/>4의2. <font color='red'>자산</font>구성형 <font color='red'>개인</font>종합자산관리계약의 경우에는 제2항제2호 전단에 따라 투자자에게 제시되는 운용방법의 내용 및 같은 호 후...</a></td>
+						<td class="txt">[20260728-36543]<br/>일부개정</td>
+				</tr>
+<tr>
+						<td class="txt">조세법령</td>
+						<td class="txt">기타</td>
+						<td class="txt al"><a href="javascript:" onclick="javascript:statute_new('/st/USESTA002M.do?ntstTlawClCd=ZZZ&ntstSysClCd=02&ntstBscId=100000000000010817&ntstTextUqno=0325005');return false;" title="자본시장과 금융투자업에 관한 법률 시행령 제325조 종합금융회사의 업무 등(새창으로 열립니다.)">[자본시장과 금융투자업에 관한 법률 시행령 제325조 <font color='red'>종합</font>금융회사의 업무 등]<br/>① 법 제336조제1항제1호에서 "대통령령으로 정하는 기간"이란 1년을 말한다. 1. 어음<font color='red'>관리</font><font color='red'>계좌</font>(고객으로부터 예탁받은 자금을...</a></td>
+						<td class="txt">[20260728-36543]<br/>일부개정</td>
+				</tr>
+<tr>
+						<td class="txt">조세법령</td>
+						<td class="txt">기타</td>
+						<td class="txt al"><a href="javascript:" onclick="javascript:statute_new('/st/USESTA002M.do?ntstTlawClCd=ZZZ&ntstSysClCd=02&ntstBscId=100000000000010817&ntstTextUqno=0010005');return false;" title="자본시장과 금융투자업에 관한 법률 시행령 제10조 전문투자자의 범위 등(새창으로 열립니다.)">[자본시장과 금융투자업에 관한 법률 시행령 제10조 전문투자자의 범위 등]<br/>6의2. 「주식ㆍ사채 등의 전자등록에 관한 법률」 제2조제6호에 따른 전자등록기관(이하 "전자등록기관"이라 한다) 4의2. 삭...</a></td>
+						<td class="txt">[20260728-36543]<br/>일부개정</td>
+				</tr>
+</tbody>
+		</table>
+	</div>
+	</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세법령정보 사전답변</span> 검색결과 <em>총(<span>4</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('preans');" title="국세법령정보 사전답변 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('preans', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('preans', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+		<div class="bbs_ListA">
+			<table>
+				<caption>국세법령정보 사전답변 : 종류, 세목, 제목 및 요지, 문서번호 정보</caption>
+				<colgroup>
+					<col style="width: 10%;">
+					<col style="width: 8%;">
+					<col style="width: 30%;">
+					<col style="width: 10%;">
+				</colgroup>
+				<thead>
+					<tr>
+						<th scope="col">종류</th>
+						<th scope="col">세목</th>
+						<th scope="col">제목 및 요지</th>
+						<th scope="col">문서번호</th>
+					</tr>
+				</thead>
+				<tbody>
+<tr>
+					<td class="txt">사전</td>
+					<td class="txt">종소</td>
+					<td class="txt al"><a href="javascript:" onclick="examrule_answer_new('/pd/USEPDA002P.do?ntstDcmId=200000000000018584')">[이전 과세기간에 연금계좌에 납입하였으나 세액공제를 받지 않은 연금보험료에 대하여 소득세법 시행령 제118조의3 연금계좌세액공제 한도액 초과납입금 등의 전환특례 적용 대상인지]<br/>... 제59조의3제3항에 따른 전환금액[「조세특례제한법」제91조의18에 따른 <font color='red'>개인종합자산관리계좌</font>(이하 "<font color='red'>개인종합자산관리계좌</font>"라 한다)의 계약기간 만료일 기준 잔액을 한도로 ...</a></td>
+					<td class="txt">사전-2025-법규소득-1221<br/>(2026.01.30)</td>
+				</tr>
+<tr>
+					<td class="txt">사전</td>
+					<td class="txt">종소</td>
+					<td class="txt al"><a href="javascript:" onclick="examrule_answer_new('/pd/USEPDA002P.do?ntstDcmId=010000000000515824')">[이전 과세기간에 연금계좌에 납입한 연금보험료에 대해 소득령§118의3에 따른 특례를 적용하여 해당 과세기간 연금계좌세액공제를 받을 수 있는지]<br/>... "연금계좌세액공제"라 한다. ③ 「조세특례제한법」제91조의18에 따른 <font color='red'>개인종합자산관리계좌</font>의 계약기간이 만료되고 해당 계좌 잔액의 전부 또는 일부를 대통령령으로 ...</a></td>
+					<td class="txt">사전-2021-법규소득-1909<br/>(2022.03.20)</td>
+				</tr>
+<tr>
+					<td class="txt">사전</td>
+					<td class="txt">종소</td>
+					<td class="txt al"><a href="javascript:" onclick="examrule_answer_new('/pd/USEPDA002P.do?ntstDcmId=010000000000524809')">[거주자가 국제연합으로부터 퇴직 후 지급받은 금원의 연금소득 과세여부]<br/>... 제59조의3제3항에 따른 전환금액[「조세특례제한법」제91조의18에 따른 <font color='red'>개인종합자산관리계좌</font>(이하 "<font color='red'>개인종합자산관리계좌</font>"라 한다)의 계약기간 만료일 기준 잔액을 한도로 ...</a></td>
+					<td class="txt">사전-2021-법규소득-1087<br/>(2022.01.20)</td>
+				</tr>
+</tbody>
+		</table>
+	</div>
+	</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세법령정보 질의회신</span> 검색결과 <em>총(<span>7</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('qna');" title="국세법령정보 질의회신 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('qna', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('qna', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+		<div class="bbs_ListA">
+			<table>
+				<caption>국세법령정보 질의회신 : 종류, 세목, 제목 및 요지, 문서번호 정보</caption>
+				<colgroup>
+					<col style="width: 10%;">
+					<col style="width: 8%;">
+					<col style="width: 30%;">
+					<col style="width: 10%;">
+				</colgroup>
+				<thead>
+					<tr>
+						<th scope="col">종류</th>
+						<th scope="col">세목</th>
+						<th scope="col">제목 및 요지</th>
+						<th scope="col">문서번호</th>
+					</tr>
+				</thead>
+				<tbody>
+<tr>
+					<td class="txt">질의</td>
+					<td class="txt">종소</td>
+					<td class="txt al"><a href="javascript:" onclick="examrule_new('/qt/USEQTA002P.do?ntstDcmId=200000000000006373')">[<font color='red'>개인종합자산관리계좌</font> 전환금액의 소득령§118의3 전환 특례 적용대상 여부 및 연금주택 양도 후 연금계좌 납입금액의 소득법§59의3에 따른 공제한도 적용 여부]<br/>이전 과세기간의 『소득세법』제59조의3 제3항에 따른 전환금액은 같은 법 시행령 제118조의3 제1항 “연금계좌 가입자가 이전...</a></td>
+					<td class="txt">서면-2023-법규소득-4203<br/>(2024.09.25)</td>
+				</tr>
+<tr>
+					<td class="txt">질의</td>
+					<td class="txt">종소</td>
+					<td class="txt al"><a href="javascript:" onclick="examrule_new('/qt/USEQTA002P.do?ntstDcmId=200000000000006505')">[<font color='red'>개인종합자산관리계좌</font>(ISA) 만기 전환금액이 연금계좌세액공제 한도액 초과납입금 전환특례 대상인지]<br/><font color='red'>개인종합자산관리계좌</font>(ISA) 만기 전환금액은 연금계좌세액공제 한도액 초과납입금 전환특례 대상임</a></td>
+					<td class="txt">서면-2024-법규소득-1973<br/>(2024.09.25)</td>
+				</tr>
+<tr>
+					<td class="txt">질의</td>
+					<td class="txt">종소</td>
+					<td class="txt al"><a href="javascript:" onclick="examrule_new('/qt/USEQTA002P.do?ntstDcmId=200000000000006372')">[소득법§59의3③에 따른 <font color='red'>개인종합자산관리계좌</font> 전환금액 중 연금계좌세액공제를 받지 아니한 금액은 이후 과세연도 소득령§118의3에 따른 전환 특례 적용대상에 해당하는지 여부]<br/>이전 과세기간의 『소득세법』제59조의3 제3항에 따른 전환금액은 같은 법 시행령 제118조의3 제1항 “연금계좌 가입자가 이전...</a></td>
+					<td class="txt">서면-2024-법규소득-0720<br/>(2024.08.29)</td>
+				</tr>
+</tbody>
+		</table>
+	</div>
+	</li>
+			<!-- paginate -->
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세법령정보 서식</span> 검색결과 <em>총(<span>2</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('form');" title="국세법령정보 서식 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('form', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('form', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+		<div class="bbs_ListA">
+			<table>
+				<caption>국세법령정보 서식 : 종류, 구분, 세목, 제목 및 요지, 문서번호 정보</caption>
+				<colgroup>
+					<col style="width: 10%;">
+					<col style="width: 8%;">
+					<col style="width: 8%;">
+					<col style="width: 30%;">
+					<col style="width: 10%;">
+				</colgroup>
+				<thead>
+					<tr>
+						<th scope="col">종류</th>
+						<th scope="col">구분</th>
+						<th scope="col">세목</th>
+						<th scope="col">제목 및 요지</th>
+						<th scope="col">문서번호</th>
+					</tr>
+				</thead>
+				<tbody>
+<tr>
+						<td class="txt">서식</td>
+						<td class="txt">법령서식</td>
+						<td class="txt">조특</td>
+						<td class="txt al"><a href="javascript:" onclick="append_new('/af/USEAFA002P.do?ntstBscId=100000000000008218&ntstBrkdId=100028461120260320&ntstAtFrmlSn=102006019&ntstAtFrmlClCd=02' );">소득확인증명서(<font color='red'>개인종합자산관리계좌</font> 가입용) [조세특례제한법 시행규칙 별지 제60-19호]</a></td>
+						<td class="txt">20260320호<br/>(2026.03.20)</td>	
+				</tr>
+<tr>
+						<td class="txt">서식</td>
+						<td class="txt">훈령서식</td>
+						<td class="txt">원천</td>
+						<td class="txt al"><a href="javascript:" onclick="append_new('/af/USEAFA002P.do?ntarBscId=100000000000037184&ntarBrkdId=100002100000193063&ntarFrmlNo=0032000&ntstAtFrmlClCd=02' );"><font color='red'>개인종합자산관리계좌</font> 가입유형 검토결과 통지서 [원천징수사무처리규정 별지 제32호]</a></td>
+						<td class="txt">호<br/>(2020.09.21)</td>	
+				</tr>
+</tbody>
+		</table>
+	</div>
+	</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세법령정보 훈령</span> 검색결과 <em>총(<span>1</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('order');" title="국세법령정보 훈령 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('order', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('order', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+		<div class="bbs_ListA">
+			<table>
+				<caption>국세법령정보 훈령 : 종류, 세목, 제목 및 요지, 문서번호 정보</caption>
+				<colgroup>
+					<col style="width: 10%;">
+					<col style="width: 8%;">
+					<col style="width: 30%;">
+					<col style="width: 10%;">
+				</colgroup>
+				<thead>
+					<tr>
+						<th scope="col">종류</th>
+						<th scope="col">세목</th>
+						<th scope="col">제목 및 요지</th>
+						<th scope="col">문서번호</th>
+					</tr>
+				</thead>
+				<tbody>
+<tr>
+					<td class="txt">훈령</td>
+					<td class="txt">원천</td>
+					<td class="txt al"><a href="javascript:" onclick="gosi_new('/st/USESTA011P.do?title=%ED%96%89%EC%A0%95%EA%B7%9C%EC%B9%99&ntarBscId=100000000000037184&ntarClCd=03');">원천징수사무처리규정(제2020-2387호)</a></td>
+					<td class="txt">호<br/>(2020.09.21)</td>
+				</tr>
+</tbody>
+		</table>
+	</div>
+	</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세법령정보 발간책자</span> 검색결과 <em>총(<span>443</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('magazine');" title="국세법령정보 발간책자 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('magazine', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('magazine', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+		<div class="bbs_ListA">
+			<table>
+				<caption>국세법령정보 발간책자 : 종류, 세목, 제목 및 요지, 문서번호 정보</caption>
+				<colgroup>
+					<col style="width: 10%;">
+					<col style="width: 8%;">
+					<col style="width: 30%;">
+					<col style="width: 10%;">
+				</colgroup>
+				<thead>
+					<tr>
+						<th scope="col">종류</th>
+						<th scope="col">세목</th>
+						<th scope="col">제목 및 요지</th>
+						<th scope="col">문서번호</th>
+					</tr>
+				</thead>
+				<tbody>
+<tr>
+					<td class="txt">발간</td>
+					<td class="txt">법규·법무</td>
+					<td class="txt al"><a href="javascript:" onclick="magazine_new('/el/USEELA002P.do?ntstPlcnBkId=511100000000000005&ntstFleId=300000000001242588&pageNum=1');">종합소득세 집행기준</a></td>
+					<td class="txt">(2026.10.29)</td>
+				</tr>
+<tr>
+					<td class="txt">발간</td>
+					<td class="txt">법규·법무</td>
+					<td class="txt al"><a href="javascript:" onclick="magazine_new('/el/USEELA002P.do?ntstPlcnBkId=511100000000000010&ntstFleId=300000000001242592&pageNum=1');">증권거래세 집행기준</a></td>
+					<td class="txt">(2026.10.29)</td>
+				</tr>
+<tr>
+					<td class="txt">발간</td>
+					<td class="txt">법규·법무</td>
+					<td class="txt al"><a href="javascript:" onclick="magazine_new('/el/USEELA002P.do?ntstPlcnBkId=511100000000000004&ntstFleId=300000000001242428&pageNum=1');">국제조세 집행기준</a></td>
+					<td class="txt">(2026.10.29)</td>
+				</tr>
+</tbody>
+		</table>
+	</div>
+	</li>
+			<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>국세법령정보 용어사전</span> 검색결과 <em>총(<span>1</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('glossary');" title="국세법령정보 용어사전 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('glossary', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('glossary', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+		<div class="bbs_ListA">
+			<table>
+				<caption>국세법령정보 용어사전 : 한글용어, 영문용어, 용어설명 정보</caption>
+				<colgroup>
+					<col style="width: 10%;">
+					<col style="width: 10%;">
+					<col style="width: 30%;">
+				</colgroup>
+				<thead>
+					<tr>
+						<th scope="col">한글용어</th>
+						<th scope="col">영문용어</th>
+						<th scope="col">용어설명</th>
+					</tr>
+				</thead>
+				<tbody>
+<tr>
+					<td class="txt al"><font color='red'>개인종합자산관리계좌</font></td>
+					<td class="txt al">Individual Savings Account</td>
+					<td class="txt al"><a href="javascript:" onclick="glossary_new('/st/USESTJ002P.do?ntstTrgyDictBrkdId=100000000000054812&pageForm=P');"><font color='red'>개인종합자산관리계좌</font>(ISA)는 하나의 통장으로 예·적금, 예탁금, 금융기관(은행·우체국·한국산업은행·중소기업은행·증권금융회사·...</a></td>
+				</tr>
+
+</tbody>
+		</table>
+	</div>
+	</li>
+			<li id="iclResultRGM"></li>
+						<li id="iclResultANNC"></li>
+						<li id="iclResultWHD"></li>
+						<li id="iclResultFAQ"></li>
+						<li id="iclResultRPSC"></li>
+						<li>
+			<div class="tit_box">
+				<strong class="result_tit"><span>세법상담정보 자주묻는 Q&A</span> 검색결과 <em>총(<span>1</span>)건</em></strong>
+				<div class="btns">
+					<a href="#mone" onClick="javascript:doCollection('call_lawQna');" title="국세상담센터 자주묻는 Q&A 더보기" class="btn_more">더보기</a>
+					<a href="javascript:;" class="btn_recent on" onClick="doOrdering('call_lawQna', 'DATE');" title="최신순(선택되었습니다.)">최신순</a>
+					<a href="javascript:;" class="btn_matching " onClick="doOrdering('call_lawQna', 'RANK');" title="정확도순">정확도순</a>
+				</div>
+			</div>
+			<ul>
+<li>
+					<p class="tit"><a href="#" onclick="fn_goQna('1318','CTG11905', '만기된 ISA계좌를 연금 계좌로 전환')" title="만기된 ISA<!HS>계좌<!HE>를 연금 <!HS>계좌<!HE>로 전환(새창으로 이동됩니다.)">만기된 ISA<font color='red'>계좌</font>를 연금 <font color='red'>계좌</font>로 전환</a></p>
+					<p class="date">2020.12.18</p>
+					<p class="category">세법상담정보 &gt; 연말정산 &gt; 자주묻는Q&amp;A &gt; 34.연금계좌세액공제</p>
+					<p class="txt"><a href="#" onclick="fn_goQna('1318','CTG11905', '만기된 ISA계좌를 연금 계좌로 전환')" title="만기된 <!HS>개인종합자산관리계좌<!HE>(ISA<!HS>계좌<!HE>)를 연금<!HS>계좌<!HE>로 전환한 경우 연금<!HS>계좌<!HE>세액공제를 적용받을 수 있나요?(새창으로 이동됩니다.)">Q 만기된 <font color='red'>개인종합자산관리계좌</font>(ISA<font color='red'>계좌</font>)를 연금<font color='red'>계좌</font>로 전환한 경우 연금<font color='red'>계좌</font>세액공제를 적용받을 수 있나요?</a></p>
+					<p class="txt"><a href="#" onclick="fn_goQna('1318','CTG11905', '만기된 ISA계좌를 연금 계좌로 전환')" title="네. 가능합니다.(2020.1.1.이후 연금<!HS>계좌<!HE> 납입분부터 적용)  <!HS>개인종합자산관리계좌<!HE>(ISA)의 계약기간이 만료되고 해당 <!HS>계좌<!HE> 잔액의 전부 또는 일부를 연금<!HS>계좌<!HE>로 납입한 경우 그 납입한 금액을 납입한 날이 속하는 과세기간의 연금<!HS>계좌<!HE> 납입액에 포함합니다.  ( 전환금액의 10%, 300만원 한도로 세액공제 추가한도 적용)  * Min( 전환금액 10%, 300만원)(새창으로 이동됩니다.)">A 네. 가능합니다.(2020.1.1.이후 연금<font color='red'>계좌</font> 납입분부터 적용)  <font color='red'>개인종합자산관리계좌</font>(ISA)의 계약기간이 만료되고 해당 <font color='red'>계좌</font> 잔액의 전부 또는 일부를 연금<font color='red'>계좌</font>로 납입한 경우 그 납입한 금액을 납입한 날이 속하는 과세기간의 연금<font color='red'>계좌</font> 납입액에 포함합니다.  ( 전환금액의 10%, 300만원 한도로 세액공제 추가한도 적용)  * Min( 전환금액 10%, 300만원)</a></p>
+				</li>
+</ul>
+		</li>
+			<!-- paginate -->
+			</ul>
+		
+				<!-- //검색 결과 영역 -->
+				</div>
+                <!-- //검색 결과 영역 -->
+            </div>
+			<div class="right_area">
+				<!-- 검색어 탭 -->
+				<aside class="search_word">
+					<div class="search_word_item">
+						<h2>인기 검색어</h2>
+						<ul class="tab">
+							<li class="on"><a href="#searchkeyWord" title="선택됨">일간</a></li>
+							<li><a href="#searchkeyWord2">주간</a></li>
+						</ul>
+						<div class="list on" id="searchkeyWord"></div>
+						<div class="list" id="searchkeyWord2"></div>
+					</div>
+					<div class="search_word_item">
+						<h2>내가 찾은 검색어</h2>
+						<div class="list my_word" id="mykeyword"></div>
+					</div>
+				</aside>
+				<!-- //검색어 탭 -->
+			</div>
+		</div>
+	</div>
+	<!-- //container -->
+	<!-- FOOTER -->
+        <!-- <footer id="footer">
+		<div class="container">
+			<h2><img src="/images/web/nts/layout/footLogo.png" alt="국세청"></h2>
+			<div class="protectionLink">
+			<a href="/nts/cm/cntnts/cntntsView.do?mi=6788&cntntsId=8280" title="누리집 이용안내 바로가기">누리집 이용안내</a>
+			<a href="/nts/sitemap.do?mi=6789" title="누리집 안내지도 바로가기">누리집 안내지도</a>
+			<a href="">납세자별 정보</a>
+			<a href=""><strong>개인정보처리방침</strong></a>
+			<a href="/nts/cm/cntnts/cntntsView.do?mi=6791&cntntsId=8169" title="저작권정책 바로가기">저작권정책</a>
+			<a href="">만족도조사</a>
+			<a href="/nts/cm/cntnts/cntntsView.do?mi=17455&cntntsId=8803" title="뷰어다운로드 페이지 바로가기">뷰어다운로드</a></div>
+			<div class="footInfo">
+				<address>(우)30128 세종특별자치시 국세청로 8-14 국세청 (정부세종2청사 국세청동) <br>국세청 대표 상담전화는 전국 어디서나 국번 없이 126번</address>
+				<p class="copyright">COPYRIGHT(c) <em>National Tax Service</em>. All Rights Reserved.</p>
+			</div>
+			<div class="lstSnsBox">
+				<ul class="lst">
+					<li><a href="http://blog.naver.com/ntscafe/" target="_blank" title="네이버 블로그 바로가기(새창)"><span class="icons icon1"></span>네이버 블로그</a></li>
+					<li><a href="http://www.facebook.com/ntsKorea" target="_blank" title="페이스북 바로가기(새창)"><span class="icons icon2"></span>페이스북</a></li>
+					<li><a href="https://twitter.com/ntskorea" target="_blank" title="트위터 바로가기(새창)"><span class="icons icon3"></span>트위터</a></li>
+					<li><a href="https://post.naver.com/my.nhn?memberNo=4795084" target="_blank" title="네이버 포스트 바로가기(새창)"><span class="icons icon4"></span>네이버 포스트</a></li>
+					<li><a href="https://story.kakao.com/ch/nts" target="_blank" title="카카오스토리 바로가기(새창)"><span class="icons icon5"></span>카카오스토리</a></li>
+					<li><a href="https://www.youtube.com/channel/UCVTdK_EozBDQ7ICMPJdbpzQ" target="_blank" title="유튜브 바로가기(새창)"><span class="icons icon6"></span>유튜브</a></li>
+				</ul>
+				<p class="wa"><img src="/images/web/nts/layout/wa.png" alt="WA 웹접근성 인증 마크"></p>
+			</div>
+			<p class="top">
+				<a href="#wrap">맨위로</a>
+			</p>
+		</div>
+	</footer> -->
+        <!-- //FOOTER -->
+</div>
+</form>
+<script type="text/javascript">
+$(document).ready(function(){
+	datePickerController.createDatePicker({
+		formElements : {"startDate" : "%Y.%m.%d"},
+		callbackFunctions:{
+			"datereturned":[
+				//maxlength 값 이상일 경우 종료일로 포커스 이동
+				function check(){
+					if($("#startDate").val().length == 10){
+						$("#endDate").focus(); //다음 포커스로 이동
+					}
+				}
+			]
+		},
+		statusFormat : "%Y %F %d일 %l"
+	});
+
+	datePickerController.createDatePicker({
+		formElements : {"endDate" : "%Y.%m.%d"},
+		callbackFunctions:{
+			"datereturned":[
+				function DateCheck(){
+					//기간체크
+					var startDate = $("#startDate").val();
+					var endDate = $("#endDate").val();
+					if(startDate > endDate){
+						alert("기간설정이 잘못되었습니다.");
+						$("#endDate").focus();
+						$("#endDate").val("");
+						return false;
+					}
+					
+				}
+				
+			]
+		},
+		statusFormat : "%Y %F %d일 %l"
+	});
+});
+
+var keyboard = new hunminKB({keyLayout:'KOREAN', offset: {top:300, left:50}});
+var keyOfficeLeft = $("#header .search .search_left").offset().left;
+var keyOfficeTop = $("#header .search .search_left").outerHeight() + $("#header .search .search_left").offset().top;
+
+$(function(){$('#openKeyBoard').click(function() {
+	keyboard.keyboardAction(this, {						
+	inputElement: '#query',
+	offset: {top: 102,left: 0}
+	});
+	/*웹접근성 관련 수정 20250807 Yang*/
+	$('#hunminKBLayout li:first-child > button').focus();	
+});
+
+});
+</script>
+</body>
+</html>
