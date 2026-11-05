@@ -1,0 +1,484 @@
+https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API (curl 2026-11-05)
+Page Visibility API - Web APIs | MDN 
+
+ Skip to main content 
+
+ Skip to search 
+
+ MDN 
+
+ HTML 
+
+ HTML: Markup language 
+
+ HTML reference 
+
+ Elements 
+
+ Global attributes 
+
+ Attributes 
+
+ See all… 
+
+ HTML guides 
+
+ Responsive images 
+
+ HTML cheatsheet 
+
+ Date & time formats 
+
+ See all… 
+
+ Markup languages 
+
+ SVG 
+
+ MathML 
+
+ XML 
+
+ CSS 
+
+ CSS: Styling language 
+
+ CSS reference 
+
+ Properties 
+
+ Selectors 
+
+ At-rules 
+
+ Values 
+
+ See all… 
+
+ CSS guides 
+
+ Box model 
+
+ Animations 
+
+ Flexbox 
+
+ Colors 
+
+ See all… 
+
+ Layout cookbook 
+
+ Column layouts 
+
+ Centering an element 
+
+ Card component 
+
+ See all… 
+
+ JavaScript JS 
+
+ JavaScript: Scripting language 
+
+ JS reference 
+
+ Standard built-in objects 
+
+ Expressions & operators 
+
+ Statements & declarations 
+
+ Functions 
+
+ See all… 
+
+ JS guides 
+
+ Control flow & error handling 
+
+ Loops and iteration 
+
+ Working with objects 
+
+ Using classes 
+
+ See all… 
+
+ Web APIs 
+
+ Web APIs: Programming interfaces 
+
+ Web API reference 
+
+ File system API 
+
+ Fetch API 
+
+ Geolocation API 
+
+ HTML DOM API 
+
+ Push API 
+
+ Service worker API 
+
+ See all… 
+
+ Web API guides 
+
+ Using the Web animation API 
+
+ Using the Fetch API 
+
+ Working with the History API 
+
+ Using the Web speech API 
+
+ Using web workers 
+
+ All 
+
+ All web technology 
+
+ Technologies 
+
+ Accessibility 
+
+ HTTP 
+
+ URI 
+
+ Web extensions 
+
+ WebAssembly 
+
+ WebDriver 
+
+ See all… 
+
+ Topics 
+
+ Media 
+
+ Performance 
+
+ Privacy 
+
+ Security 
+
+ Progressive web apps 
+
+ Learn 
+
+ Learn web development 
+
+ Frontend developer course 
+
+ Getting started modules 
+
+ Core modules 
+
+ MDN Curriculum 
+
+ Check out the video course from Scrimba, our partner 
+
+ Learn HTML 
+
+ Structuring content with HTML module 
+
+ Learn CSS 
+
+ CSS styling basics module 
+
+ CSS layout module 
+
+ Learn JavaScript 
+
+ Dynamic scripting with JavaScript module 
+
+ Tools 
+
+ Discover our tools
+
+ Playground 
+
+ HTTP Observatory 
+
+ Border-image generator 
+
+ Border-radius generator 
+
+ Box-shadow generator 
+
+ Color format converter 
+
+ Color mixer 
+
+ Shape generator 
+
+ About 
+
+ Get to know MDN better
+
+ About MDN 
+
+ Advertise with us 
+
+ Community 
+
+ MDN on GitHub 
+
+ Blog 
+
+ Toggle sidebar 
+
+ Web 
+
+ Web APIs 
+
+ Page Visibility API 
+
+ Theme 
+
+ OS default 
+
+ Light 
+
+ Dark 
+
+ English (US) 
+
+ Remember language 
+
+ Learn more 
+
+ Deutsch 
+
+ English (US) 
+
+ Français 
+
+ 日本語 
+
+ 한국어 
+
+ Português (do Brasil) 
+
+ Русский 
+
+ 中文 (简体) 
+
+ Page Visibility API 
+
+ Baseline
+
+ Widely available 
+
+ This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015. 
+
+ See full compatibility
+
+ Learn more
+
+ The Page Visibility API provides events you can watch for to know when a document becomes visible or hidden, as well as features to look at the current visibility state of the page. 
+ This is especially useful for saving resources and improving performance by letting a page avoid performing unnecessary tasks when the document isn't visible. 
+
+ In this article 
+
+ Concepts and usage 
+
+ Extensions to other interfaces 
+
+ Examples 
+
+ Specifications 
+
+ Browser compatibility 
+
+ See also 
+
+ Concepts and usage 
+ When the user minimizes the window, switches to another tab, or the document is entirely obscured by another window, the API sends a visibilitychange event to let listeners know the state of the page has changed. You can detect the event and perform some actions or behave differently. For example, if your web app is playing a video, it can pause the video when the user puts the tab into the background, and resume playback when the user returns to the tab. The user doesn't lose their place in the video, the video's soundtrack doesn't interfere with audio in the new foreground tab, and the user doesn't miss any of the video in the meantime. 
+ Visibility states of an <iframe> are the same as the parent document. Hiding an <iframe> using CSS properties (such as display: none; ) doesn't trigger visibility events or change the state of the document contained within the frame. 
+
+ Use cases 
+ Let's consider a few use cases for the Page Visibility API. 
+
+ A site has an image carousel that shouldn't advance to the next slide unless the user is viewing the page 
+ An application showing a dashboard of information doesn't want to poll the server for updates when the page isn't visible 
+ A site wants to switch off sounds when a device is in standby mode (user pushes power button to turn screen off) 
+
+ Developers have historically used imperfect proxies to detect this. For example, watching for blur and focus events on the window helps you know when your page is not the active page, but it does not tell you that your page is actually hidden to the user. The Page Visibility API addresses this. 
+
+ Note: 
+While onblur and onfocus will tell you if the user switches windows, it doesn't necessarily mean it's hidden. Pages only become hidden when the user switches tabs or minimizes the browser window containing the tab. 
+
+ Policies in place to aid background page performance 
+ Separately from the Page Visibility API, user agents typically have a number of policies in place to mitigate the performance impact of background or hidden tabs. These may include: 
+
+ Most browsers stop sending requestAnimationFrame() callbacks to background tabs or hidden <iframe> s in order to improve performance and battery life. 
+ Timers such as setTimeout() are throttled in background/inactive tabs to help improve performance. See Reasons for longer delays than specified for more details. 
+ Browsers implement budget-based background timeout throttling. This operates in a similar way across modern browsers, with the details being as follows:
+
+ In Firefox, windows in background tabs each have their own time budget in milliseconds — a max and a min value of +50 ms and -150 ms, respectively. Chrome is very similar except that the budget is specified in seconds. 
+ Windows are subjected to throttling after 30 seconds, with the same throttling delay rules as specified for window timers (again, see Reasons for longer delays than specified ). In Chrome, this value is 10 seconds. 
+ Timer tasks are only permitted when the budget is non-negative. 
+ Once a timer's code has finished running, the duration of time it took to execute is subtracted from its window's timeout budget. 
+ The budget regenerates at a rate of 10 ms per second, in both Firefox and Chrome. 
+
+ Some processes are exempt from this throttling behavior. In these cases, you can use the Page Visibility API to reduce the tabs' performance impact while they're hidden. 
+
+ Tabs which are playing audio are considered foreground and aren't throttled. 
+ Tabs running code that's using real-time network connections ( WebSockets and WebRTC ) go unthrottled in order to avoid closing these connections timing out and getting unexpectedly closed. 
+ IndexedDB processes are also left unthrottled in order to avoid timeouts. 
+
+ Extensions to other interfaces 
+
+ Instance properties 
+ The Page Visibility API adds the following properties to the Document interface: 
+
+ Document.hidden Read only 
+
+ Returns true if the page is in a state considered to be hidden to the user, and false otherwise. 
+
+ Document.visibilityState Read only 
+
+ A string indicating the document's current visibility state. Possible values are: 
+
+ visible 
+
+ The page content may be at least partially visible. In practice this means that the page is the foreground tab of a non-minimized window. 
+
+ hidden 
+
+ The page's content is not visible to the user, either due to the document's tab being in the background or part of a window that is minimized, or because the device's screen is off. 
+
+ Events 
+ The Page Visibility API adds the following events to the Document interface: 
+
+ visibilitychange 
+
+ Fired when the content of a tab has become visible or has been hidden. 
+
+ Examples 
+
+ Pausing audio on page hide 
+ This example pauses playing audio when the page is hidden and resumes playing when the page becomes visible again.
+The <audio> element controls allow the user to toggle between playing and paused audio.
+The boolean playingOnHide is used to prevent audio from playing if the page changes to a visible state, but the media wasn't playing on page hide. 
+ audio {
+ width: 100%;
+}
+
+ HTML 
+ html <audio
+ controls
+ src="https://mdn.github.io/webaudio-examples/audio-basics/outfoxing.mp3"></audio>
+
+ JavaScript 
+ js const audio = document.querySelector("audio");
+
+let playingOnHide = false;
+
+document.addEventListener("visibilitychange", () => {
+ if (document.hidden) {
+ playingOnHide = !audio.paused;
+ audio.pause();
+ } else if (playingOnHide) {
+ // Page became visible! Resume playing if audio was "playing on hide"
+ audio.play();
+ }
+});
+
+ Result 
+
+ Specifications 
+
+ Specification
+
+ HTML # dom-document-visibilitystate 
+
+ Browser compatibility 
+ Enable JavaScript to view this browser compatibility table. 
+
+ See also 
+
+ Document.visibilityState 
+ Document.hidden 
+ Timing element visibility with the Intersection Observer API 
+
+ Help improve MDN
+
+ Was this page helpful to you? 
+
+ Yes 
+
+ No 
+
+ Learn how to contribute 
+ This page was last modified on Dec 30, 2025 by MDN contributors .
+
+ View this page on GitHub • Report a problem with this content 
+
+ Filter sidebar 
+
+ Clear filter input 
+
+ Page Visibility API Properties Document .hidden Document .visibilityState Events Document: visibilitychange 
+
+ MDN 
+
+ Your blueprint for a better internet.
+
+ MDN 
+
+ About
+
+ Blog
+
+ Mozilla careers
+
+ Advertise with us
+
+ MDN Plus
+
+ Product help
+
+ Contribute 
+
+ MDN Community
+
+ Community resources
+
+ Writing guidelines
+
+ MDN Discord
+
+ MDN on GitHub
+
+ Developers 
+
+ Web technologies
+
+ Learn web development
+
+ Guides
+
+ Tutorials
+
+ Glossary
+
+ Hacks blog
+
+ Mozilla 
+
+ Website Privacy Notice 
+
+ Telemetry Settings 
+
+ Legal 
+
+ Community Participation Guidelines 
+
+ Portions of this content are ©1998–2026 by individual mozilla.org contributors. Content available under a Creative Commons license .

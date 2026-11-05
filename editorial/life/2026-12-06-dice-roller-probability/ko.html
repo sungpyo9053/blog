@@ -1,0 +1,251 @@
+<p><em>2026년 11월 5일 기준으로 정리했습니다. 확률 공식은 수식 자체가 근거이고, 돈을 거는 경우의 법적 기준은 국가법령정보센터 형법(시행 2026.10.2.) 원문으로, 상담 번호는 한국도박문제예방치유원 누리집으로 확인했습니다.</em></p>
+<p><strong>주사위 개수와 면 수를 고르고 '굴리기'를 누르면 바로 쓰는 온라인 주사위다.</strong> 1개부터 10개까지, 4면·6면·8면·10면·12면·20면 주사위를 굴릴 수 있고, 각 주사위의 눈과 합계, 지난 기록이 함께 나온다. 아래에는 주사위 n개의 합계가 특정 값이 될 확률을 정확하게 계산하는 계산기를 붙였다. 주사위 두 개에서 7이 왜 가장 자주 나오는지, 6이 한 번이라도 나오려면 몇 번 굴려야 하는지도 숫자로 정리했다.</p>
+<p><strong>목차</strong></p>
+<ul class="huntlab-toc">
+<li><a href="#summary">30초 핵심 요약</a></li>
+<li><a href="#roller">주사위 굴리기</a></li>
+<li><a href="#calculator">주사위 합계 확률 계산기</a></li>
+<li><a href="#two-dice">주사위 2개에서 7이 가장 잘 나오는 이유</a></li>
+<li><a href="#bell">주사위가 많을수록 종 모양이 되는 이유</a></li>
+<li><a href="#at-least-one">한 번이라도 6이 나올 확률</a></li>
+<li><a href="#waiting">원하는 눈이 나올 때까지 몇 번 굴리나</a></li>
+<li><a href="#fallacy">흔한 착각: 나올 차례는 없다</a></li>
+<li><a href="#simulation">20만 번 굴려 본 검산 결과</a></li>
+<li><a href="#uses">보드게임·TRPG·순서 정하기</a></li>
+<li><a href="#money">돈을 걸면 오락이 아니게 된다</a></li>
+<li><a href="#faq">자주 묻는 질문</a></li>
+</ul>
+<h2 id="summary">30초 핵심 요약</h2>
+<ul>
+<li><strong>사용법:</strong> 주사위 개수(1~10개)와 면 수(d4·d6·d8·d10·d12·d20)를 고르고 '굴리기'를 누른다. 눈, 합계, 최근 20번 기록이 나온다.</li>
+<li><strong>주사위 2개:</strong> 36가지 경우 중 합 7이 6가지라 확률 16.67%로 가장 높다. 합 2와 12는 각각 1가지, 2.78%다.</li>
+<li><strong>합계 확률:</strong> 주사위를 하나씩 더해 가며 경우의 수를 세는 방식(동적 계획법)으로 근사 없이 정확한 값을 낸다.</li>
+<li><strong>6이 한 번 이상:</strong> 1 − (5/6)^n. 4번 굴리면 51.77%, 6번 굴려도 66.51%다.</li>
+<li><strong>기다리는 횟수:</strong> 6면 주사위에서 6이 처음 나올 때까지 평균 6번, 절반 확률로 나오려면 4번, 90%는 13번이다.</li>
+<li><strong>공정성:</strong> 브라우저의 암호학적 난수(crypto.getRandomValues)를 쓰고, 나머지 연산 때문에 생기는 치우침은 거부 샘플링으로 없앴다.</li>
+</ul>
+<p class="huntlab-checked-date"><small>자료 확인일: 2026년 11월 5일 · 공식 출처 기준</small></p>
+<div class="wp-block-buttons huntlab-official-links"><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%ED%98%95%EB%B2%95" target="_blank" rel="noopener">형법 원문 바로가기</a></div><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://www.kcgp.or.kr/portal/main/main.do" target="_blank" rel="noopener">한국도박문제예방치유원 바로가기</a></div></div>
+<h2 id="roller">주사위 굴리기</h2>
+<p>기본값은 6면 주사위 2개다. 개수와 면 수를 바꾸면 다음 굴리기부터 바로 적용된다.</p>
+<div id="dr-box" style="border:1px solid #d0d7de;border-radius:8px;padding:16px;margin:16px 0">
+<p style="margin:0 0 12px"><label>주사위 개수 <select id="dr-n"></select></label> <label>면 수 <select id="dr-s"></select></label></p>
+<div id="dr-faces" aria-live="polite" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;min-height:64px;margin:0 0 8px"></div>
+<p id="dr-total" style="font-weight:700;font-size:1.2em;text-align:center;margin:0 0 12px">굴리기를 누르세요.</p>
+<p style="text-align:center;margin:0 0 12px"><button type="button" id="dr-roll" style="font-size:1.1em;padding:8px 28px">굴리기</button> <button type="button" id="dr-clear">기록 지우기</button></p>
+<ol id="dr-hist" style="font-size:0.95em;margin:0;padding-left:24px"></ol>
+</div>
+<h3>표시되는 내용</h3>
+<p>굴릴 때마다 주사위 하나하나의 눈이 칸으로 나오고, 그 아래에 합계가 나온다. 기록은 가장 최근 것이 맨 위에 오며 20번까지 남는다. 'd6'은 6면 주사위, 'd20'은 20면 주사위를 뜻하고, '2d6'은 6면 주사위 2개를 굴려 더한다는 표기다. 보드게임과 TRPG에서 널리 쓰는 표기라 이 글도 그대로 따른다.</p>
+<h3>난수를 어떻게 뽑나</h3>
+<p>눈은 브라우저가 암호 용도로 제공하는 crypto.getRandomValues에서 받은 32비트 정수로 정한다. 흔히 쓰는 '정수 ÷ 6의 나머지 + 1' 방식에는 작은 함정이 있다. 32비트 정수는 4,294,967,296가지인데 이 수는 6으로 나누어떨어지지 않고 4가 남는다. 그대로 나머지를 쓰면 1~4가 5·6보다 아주 조금 더 자주 나온다. 그래서 이 주사위는 6의 배수가 끝나는 지점보다 큰 값이 나오면 버리고 다시 뽑는다. 이것을 거부 샘플링이라고 한다. 버려지는 값은 40억 개 중 4개라서 다시 뽑는 일은 거의 생기지 않지만, 덕분에 모든 눈의 확률이 정확히 같아진다. 20면은 16개, 10면은 6개를 같은 방식으로 버린다. 결과는 내 기기 안에서만 정해지고 어디에도 전송되지 않는다.</p>
+<h2 id="calculator">주사위 합계 확률 계산기</h2>
+<p>주사위 개수, 면 수, 궁금한 합계를 넣으면 그 합계가 정확히 나올 확률과 그 이상·이하가 나올 확률을 계산한다. 아래 막대는 나올 수 있는 모든 합계의 확률이고, 빨간 막대가 입력한 합계, 연한 빨간 막대가 그보다 큰 합계다.</p>
+<div id="dc-box" style="border:1px solid #d0d7de;border-radius:8px;padding:16px;margin:16px 0">
+<p style="margin:0 0 10px"><label>주사위 개수 n <input id="dc-n" type="number" min="1" max="10" step="1" value="2" style="width:70px"></label> <label>면 수 <select id="dc-s"></select></label> <label>합계 k <input id="dc-k" type="number" step="1" value="7" style="width:70px"></label></p>
+<div id="dc-out" aria-live="polite" style="font-weight:700"></div>
+<div id="dc-chart" aria-hidden="true" style="display:flex;align-items:flex-end;gap:1px;height:140px;margin:12px 0 4px;border-bottom:1px solid #8c959f"></div>
+<p id="dc-axis" style="display:flex;justify-content:space-between;font-size:0.85em;margin:0"></p>
+</div>
+<h3>입력하는 값</h3>
+<p>n은 1~10개, 면 수는 4·6·8·10·12·20 중에서 고른다. 합계 k는 나올 수 있는 범위 밖의 값을 넣어도 계산은 된다. 2d6에 13을 넣으면 '정확히 13'은 0%, '13 이상'도 0%로 나온다.</p>
+<h3>어떻게 정확하게 세나</h3>
+<p>주사위 10개를 6면으로 굴리면 경우의 수가 6^10, 약 6,047만 가지다. 이걸 하나씩 늘어놓지 않고, 주사위를 한 개씩 추가하면서 '지금까지의 합이 j가 되는 경우의 수' 표를 갱신한다. 주사위 하나를 더할 때 새 합 j의 경우의 수는 이전 표에서 j−1, j−2, …, j−s의 경우의 수를 모두 더한 값이다. 이 방식은 표본을 뽑아 어림하는 게 아니라 경우의 수를 그대로 세므로 결과에 오차가 없다. 계산기에는 '경우의 수 / 전체 경우의 수'도 함께 나온다.</p>
+<h3>결과 읽는 법</h3>
+<p>'k 이상'은 TRPG에서 목표값 이상을 굴려야 성공하는 판정에, 'k 이하'는 낮게 굴릴수록 좋은 규칙에 쓴다. 평균과 표준편차는 합계가 대략 어느 범위에 몰리는지 보여 준다. 마지막 줄은 이 주사위 하나로 특정 눈(예를 들어 6면이면 6) 하나를 노릴 때의 값이다.</p>
+<h2 id="two-dice">주사위 2개에서 7이 가장 잘 나오는 이유</h2>
+<p>6면 주사위 두 개를 굴리면 첫째 주사위 6가지와 둘째 주사위 6가지를 짝지어 36가지 경우가 생기고, 각 경우는 똑같이 1/36의 확률을 가진다. 합 7을 만드는 짝은 (1,6), (2,5), (3,4), (4,3), (5,2), (6,1)의 6가지다. 다른 어떤 합도 6가지를 넘지 못한다.</p>
+<table>
+<thead><tr><th>합계</th><th>경우의 수</th><th>확률</th></tr></thead>
+<tbody>
+<tr><td>2 또는 12</td><td>1</td><td>2.78%</td></tr>
+<tr><td>3 또는 11</td><td>2</td><td>5.56%</td></tr>
+<tr><td>4 또는 10</td><td>3</td><td>8.33%</td></tr>
+<tr><td>5 또는 9</td><td>4</td><td>11.11%</td></tr>
+<tr><td>6 또는 8</td><td>5</td><td>13.89%</td></tr>
+<tr><td>7</td><td>6</td><td>16.67%</td></tr>
+</tbody>
+</table>
+<h3>(3,4)와 (4,3)은 다른 경우다</h3>
+<p>두 주사위가 똑같이 생겼더라도 서로 다른 물체라 '3과 4'는 두 가지 방식으로 나온다. 반면 '6과 6'은 한 가지뿐이다. 그래서 합 12(6,6)는 2.78%인데, 합 11은 (5,6)과 (6,5) 두 가지라 5.56%로 두 배다. 이 차이를 놓치면 합계별 확률을 모두 같다고 착각하기 쉽다.</p>
+<h3>8 이상이 나올 확률</h3>
+<p>표의 경우의 수를 더하면 된다. 8 이상은 5+4+3+2+1 = 15가지라 41.67%, 10 이상은 6가지라 16.67%다. 2d6에서 7 이상은 21가지, 58.33%라 절반보다 조금 많다. 계산기에 n=2, 면 수 6, k=8을 넣으면 같은 값이 나온다.</p>
+<h2 id="bell">주사위가 많을수록 종 모양이 되는 이유</h2>
+<p>주사위 하나는 모든 눈이 1/6로 같아서 막대그래프가 평평하다. 두 개를 더하면 가운데가 솟은 삼각형이 되고, 세 개부터는 꼭대기가 둥글어진다. 개수가 늘수록 모양은 종 모양(정규분포)에 가까워진다. 가운데 값은 여러 조합으로 만들 수 있지만, 양 끝 값은 모든 주사위가 한쪽 끝 눈을 내야만 나오기 때문이다.</p>
+<h3>주사위 3개(3d6)</h3>
+<p>3d6의 경우의 수는 216가지다. 10과 11이 각각 27가지, 12.50%로 가장 높다. 9와 12는 25가지(11.57%), 3과 18은 1가지(0.46%)뿐이다. 15 이상은 20가지라 9.26%다. 계산기에 n=3을 넣으면 막대가 거의 종 모양으로 바뀌는 걸 볼 수 있다.</p>
+<h3>평균과 표준편차 공식</h3>
+<p>s면 주사위 하나의 평균은 (s + 1) ÷ 2다. 6면이면 3.5, 20면이면 10.5다. n개를 더한 합의 평균은 n × (s + 1) ÷ 2이고, 퍼진 정도를 나타내는 표준편차는 √(n × (s² − 1) ÷ 12)다. 2d6은 평균 7, 표준편차 약 2.42다. 3d6은 평균 10.5, 표준편차 약 2.96이다.</p>
+<h3>10개를 굴리면</h3>
+<p>10d6의 평균은 35, 표준편차는 약 5.40이다. 정확히 35가 나올 확률은 7.27%에 불과하지만, 30~40 사이에 들어올 확률은 68.70%, 28~42 사이는 83.32%다. 가능한 합은 10부터 60까지인데 대부분의 결과가 가운데 좁은 구간에 몰린다. 10이나 60이 나올 확률은 각각 6^10분의 1, 약 6,047만분의 1이다.</p>
+<h2 id="at-least-one">한 번이라도 6이 나올 확률</h2>
+<p>주사위를 한 번 굴려 6이 안 나올 확률은 5/6이다. 굴릴 때마다 결과가 서로 영향을 주지 않으므로 n번 연속 안 나올 확률은 (5/6)^n이고, 한 번이라도 나올 확률은 그 나머지다. 6면 주사위 n개를 한 번에 굴려 그중 하나라도 6이 나올 확률도 같은 식이다.</p>
+<p><strong>n번 중 6이 한 번 이상 나올 확률 = 1 − (5/6)^n</strong></p>
+<table>
+<thead><tr><th>굴리는 횟수(또는 개수)</th><th>6이 한 번 이상</th><th>한 번도 안 나옴</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>16.67%</td><td>83.33%</td></tr>
+<tr><td>2</td><td>30.56%</td><td>69.44%</td></tr>
+<tr><td>3</td><td>42.13%</td><td>57.87%</td></tr>
+<tr><td>4</td><td>51.77%</td><td>48.23%</td></tr>
+<tr><td>6</td><td>66.51%</td><td>33.49%</td></tr>
+<tr><td>10</td><td>83.85%</td><td>16.15%</td></tr>
+<tr><td>20</td><td>97.39%</td><td>2.61%</td></tr>
+</tbody>
+</table>
+<h3>6번 굴리면 한 번은 나올까</h3>
+<p>평균으로 보면 6번에 한 번 나오지만, 6번 굴려서 6을 한 번이라도 볼 확률은 66.51%다. 세 번 중 한 번꼴로는 6번 내내 6이 안 나온다. 1/6을 6번 더해 100%라고 계산하는 실수가 흔한데, 확률은 더하는 게 아니라 '안 나올 확률'을 곱해서 빼야 한다.</p>
+<h3>주사위 2개로 6-6이 한 번 이상</h3>
+<p>두 주사위가 모두 6일 확률은 1/36이다. 같은 식에 넣으면 24번 굴려서 6-6이 한 번이라도 나올 확률은 1 − (35/36)^24 = 49.14%로 절반이 안 되고, 25번이어야 50.55%로 절반을 넘는다. 주사위 하나로 4번 안에 6을 볼 확률(51.77%)과 비슷해 보이지만 결과가 엇갈린다.</p>
+<h2 id="waiting">원하는 눈이 나올 때까지 몇 번 굴리나</h2>
+<p>특정 눈 하나가 처음 나올 때까지 굴리는 횟수는 기하분포를 따른다. 한 번에 나올 확률이 p = 1/s이면 평균 횟수는 1/p = s번이다. 6면 주사위로 6을 기다리면 평균 6번, 20면 주사위로 20을 기다리면 평균 20번이다.</p>
+<h3>평균과 '절반 확률' 횟수는 다르다</h3>
+<p>평균은 아주 오래 안 나오는 경우까지 끌어올린 값이라, 실제로는 평균보다 일찍 나오는 경우가 더 많다. 절반 확률로 한 번은 나오는 횟수는 n = log(1 − 0.5) ÷ log(1 − p)를 올림한 값이다.</p>
+<table>
+<thead><tr><th>주사위</th><th>평균 횟수</th><th>50% 확률</th><th>90% 확률</th></tr></thead>
+<tbody>
+<tr><td>d4</td><td>4번</td><td>3번</td><td>9번</td></tr>
+<tr><td>d6</td><td>6번</td><td>4번</td><td>13번</td></tr>
+<tr><td>d8</td><td>8번</td><td>6번</td><td>18번</td></tr>
+<tr><td>d10</td><td>10번</td><td>7번</td><td>22번</td></tr>
+<tr><td>d12</td><td>12번</td><td>8번</td><td>27번</td></tr>
+<tr><td>d20</td><td>20번</td><td>14번</td><td>45번</td></tr>
+</tbody>
+</table>
+<h3>지금까지 못 봤어도 남은 기대 횟수는 같다</h3>
+<p>기하분포에는 기억이 없다. 6을 10번째까지 못 봤더라도, 그 시점부터 6이 나올 때까지의 평균 횟수는 다시 6번이다. 이미 굴린 10번이 앞으로의 결과를 앞당겨 주지 않는다. 이것이 다음 장에서 다룰 착각과 바로 이어진다.</p>
+<h2 id="fallacy">흔한 착각: 나올 차례는 없다</h2>
+<p>주사위에는 기억이 없다. 6이 다섯 번 연속 안 나왔다고 해서 다음 판에 6이 나올 확률이 올라가지 않는다. 다음 한 번의 확률은 언제나 1/6이다. 오래 안 나왔으니 이제 나올 때가 됐다고 믿는 것을 '도박사의 오류'라고 부른다.</p>
+<h3>연속으로 안 나오는 건 흔하다</h3>
+<p>6이 5번 연속 안 나올 확률은 (5/6)^5 = 40.19%다. 열 번 중 네 번꼴로 생기는 일이라 특별한 신호가 아니다. 반대로 같은 눈이 두 번 연속 나올 확률도 1/6, 16.67%라서 생각보다 자주 보인다. 무작위 결과는 사람이 예상하는 것보다 훨씬 덜 고르게 흩어진다.</p>
+<h3>많이 굴리면 비율이 맞아지는 이유</h3>
+<p>수천 번 굴리면 각 눈의 비율이 1/6에 가까워진다. 이것은 앞에서 덜 나온 눈이 뒤에서 더 나와 빈자리를 메우기 때문이 아니다. 굴린 횟수가 커질수록 처음의 치우침이 전체에서 차지하는 비중이 작아질 뿐이다. 100번 굴려 6이 10번만 나왔다면, 그다음 100번에서도 6의 기대 횟수는 약 16.7번이지 그 이상이 아니다.</p>
+<h3>'손이 뜨겁다'는 느낌</h3>
+<p>좋은 눈이 연달아 나오면 이번 판은 계속 잘 나올 것 같은 기분이 든다. 공정한 주사위라면 이것도 앞의 착각을 뒤집어 놓은 것일 뿐이다. 굴리는 사람, 시간, 직전 결과는 다음 눈에 영향을 주지 않는다. 이 페이지의 주사위도 매번 새로 받은 난수로만 눈을 정한다.</p>
+<h2 id="simulation">20만 번 굴려 본 검산 결과</h2>
+<p>계산기의 정확한 값과 주사위 코드가 맞는지 확인하려고, 이 페이지의 스크립트를 그대로 떼어 node에서 돌렸다. 주사위 코드로 각 20만 번씩 굴린 결과를 정확한 확률과 비교했다.</p>
+<table>
+<thead><tr><th>검산 항목</th><th>정확한 값</th><th>20만 번 실험</th></tr></thead>
+<tbody>
+<tr><td>2d6 합 7</td><td>16.67%</td><td>16.79%</td></tr>
+<tr><td>3d6 합 10</td><td>12.50%</td><td>12.49%</td></tr>
+<tr><td>6면 4번 중 6이 한 번 이상</td><td>51.77%</td><td>51.69%</td></tr>
+<tr><td>d20 20이 나올 때까지 평균 횟수</td><td>20번</td><td>20.01번</td></tr>
+</tbody>
+</table>
+<p>네 값 모두 정확한 값과의 차이가 0.2%포인트 안에 들었다. 20만 번 실험의 표준오차는 2d6 합 7 기준 약 0.08%포인트라 이 정도 차이는 우연의 범위다.</p>
+<h3>카이제곱 검정</h3>
+<p>주사위가 고른지 보려고 d6과 d20을 각각 20만 번 굴려 눈별 횟수에 카이제곱 검정을 했다. 통계량은 d6이 5.90(자유도 5, 5% 기준값 11.07), d20이 13.79(자유도 19, 기준값 30.14)로 둘 다 기준값보다 작았다. 특정 눈으로 치우쳤다고 볼 근거가 없다는 뜻이다. 2d6의 합계 분포도 정확한 확률과 비교해 6.58(자유도 10, 기준값 18.31)로 통과했다. 실험값은 돌릴 때마다 조금씩 달라진다.</p>
+<h2 id="uses">보드게임·TRPG·순서 정하기</h2>
+<h3>보드게임 주사위를 잃어버렸을 때</h3>
+<p>대부분의 보드게임은 6면 주사위 1~2개를 쓴다. 개수와 면 수를 맞춰 두고 굴리기만 누르면 된다. 휴대폰을 가운데 두고 같이 보면 눈을 잘못 읽을 일도 없고, 기록이 남아 방금 몇이 나왔는지 다시 확인할 수 있다.</p>
+<h3>TRPG 판정</h3>
+<p>TRPG에서 자주 쓰는 d20은 한 번 굴려 20이 나올 확률이 5%다. 두 번 굴려 높은 쪽을 쓰는 규칙이면 20이 한 번 이상 나올 확률은 1 − (19/20)^2 = 9.75%로 두 배 가까이 된다. '15 이상이면 성공' 같은 판정은 계산기에 n=1, 면 수 20, k=15를 넣으면 30%로 나온다. 피해 굴림처럼 여러 개를 더하는 경우도 그대로 넣으면 된다.</p>
+<h3>순서·당번 정하기</h3>
+<p>사람마다 주사위 하나를 굴려 큰 수부터 순서를 정할 수 있다. 다만 6면 주사위는 동점이 자주 나온다. 네 명이 6면 주사위를 하나씩 굴리면 적어도 두 명이 같은 눈일 확률이 1 − (6×5×4×3)/6^4 = 72.22%다. 20면 주사위를 쓰면 같은 네 명의 동점 확률이 27.32%로 줄어든다. 인원이 많거나 이름을 넣고 바로 정하고 싶다면 <a href="https://huntlab.app/ladder-game-online-2026/">사다리 게임</a>이나 <a href="https://huntlab.app/roulette-wheel-spinner-2026/">돌림판 룰렛</a>이 편하다.</p>
+<h2 id="money">돈을 걸면 오락이 아니게 된다</h2>
+<p>이 주사위와 계산기는 놀이와 확률 공부를 위한 것이다. 형법 제246조제1항은 "도박을 한 사람은 1천만원 이하의 벌금에 처한다. 다만, 일시오락 정도에 불과한 경우에는 예외로 한다."고 정한다. 제2항은 상습으로 한 경우 "3년 이하의 징역 또는 2천만원 이하의 벌금"이다. 어느 정도가 일시오락에 해당하는지는 법조문에 금액으로 정해져 있지 않고, 이번에 그 판단 기준은 확인하지 못했다.</p>
+<p>주사위의 확률을 안다고 돈을 따는 방법이 생기지는 않는다. 각 판은 독립이고, 앞에서 본 것처럼 '나올 차례'도 없다. 도박 때문에 걱정되는 일이 있다면 한국도박문제예방치유원 헬프라인 1336(국번없이, 무료)에 전화할 수 있다. 누리집에 안내된 운영 시간은 365일 연중무휴 09:00~22:00다.</p>
+<h2 id="faq">자주 묻는 질문</h2>
+<h3>온라인 주사위는 진짜 주사위만큼 공정한가요?</h3>
+<p>이 페이지의 주사위는 암호학적 난수를 쓰고, 나머지 연산의 치우침을 거부 샘플링으로 없애 모든 눈의 확률이 정확히 같다. 20만 번 굴린 카이제곱 검정에서도 치우침이 보이지 않았다. 실제 주사위는 모서리 마모나 무게 중심 때문에 조금씩 치우칠 수 있다.</p>
+<h3>주사위 2개를 굴리면 왜 7이 많이 나오나요?</h3>
+<p>36가지 경우 중 합 7을 만드는 경우가 6가지로 가장 많기 때문이다. 확률은 16.67%다. 합 2와 12는 각각 한 가지뿐이라 2.78%다.</p>
+<h3>6이 계속 안 나오면 다음엔 나올 확률이 높아지나요?</h3>
+<p>아니다. 주사위는 앞의 결과를 기억하지 않아서 다음 한 번의 확률은 언제나 1/6이다. 6이 5번 연속 안 나올 확률은 40.19%로 흔한 일이다.</p>
+<h3>주사위를 6번 굴리면 6이 꼭 한 번은 나오나요?</h3>
+<p>아니다. 한 번 이상 나올 확률은 1 − (5/6)^6 = 66.51%다. 한 번도 안 나올 확률이 33.49%나 된다. 90% 이상으로 보려면 13번을 굴려야 한다.</p>
+<h3>주사위 3개 합계에서 가장 잘 나오는 수는 무엇인가요?</h3>
+<p>10과 11이다. 216가지 중 각각 27가지라 확률은 12.50%다. 3과 18은 각각 1가지라 0.46%다.</p>
+<h3>d20에서 20이 나오려면 평균 몇 번 굴려야 하나요?</h3>
+<p>평균 20번이다. 다만 절반 확률로 한 번 보려면 14번, 90% 확률로 보려면 45번을 굴려야 한다. 평균보다 일찍 나오는 경우가 더 많다.</p>
+<h3>굴린 기록이 어딘가에 저장되나요?</h3>
+<p>기록은 화면에만 남고 서버로 보내지 않는다. 새로 고치면 기록이 지워진다.</p>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"온라인 주사위는 진짜 주사위만큼 공정한가요?","acceptedAnswer":{"@type":"Answer","text":"이 페이지의 주사위는 암호학적 난수를 쓰고, 나머지 연산의 치우침을 거부 샘플링으로 없애 모든 눈의 확률이 정확히 같다. 20만 번 굴린 카이제곱 검정에서도 치우침이 보이지 않았다. 실제 주사위는 모서리 마모나 무게 중심 때문에 조금씩 치우칠 수 있다."}},
+{"@type":"Question","name":"주사위 2개를 굴리면 왜 7이 많이 나오나요?","acceptedAnswer":{"@type":"Answer","text":"36가지 경우 중 합 7을 만드는 경우가 6가지로 가장 많기 때문이다. 확률은 16.67퍼센트다. 합 2와 12는 각각 한 가지뿐이라 2.78퍼센트다."}},
+{"@type":"Question","name":"6이 계속 안 나오면 다음엔 나올 확률이 높아지나요?","acceptedAnswer":{"@type":"Answer","text":"아니다. 주사위는 앞의 결과를 기억하지 않아서 다음 한 번의 확률은 언제나 1/6이다. 6이 5번 연속 안 나올 확률은 40.19퍼센트로 흔한 일이다."}},
+{"@type":"Question","name":"주사위를 6번 굴리면 6이 꼭 한 번은 나오나요?","acceptedAnswer":{"@type":"Answer","text":"아니다. 한 번 이상 나올 확률은 1 - (5/6)의 6제곱 = 66.51퍼센트다. 한 번도 안 나올 확률이 33.49퍼센트나 된다. 90퍼센트 이상으로 보려면 13번을 굴려야 한다."}},
+{"@type":"Question","name":"주사위 3개 합계에서 가장 잘 나오는 수는 무엇인가요?","acceptedAnswer":{"@type":"Answer","text":"10과 11이다. 216가지 중 각각 27가지라 확률은 12.50퍼센트다. 3과 18은 각각 1가지라 0.46퍼센트다."}},
+{"@type":"Question","name":"d20에서 20이 나오려면 평균 몇 번 굴려야 하나요?","acceptedAnswer":{"@type":"Answer","text":"평균 20번이다. 다만 절반 확률로 한 번 보려면 14번, 90퍼센트 확률로 보려면 45번을 굴려야 한다. 평균보다 일찍 나오는 경우가 더 많다."}},
+{"@type":"Question","name":"굴린 주사위 기록이 어딘가에 저장되나요?","acceptedAnswer":{"@type":"Answer","text":"기록은 화면에만 남고 서버로 보내지 않는다. 새로 고치면 기록이 지워진다."}}
+]}
+</script>
+<h2 id="related">같이 보면 좋은 글</h2>
+<ul>
+<li><a href="https://huntlab.app/ladder-game-online-2026/">사다리 게임 2026</a></li>
+<li><a href="https://huntlab.app/roulette-wheel-spinner-2026/">돌림판 룰렛 돌리기 2026</a></li>
+<li><a href="https://huntlab.app/percent-calculator-2026/">퍼센트 계산기 2026</a></li>
+<li><a href="https://huntlab.app/lottery-prize-tax-calculator-2026/">로또 당첨금 세금 계산기 2026</a></li>
+</ul>
+<p>출처: 합계 분포, 한 번 이상 나올 확률, 기하분포의 평균·필요 횟수는 수식 자체가 근거이며, 이 페이지 스크립트로 20만 번 모의 실험과 카이제곱 검정을 해 검산했다. 도박죄 조문은 <a href="https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=290185">국가법령정보센터 형법(시행 2026.10.2.) 제246조</a>, 헬프라인 번호와 운영 시간은 <a href="https://www.kcgp.or.kr/portal/main/main.do">한국도박문제예방치유원</a> 누리집으로 확인했다. 일시오락의 판단 기준은 이번에 확인하지 못했다.</p>
+<script>
+(function(){
+var SIDES=[4,6,8,10,12,20],MAXN=10,TWO32=4294967296;
+function randInt(s){
+var lim=TWO32-TWO32%s,a=new Uint32Array(1),v;
+do{window.crypto.getRandomValues(a);v=a[0]}while(v>=lim);
+return v%s+1}
+function roll(n,s){var r=[],i;for(i=0;i<n;i++)r.push(randInt(s));return r}
+function dist(n,s){
+var c=[1],i,j,f,d;
+for(i=0;i<n;i++){d=[];for(j=0;j<c.length+s-1;j++)d.push(0);for(j=0;j<c.length;j++){for(f=0;f<s;f++)d[j+f]+=c[j]}c=d}
+return {n:n,s:s,min:n,max:n*s,counts:c,total:Math.pow(s,n)}}
+function cntEq(D,k){if(k<D.min)return 0;if(k>D.max)return 0;return D.counts[k-D.min]}
+function cntGe(D,k){var x=0,j;for(j=Math.max(k,D.min);j<=D.max;j++)x+=D.counts[j-D.min];return x}
+function cntLe(D,k){var x=0,j;for(j=D.min;j<=Math.min(k,D.max);j++)x+=D.counts[j-D.min];return x}
+function modes(D){var m=Math.max.apply(null,D.counts),r=[];D.counts.forEach(function(c,i){if(c===m)r.push(i+D.min)});return r}
+function mean(n,s){return n*(s+1)/2}
+function sd(n,s){return Math.sqrt(n*(s*s-1)/12)}
+function atLeastOne(n,s){return 1-Math.pow((s-1)/s,n)}
+function rollsFor(s,T){var p=1/s;if(p>=1)return 1;return Math.max(1,Math.ceil(Math.log(1-T)/Math.log(1-p)-1e-9))}
+window.diceCore={randInt:randInt,roll:roll,dist:dist,cntEq:cntEq,cntGe:cntGe,cntLe:cntLe,modes:modes,mean:mean,sd:sd,atLeastOne:atLeastOne,rollsFor:rollsFor};
+var $=function(i){return document.getElementById(i)};
+if(!$('dr-roll'))return;
+function fillSel(el,vals,def,fmt){vals.forEach(function(v){var o=document.createElement('option');o.value=String(v);o.textContent=fmt(v);if(v===def)o.selected=true;el.appendChild(o)});el.value=String(def)}
+var ns=[],i;for(i=1;i<=MAXN;i++)ns.push(i);
+fillSel($('dr-n'),ns,2,function(v){return v+'개'});
+fillSel($('dr-s'),SIDES,6,function(v){return v+'면 (d'+v+')'});
+fillSel($('dc-s'),SIDES,6,function(v){return v+'면 (d'+v+')'});
+var hist=[];
+function fmtN(x){return Number(x).toLocaleString('ko-KR')}
+function pct(x){if(x===0)return '0%';if(x<0.000001)return '0.0001% 미만';return (Math.round(x*10000)/100).toFixed(2)+'%'}
+function doRoll(){
+var n=parseInt($('dr-n').value,10),s=parseInt($('dr-s').value,10),r=roll(n,s),box=$('dr-faces'),sum=0;
+box.innerHTML='';
+r.forEach(function(v){sum+=v;var d=document.createElement('div');d.textContent=String(v);d.setAttribute('aria-label','d'+s+' '+v);d.style.cssText='width:56px;height:56px;line-height:56px;text-align:center;font-size:1.5em;font-weight:700;border:2px solid #1f2328;border-radius:10px;background:#ffffff;color:#1f2328';box.appendChild(d)});
+$('dr-total').textContent=n+'d'+s+' 합계: '+sum;
+hist.unshift(n+'d'+s+': '+r.join(' + ')+' = '+sum);
+if(hist.length>20)hist.length=20;
+showHist()}
+function showHist(){var ol=$('dr-hist');ol.innerHTML='';hist.forEach(function(h){var li=document.createElement('li');li.textContent=h;ol.appendChild(li)})}
+$('dr-roll').addEventListener('click',doRoll);
+$('dr-clear').addEventListener('click',function(){hist=[];showHist()});
+function out(L){var o=$('dc-out');o.innerHTML='';L.forEach(function(s){var p=document.createElement('p');p.style.margin='0 0 6px';p.textContent=s;o.appendChild(p)})}
+function chart(D,k){
+var box=$('dc-chart'),ax=$('dc-axis'),m=Math.max.apply(null,D.counts);
+box.innerHTML='';ax.innerHTML='';
+D.counts.forEach(function(c,j){var sum=j+D.min,b=document.createElement('div'),col='#6fb7d6';
+if(sum>=k)col='#f2a2a2';
+if(sum===k)col='#d1242f';
+b.style.cssText='flex:1 1 0;min-width:1px;background:'+col+';height:'+(c/m*100)+'%';b.title='합 '+sum+': '+pct(c/D.total);box.appendChild(b)});
+[D.min,modes(D).join('·'),D.max].forEach(function(t,j){var sp=document.createElement('span');sp.textContent=(j===1?'최빈 ':'')+t;ax.appendChild(sp)})}
+function calc(){
+var n=parseInt($('dc-n').value,10),s=parseInt($('dc-s').value,10),k=parseInt($('dc-k').value,10);
+if(!(n>=1)){out(['주사위 개수를 1 이상으로 입력해 주세요.']);return}
+if(n>MAXN){out(['주사위 개수는 10개까지 계산합니다.']);return}
+if(isNaN(k)){out(['합계 k를 정수로 입력해 주세요.']);return}
+var D=dist(n,s),T=D.total,e=cntEq(D,k),g=cntGe(D,k),l=cntLe(D,k);
+out([n+'d'+s+' 합계가 정확히 '+k+': '+pct(e/T)+' ('+fmtN(e)+' / '+fmtN(T)+')',
+k+' 이상: '+pct(g/T)+' ('+fmtN(g)+' / '+fmtN(T)+')',
+k+' 이하: '+pct(l/T)+' ('+fmtN(l)+' / '+fmtN(T)+')',
+'나올 수 있는 합계: '+D.min+'~'+D.max+', 가장 잘 나오는 합: '+modes(D).join(', '),
+'평균(기댓값) '+mean(n,s)+', 표준편차 약 '+sd(n,s).toFixed(2),
+'주사위 '+n+'개 중 특정 눈('+s+')이 하나 이상 나올 확률: '+pct(atLeastOne(n,s)),
+'1개로 특정 눈을 기다리면 평균 '+s+'번, 50% 확률 '+rollsFor(s,0.5)+'번, 90% 확률 '+rollsFor(s,0.9)+'번']);
+chart(D,k)}
+['dc-n','dc-k'].forEach(function(id){$(id).addEventListener('input',calc)});
+$('dc-s').addEventListener('change',calc);
+calc()})();
+</script>
