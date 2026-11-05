@@ -1,0 +1,172 @@
+<pre><code>[INFO] [rosbag2_cpp]: Writing remaining messages from cache to the bag. It may take a while
+[WARN] [rosbag2_cpp]: Cache buffers lost messages per topic:
+	/cam: 361
+Total lost: 361</code></pre>
+
+<p>This is what <code>ros2 bag record</code> printed on Jazzy after I stopped it. It had dropped 361 of 1,200 camera frames. It printed nothing during the 40 seconds of recording, only this, at exit. On Lyrical one more line follows: <code>[WARN] [rosbag2_recorder]: Number of messages lost in the recorder: 427</code>.</p>
+
+<p>Short answer: the recorder drops messages when it can't write to storage as fast as they arrive. Its write cache hides the problem for the first 18 to 22 seconds, then it starts losing whole blocks of messages. The fix is to make write throughput higher than the topic data rate: a faster disk, fewer or smaller messages, or compression when the data actually compresses. A bigger <code>--max-cache-size</code> only delays the first drop. <code>--max-cache-size 0</code> made it worse, and the recorder printed nothing at all. Best-effort topics carried over UDP lose messages before they reach the recorder, and on Humble and Lyrical nothing tells you. To be sure, count what is in the bag and compare it with what you published:</p>
+
+<pre><code>ros2 bag info my_bag            # "Count:" per topic
+# expected = rate (Hz) x duration (s); or put a sequence number in each message and look for gaps</code></pre>
+
+<h2>Find your case</h2>
+
+<p>Each row is a single run of a 640x480 rgb8-sized image topic (921,600 bytes per message, random bytes so it doesn't compress). "Slow disk" means the container was limited to 10 MB/s of writes while the topic produced about 27.6 MB/s.</p>
+
+<table>
+<thead><tr><th>What happened</th><th>What the recorder printed</th><th>Lost (Humble / Jazzy / Lyrical)</th></tr></thead>
+<tbody>
+<tr><td>Slow disk, default cache</td><td><code>Cache buffers lost messages per topic</code> and <code>Total lost: N</code>, at exit only</td><td>383 / 361 / 427 of 1,200</td></tr>
+<tr><td>Slow disk, <code>--max-cache-size 0</code></td><td>nothing</td><td>547 / 606 / 565 of 1,200</td></tr>
+<tr><td>Best-effort publisher, Fast DDS forced to UDP, 100 Hz</td><td>Jazzy: <code>Number of messages lost on the transport layer: 255</code>. Humble and Lyrical: nothing</td><td>15 / 256 / 20 of 300</td></tr>
+<tr><td>Same, reliable publisher</td><td>nothing</td><td>0 / 0 / 0 of 300</td></tr>
+<tr><td>Filesystem filled up during recording</td><td>Humble: <code>SQLite error (13): database or disk is full</code> and a crash. Jazzy and Lyrical: nothing, exit code 0</td><td>bag not readable on all three (see below)</td></tr>
+<tr><td>Same topic, disk not throttled, 40 s</td><td>nothing</td><td>0 / 0 / 0 of 1,200</td></tr>
+</tbody>
+</table>
+
+<p>The questions linked at the end describe the first row: images that "start to drop out" after about 20 seconds on a Raspberry Pi 5, with CPU under 30%. In my runs the first missing frame came at 21.7 s on Humble, 20.4 s on Jazzy and 18.2 s on Lyrical. Low CPU is expected here. The recorder isn't busy, it is waiting on the disk.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-05 I ran the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host, one distro after another. Each distro got two containers with <code>--cpus=1.5 --memory=1500m</code>. The second one also had <code>--device-write-bps /dev/nvme0n1:10mb</code>, which throttles writes to the disk that holds the bag. That is my stand-in for an SD card or a slow USB drive.</p>
+
+<p>A Python publisher (<code>pub.py</code>) sends <code>sensor_msgs/Image</code> messages on <code>/cam</code> at a fixed rate and writes the sequence number into <code>header.frame_id</code>. <code>ros2 bag record</code> records <code>/cam</code> with default settings unless the row says otherwise. When the publisher finishes, the script sends SIGINT and waits for the recorder to exit. Then <code>count.py</code> reads the bag with <code>rosbag2_py</code>, counts the messages and lists the missing sequence numbers. The publisher hit its rate in every run (30.0 to 30.1 Hz, 8.0 Hz or 100.3 Hz), so every loss below happened on the recording side. Each case ran once per distro. The default storage was <code>sqlite3</code> on Humble and <code>mcap</code> on Jazzy and Lyrical. Humble's ros-base image doesn't ship the MCAP plugin.</p>
+
+<h2>Cause 1: the disk is slower than the data</h2>
+
+<p>The slow disk takes about 10 MB/s, and 30 frames per second of 921,600 bytes is about 27.6 MB/s. The recorder keeps up at first because it writes into a memory cache. The help text explains it: "Maximum size (in bytes) of messages to hold in each buffer of cache. Default: 104857600. The cache is handled through double buffering". One buffer fills while the other is written out. When the writer falls far enough behind, incoming messages are thrown away. You can see that in where the gaps are. On Jazzy the missing frames were 611 to 701, 816 to 1048 and 1163 to 1199, so blocks of 37 to 233 frames, with good stretches between them.</p>
+
+<table>
+<thead><tr><th>Slow disk, 30 Hz for 40 s</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Messages in the bag</td><td>817</td><td>839</td><td>773</td></tr>
+<tr><td>Lost (recorder's own count)</td><td>383</td><td>361</td><td>427</td></tr>
+<tr><td>First missing frame</td><td>#650 (21.7 s)</td><td>#611 (20.4 s)</td><td>#547 (18.2 s)</td></tr>
+<tr><td>Flush after SIGINT ("Writing remaining messages" to the "lost" warning)</td><td>9.9 s</td><td>12.1 s</td><td>10.1 s</td></tr>
+</tbody>
+</table>
+
+<p>In every run the recorder's own "Total lost" matched the gap count from the sequence numbers exactly, so the exit line is reliable for this cause. Its problem is timing. It comes at the very end, when the frames are already gone. rosbag2 <a href="https://github.com/ros2/rosbag2/issues/2534">issue #2534</a> asks for the count to be available during recording. Lyrical has a partial answer: it publishes <code>rosbag2_interfaces/msg/MessagesLostEvent</code> on <code>/events/rosbag2_messages_lost</code>. I echoed that topic during each Lyrical run. In the default slow-disk run it got 17 events, and their <code>messages_lost_in_recorder</code> fields added up to 427, the same as the exit line. Humble and Jazzy don't have this message type.</p>
+
+<p>Run-to-run spread is real. On Humble the default case and the explicit <code>-s sqlite3</code> case were the same configuration, and they lost 383 and 465. Read the numbers in this post as "about a third", not exact values.</p>
+
+<h2>Cause 2: --max-cache-size 0</h2>
+
+<p>Setting the cache to zero is a common suggestion, and the Pi 5 question above used it. With no cache, the recorder writes each message as it arrives. On the slow disk this lost more than the default on all three distros, and the recorder printed no warning. The warning comes from the cache, and with a size of 0 the cache is off.</p>
+
+<table>
+<thead><tr><th>Slow disk, cache 0</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Lost</td><td>547</td><td>606</td><td>565</td></tr>
+<tr><td>First missing frame</td><td>#292 (9.7 s)</td><td>#594 (19.8 s)</td><td>#279 (9.3 s)</td></tr>
+<tr><td>Gap pattern</td><td>351 gaps, mostly every other frame</td><td>1 gap: every frame from #594 to the end</td><td>346 gaps, mostly every other frame</td></tr>
+<tr><td>Warning printed</td><td>none</td><td>none</td><td>none (and no lost events)</td></tr>
+</tbody>
+</table>
+
+<p>Jazzy's pattern is the worst kind. The bag holds the first 594 frames and then nothing, with no error. If you set <code>--max-cache-size 0</code>, the only way to find out is to count.</p>
+
+<h2>Cause 3: best-effort QoS on a lossy transport</h2>
+
+<p>A camera driver often publishes best effort. By default the recorder adapts to the publisher's QoS, so it subscribes best effort too, and anything the transport drops is gone. Inside one container Fast DDS uses shared memory, so I forced it onto UDP with an XML profile (<code>FASTRTPS_DEFAULT_PROFILES_FILE</code>). That is closer to recording from another machine or another container. At 100 Hz with the same 921,600-byte messages:</p>
+
+<ul>
+<li>Best effort: 15 lost on Humble, 256 on Jazzy and 20 on Lyrical, out of 300. Frame #0 was missing on all three. I ran this once per distro, so I can't say whether Jazzy's 256 is a real difference or a bad run.</li>
+<li>Reliable: 300 of 300 on all three.</li>
+</ul>
+
+<p>Only Jazzy printed a warning (<code>Number of messages lost on the transport layer: 255</code>, one less than the gap count). Lyrical's lost-event topic stayed at zero for <code>messages_lost_in_transport</code>. So on Humble and Lyrical, transport loss looks like a clean recording. Lyrical also warns that <code>FASTRTPS_DEFAULT_PROFILES_FILE</code> is deprecated in favour of <code>FASTDDS_DEFAULT_PROFILES_FILE</code>.</p>
+
+<p>If you can change the publisher to reliable, that removed the loss here. If you can't, a reliable subscriber can't connect to a best-effort publisher. I didn't test recorder QoS overrides for this case.</p>
+
+<h2>Cause 4: the disk fills up</h2>
+
+<p>I filled <code>/dev/shm</code> until about 150 MB was free, then recorded 276 MB. The results were the worst of all, because two of the three distros said nothing:</p>
+
+<ul>
+<li>Humble (sqlite3): <code>terminate called after throwing an instance of 'rosbag2_storage_plugins::SqliteException'</code>, <code>what(): Error when processing SQL statement. SQLite error (13): database or disk is full</code>. Exit code 134. There was a 155,951,104-byte <code>.db3</code> file and no <code>metadata.yaml</code>.</li>
+<li>Jazzy (mcap): exit code 0, no error line. A 155,389,952-byte <code>.mcap</code> and a 0-byte <code>metadata.yaml</code>. <code>rosbag2_py</code> failed with <code>Exception on parsing info file: invalid node; first invalid key: "version"</code>.</li>
+<li>Lyrical (mcap): the same as Jazzy, with a 154,607,616-byte <code>.mcap</code> and a 0-byte <code>metadata.yaml</code>.</li>
+</ul>
+
+<p>If a bag came out about the size of your free space, or <code>ros2 bag info</code> fails on it, check <code>df</code> first. I didn't test whether <code>ros2 bag reindex</code> recovers these bags.</p>
+
+<h2>Fix options compared</h2>
+
+<p>All on the 10 MB/s disk with the 27.6 MB/s topic, 1,200 frames, unless noted. Lost counts are Humble / Jazzy / Lyrical.</p>
+
+<table>
+<thead><tr><th>Change</th><th>Lost</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Nothing (default cache)</td><td>383 / 361 / 427</td><td>first drop after 18 to 22 s</td></tr>
+<tr><td><code>--max-cache-size 0</code></td><td>547 / 606 / 565</td><td>worse, and silent</td></tr>
+<tr><td><code>--max-cache-size 314572800</code> (300 MiB)</td><td>87 / 215 / 233</td><td>first drop at 27.7 / 28.6 / 32.2 s; the flush after SIGINT took 46.5 / 24.0 / 34.1 s</td></tr>
+<tr><td><code>-s sqlite3</code> instead of the default</td><td>465 / 468 / 515</td><td>no better; on Humble this is the default</td></tr>
+<tr><td><code>--compression-mode message --compression-format zstd</code>, random data</td><td>395 / 427 / 487</td><td>no better: random bytes don't compress</td></tr>
+<tr><td>Same compression, all-zero image data</td><td>0 / 0 / 0</td><td>bag was 185,329 / 179,450 / 179,588 bytes</td></tr>
+<tr><td>8 Hz instead of 30 Hz (about 7.4 MB/s)</td><td>0 / 0 / 0</td><td>under the disk's 10 MB/s</td></tr>
+<tr><td>Disk not throttled, 30 Hz</td><td>0 / 0 / 0</td><td>1,200 of 1,200</td></tr>
+</tbody>
+</table>
+
+<p>Three things follow from this. First, a bigger cache buys time but not a full bag. Even 300 MiB per buffer lost 87 to 233 frames in 40 seconds, and stopping the recorder took up to 46.5 s while it flushed. Second, wait for the recorder to exit. In one Humble run my script killed it 30 s after SIGINT while it was still flushing. The <code>.db3</code> was 850,296,832 bytes and there was no <code>metadata.yaml</code>, so <code>rosbag2_py</code> couldn't open it. Third, compression only helps when your data compresses. All-zero frames are the best case. Real camera images sit somewhere between that and random bytes, and I didn't measure them. Recording a compressed image topic instead of the raw one is the usual way to get there, but I didn't test that either.</p>
+
+<p>The fix that worked every time was to get the data rate below what the storage can write. Measure the rate with <code>ros2 topic bw</code> (this <a href="https://huntlab.app/en/ros2-topic-hz-bw-inaccurate-high-rate-measured/">test of ros2 topic hz and bw</a> shows where it can be off at high rates). Then compare it with a write test on the target disk. If the rate is close to the disk speed, record to a faster disk, record fewer topics, or lower the rate or resolution.</p>
+
+<h2>How to check a bag for drops</h2>
+
+<ol>
+<li>Read the last lines the recorder prints. <code>Cache buffers lost messages per topic</code> means cause 1. It is accurate, but you only get it at exit.</li>
+<li>On Lyrical, subscribe to <code>/events/rosbag2_messages_lost</code> during recording to see cache drops as they happen.</li>
+<li>Compare <code>ros2 bag info</code> counts with the rate times the duration. This also catches cause 2, cause 3 and the start-of-recording gap.</li>
+<li>If you own the publisher, add a sequence number. With one in <code>frame_id</code>, finding the gaps takes a short <code>rosbag2_py</code> script (<code>count.py</code> in the evidence folder).</li>
+</ol>
+
+<p>Messages missing only at the start are a different problem: the recorder subscribed late. That is covered in <a href="https://huntlab.app/en/ros2-bag-record-from-ros-2-launch-file-missing-first-messages/">missing first messages when ros2 bag record starts from a launch file</a>.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (rosbag2 0.15.17): default storage <code>sqlite3</code>, and MCAP isn't in ros-base. A full disk crashes the recorder with an SQLite error. No transport-loss line.</li>
+<li>Jazzy (rosbag2 0.26.11): default <code>mcap</code>. Prints <code>Number of messages lost on the transport layer</code> at exit. The positional topic argument still works but warns <code>Positional "topics" argument deprecated. Please use optional "--topics" argument instead.</code></li>
+<li>Lyrical (rosbag2 0.33.4): default <code>mcap</code>. Positional topics are gone (<code>ros2: error: unrecognized arguments: /cam</code>), so use <code>--topics /cam</code>. Adds <code>Number of messages lost in the recorder</code> and the <code>/events/rosbag2_messages_lost</code> topic, and has a new <code>--max-cache-duration</code> option. Bag files are named like <code>0_bag_name_2026_11_05-05_59_31.mcap</code>.</li>
+</ul>
+
+<p>The cache warning text was the same on all three. If you also split bags, a split can overshoot the size limit by up to the cache size on Jazzy and Lyrical, as measured in <a href="https://huntlab.app/en/ros-2-bag-record-split-max-bag-size-vs-max-bag-duration/">ros2 bag record split: --max-bag-size vs --max-bag-duration</a>. Converting old <code>.db3</code> bags to MCAP is covered in <a href="https://huntlab.app/en/ros-2-bag-convert-db3-to-mcap-jazzy-bag-in-humble/">convert a ROS 2 .db3 bag to MCAP</a>.</p>
+
+<h2>Not tested</h2>
+
+<p>Real SD cards or USB drives (I used a cgroup write limit), real camera images and compressed image topics, several topics at once, <code>--storage-preset-profile</code>, <code>--compression-mode file</code>, <code>--compression-threads</code>, recorder QoS overrides (<code>--qos-profile-overrides-path</code>), Cyclone DDS and Zenoh, recording across two machines, <code>ros2 bag reindex</code> on broken bags, snapshot mode, <code>--max-cache-duration</code>, and repeated runs to measure the spread.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 bag record drop messages after about 20 seconds?</h3>
+<p>The write cache hides a slow disk for a while. With a 27.6 MB/s topic and a 10 MB/s disk, the first drop came at 18.2 to 21.7 s, and about a third of the frames were lost over 40 s. CPU use stays low because the recorder is waiting for the disk.</p>
+
+<h3>Does --max-cache-size 0 stop dropped messages?</h3>
+<p>No. On the slow disk it lost 547 to 606 of 1,200 frames, against 361 to 427 with the default, and it printed no warning on any distro.</p>
+
+<h3>How do I know if ros2 bag record lost messages?</h3>
+<p>For cache drops, look for "Cache buffers lost messages per topic" and "Total lost" when the recorder exits. It matched the real gap count in every run. For everything else, compare the counts in ros2 bag info with the rate times the duration, or check sequence numbers.</p>
+
+<h3>Will a bigger cache fix it?</h3>
+<p>It delays the first drop but doesn't stop it while the disk is slower than the data. A 300 MiB cache still lost 87 to 233 frames, and the recorder then took up to 46.5 s to exit. Wait for it to exit, or the bag can end up with no metadata.yaml.</p>
+
+<h3>Why are messages missing from a best-effort topic?</h3>
+<p>The recorder subscribes best effort to match the publisher, so it loses whatever the transport loses. Over UDP at 100 Hz it lost 15 to 256 of 300 messages, and a reliable publisher lost none. Only Jazzy printed a transport-loss warning.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 bag record drop messages after about 20 seconds?", "acceptedAnswer": {"@type": "Answer", "text": "The write cache hides a slow disk for a while. With a 27.6 MB/s topic and a 10 MB/s disk, the first drop came at 18.2 to 21.7 s, and about a third of the frames were lost over 40 s. CPU use stays low because the recorder is waiting for the disk."}},
+{"@type": "Question", "name": "Does --max-cache-size 0 stop dropped messages?", "acceptedAnswer": {"@type": "Answer", "text": "No. On the slow disk it lost 547 to 606 of 1,200 frames, against 361 to 427 with the default, and it printed no warning on any distro."}},
+{"@type": "Question", "name": "How do I know if ros2 bag record lost messages?", "acceptedAnswer": {"@type": "Answer", "text": "For cache drops, look for Cache buffers lost messages per topic and Total lost when the recorder exits. It matched the real gap count in every run. For everything else, compare the counts in ros2 bag info with the rate times the duration, or check sequence numbers."}},
+{"@type": "Question", "name": "Will a bigger cache fix it?", "acceptedAnswer": {"@type": "Answer", "text": "It delays the first drop but doesn't stop it while the disk is slower than the data. A 300 MiB cache still lost 87 to 233 frames, and the recorder then took up to 46.5 s to exit. Wait for it to exit, or the bag can end up with no metadata.yaml."}},
+{"@type": "Question", "name": "Why are messages missing from a best-effort topic?", "acceptedAnswer": {"@type": "Answer", "text": "The recorder subscribes best effort to match the publisher, so it loses whatever the transport loses. Over UDP at 100 Hz it lost 15 to 256 of 300 messages, and a reliable publisher lost none. Only Jazzy printed a transport-loss warning."}}
+]}
+</script>
+
+<p>Measured on 2026-11-05 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rosbag2 0.15.17, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rosbag2 0.26.11, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rosbag2 0.33.4, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-24-ros2-bag-record-dropping-messages/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/112800">ros2 bag dropping some images after recording for around 20 seconds</a>, <a href="https://robotics.stackexchange.com/questions/100644">Detect messages dropped by ros2 bag record</a>, <a href="https://github.com/ros2/rosbag2/issues/1845">[humble] How to avoid frames dropped without buffsize and chunksize options?</a>, <a href="https://github.com/ros2/rosbag2/issues/2007">Statistics about the number of lost and recorded messages</a>, <a href="https://github.com/ouster-lidar/ouster-ros/issues/306">Lidar points dropped in ros bag record</a>.</p>
