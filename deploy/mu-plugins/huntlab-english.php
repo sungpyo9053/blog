@@ -85,7 +85,8 @@ add_filter(
     5
 );
 
-// "Keep reading": up to three other English lessons, same symptom group (huntlab-hub) first, then newest.
+// "Keep reading": up to six other English lessons, same symptom group (huntlab-hub) first, then most shared
+// slug words, then newest. Newest-only picked unrelated posts (colcon memory post showed apt-key posts, 2026-11-05).
 add_filter(
     'the_content',
     static function ( string $content ): string {
@@ -93,7 +94,7 @@ add_filter(
             return $content;
         }
         $current = get_post();
-        $others  = get_posts( [ 'post_type' => 'hunt_en', 'post_status' => 'publish', 'numberposts' => 50,
+        $others  = get_posts( [ 'post_type' => 'hunt_en', 'post_status' => 'publish', 'numberposts' => 300,
             'exclude' => [ $current->ID ] ] );
         $pattern = null;
         foreach ( function_exists( 'huntlab_hub_groups' ) ? huntlab_hub_groups() : [] as $group ) {
@@ -102,11 +103,15 @@ add_filter(
                 break;
             }
         }
-        // usort is stable since PHP 8: same-group posts first, newest order kept within each side.
-        usort( $others, static fn( $a, $b ) => (int) ( $pattern && preg_match( $pattern, $b->post_name ) )
-            - (int) ( $pattern && preg_match( $pattern, $a->post_name ) ) );
+        $stop  = array_flip( [ 'ros', 'ros2', '2', 'the', 'a', 'to', 'in', 'of', 'and', 'or', 'is', 'not', 'no', 'for', 'with', 'measured', 'vs', 'how' ] );
+        $words = static fn( $p ) => array_diff_key( array_flip( explode( '-', $p->post_name ) ), $stop );
+        $mine  = $words( $current );
+        $score = static fn( $p ) => ( $pattern && preg_match( $pattern, $p->post_name ) ? 100 : 0 )
+            + count( array_intersect_key( $mine, $words( $p ) ) );
+        // usort is stable since PHP 8: ties keep get_posts' newest-first order.
+        usort( $others, static fn( $a, $b ) => $score( $b ) <=> $score( $a ) );
         $items = '';
-        foreach ( array_slice( $others, 0, 3 ) as $post ) {
+        foreach ( array_slice( $others, 0, 6 ) as $post ) {
             $items .= '<li><a href="' . esc_url( get_permalink( $post ) ) . '">' . esc_html( get_the_title( $post ) ) . '</a></li>';
         }
         return $items ? $content . '<aside class="huntlab-related" aria-label="Keep reading"><h2>Keep reading</h2><ul>'
