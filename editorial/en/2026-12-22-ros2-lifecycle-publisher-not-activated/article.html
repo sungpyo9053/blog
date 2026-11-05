@@ -1,0 +1,194 @@
+<pre><code>[WARN] [1793845263.836121682] [LifecyclePublisher]: Trying to publish message on the topic '/chatter', but the publisher is not activated</code></pre>
+
+<p>Short answer: a publisher created with a lifecycle node only sends messages while it is activated. It starts inactive, and it gets activated when the node goes through the <code>activate</code> transition. Two things go wrong in practice. The node is never configured and activated, because nothing sent those transitions. Or the node is active, but your <code>on_activate</code> override never activated the publisher. Call the base class in your override, and start the node with configure and activate events (or <code>autostart=True</code> on Jazzy and Lyrical):</p>
+
+<pre><code class="language-cpp">CallbackReturn on_activate(const rclcpp_lifecycle::State &amp; state) override
+{
+  LifecycleNode::on_activate(state);   // activates every lifecycle publisher of this node
+  // or: pub_-&gt;on_activate();
+  return CallbackReturn::SUCCESS;
+}</code></pre>
+
+<pre><code class="language-python">def on_activate(self, state):
+    super().on_activate(state)   # rclpy: same job, and the warning above never appears in Python
+    return TransitionCallbackReturn.SUCCESS</code></pre>
+
+<pre><code>ros2 lifecycle set /my_node configure
+ros2 lifecycle set /my_node activate</code></pre>
+
+<p>Two details make this harder to spot. In C++ the warning was printed once per inactive stretch, not once per dropped message. In my run one line stood for 64 to 91 lost messages. In Python nothing was printed at all: the messages were dropped without any log line.</p>
+
+<h2>Find your symptom</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical unless the row says otherwise.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my run</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 lifecycle get</code> says <code>unconfigured [1]</code>, nothing on the topic</td><td>Node started, no transition sent. A plain <code>LifecycleNode</code> in a launch file stays here.</td><td>Send <code>configure</code> then <code>activate</code>, from the CLI or with launch events</td></tr>
+<tr><td>State <code>inactive [2]</code>, the C++ node logs the warning once</td><td>Configured but not activated. Also the case in launch files that only handle the activate step.</td><td>Send <code>activate</code></td></tr>
+<tr><td>State <code>active [3]</code>, the C++ node logged the warning once, topic stays empty</td><td><code>on_activate</code> override that doesn't call <code>LifecycleNode::on_activate(state)</code> or <code>pub_-&gt;on_activate()</code></td><td>Call one of them in the override</td></tr>
+<tr><td>State <code>active [3]</code>, Python node, topic empty, no warning</td><td><code>on_activate</code> override without <code>super().on_activate(state)</code></td><td>Call <code>super().on_activate(state)</code></td></tr>
+<tr><td><code>Unknown transition requested, available ones are:</code> with exit code 1</td><td>Transition not allowed from the current state, for example <code>activate</code> from <code>unconfigured</code></td><td>Follow the order: configure, activate</td></tr>
+<tr><td><code>TypeError: LifecycleNode.__init__() missing 1 required keyword-only argument: 'namespace'</code></td><td><code>LifecycleNode(...)</code> in a launch file without <code>namespace=</code></td><td>Add <code>namespace=''</code></td></tr>
+<tr><td><code>TypeError: Action.__init__() got an unexpected keyword argument 'autostart'</code></td><td><code>autostart=True</code> on Humble</td><td>Use configure and activate events on Humble</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-05 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after the other, on a 2 vCPU Ubuntu host. One package held two lifecycle nodes: a C++ node (<code>rclcpp_lifecycle::LifecycleNode</code>, name <code>lc_cpp</code>) and a Python node (<code>rclpy.lifecycle.Node</code>, name <code>lc_py</code>). In <code>on_configure</code> each node creates a lifecycle publisher on <code>/chatter</code>, a 100 ms timer that publishes on it, and a subscription on <code>/in</code>. An environment variable picks one of three <code>on_activate</code> styles:</p>
+
+<ul>
+<li><code>base</code>: the override calls the base class (<code>LifecycleNode::on_activate(state)</code> in C++, <code>super().on_activate(state)</code> in Python), and the same for <code>on_deactivate</code>.</li>
+<li><code>none</code>: the override only returns SUCCESS.</li>
+<li><code>manual</code> (C++ only): the override calls <code>pub_-&gt;on_activate()</code> and <code>pub_-&gt;on_deactivate()</code>.</li>
+</ul>
+
+<p>For each node and style the script walked the node through every state with <code>ros2 lifecycle set</code>. In each state it ran <code>ros2 topic echo /chatter</code> for about 3 seconds while <code>ros2 topic pub -r 10 /in</code> fed the subscription. The node logged how many timer ticks and <code>/in</code> messages it had seen since the last transition. I then started the C++ node from six launch files and read its state 7 seconds later. The full script is <code>repro.sh</code> in the evidence folder.</p>
+
+<p>Messages received by <code>ros2 topic echo /chatter</code> in each state. The echo window includes its own startup time, so the active counts vary between runs.</p>
+
+<table>
+<thead><tr><th>Node and style</th><th>unconfigured</th><th>inactive</th><th>active</th><th>after deactivate</th><th>warning lines</th></tr></thead>
+<tbody>
+<tr><td>C++ <code>base</code></td><td>0</td><td>0</td><td>25 / 17 / 20</td><td>0</td><td>2</td></tr>
+<tr><td>C++ <code>manual</code></td><td>0</td><td>0</td><td>22 / 29 / 29</td><td>0</td><td>2</td></tr>
+<tr><td>C++ <code>none</code></td><td>0</td><td>0</td><td>0 / 0 / 0</td><td>0</td><td>1</td></tr>
+<tr><td>Python <code>base</code></td><td>0</td><td>0</td><td>27 / 24 / 30</td><td>0</td><td>0</td></tr>
+<tr><td>Python <code>none</code></td><td>0</td><td>0</td><td>0 / 0 / 0</td><td>0</td><td>0</td></tr>
+</tbody>
+</table>
+
+<p>The active column is Humble / Jazzy / Lyrical. The other columns were 0 on all three.</p>
+
+<h2>The publisher starts inactive, even after configure</h2>
+
+<p>Right after <code>create_publisher</code> in <code>on_configure</code>, the C++ node logged <code>pub_is_activated=0</code>. A lifecycle publisher is created inactive, whatever state the node is in. While the node was inactive, the timer kept ticking and calling <code>publish()</code>, between 61 and 93 times per stretch, and <code>ros2 topic echo</code> received nothing. The node does not stop your code from running. It only stops the publisher from sending.</p>
+
+<p>After a successful <code>activate</code> transition in the <code>base</code> style, the C++ node logged <code>on_activate done, pub_is_activated=1</code>, and messages arrived. After <code>deactivate</code> they stopped again, and the publisher reported <code>pub_is_activated=0</code> in <code>on_cleanup</code>.</p>
+
+<h2>An active node with an inactive publisher</h2>
+
+<p>This is the case that wastes the most time. In the <code>none</code> style every <code>ros2 lifecycle set</code> printed <code>Transitioning successful</code>, and <code>ros2 lifecycle get</code> said <code>active [3]</code>. The C++ node logged <code>on_activate done, pub_is_activated=0</code>, and the topic stayed empty for the whole active period on all three distros. The state machine moved, but the publisher was never told.</p>
+
+<p>When you override <code>on_activate</code>, the base class version doesn't run unless you call it. That base version is what activates the node's lifecycle publishers. Two fixes worked the same way in my run:</p>
+
+<ul>
+<li>Call <code>LifecycleNode::on_activate(state)</code> (C++) or <code>super().on_activate(state)</code> (Python) inside the override. This covers every lifecycle publisher the node created.</li>
+<li>In C++, call <code>pub_-&gt;on_activate()</code> for each publisher yourself (the <code>manual</code> style), and <code>pub_-&gt;on_deactivate()</code> in <code>on_deactivate</code>.</li>
+</ul>
+
+<p>Do the same in <code>on_deactivate</code>. The <code>base</code> and <code>manual</code> styles both called the deactivate side too, and both stopped sending after <code>deactivate</code>.</p>
+
+<h2>One warning line, many lost messages</h2>
+
+<p>In C++ the warning comes from the logger named <code>LifecyclePublisher</code>, not from your node's logger. In the <code>base</code> and <code>manual</code> styles it appeared exactly twice per run: once in the first inactive stretch and once after <code>deactivate</code>. Each stretch had 64 to 91 publish calls. In the <code>none</code> style it appeared once, although the publisher stayed inactive through 220 to 245 publish calls across three states. So a single warning at startup doesn't mean only one message was lost. It means the publisher was inactive from that point until it was activated.</p>
+
+<p>If you filter logs by node name, you will also miss it, because the line is tagged <code>[LifecyclePublisher]</code> instead of your node's name.</p>
+
+<h2>Python drops messages without a word</h2>
+
+<p>The rclpy node used <code>create_lifecycle_publisher</code>. While it was inactive, and in the <code>none</code> style while the node was active, <code>publish()</code> raised nothing and logged nothing on any distro. The log file had zero lines containing <code>not activated</code>. If you search for the warning text because your Python topic is empty, you won't find it in your output. Check the state with <code>ros2 lifecycle get /node_name</code> and check that your <code>on_activate</code> calls <code>super()</code>.</p>
+
+<h2>Timers and subscriptions keep running while inactive</h2>
+
+<p>Only publishers are managed. In every run the timer fired while the node was inactive, and the subscription received between 7 and 31 of the roughly 30 messages fed to <code>/in</code> in each inactive stretch. The lower counts are probably discovery delay at the start of a feed; I didn't measure that. This held for C++ and Python on all three distros. If your node must be quiet while inactive, create the timer and subscription in <code>on_activate</code> and destroy them in <code>on_deactivate</code>, or check the state in the callback. An open rclcpp issue asks for lifecycle-managed timers: <a href="https://github.com/ros2/rclcpp/issues/3255">Support lifecycle-managed timers in rclcpp_lifecycle::LifecycleNode</a>.</p>
+
+<h2>Transitions from the command line</h2>
+
+<p>A transition that is not allowed from the current state fails with exit code 1. Sending <code>activate</code> to an unconfigured node printed:</p>
+
+<pre><code>Unknown transition requested, available ones are:
+- configure [1]
+- shutdown [5]</code></pre>
+
+<p>A valid one printed <code>Transitioning successful</code> with exit code 0. The order that worked on all three distros was <code>configure</code>, <code>activate</code>, <code>deactivate</code>, <code>cleanup</code>, <code>shutdown</code>, ending in <code>finalized [4]</code>. <code>ros2 lifecycle list /node_name</code> prints the transitions allowed right now, and <code>ros2 lifecycle nodes</code> lists every lifecycle node it can see. The node name must be unique. Two nodes with the same name answer the same lifecycle services, which I covered in <a href="https://huntlab.app/en/ros2-nodes-in-the-graph-share-an-exact-name-warning/">nodes that share an exact name</a>.</p>
+
+<h2>Configure and activate from a launch file</h2>
+
+<p><code>launch_ros.actions.LifecycleNode</code> only starts the process. On all three distros, the node from a launch file with nothing else was still <code>unconfigured [1]</code> after 7 seconds.</p>
+
+<p>A common pattern registers an <code>OnStateTransition</code> handler that activates the node when it reaches <code>inactive</code>, but never emits the first configure event. That node also stayed <code>unconfigured [1]</code>, because nothing ever moved it to <code>inactive</code>. You need both parts:</p>
+
+<pre><code class="language-python">import lifecycle_msgs.msg
+from launch import LaunchDescription
+from launch.actions import EmitEvent, RegisterEventHandler
+from launch.events import matches_action
+from launch_ros.actions import LifecycleNode
+from launch_ros.event_handlers import OnStateTransition
+from launch_ros.events.lifecycle import ChangeState
+
+def generate_launch_description():
+    node = LifecycleNode(package='lc', executable='lc_cpp', name='lc_cpp',
+                         namespace='', output='screen')
+    configure = EmitEvent(event=ChangeState(
+        lifecycle_node_matcher=matches_action(node),
+        transition_id=lifecycle_msgs.msg.Transition.TRANSITION_CONFIGURE))
+    activate = RegisterEventHandler(OnStateTransition(
+        target_lifecycle_node=node, goal_state='inactive',
+        entities=[EmitEvent(event=ChangeState(
+            lifecycle_node_matcher=matches_action(node),
+            transition_id=lifecycle_msgs.msg.Transition.TRANSITION_ACTIVATE))]))
+    return LaunchDescription([activate, node, configure])</code></pre>
+
+<p>With this file the node was <code>active [3]</code>. <code>on_activate</code> finished 0.623 s after <code>ros2 launch</code> started on Humble, 0.696 s on Jazzy and 0.696 s on Lyrical. A version that emitted only the configure event, placed before the node in the list, left the node in <code>inactive [2]</code>, so the order in the list didn't block the event. That node printed the warning once, as expected.</p>
+
+<p>Leave out <code>namespace=</code> and the file doesn't load on any of the three distros: <code>TypeError: LifecycleNode.__init__() missing 1 required keyword-only argument: 'namespace'</code>. Use <code>namespace=''</code> if you don't need one.</p>
+
+<h2>autostart=True: Jazzy and Lyrical only</h2>
+
+<p>On Jazzy and Lyrical, <code>LifecycleNode(..., autostart=True)</code> did both transitions without any event code. The node was <code>active [3]</code> after 0.696 s on Jazzy and 0.703 s on Lyrical, the same as the event version. On Humble the launch file failed to load with <code>TypeError: Action.__init__() got an unexpected keyword argument 'autostart'</code>. The feature came from <a href="https://github.com/ros2/launch_ros/pull/430">launch_ros PR 430</a>, merged into rolling on 2025-02-19. The <a href="https://github.com/ros2/launch_ros/pull/476">Humble backport</a> was closed without merging. On Humble, use the events above.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 lifecycle set</code> configure, then activate</td><td>works</td><td>works</td><td>works</td><td>Manual, good for testing</td></tr>
+<tr><td>Launch: configure event plus <code>OnStateTransition</code> activate</td><td>active at 0.623 s</td><td>active at 0.696 s</td><td>active at 0.696 s</td><td>Works everywhere</td></tr>
+<tr><td>Launch: <code>autostart=True</code></td><td>TypeError</td><td>active at 0.696 s</td><td>active at 0.703 s</td><td>Least code</td></tr>
+<tr><td>Launch: activate handler only</td><td>unconfigured</td><td>unconfigured</td><td>unconfigured</td><td>Missing first step</td></tr>
+<tr><td>Base class call in <code>on_activate</code></td><td>sends</td><td>sends</td><td>sends</td><td>C++ and Python</td></tr>
+<tr><td><code>pub_-&gt;on_activate()</code> in C++</td><td>sends</td><td>sends</td><td>sends</td><td>One call per publisher</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The publisher behavior, the warning text and the CLI messages were the same on all three distros. Three things differed. <code>autostart=True</code> failed on Humble and worked on Jazzy and Lyrical. On Lyrical, a C++ lifecycle node stopped with Ctrl+C before reaching <code>finalized</code> printed <code>LifecycleNode is not shut down: Node still in state(3) in destructor</code>, with the current state's number. Humble and Jazzy printed nothing there. And the rclcpp signal message changed from <code>signal_handler(SIGINT/SIGTERM)</code> on Humble and Jazzy to <code>signal_handler(signum=2)</code> on Lyrical. The rclpy node ended <code>rclpy.spin</code> with <code>ExternalShutdownException</code> on SIGINT on all three; the <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">node shutdown post</a> covers that part.</p>
+
+<h2>Not tested</h2>
+
+<p>Nav2's lifecycle manager, composable lifecycle nodes (<code>LifecycleComponentNode</code> and component containers), the XML and YAML launch frontends, lifecycle services called from inside another node's callbacks, a failing <code>on_configure</code> (returning FAILURE or ERROR), the <code>ErrorProcessing</code> state, loaned messages, Cyclone DDS and Zenoh, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "the publisher is not activated" mean in ROS 2?</h3>
+<p>A lifecycle publisher was asked to publish while inactive, so the message was dropped. The publisher starts inactive and only sends after the node's <code>activate</code> transition activated it. In my run the C++ warning appeared once per inactive stretch, while 64 to 91 messages were dropped in each one.</p>
+
+<h3>My lifecycle node is active but still publishes nothing. Why?</h3>
+<p>Your <code>on_activate</code> override probably doesn't call the base class. With an override that only returned SUCCESS, the node reported <code>active [3]</code> and the topic stayed empty on Humble, Jazzy and Lyrical. Call <code>LifecycleNode::on_activate(state)</code> in C++ or <code>super().on_activate(state)</code> in Python, or <code>pub_-&gt;on_activate()</code> per publisher.</p>
+
+<h3>How do I configure and activate a lifecycle node automatically in a launch file?</h3>
+<p>Emit a <code>ChangeState</code> event with <code>TRANSITION_CONFIGURE</code>, and register an <code>OnStateTransition</code> handler for <code>goal_state='inactive'</code> that emits <code>TRANSITION_ACTIVATE</code>. On Jazzy and Lyrical you can pass <code>autostart=True</code> to <code>LifecycleNode</code> instead. Both reached the active state in about 0.7 s.</p>
+
+<h3>Why does my rclpy lifecycle node not print the warning?</h3>
+<p>The rclpy lifecycle publisher dropped messages without any log line on all three distros. Check the state with <code>ros2 lifecycle get</code> and check that <code>on_activate</code> calls <code>super().on_activate(state)</code>.</p>
+
+<h3>Do timers and subscriptions stop when a lifecycle node is inactive?</h3>
+<p>No. Only lifecycle publishers are managed. Timers fired and subscriptions received messages while the node was inactive, in C++ and Python. Create them in <code>on_activate</code> and destroy them in <code>on_deactivate</code> if they must stop.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does the publisher is not activated mean in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "A lifecycle publisher was asked to publish while inactive, so the message was dropped. The publisher starts inactive and only sends after the node's activate transition activated it. In my run the C++ warning appeared once per inactive stretch, while 64 to 91 messages were dropped in each one."}},
+{"@type": "Question", "name": "My lifecycle node is active but still publishes nothing. Why?", "acceptedAnswer": {"@type": "Answer", "text": "Your on_activate override probably doesn't call the base class. With an override that only returned SUCCESS, the node reported active [3] and the topic stayed empty on Humble, Jazzy and Lyrical. Call LifecycleNode::on_activate(state) in C++ or super().on_activate(state) in Python, or pub_->on_activate() per publisher."}},
+{"@type": "Question", "name": "How do I configure and activate a lifecycle node automatically in a launch file?", "acceptedAnswer": {"@type": "Answer", "text": "Emit a ChangeState event with TRANSITION_CONFIGURE, and register an OnStateTransition handler for goal_state inactive that emits TRANSITION_ACTIVATE. On Jazzy and Lyrical you can pass autostart=True to LifecycleNode instead. Both reached the active state in about 0.7 s."}},
+{"@type": "Question", "name": "Why does my rclpy lifecycle node not print the warning?", "acceptedAnswer": {"@type": "Answer", "text": "The rclpy lifecycle publisher dropped messages without any log line on all three distros. Check the state with ros2 lifecycle get and check that on_activate calls super().on_activate(state)."}},
+{"@type": "Question", "name": "Do timers and subscriptions stop when a lifecycle node is inactive?", "acceptedAnswer": {"@type": "Answer", "text": "No. Only lifecycle publishers are managed. Timers fired and subscriptions received messages while the node was inactive, in C++ and Python. Create them in on_activate and destroy them in on_deactivate if they must stop."}}
+]}
+</script>
+
+<p>Measured on 2026-11-05 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclcpp and rclcpp_lifecycle 16.0.21, rclpy 3.3.22, ros2cli and ros2lifecycle 0.18.20, launch_ros 0.19.14, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclcpp and rclcpp_lifecycle 28.1.22, rclpy 7.1.12, ros2cli and ros2lifecycle 0.32.13, launch_ros 0.26.13, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclcpp and rclcpp_lifecycle 32.0.3, rclpy 10.0.11, ros2cli and ros2lifecycle 0.40.9, launch_ros 0.29.9, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-22-ros2-lifecycle-publisher-not-activated/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/110950">How to automatically configure a ROS 2 lifecycle node in a launch file right after it's initialized?</a>, <a href="https://robotics.stackexchange.com/questions/89113">How to correctly create a Lifecycle launch file</a>, <a href="https://robotics.stackexchange.com/questions/95324">ROS 2 lifecycle node self-transitioning</a>, <a href="https://robotics.stackexchange.com/questions/107602">Lifecycle node consuming cpu in deactivated state</a>.</p>
