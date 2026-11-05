@@ -1,0 +1,205 @@
+=== distro=humble
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-ros2topic 0.18.20-1jammy.20260907.215610
+RMW_IMPLEMENTATION=<unset>
+===== PY sig
+--- sig
+SIGNATURE (msg_type, node: 'Node', topic: str, *, qos_profile: Union[rclpy.qos.QoSProfile, int] = 1, time_to_wait=-1)
+MODULE /opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/wait_for_message.py
+SOURCE-BEGIN
+def wait_for_message(
+    msg_type,
+    node: 'Node',
+    topic: str,
+    *,
+    qos_profile: Union[QoSProfile, int] = 1,
+    time_to_wait=-1
+):
+    """
+    Wait for the next incoming message.
+    :param msg_type: message type
+    :param node: node to initialize the subscription on
+    :param topic: topic name to wait for message
+    :param qos_profile: QoS profile to use for the subscription
+    :param time_to_wait: seconds to wait before returning
+    :returns: (True, msg) if a message was successfully received, (False, None) if message
+        could not be obtained or shutdown was triggered asynchronously on the context.
+    """
+    context = node.context
+    wait_set = _rclpy.WaitSet(1, 1, 0, 0, 0, 0, context.handle)
+    wait_set.clear_entities()
+    sub = node.create_subscription(msg_type, topic, lambda _: None, qos_profile=qos_profile)
+    try:
+        wait_set.add_subscription(sub.handle)
+        sigint_gc = SignalHandlerGuardCondition(context=context)
+        wait_set.add_guard_condition(sigint_gc.handle)
+        timeout_nsec = timeout_sec_to_nsec(time_to_wait)
+        wait_set.wait(timeout_nsec)
+        subs_ready = wait_set.get_ready_entities('subscription')
+        guards_ready = wait_set.get_ready_entities('guard_condition')
+        if guards_ready:
+            if sigint_gc.handle.pointer in guards_ready:
+                return False, None
+        if subs_ready:
+            if sub.handle.pointer in subs_ready:
+                msg_info = sub.handle.take_message(sub.msg_type, sub.raw)
+                if msg_info is not None:
+                    return True, msg_info[0]
+    finally:
+        node.destroy_subscription(sub)
+    return False, None
+SOURCE-END
+exit=0
+===== PY normal (reliable volatile 10 Hz publisher)
+--- normal
+RESULT case=normal ok=True msg='hello 23' elapsed=0.374s
+RESULT case=normal ok=True msg='hello 24' elapsed=0.018s
+RESULT case=normal ok=True msg='hello 25' elapsed=0.100s
+RESULT case=normal ok=True msg='hello 26' elapsed=0.100s
+RESULT case=normal ok=True msg='hello 27' elapsed=0.100s
+exit=0
+===== PY timeout (no publisher, time_to_wait=1.0)
+--- timeout
+RESULT case=timeout ok=False msg=None elapsed=1.002s
+exit=0
+===== PY forever (no publisher, default time_to_wait, killed by timeout 5)
+--- forever
+calling with default time_to_wait
+RESULT case=forever ok=False msg=None elapsed=4.794s
+exit=124
+===== PY latched (transient_local publisher, published once 2 s before the call)
+--- latched_default
+RESULT case=latched_default ok=False msg=None elapsed=3.002s
+exit=0
+--- latched_qos
+RESULT case=latched_qos ok=True msg='hello 1' elapsed=0.013s
+exit=0
+===== PY best_effort 10 Hz publisher
+--- default_qos
+RESULT case=default_qos ok=False msg=None elapsed=0.375s
+exit=0
+--- default_qos
+RESULT case=default_qos ok=False msg=None elapsed=0.042s
+exit=0
+--- default_qos
+RESULT case=default_qos ok=False msg=None elapsed=0.002s
+exit=0
+--- sensor_qos
+RESULT case=sensor_qos ok=True msg='hello 36' elapsed=0.137s
+exit=0
+===== PY wrong type (String publisher, wait for Int32)
+--- wrong_type
+RESULT case=wrong_type ok=False msg=None elapsed=3.002s
+exit=0
+===== PY inside a timer callback of a spinning node
+--- in_callback
+RESULT case=in_callback ok=True msg='hello 24' elapsed=0.194s
+exit=0
+===== PY node spinning in a MultiThreadedExecutor thread
+--- spinning_thread
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.10/threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 323, in spin
+    self.spin_once()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 867, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 864, in _spin_once_impl
+    future.result()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 109, in result
+    raise self.exception()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 309, in _execute_coroutine_step
+    result = coro.send(None)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 478, in handler
+    arg = take_from_wait_list(entity)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 399, in _take_subscription
+    with sub.handle:
+rclpy._rclpy_pybind11.InvalidHandle: cannot use Destroyable because destruction was requested
+RESULT case=spinning_thread ok_count=20/20 results=[(True, 0.059), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.101), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1)]
+EXECUTOR thread alive after the calls: False
+exit=0
+===== PY spinning node with timer: same node vs separate helper node
+--- spin_timer_same
+RESULT case=spin_timer_same ok_count=20/20 wfm_results=[(True, 0.056), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.8), (True, 0.1), (True, 0.1), (True, 0.4), (True, 0.2), (True, 0.3), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1)] executor_alive=True timer_ticks_in_next_2s=20
+exit=0
+--- spin_timer_same
+RESULT case=spin_timer_same ok_count=20/20 wfm_results=[(True, 0.053), (True, 0.5), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.5), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.2)] executor_alive=True timer_ticks_in_next_2s=20
+exit=0
+--- spin_timer_same
+RESULT case=spin_timer_same ok_count=20/20 wfm_results=[(True, 0.454), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.7), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.3)] executor_alive=True timer_ticks_in_next_2s=20
+exit=0
+--- spin_timer_sep
+RESULT case=spin_timer_sep ok_count=20/20 wfm_results=[(True, 0.042), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1), (True, 0.1)] executor_alive=True timer_ticks_in_next_2s=20
+exit=0
+===== PY repeated calls (100 Hz publisher)
+--- repeat 400
+REPEAT call=1 ok=True cpu_user+sys=0.216s subs_on_node=0
+REPEAT call=200 ok=True cpu_user+sys=0.475s subs_on_node=0
+REPEAT call=400 ok=True cpu_user+sys=0.740s subs_on_node=0
+RESULT case=repeat N=400 mean_first_half=11.82ms mean_second_half=9.99ms max=376.41ms
+SUBS after loop: 0, topic subscriptions in graph: 0
+exit=0
+===== CLI ros2 topic echo --once
+HELP [--qos-durability {system_default,transient_local,volatile,unknown}]
+HELP [--once]
+HELP --qos-durability {system_default,transient_local,volatile,unknown}
+HELP --once                Print the first message received and then exit.
+data: hello 27
+---
+exit=0 elapsed=1.056
+--- echo --once, default QoS, latched publisher
+data: hello 1
+---
+exit=0 elapsed=1.326
+--- echo --once --qos-durability transient_local
+data: hello 1
+---
+exit=0 elapsed=1.0
+--- echo --once --timeout 2 (no publisher)
+usage: ros2 [-h] [--use-python-default-buffering]
+            Call `ros2 <command> -h` for more detailed usage. ...
+ros2: error: unrecognized arguments: --timeout std_msgs/msg/String
+exit=2 elapsed=0.319
+===== CPP header
+header=/opt/ros/humble/include/rclcpp/rclcpp/wait_for_message.hpp
+44:bool wait_for_message(
+45-  MsgT & out,
+46-  std::shared_ptr<rclcpp::Subscription<MsgT>> subscription,
+47-  std::shared_ptr<rclcpp::Context> context,
+48-  std::chrono::duration<Rep, Period> time_to_wait = std::chrono::duration<Rep, Period>(-1))
+49-{
+50-  auto gc = std::make_shared<rclcpp::GuardCondition>(context);
+51-  auto shutdown_callback_handle = context->add_on_shutdown_callback(
+52-    [weak_gc = std::weak_ptr<rclcpp::GuardCondition>{gc}]() {
+--
+93:bool wait_for_message(
+94-  MsgT & out,
+95-  rclcpp::Node::SharedPtr node,
+96-  const std::string & topic,
+97-  std::chrono::duration<Rep, Period> time_to_wait = std::chrono::duration<Rep, Period>(-1),
+98-  const rclcpp::QoS & qos = rclcpp::SystemDefaultsQoS())
+99-{
+100-  auto sub = node->create_subscription<MsgT>(topic, qos, [](const std::shared_ptr<const MsgT>) {});
+101-  return wait_for_message<MsgT, Rep, Period>(
+header_has_qos=1
+build ok
+--- cpp normal
+RESULT case=normal ok=1 msg='hello 20' elapsed=0.042s
+exit=0
+--- cpp timeout
+RESULT case=timeout ok=0 msg='' elapsed=1.001s
+exit=0
+--- cpp normal
+RESULT case=normal ok=0 msg='' elapsed=3.001s
+exit=0
+--- cpp qos
+RESULT case=qos ok=1 msg='hello 1' elapsed=0.012s
+exit=0
+=== done

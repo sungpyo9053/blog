@@ -1,0 +1,185 @@
+<pre><code>RESULT case=latched_default ok=False msg=None elapsed=3.002s
+RESULT case=forever ok=False msg=None elapsed=4.794s
+rclpy._rclpy_pybind11.InvalidHandle: cannot use Destroyable because destruction was requested</code></pre>
+
+<p>Those three lines come from my test runs. The first is <code>rclpy.wait_for_message.wait_for_message()</code> giving up on a topic whose publisher clearly exists. The second is the same function with no timeout, which only came back when the process was killed. The third is what a <code>MultiThreadedExecutor</code> thread died with on Humble, after <code>wait_for_message</code> was called on the node it was spinning.</p>
+
+<p>Short answer: ROS 2 does have a <code>rospy.wait_for_message</code> equivalent. In Python it's <code>from rclpy.wait_for_message import wait_for_message</code>, and in C++ it's <code>rclcpp::wait_for_message</code>. Both exist on Humble, Jazzy and Lyrical. When it returns <code>(False, None)</code> or hangs, the cause in my runs was one of three things. There was no timeout, the subscription's QoS didn't fit the publisher, or the node passed in was also being spun by an executor. This version worked on all three distros in every run:</p>
+
+<pre><code class="language-python">import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
+from rclpy.wait_for_message import wait_for_message
+from std_msgs.msg import String
+
+rclpy.init()
+helper = Node('waiter_helper')      # not added to any executor
+ok, msg = wait_for_message(
+    String, helper, '/chatter',
+    time_to_wait=3.0,               # keyword only, seconds; default -1 waits forever
+    qos_profile=QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    # latched topic: TRANSIENT_LOCAL; sensor topic: qos_profile_sensor_data
+if not ok:
+    helper.get_logger().warn('no message within 3 s')</code></pre>
+
+<p>In C++ the timeout and the QoS are the 4th and 5th arguments: <code>rclcpp::wait_for_message(msg, node, "/chatter", 3s, rclcpp::QoS(1).reliable().transient_local())</code>. It returns <code>bool</code> and fills <code>msg</code>.</p>
+
+<h2>Find your symptom</h2>
+
+<p>Each row was measured in rclpy on Humble, Jazzy and Lyrical with a <code>std_msgs/String</code> publisher on <code>/chatter</code>. The results were the same on all three unless the row says otherwise.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my runs</th><th>Fix that worked</th></tr></thead>
+<tbody>
+<tr><td>Call never returns</td><td>No <code>time_to_wait</code>, so it defaults to <code>-1</code>, and no message arrived</td><td>Pass <code>time_to_wait=</code> in seconds</td></tr>
+<tr><td><code>(False, None)</code> after exactly the timeout, publisher is up</td><td>Publisher is <code>TRANSIENT_LOCAL</code> (latched) and published before the call. The default subscription is volatile, so it only waits for a new message</td><td><code>qos_profile=QoSProfile(depth=1, durability=TRANSIENT_LOCAL)</code></td></tr>
+<tr><td><code>(False, None)</code> almost at once, well before the timeout</td><td>Publisher is <code>BEST_EFFORT</code>, the default subscription is reliable</td><td><code>qos_profile=qos_profile_sensor_data</code></td></tr>
+<tr><td><code>(False, None)</code> after the timeout, no error printed</td><td>Wrong message type (waited for <code>Int32</code> on a <code>String</code> topic)</td><td>Use the type from <code>ros2 topic info</code></td></tr>
+<tr><td>Executor thread dies with <code>InvalidHandle: cannot use Destroyable</code> (Humble only)</td><td>Same node spun by a <code>MultiThreadedExecutor</code> in another thread</td><td>Pass a separate node that no executor spins</td></tr>
+<tr><td>Occasional <code>(False, None)</code> or slow calls while your node spins</td><td>Same node spun by an executor (Jazzy and Lyrical lost 1 to 3 of 20 calls)</td><td>Separate helper node</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-05 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro after another, with the default RMW (Fast DDS). A small Python publisher sent <code>hello N</code> on <code>/chatter</code>. Its reliability, durability and rate were set per case. Each case started the publisher, waited 2 seconds, then ran a separate Python process that called <code>wait_for_message</code> and timed it with <code>time.monotonic()</code>. A small C++ package covered <code>rclcpp::wait_for_message</code>, and I also timed <code>ros2 topic echo --once</code>. The script printed the function's signature and source on each distro, so the notes below come from the installed code, not from the docs.</p>
+
+<table>
+<thead><tr><th>Case (rclpy)</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>10 Hz reliable publisher, 5 calls, <code>time_to_wait=5.0</code></td><td>5/5 True, 0.018 to 0.374 s</td><td>5/5 True, 0.060 to 0.340 s</td><td>5/5 True, 0.100 to 0.160 s</td></tr>
+<tr><td>No publisher, <code>time_to_wait=1.0</code></td><td>False, 1.002 s</td><td>False, 1.002 s</td><td>False, 1.003 s</td></tr>
+<tr><td>No publisher, no <code>time_to_wait</code>, killed by <code>timeout 5</code></td><td>False at 4.794 s, exit 124</td><td>False at 4.751 s, exit 124</td><td>False at 4.748 s, exit 124</td></tr>
+<tr><td>Latched publisher, default QoS, 3 s</td><td>False, 3.002 s</td><td>False, 3.003 s</td><td>False, 3.003 s</td></tr>
+<tr><td>Latched publisher, <code>TRANSIENT_LOCAL</code> QoS</td><td>True, <code>hello 1</code>, 0.013 s</td><td>True, <code>hello 1</code>, 0.149 s</td><td>True, <code>hello 1</code>, 0.174 s</td></tr>
+<tr><td>Best-effort publisher, default QoS, 3 s, 3 calls</td><td>False after 0.375, 0.042, 0.002 s</td><td>False after 0.067 s (x3)</td><td>False after 0.093 to 0.094 s</td></tr>
+<tr><td>Best-effort publisher, <code>qos_profile_sensor_data</code></td><td>True, 0.137 s</td><td>True, 0.077 s</td><td>True, 0.127 s</td></tr>
+<tr><td>Wrong type (<code>Int32</code>), 3 s</td><td>False, 3.002 s</td><td>False, 3.003 s</td><td>False, 3.003 s</td></tr>
+<tr><td>Called inside a timer callback of a spinning node</td><td>True, 0.194 s</td><td>True, 0.091 s</td><td>True, 0.050 s</td></tr>
+</tbody>
+</table>
+
+<h2>No timeout means it waits forever</h2>
+
+<p>The signature was the same on all three distros: <code>(msg_type, node, topic, *, qos_profile=1, time_to_wait=-1)</code>. Lyrical only adds type hints. The <code>*</code> makes <code>qos_profile</code> and <code>time_to_wait</code> keyword-only, so write <code>time_to_wait=3.0</code>, not a fourth positional argument. The default <code>-1</code> means no timeout. With no publisher, the call blocked until <code>timeout 5</code> killed the process. It did return <code>(False, None)</code> at about 4.75 to 4.79 seconds, because the source adds a signal-handler guard condition to its wait set and returns False when it fires. A plain script without a timeout can still hang forever if nothing ever publishes and nobody signals it.</p>
+
+<p>With <code>time_to_wait=1.0</code> and no publisher, the call returned <code>(False, None)</code> after 1.002 to 1.003 seconds. That's close enough to treat the value as a deadline in seconds.</p>
+
+<h2>It waits for the next message, not the last one</h2>
+
+<p>This is the main difference from what many people expect. <code>wait_for_message</code> creates a new subscription, waits once, takes one message and destroys the subscription. The source is short:</p>
+
+<pre><code class="language-python">sub = node.create_subscription(msg_type, topic, lambda _: None, qos_profile=qos_profile)
+...
+wait_set.wait(timeout_nsec)
+...
+msg_info = sub.handle.take_message(sub.msg_type, sub.raw)
+if msg_info is not None:
+    return True, msg_info[0]
+...
+finally:
+    node.destroy_subscription(sub)
+return False, None</code></pre>
+
+<p>Nothing is cached between calls. With the 10 Hz publisher, five calls in a row got five consecutive messages (for example <code>hello 25</code> to <code>hello 29</code> on Lyrical), and after the first call most calls took 0.100 seconds, one publish period. Some calls were slower: 0.374 s on Humble and 0.340 s on Jazzy. One Jazzy run jumped from <code>hello 21</code> to <code>hello 24</code>, so two messages went by during that call. If your topic publishes at 1 Hz, expect each call to cost up to a second. If you need the latest value often, a normal subscription that stores the last message is cheaper.</p>
+
+<p>The fresh subscription matters for QoS too. The default <code>qos_profile=1</code> means depth 1, reliable, volatile. A volatile subscription doesn't get messages published before it existed.</p>
+
+<h2>Latched topics: (False, None) after the full timeout</h2>
+
+<p>Topics like <code>/map</code>, <code>/robot_description</code> or <code>/tf_static</code> are usually published once with <code>TRANSIENT_LOCAL</code> durability. To test that, the publisher sent <code>hello 1</code> once and kept running. Two seconds later, <code>wait_for_message</code> with the default QoS waited the full 3 seconds and returned <code>(False, None)</code> on all three distros. Passing a transient-local profile returned <code>hello 1</code> in 0.013 to 0.174 seconds:</p>
+
+<pre><code class="language-python">from rclpy.qos import QoSProfile, DurabilityPolicy
+ok, msg = wait_for_message(String, node, '/map_like_topic', time_to_wait=3.0,
+                           qos_profile=QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))</code></pre>
+
+<p>C++ behaved the same. The default <code>rclcpp::SystemDefaultsQoS()</code> returned false after 3.001 to 3.002 seconds. <code>rclcpp::QoS(1).reliable().transient_local()</code> returned <code>hello 1</code> in 0.012 s (Humble), 1.384 s (Jazzy) and 0.181 s (Lyrical). How many old messages a late subscriber gets in general is covered in <a href="https://huntlab.app/en/ros2-transient-local-late-joiner-lifespan/">transient_local and late subscribers</a>.</p>
+
+<h2>Best-effort topics: (False, None) almost at once</h2>
+
+<p>Sensor drivers often publish with <code>BEST_EFFORT</code> reliability. A reliable subscription doesn't match a best-effort publisher. With the default QoS, <code>wait_for_message</code> didn't wait the 3 seconds I asked for. It returned <code>(False, None)</code> early: after 0.375, 0.042 and 0.002 s on Humble, 0.067 s three times on Jazzy, and 0.093 to 0.094 s on Lyrical. The source waits only once, and when the wait set wakes up without a message to take, the function returns False. I didn't trace what woke the wait set. So a fast False is not a "no data" answer. It can mean a QoS mismatch. With <code>qos_profile=qos_profile_sensor_data</code> the call returned a message in 0.077 to 0.137 seconds. The QoS rules behind this are in <a href="https://huntlab.app/en/ros2-incompatible-qos-reliability-no-messages-will-be-sent/">Requesting incompatible QoS</a>.</p>
+
+<p>If you don't know the publisher's QoS, run <code>ros2 topic info -v /topic</code> and copy reliability and durability from the publisher's block.</p>
+
+<h2>Wrong type: a silent timeout</h2>
+
+<p>I waited for <code>std_msgs/Int32</code> on a topic that carries <code>std_msgs/String</code>. No exception and no warning were printed. The call returned <code>(False, None)</code> after 3.002 to 3.003 seconds, which looks exactly like "nobody is publishing". Check the type with <code>ros2 topic info /topic</code> before you suspect anything else.</p>
+
+<h2>A node that is already spinning</h2>
+
+<p>The common ROS 1 pattern is to call <code>wait_for_message</code> in the middle of a program that also has callbacks running. In ROS 2 that means the node you pass in is often spun by an executor in another thread. The subscription that <code>wait_for_message</code> creates belongs to that node, so the executor sees it too. I tested three setups with a 10 Hz publisher:</p>
+
+<table>
+<thead><tr><th>Setup</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Same node, <code>MultiThreadedExecutor</code> in a thread, 20 calls</td><td>20/20 True, but the executor thread died with <code>InvalidHandle</code> during the calls</td><td>19/20 True, one False after 0.104 s; executor alive</td><td>17/20 True, False after 0.100, 0.101, 0.222 s; executor alive</td></tr>
+<tr><td>Same node, <code>SingleThreadedExecutor</code> in a thread with a 10 Hz timer, 3 x 20 calls</td><td>60/60 True; 10 calls took 0.2 to 0.8 s</td><td>59/60 True, one False after 0.147 s; 4 calls took 0.2 to 0.9 s</td><td>60/60 True; 9 calls took 0.2 to 0.6 s</td></tr>
+<tr><td>Separate helper node, not in any executor, 20 calls</td><td>20/20 True, none over 0.15 s</td><td>20/20 True, none over 0.15 s</td><td>20/20 True, none over 0.15 s</td></tr>
+</tbody>
+</table>
+
+<p>The Humble failure is the worst one, because it's silent for your main thread. Every <code>wait_for_message</code> call succeeded. Meanwhile the executor thread printed a traceback ending in <code>_take_subscription</code>, <code>with sub.handle:</code> and <code>InvalidHandle: cannot use Destroyable because destruction was requested</code>, and then it stopped. After the 20 calls, <code>thread.is_alive()</code> was False, so none of that node's other callbacks would run again. Jazzy and Lyrical kept the executor alive, but some calls came back False or slow. The likely reason is that the executor took the message before <code>wait_for_message</code> could. I didn't instrument that, so treat it as a guess. The 10 Hz timer kept firing (20 ticks in the next 2 s) in every single-threaded run.</p>
+
+<p>The fix that was clean on all three distros is a separate node used only for waiting:</p>
+
+<pre><code class="language-python">helper = Node('waiter_helper')   # create once, never add it to an executor
+ok, msg = wait_for_message(String, helper, '/chatter', time_to_wait=2.0)</code></pre>
+
+<p>Calling <code>wait_for_message</code> inside a timer callback of a spinning node also worked: True in 0.050 to 0.194 seconds on all three. It doesn't use the executor, so it doesn't deadlock the way a service call inside a callback can. It does block that callback, and every other callback in the same group, for up to <code>time_to_wait</code>. Callback groups and the service-call deadlock are in <a href="https://huntlab.app/en/rclpy-generator-already-executing-multithreadedexecutor-callback-groups/">generator already executing and callback groups</a>.</p>
+
+<h2>Repeated calls</h2>
+
+<p>An rclpy issue from 2023 reported CPU load growing with repeated calls. I called <code>wait_for_message</code> 400 times against a 100 Hz publisher on a node that wasn't spinning. The mean call time was 11.82, 11.93 and 10.43 ms for the first 200 calls, and 9.99 to 10.00 ms for the last 200, on Humble, Jazzy and Lyrical. Process CPU time grew linearly, about 1.3 ms per call on Humble and 1.5 ms on Jazzy and Lyrical. After the loop the node had 0 subscriptions and the graph showed 0 subscribers on <code>/chatter</code>, so nothing leaked in this setup. Each call still creates and destroys a subscription, which costs discovery work. In a loop that runs all the time, a normal subscription is the better tool.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Latched topic</th><th>Best-effort topic</th><th>Timeout</th><th>Notes from the runs</th></tr></thead>
+<tbody>
+<tr><td><code>wait_for_message</code>, defaults</td><td>False after the timeout</td><td>False early</td><td>Forever unless set</td><td>Fine for reliable, volatile topics</td></tr>
+<tr><td><code>wait_for_message</code> + matching <code>qos_profile</code> + <code>time_to_wait</code></td><td>True, 0.013 to 0.174 s</td><td>True, 0.077 to 0.137 s</td><td>Seconds, accurate to about 3 ms</td><td>Use a helper node if the main node spins</td></tr>
+<tr><td><code>rclcpp::wait_for_message(msg, node, topic, 3s, qos)</code></td><td>True with <code>transient_local()</code>, false with the default</td><td>Not tested</td><td>1.001 to 1.002 s for <code>1s</code></td><td>QoS argument present on Humble, Jazzy and Lyrical</td></tr>
+<tr><td><code>ros2 topic echo --once</code></td><td>Got <code>hello 1</code> even with default options</td><td>Not tested</td><td><code>--timeout N</code> on Jazzy and Lyrical only</td><td>1.0 to 2.4 s per run, mostly CLI startup</td></tr>
+</tbody>
+</table>
+
+<p>For shell scripts, <code>ros2 topic echo --once /topic type</code> is the CLI version. It handled the latched publisher without extra flags. It printed <code>hello 1</code> in 1.326 s (Humble), 1.088 s (Jazzy) and 1.108 s (Lyrical), and adding <code>--qos-durability transient_local</code> gave the same message. With the 10 Hz publisher a run took 1.056 to 2.434 seconds. Watch the exit code with <code>--timeout</code>. On Jazzy and Lyrical, <code>--once --timeout 2</code> with no publisher printed nothing and exited with code 0 after 3.074 and 3.082 seconds. A script can't tell a timeout from success by the exit code. Check whether anything was printed. On Humble, <code>--timeout</code> doesn't exist: <code>ros2: error: unrecognized arguments: --timeout</code>, exit 2. Wrap the command in <code>timeout 5</code> instead.</p>
+
+<h2>Version notes</h2>
+
+<p>rclpy's <code>wait_for_message</code> had the same keyword arguments and the same logic on Humble (rclpy 3.3.22), Jazzy (7.1.12) and Lyrical (10.0.11). Lyrical adds type hints and raises <code>RuntimeError('Cannot create Waitset without a context.handle')</code> if the context has no handle. The current Humble package accepts <code>qos_profile</code> too. In C++, all three headers have <code>wait_for_message(out, node, topic, time_to_wait, qos)</code> with <code>SystemDefaultsQoS()</code> as the default. Lyrical (rclcpp 32.0.3) adds an overload that takes <code>NodeParametersInterface</code> and <code>NodeTopicsInterface</code> pointers instead of a <code>Node::SharedPtr</code>. The executor crash with <code>InvalidHandle</code> happened only on Humble. <code>ros2 topic echo --timeout</code> exists on Jazzy (ros2cli 0.32.13) and Lyrical (0.40.9), not on Humble (0.18.20).</p>
+
+<h2>Not tested</h2>
+
+<p>Cyclone DDS and Zenoh, rclcpp with a spinning executor, best-effort topics in C++, <code>use_sim_time</code> and whether <code>time_to_wait</code> follows sim time, messages across machines or Docker networks, large messages, lifecycle nodes, CPU growth during repeated calls on a spinning node, <code>ros2 topic echo</code> with best-effort publishers, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What is the ROS 2 equivalent of rospy.wait_for_message?</h3>
+<p><code>from rclpy.wait_for_message import wait_for_message</code>, called as <code>ok, msg = wait_for_message(MsgType, node, '/topic', time_to_wait=3.0)</code>. In C++ it's <code>rclcpp::wait_for_message(msg, node, "/topic", 3s)</code> from <code>rclcpp/wait_for_message.hpp</code>. Both were present on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why does wait_for_message return (False, None) when the topic is publishing?</h3>
+<p>In my runs it was a QoS mismatch or a wrong type. A latched (transient local) publisher gave False after the full timeout, a best-effort publisher gave False within 0.4 s, and a wrong message type gave False after the timeout with no error. Pass a matching <code>qos_profile</code> and check the type with <code>ros2 topic info -v</code>.</p>
+
+<h3>Why does wait_for_message hang forever?</h3>
+<p><code>time_to_wait</code> defaults to <code>-1</code>, which means no timeout. If no message arrives, the call blocks until a signal or shutdown. Pass <code>time_to_wait=</code> as a keyword argument in seconds. A 1.0 s timeout returned after 1.002 to 1.003 s.</p>
+
+<h3>Can I call wait_for_message on a node that is spinning?</h3>
+<p>It worked inside a timer callback, but on a node spun by an executor in another thread it caused trouble. On Humble a MultiThreadedExecutor thread died with InvalidHandle, and on Jazzy and Lyrical up to 3 of 20 calls returned False. A separate helper node that no executor spins returned 20 of 20 on all three distros.</p>
+
+<h3>Does wait_for_message return the last message on the topic?</h3>
+<p>No. It creates a new subscription and waits for the next message, then destroys the subscription. With a 10 Hz publisher most calls took 0.1 s. Only a transient local subscription to a transient local publisher gets a message published before the call.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What is the ROS 2 equivalent of rospy.wait_for_message?", "acceptedAnswer": {"@type": "Answer", "text": "from rclpy.wait_for_message import wait_for_message, called as ok, msg = wait_for_message(MsgType, node, '/topic', time_to_wait=3.0). In C++ it is rclcpp::wait_for_message(msg, node, \"/topic\", 3s) from rclcpp/wait_for_message.hpp. Both were present on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why does wait_for_message return (False, None) when the topic is publishing?", "acceptedAnswer": {"@type": "Answer", "text": "In my runs it was a QoS mismatch or a wrong type. A latched (transient local) publisher gave False after the full timeout, a best-effort publisher gave False within 0.4 s, and a wrong message type gave False after the timeout with no error. Pass a matching qos_profile and check the type with ros2 topic info -v."}},
+{"@type": "Question", "name": "Why does wait_for_message hang forever?", "acceptedAnswer": {"@type": "Answer", "text": "time_to_wait defaults to -1, which means no timeout. If no message arrives, the call blocks until a signal or shutdown. Pass time_to_wait= as a keyword argument in seconds. A 1.0 s timeout returned after 1.002 to 1.003 s."}},
+{"@type": "Question", "name": "Can I call wait_for_message on a node that is spinning?", "acceptedAnswer": {"@type": "Answer", "text": "It worked inside a timer callback, but on a node spun by an executor in another thread it caused trouble. On Humble a MultiThreadedExecutor thread died with InvalidHandle, and on Jazzy and Lyrical up to 3 of 20 calls returned False. A separate helper node that no executor spins returned 20 of 20 on all three distros."}},
+{"@type": "Question", "name": "Does wait_for_message return the last message on the topic?", "acceptedAnswer": {"@type": "Answer", "text": "No. It creates a new subscription and waits for the next message, then destroys the subscription. With a 10 Hz publisher most calls took 0.1 s. Only a transient local subscription to a transient local publisher gets a message published before the call."}}
+]}
+</script>
+
+<p>Measured on 2026-11-05 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS), on a 2 vCPU Linux host with each container limited to 1.5 CPUs. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-21-ros2-wait-for-message/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/102688">Is there an equivalent of rospy.wait_for_message in ros2?</a>, <a href="https://robotics.stackexchange.com/questions/89476">What's the best way to wait for a new message?</a>, <a href="https://github.com/ros2/rclpy/issues/953">rclpy issue 953: wait for message</a>, <a href="https://github.com/ros2/rclpy/issues/1179">rclpy issue 1179: wait_for_message accumulating CPU load after repeated calls</a>, <a href="https://github.com/ros2/rclcpp/issues/1953">rclcpp issue 1953: single message getting API</a>.</p>
