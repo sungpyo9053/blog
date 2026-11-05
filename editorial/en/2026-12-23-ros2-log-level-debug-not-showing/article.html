@@ -1,0 +1,216 @@
+<pre><code>RCLCPP_DEBUG(get_logger(), "MARK node debug %d", i);   // prints nothing
+self.get_logger().debug('MARK node debug %d' % i)      # prints nothing
+
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'
+  what():  failed to initialize rcl: Couldn't parse log level: '--log-level verbose'. Error: Argument does not use a valid severity level, at ./src/rcl/arguments.c:1858, at ./src/rcl/arguments.c:441
+
+ros2: error: unrecognized arguments: --ros-args --log-level debug</code></pre>
+
+<p>The first two lines are the usual symptom: no error, just no output. The other two are what you get on the way to fixing it, from an invalid level name and from putting <code>--ros-args</code> on <code>ros2 launch</code> itself.</p>
+
+<p>Short answer: every ROS 2 logger starts at INFO, so <code>RCLCPP_DEBUG</code> and <code>get_logger().debug()</code> are dropped until you lower the level for that logger. Pass the logger's name, not the node's code name, after <code>--ros-args</code>:</p>
+
+<pre><code>ros2 run my_pkg my_node --ros-args --log-level my_node:=debug</code></pre>
+
+<p>In a launch file, give each flag its own list item:</p>
+
+<pre><code class="language-python">Node(package='my_pkg', executable='my_node', output='screen',
+     arguments=['--ros-args', '--log-level', 'my_node:=debug'])
+# or, the same thing:
+Node(package='my_pkg', executable='my_node', output='screen',
+     ros_arguments=['--log-level', 'my_node:=debug'])</code></pre>
+
+<p>The logger name is the node's name after remapping, with the namespace in front and dots instead of slashes. A node started with <code>name='my_name'</code> in launch logs as <code>my_name</code>. A node in namespace <code>/robot1</code> logs as <code>robot1.my_node</code>. If the name in <code>--log-level</code> doesn't match, nothing tells you. The node just stays at INFO. Both rules held in rclcpp and rclpy on Humble, Jazzy and Lyrical.</p>
+
+<h2>Find your case</h2>
+
+<p>Each row was the same for a C++ node and a Python node on all three distros, except where the row says otherwise. "Debug shown" means the node's own <code>debug()</code> line printed.</p>
+
+<table>
+<thead><tr><th>What you did</th><th>Debug shown?</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td>Nothing</td><td>no</td><td>Default level is INFO</td></tr>
+<tr><td><code>--log-level debug</code> without <code>--ros-args</code></td><td>no</td><td>Taken as a program argument, no warning</td></tr>
+<tr><td><code>--ros-args --log-level debug</code> (or <code>DEBUG</code>)</td><td>yes</td><td>Every logger in the process goes to DEBUG, 72 to 98 extra lines at startup</td></tr>
+<tr><td><code>--ros-args --log-level my_node:=debug</code></td><td>yes</td><td>Only that logger and its children, no extra lines</td></tr>
+<tr><td>Node in <code>/robot1</code>, <code>--log-level my_node:=debug</code></td><td>no</td><td>Logger is <code>robot1.my_node</code></td></tr>
+<tr><td>Node in <code>/robot1</code>, <code>--log-level /robot1/my_node:=debug</code></td><td>no</td><td>Slashes don't match, no error</td></tr>
+<tr><td>Node in <code>/robot1</code>, <code>--log-level robot1.my_node:=debug</code></td><td>yes</td><td>Dotted name matches</td></tr>
+<tr><td>Node renamed (<code>-r __node:=my_name</code> or launch <code>name=</code>), level set for the old name</td><td>no</td><td>Logger is the new name</td></tr>
+<tr><td><code>--log-level verbose</code></td><td>node never starts</td><td><code>Argument does not use a valid severity level</code>. C++ exit 250, Python exit 1</td></tr>
+<tr><td>Env <code>RCLCPP_LOG_MIN_SEVERITY=RCLCPP_LOG_MIN_SEVERITY_DEBUG</code></td><td>no</td><td>It is a compile-time macro, not an environment variable</td></tr>
+<tr><td>Package compiled with <code>RCLCPP_LOG_MIN_SEVERITY=..._INFO</code>, then <code>--log-level debug</code></td><td>no</td><td>C++ only. The logger reported DEBUG enabled, the macro was compiled out</td></tr>
+<tr><td>Launch: <code>arguments=['--ros-args --log-level DEBUG --']</code> (one string)</td><td>no</td><td>No error, exit 0, level stays INFO</td></tr>
+<tr><td>Launch: <code>arguments=['--ros-args', '--log-level', 'debug']</code></td><td>yes</td><td>Works</td></tr>
+<tr><td>Launch: <code>ros_arguments=['--log-level', 'debug']</code></td><td>yes</td><td>Works, Humble included</td></tr>
+<tr><td><code>ros2 launch file.launch.py --ros-args --log-level debug</code></td><td>launch never starts</td><td><code>ros2: error: unrecognized arguments</code>, exit 2</td></tr>
+<tr><td><code>ros2 launch -d file.launch.py</code></td><td>no</td><td>Only launch's own DEBUG lines (16 to 19)</td></tr>
+<tr><td><code>set_level(DEBUG)</code> on the node logger in code</td><td>yes</td><td>Node and children, not unrelated loggers</td></tr>
+<tr><td><code>set_logger_levels</code> service at runtime</td><td>Jazzy, Lyrical: yes. Humble: not available</td><td>Needs <code>enable_logger_service</code> in the node</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-05 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another, with the default RMW (Fast DDS). One <code>ament_cmake</code> package held three executables:</p>
+
+<ul>
+<li><code>lv_cpp</code>, an rclcpp node named <code>lv_cpp</code>.</li>
+<li><code>lv_py.py</code>, an rclpy node named <code>lv_py</code>.</li>
+<li><code>lv_cpp_min</code>, the same C++ source built with <code>RCLCPP_LOG_MIN_SEVERITY=RCLCPP_LOG_MIN_SEVERITY_INFO</code>.</li>
+</ul>
+
+<p>Each node logs one INFO line with its logger name and whether DEBUG is enabled. Then it logs four marker lines: a DEBUG and an INFO on the node logger, a DEBUG on a child logger (<code>get_child("plugin")</code>), and a DEBUG on an unrelated logger named <code>my_lib</code>. The child logger stands in for a plugin or a helper class. The unrelated one stands in for a library that gets its logger with <code>rclcpp::get_logger("my_lib")</code>. I started each node with <code>ros2 run</code> under 18 argument and environment variants. Then I ran 13 launch files and a runtime test through the logger services, and counted the marker lines on stdout, stderr and in the log file under <code>ROS_LOG_DIR</code>.</p>
+
+<p>Results for <code>ros2 run</code>, counts of marker lines (node debug / child debug / my_lib debug), the same in C++ and Python on all three distros:</p>
+
+<table>
+<thead><tr><th>Arguments</th><th>node</th><th>child</th><th>my_lib</th></tr></thead>
+<tbody>
+<tr><td>(none)</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>--ros-args --log-level debug</code></td><td>1</td><td>1</td><td>1</td></tr>
+<tr><td><code>--ros-args --log-level lv_cpp:=debug</code></td><td>1</td><td>1</td><td>0</td></tr>
+<tr><td><code>--ros-args --log-level lv_cpp.plugin:=debug</code></td><td>0</td><td>1</td><td>0</td></tr>
+<tr><td><code>--ros-args --log-level my_lib:=debug</code></td><td>0</td><td>0</td><td>1</td></tr>
+<tr><td><code>--ros-args --log-level debug --log-level lv_cpp:=info</code></td><td>0</td><td>0</td><td>1</td></tr>
+<tr><td><code>--ros-args --log-level DEBUG --log-level rcl:=INFO</code></td><td>1</td><td>1</td><td>1</td></tr>
+<tr><td><code>-r __ns:=/robot1 --log-level robot1.lv_cpp:=debug</code></td><td>1</td><td>1</td><td>0</td></tr>
+<tr><td><code>-r __node:=my_name --log-level my_name:=debug</code></td><td>1</td><td>1</td><td>0</td></tr>
+</tbody>
+</table>
+
+<p>The Python rows used <code>lv_py</code> in place of <code>lv_cpp</code>. Whenever the node's DEBUG line reached the console, it was also in the log file, and when it didn't, it wasn't there either. The file doesn't keep lines the console dropped.</p>
+
+<h2>The logger name is not always the name in your code</h2>
+
+<p>The node logger is named after the node, and the namespace and remaps are applied before the name is built. My C++ node printed <code>logger_name=lv_cpp</code> when run plain, <code>logger_name=robot1.lv_cpp</code> with <code>-r __ns:=/robot1</code>, and <code>logger_name=my_name</code> with <code>-r __node:=my_name</code>. The Python node did the same. A launch <code>name='my_name'</code> works the same way. Launch passes it as a <code>-r __node:=</code> remap, which you can see in the command line quoted in <a href="https://robotics.stackexchange.com/questions/99332">this question</a>. With <code>name='my_name'</code> and <code>--log-level lv_cpp:=debug</code>, the node printed <code>logger_name=my_name debug_enabled=0</code> and no debug line. Changing it to <code>my_name:=debug</code> fixed it.</p>
+
+<p>For a namespace, write the name with dots: <code>robot1.lv_cpp</code>. The slash form <code>/robot1/lv_cpp:=debug</code> was accepted without any error and did nothing. So did the bare node name when the node had a namespace.</p>
+
+<p>If you are not sure of the name, log it once at INFO. In rclcpp that's <code>get_logger().get_name()</code>, and in rclpy <code>get_logger().name</code>. Or use the global form <code>--log-level debug</code> to confirm that your debug lines exist, then narrow it down.</p>
+
+<p>This matters for the <a href="https://robotics.stackexchange.com/questions/108248">RCLCPP_DEBUG question</a> from someone working on a Nav2 controller plugin. Plugins and helper classes often log through a logger they got from the node. In my run, a child logger followed its parent: <code>lv_cpp:=debug</code> also enabled <code>lv_cpp.plugin</code>. A logger made with <code>rclcpp::get_logger("my_lib")</code> did not follow the node. It needed its own <code>my_lib:=debug</code>. I didn't run Nav2 itself, so check which logger your plugin actually uses.</p>
+
+<h2>Global --log-level debug works, but it is noisy</h2>
+
+<p>The global form turns on every logger in the process, including the ROS client libraries. Apart from my four marker lines, the C++ node printed 85 DEBUG lines on Humble, 98 on Jazzy and 96 on Lyrical. The Python node printed 72, 81 and 88. All of that came from a node that only starts and exits.</p>
+
+<p>You can combine levels. A <a href="https://robotics.stackexchange.com/questions/115099">Foxy question</a> reports an error from <code>--log-level DEBUG --log-level rcl:=INFO</code>. On Humble, Jazzy and Lyrical that line worked. It cut the C++ extras from 85 to 30 on Humble, from 98 to 34 on Jazzy and from 96 to 41 on Lyrical. The reverse also worked: <code>--log-level debug --log-level lv_cpp:=info</code> kept my node at INFO and let <code>my_lib</code> through. A named level beat the global one in both directions.</p>
+
+<p>Level names are case-insensitive: <code>debug</code> and <code>DEBUG</code> gave identical counts. A name that isn't a level stops the node before your code runs:</p>
+
+<pre><code>rclpy._rclpy_pybind11.RCLError: failed to initialize rcl: Couldn't parse log level: '--log-level verbose'. Error: Argument does not use a valid severity level, at ./src/rcl/arguments.c:1858, at ./src/rcl/arguments.c:441</code></pre>
+
+<p>The line numbers were <code>arguments.c:1806</code> and <code>:432</code> on Humble, <code>:1858</code> and <code>:441</code> on Jazzy, and <code>:1860</code> and <code>:441</code> on Lyrical. C++ printed the same text after <code>terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'</code>, and <code>ros2 run</code> reported <code>[ros2run]: Aborted</code> with exit code 250.</p>
+
+<h2>--ros-args is required, and ros2 launch doesn't take it</h2>
+
+<p><code>ros2 run lv lv_cpp --log-level debug</code>, without <code>--ros-args</code>, started normally, logged at INFO and gave no warning. rcl treats anything before <code>--ros-args</code> as the program's own arguments.</p>
+
+<p><code>ros2 launch</code> is the other way around. It is not a node, and <code>ros2 launch file.launch.py --ros-args --log-level debug</code> failed before anything launched:</p>
+
+<pre><code>ros2: error: unrecognized arguments: --ros-args --log-level debug</code></pre>
+
+<p>Exit code 2 on all three distros. On Lyrical the message ended at <code>--log-level</code>, without <code>debug</code>. This is the case in <a href="https://github.com/ros2/launch/issues/383">ros2/launch issue #383</a>, which is still open. To set node levels from the command line, declare a launch argument and pass it through, as shown below.</p>
+
+<p><code>ros2 launch -d</code> is not a node log level either. It printed <code>Default logging verbosity is set to DEBUG</code> and then 16 to 19 <code>[DEBUG] [launch]</code> lines about launch itself. My node's debug line still didn't appear.</p>
+
+<h2>In a launch file: one list item per flag</h2>
+
+<p><code>arguments</code> is a list of separate command-line words, and a string with spaces in it did not work as several words. The form from <a href="https://robotics.stackexchange.com/questions/99332">this question</a>, <code>arguments=['--ros-args --log-level DEBUG --']</code>, didn't crash in my run. The process started, printed INFO only and <code>process has finished cleanly</code>, on all three distros. The question reports exit code -6 on an older distro, which I didn't test. Either way, the level isn't applied.</p>
+
+<p>These worked on every distro, including Humble with launch_ros 0.19.14:</p>
+
+<pre><code class="language-python">from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        DeclareLaunchArgument('log_level', default_value='info'),
+        Node(package='lv', executable='lv_cpp', output='screen',
+             arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')]),
+    ])</code></pre>
+
+<p>With no argument this logged at INFO. With <code>ros2 launch ... log_level:=debug</code>, all four marker lines appeared. <code>ros_arguments=['--log-level', 'debug']</code> gave the same result as the <code>arguments</code> form for both the C++ and the Python node. With <code>namespace='robot1'</code>, <code>robot1.lv_cpp:=debug</code> worked. With <code>name='my_name'</code>, only <code>my_name:=debug</code> worked.</p>
+
+<p>One thing to know when you look for the lines: with <code>output='screen'</code>, all of the node's log lines came out on <code>ros2 launch</code>'s stdout. Under <code>ros2 run</code> they went to stderr, INFO included. Setting <code>RCUTILS_LOGGING_USE_STDOUT=1</code> moved every line to stdout under <code>ros2 run</code>. If you pipe output through <code>grep</code>, use <code>2&gt;&amp;1</code>, or you'll see nothing and think the level is wrong. The <code>-p</code> and <code>--params-file</code> rules in the <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">params YAML and -p errors</a> post follow the same <code>--ros-args</code> placement as <code>--log-level</code>.</p>
+
+<h2>RCLCPP_LOG_MIN_SEVERITY is a compile-time switch</h2>
+
+<p>The <a href="https://robotics.stackexchange.com/questions/108248">same question</a> mentions setting <code>RCLCPP_LOG_MIN_SEVERITY=RCLCPP_LOG_MIN_SEVERITY_DEBUG</code> in the shell. As an environment variable it changed nothing: the node stayed at INFO in C++ and Python. It is a preprocessor macro for rclcpp's logging header, so it only matters when your code is compiled.</p>
+
+<p>In the other direction it can hide debug lines for good. <code>lv_cpp_min</code> was built with <code>target_compile_definitions(lv_cpp_min PRIVATE RCLCPP_LOG_MIN_SEVERITY=RCLCPP_LOG_MIN_SEVERITY_INFO)</code>. Run with <code>--log-level debug</code>, it printed <code>debug_enabled=1</code> for its own logger, plus the 85 to 98 DEBUG lines from the ROS libraries, and none of its own <code>RCLCPP_DEBUG</code> lines. The macro had compiled the calls out. If <code>--log-level debug</code> shows library debug lines but not yours, look for this definition in your <code>CMakeLists.txt</code> or a parent CMake file.</p>
+
+<h2>Changing the level in code or at runtime</h2>
+
+<p>In code, set the level on the node's logger:</p>
+
+<pre><code class="language-cpp">node-&gt;get_logger().set_level(rclcpp::Logger::Level::Debug);   // rclcpp</code></pre>
+<pre><code class="language-python">self.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)  # rclpy</code></pre>
+
+<p>Both worked on all three distros. The child logger followed, <code>my_lib</code> stayed at INFO. It's a code change you have to remember to take out, so I'd use it only while debugging.</p>
+
+<p>Jazzy and Lyrical can change levels on a running node through two services, if the node enables them. In rclcpp that's <code>rclcpp::NodeOptions().enable_logger_service(true)</code>, in rclpy <code>Node('name', enable_logger_service=True)</code>. With that on, <code>ros2 service list</code> showed <code>/lv_cpp/get_logger_levels</code> and <code>/lv_cpp/set_logger_levels</code>, and this call worked:</p>
+
+<pre><code>ros2 service call /lv_cpp/set_logger_levels rcl_interfaces/srv/SetLoggerLevels "{levels: [{name: lv_cpp, level: 10}]}"</code></pre>
+
+<p>Level 10 is DEBUG. The reply was <code>successful=True</code>. <code>get_logger_levels</code> returned <code>level=0</code> (unset) before the call and <code>level=10</code> after. My test node logged once every 0.2 s for 40 rounds. Its first debug line appeared at round 25 (C++ on Jazzy and Lyrical), 26 (Python on Jazzy) or 27 (Python on Lyrical). After that the node and its child logger printed debug lines, and <code>my_lib</code> didn't. The <code>ros2 service call</code> command took 1.0 s on Jazzy and 1.0 to 1.7 s on Lyrical.</p>
+
+<p>On Humble none of this exists. rclpy 3.3.22 rejected the option with <code>Node.__init__() got an unexpected keyword argument 'enable_logger_service'</code>. For the C++ node I compiled the option out on Humble, guarded by <code>RCLCPP_VERSION_MAJOR &gt;= 21</code>, and no logger services appeared in <code>ros2 service list</code>. <code>ros2 service call</code> answered <code>The passed service type is invalid</code> for <code>rcl_interfaces/srv/SetLoggerLevels</code> and <code>GetLoggerLevels</code>. On Humble, change levels with <code>--log-level</code> at startup or with <code>set_level</code> in code.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Scope</th><th>Noise</th><th>Distros</th></tr></thead>
+<tbody>
+<tr><td><code>--ros-args --log-level &lt;logger&gt;:=debug</code></td><td>One logger and its children</td><td>None</td><td>Humble, Jazzy, Lyrical</td></tr>
+<tr><td><code>--ros-args --log-level debug</code></td><td>Whole process</td><td>72 to 98 lines at startup</td><td>All three</td></tr>
+<tr><td>Global debug plus <code>rcl:=INFO</code></td><td>Whole process minus rcl</td><td>24 to 41 lines</td><td>All three</td></tr>
+<tr><td>Launch <code>arguments</code> list or <code>ros_arguments</code>, with a <code>log_level</code> launch argument</td><td>Per node</td><td>Depends on the name you pass</td><td>All three</td></tr>
+<tr><td><code>set_level()</code> in code</td><td>Node logger and children</td><td>None</td><td>All three</td></tr>
+<tr><td><code>set_logger_levels</code> service</td><td>Any named logger, while running</td><td>None</td><td>Jazzy, Lyrical</td></tr>
+</tbody>
+</table>
+
+<p>For day-to-day work I'd use a <code>log_level</code> launch argument passed as the logger name, like <code>my_node:=debug</code>. It doesn't touch the code, it can't leak into production, and it stays quiet. If you need to change levels on a running robot, use the logger service on Jazzy or newer.</p>
+
+<h2>Version notes</h2>
+
+<p>Behavior was the same on Humble, Jazzy and Lyrical for every <code>ros2 run</code> case and every launch case. Three things differed. The number of library DEBUG lines differed (85, 98 and 96 for the C++ node). The <code>arguments.c</code> line numbers in the invalid-level error differed. And the logger services exist only on Jazzy and Lyrical. Lyrical's <code>unrecognized arguments</code> message for <code>ros2 launch --ros-args</code> left out the last word. On Lyrical colcon also reported <code>1 package had stderr output: lv</code> during the build. I didn't capture what that output was, and the package built and ran.</p>
+
+<h2>Not tested</h2>
+
+<p>Foxy, Iron and Rolling. Component containers and <code>ComposableNode</code> (see <a href="https://github.com/ros2/launch/issues/488">ros2/launch issue #488</a>). Nav2 and its plugins. rqt_console and the <code>/rosout</code> topic level. Cyclone DDS and Zenoh. <code>RCUTILS_CONSOLE_OUTPUT_FORMAT</code> and colorized output. Throttled or once-only log calls. Windows and macOS.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why doesn't RCLCPP_DEBUG print anything?</h3>
+<p>The default level for every logger is INFO. Run the node with <code>--ros-args --log-level &lt;logger&gt;:=debug</code>, where the logger is the node's name after remapping, with dots for the namespace. If even <code>--log-level debug</code> doesn't show your lines while library debug lines appear, check for <code>RCLCPP_LOG_MIN_SEVERITY</code> in your CMake files.</p>
+
+<h3>How do I set the log level of a node in a ROS 2 launch file?</h3>
+<p>Use <code>arguments=['--ros-args', '--log-level', 'my_node:=debug']</code> or <code>ros_arguments=['--log-level', 'my_node:=debug']</code> on the <code>Node</code>. Both worked on Humble, Jazzy and Lyrical. A single string like <code>'--ros-args --log-level DEBUG'</code> was silently ignored. To choose the level at launch time, pass a <code>LaunchConfiguration</code> in place of the level.</p>
+
+<h3>Why does --log-level my_node:=debug do nothing?</h3>
+<p>The name doesn't match the logger. With a namespace the logger is <code>namespace.my_node</code>, and with a launch <code>name=</code> or <code>__node</code> remap it's the new name. A wrong name gives no error. Log <code>get_logger().get_name()</code> once to see the real one.</p>
+
+<h3>Can I pass --ros-args --log-level to ros2 launch?</h3>
+<p>No. <code>ros2 launch</code> rejected it with <code>ros2: error: unrecognized arguments</code> and exit code 2. <code>ros2 launch -d</code> only turns on launch's own debug output. Declare a <code>log_level</code> launch argument and pass it to each node instead.</p>
+
+<h3>Can I change the log level while the node is running?</h3>
+<p>On Jazzy and Lyrical, yes. Enable the logger service in the node and call <code>set_logger_levels</code> with level 10 for DEBUG. My test node then printed debug lines for the rest of its run. On Humble the service doesn't exist, so use <code>set_level()</code> in code.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why doesn't RCLCPP_DEBUG print anything?", "acceptedAnswer": {"@type": "Answer", "text": "The default level for every logger is INFO. Run the node with --ros-args --log-level followed by logger:=debug, where the logger is the node's name after remapping, with dots for the namespace. If even --log-level debug doesn't show your lines while library debug lines appear, check for RCLCPP_LOG_MIN_SEVERITY in your CMake files."}},
+{"@type": "Question", "name": "How do I set the log level of a node in a ROS 2 launch file?", "acceptedAnswer": {"@type": "Answer", "text": "Use arguments=['--ros-args', '--log-level', 'my_node:=debug'] or ros_arguments=['--log-level', 'my_node:=debug'] on the Node. Both worked on Humble, Jazzy and Lyrical. A single string like '--ros-args --log-level DEBUG' was silently ignored. To choose the level at launch time, pass a LaunchConfiguration in place of the level."}},
+{"@type": "Question", "name": "Why does --log-level my_node:=debug do nothing?", "acceptedAnswer": {"@type": "Answer", "text": "The name doesn't match the logger. With a namespace the logger is namespace.my_node, and with a launch name= or __node remap it's the new name. A wrong name gives no error. Log get_logger().get_name() once to see the real one."}},
+{"@type": "Question", "name": "Can I pass --ros-args --log-level to ros2 launch?", "acceptedAnswer": {"@type": "Answer", "text": "No. ros2 launch rejected it with ros2: error: unrecognized arguments and exit code 2. ros2 launch -d only turns on launch's own debug output. Declare a log_level launch argument and pass it to each node instead."}},
+{"@type": "Question", "name": "Can I change the log level while the node is running?", "acceptedAnswer": {"@type": "Answer", "text": "On Jazzy and Lyrical, yes. Enable the logger service in the node and call set_logger_levels with level 10 for DEBUG. My test node then printed debug lines for the rest of its run. On Humble the service doesn't exist, so use set_level() in code."}}
+]}
+</script>
+
+<p>Measured on 2026-11-05 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rcl 5.3.13, rcutils 5.1.10, rclcpp 16.0.21, rclpy 3.3.22, launch 1.0.15, launch_ros 0.19.14, ros2cli 0.18.20), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rcl 9.2.11, rcutils 6.7.6, rclcpp 28.1.22, rclpy 7.1.12, launch 3.4.12, launch_ros 0.26.13, ros2cli 0.32.13) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rcl 10.4.5, rcutils 7.1.3, rclcpp 32.0.3, rclpy 10.0.11, launch 3.9.8, launch_ros 0.29.9, ros2cli 0.40.9), default RMW (Fast DDS, rmw_fastrtps_cpp 6.2.10, 8.4.4 and 9.4.10). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-23-ros2-log-level-debug-not-showing/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/89933">Selecting log level in ROS2 launch file</a>, <a href="https://robotics.stackexchange.com/questions/99332">Specify log level on ROS2 node in Launch file</a>, <a href="https://robotics.stackexchange.com/questions/108248">Can't see debug messages using RCLCPP_DEBUG</a>, <a href="https://robotics.stackexchange.com/questions/115099">Problem when trying to start a ROS2 node and trying to set the log level</a>, <a href="https://github.com/ros2/launch/issues/383">Support setting log-level via command-line</a>.</p>
