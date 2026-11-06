@@ -1,0 +1,220 @@
+<pre><code>sequence size exceeds remaining buffer</code></pre>
+
+<p>That is the whole message. No node name, no log level, no timestamp. In my runs a Humble process printed it once when a Jazzy or Lyrical node was on the same <code>ROS_DOMAIN_ID</code>. It printed it again each time another Jazzy process joined. Humble talking to Humble, Jazzy to Jazzy, Jazzy to Lyrical and Lyrical to Lyrical never printed it.</p>
+
+<p>Short answer: the line means your network mixes Humble with a newer distro. Humble's Fast DDS type support tried to read something it couldn't fit into its own message layout. One clear layout change is <code>rmw_dds_common/msg/Gid</code>, which is <code>char[24]</code> on Humble and <code>char[16]</code> on Jazzy and Lyrical. The message itself does no harm. Topic data with the same message definition still arrived, and so did a direct service call. What breaks is the ROS graph. Humble's <code>ros2 node list</code> came back empty, and <code>ros2 param get</code> said <code>Node not found</code>. The same happened in reverse from Jazzy and Lyrical, which saw no Humble nodes and printed no error at all. The only fix that made everything work was running one distro on every machine. Jazzy with Lyrical worked fully in every test. If you must keep a Humble machine, stay on one RMW vendor everywhere, call services by name, and don't rely on node-based tools across the distro line.</p>
+
+<h2>Find your symptom</h2>
+
+<p>Each row is a Humble subscriber/client (default Fast DDS) with a talker node on another distro, on the same domain. The talker publishes <code>std_msgs/String</code> on <code>/chatter</code> at 10 Hz and serves <code>std_srvs/Trigger</code> on <code>/trigger</code>.</p>
+
+<table>
+<thead><tr><th>Check from Humble</th><th>Humble talker</th><th>Jazzy talker</th><th>Lyrical talker</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 topic echo /chatter</code>, 10 s</td><td>90 messages</td><td>90 messages</td><td>83 messages</td></tr>
+<tr><td>"sequence size exceeds remaining buffer" per command</td><td>0</td><td>1</td><td>1</td></tr>
+<tr><td><code>ros2 node list</code></td><td><code>/talker_humble</code></td><td>empty</td><td>empty</td></tr>
+<tr><td><code>ros2 topic list</code></td><td>/chatter, /parameter_events, /rosout</td><td>same</td><td>same</td></tr>
+<tr><td><code>ros2 service call /trigger</code></td><td>success</td><td>success</td><td>success</td></tr>
+<tr><td><code>ros2 param get /talker_X use_sim_time</code></td><td><code>Boolean value is: False</code></td><td><code>Node not found</code></td><td><code>Node not found</code></td></tr>
+</tbody>
+</table>
+
+<p>Every <code>ros2</code> command I ran on the Humble side printed the line exactly once: echo, node list, topic list, service call and param get. The talker node itself on the newer distro printed nothing.</p>
+
+<p>The reverse direction is quieter, and that makes it harder to spot:</p>
+
+<table>
+<thead><tr><th>Check from Jazzy or Lyrical</th><th>Humble talker</th><th>Jazzy talker</th><th>Lyrical talker</th></tr></thead>
+<tbody>
+<tr><td>Messages in 10 s (Jazzy / Lyrical subscriber)</td><td>88 / 88</td><td>88 / 63</td><td>88 / 88</td></tr>
+<tr><td>Error lines on the Jazzy or Lyrical side</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>ros2 node list</code></td><td>empty</td><td>talker shown</td><td>talker shown</td></tr>
+<tr><td><code>ros2 service call /trigger</code></td><td>success</td><td>success</td><td>success</td></tr>
+<tr><td><code>ros2 param get</code></td><td><code>Node not found</code></td><td>works</td><td>works</td></tr>
+<tr><td>Error lines in the Humble talker's own log</td><td>33 (during the Jazzy probe), 28 (during the Lyrical probe)</td><td>-</td><td>-</td></tr>
+</tbody>
+</table>
+
+<p>So with mixed distros, the error goes to whichever process runs Humble. If a Humble robot keeps printing "sequence size exceeds remaining buffer" while nobody touches it, someone on the domain is probably running a newer distro's tools. In my run the Humble talker logged 33 lines while the Jazzy container ran its five commands.</p>
+
+<h2>What I ran</h2>
+
+<p>Everything ran in Docker on a 2 vCPU Linux host, using the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images. I didn't use <code>--net=host</code>. Each container sat on a user-defined bridge network with its own IP and no shared <code>/dev/shm</code>, so Fast DDS used UDP between them, the same as two machines on a LAN. All containers used <code>ROS_DOMAIN_ID=32</code> unless noted.</p>
+
+<p>The talker is a short rclpy script, so it runs the same on all three distros:</p>
+
+<pre><code class="language-python">import sys, rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+from std_srvs.srv import Trigger
+
+rclpy.init()
+name = sys.argv[1]
+n = Node(name)
+pub = n.create_publisher(String, 'chatter', 10)
+count = [0]
+
+def tick():
+    count[0] += 1
+    m = String(); m.data = '%s %d' % (name, count[0]); pub.publish(m)
+
+def trig(req, res):
+    res.success = True; res.message = 'from ' + name; return res
+
+n.create_timer(0.1, tick)
+n.create_service(Trigger, 'trigger', trig)
+rclpy.spin(n)</code></pre>
+
+<p>For each pair, one container ran the talker and a second container ran these probes in order:</p>
+
+<pre><code>timeout 10 ros2 topic echo /chatter std_msgs/msg/String
+ros2 node list --no-daemon --spin-time 3
+ros2 topic list --no-daemon --spin-time 3
+ros2 service call /trigger std_srvs/srv/Trigger
+ros2 param get --no-daemon --spin-time 3 /talker_jazzy use_sim_time</code></pre>
+
+<p>I counted <code>data:</code> lines from the echo and "sequence size exceeds" lines from each command's stderr and from the talker's log. I ran all nine Fast DDS pairs, then Cyclone DDS pairs and cross-vendor pairs, then a few fix attempts. <code>--no-daemon --spin-time 3</code> matters for a fair test. Without <code>--spin-time</code>, even Humble-to-Humble <code>ros2 param get --no-daemon</code> returned <code>Node not found</code> in my first attempt, because the CLI node hadn't finished discovery.</p>
+
+<h2>Why Humble can't read the newer graph data</h2>
+
+<p>There are two layers of discovery. DDS discovery tells every participant which topics exist and which types they carry. That part still works across distros, and it is why <code>ros2 topic list</code> and the topic data were fine. Node names live a layer above DDS. Each ROS 2 context publishes a graph message on a hidden topic, and that message lists its nodes and the GIDs of their publishers and subscriptions. The message types are in <code>rmw_dds_common</code>, and <code>ros2 interface show</code> gave this on each image:</p>
+
+<pre><code># Humble
+rmw_dds_common/msg/Gid:  char[24] data
+# Jazzy and Lyrical
+rmw_dds_common/msg/Gid:  char[16] data</code></pre>
+
+<p><code>NodeEntitiesInfo</code> holds arrays of <code>Gid</code>, so the byte layout differs between distros. When Humble deserializes a Jazzy graph message, the fields don't line up. A length field ends up pointing past the end of the buffer, and the type support rejects the sample with "sequence size exceeds remaining buffer". The sample is dropped, so Humble never learns the newer distro's node names. When Jazzy or Lyrical reads Humble's longer message, it printed nothing in my runs but also listed no Humble nodes.</p>
+
+<p>That explanation fits everything I measured: the Gid sizes, which side prints the line, and node lists that come back empty while topics work. I didn't trace the bytes of the hidden topic itself, so treat the exact field that fails as an inference.</p>
+
+<h2>What breaks and what still works</h2>
+
+<h3>Topics with the same definition: work</h3>
+
+<p>Humble received 90 messages in 10 seconds from the Jazzy talker and 83 from the Lyrical talker, against 90 from a Humble talker. The first message received was number 38 from Jazzy and 37 from Lyrical, against 40 from Humble, so all three started delivering at about the same point. That was <code>std_msgs/String</code>, whose definition didn't change. A custom or core message whose fields changed between distros wasn't part of this test.</p>
+
+<h3>Services called by name: work, on one vendor</h3>
+
+<p><code>ros2 service call /trigger</code> succeeded in every Fast DDS pair: Humble to Jazzy, Humble to Lyrical, and back. It took 0.57 to 0.75 seconds, against 1.73 seconds for the Humble-to-Humble run. Each call starts a new process, so these times are mostly discovery and not service latency. I also called a Jazzy node's parameter service directly from Humble:</p>
+
+<pre><code>ros2 service call /talker_jazzy/get_parameters rcl_interfaces/srv/GetParameters '{names: [use_sim_time]}'</code></pre>
+
+<p>It returned <code>bool_value=False</code>. The parameter itself is reachable. Only the tool that first looks the node up fails.</p>
+
+<h3>Node-based tools: broken</h3>
+
+<p><code>ros2 node list</code> was empty across the Humble line in both directions. <code>ros2 param get</code> returned <code>Node not found</code> and exit code 1, because it checks the node list before it calls anything. Anything else that builds on node names (node info, rqt_graph and lifecycle tools are the usual ones) depends on the same graph data. I only ran node list and param get, so the other tools are an expectation, not a measurement.</p>
+
+<h3>rclcpp nodes print it too</h3>
+
+<p>The line comes from the RMW layer, not from rclpy. A Humble <code>robot_state_publisher</code>, which is rclcpp, ran for 10 seconds next to the Jazzy talker and printed it once. Next to a Humble talker it printed nothing. Its normal log lines (<code>got segment a</code>) were the same in both runs.</p>
+
+<h3>How often it appears</h3>
+
+<p>It isn't printed per message. A Humble <code>ros2 topic echo</code> left running for 30 seconds next to the Jazzy talker printed it once, in the first second, and never again. In a second 20-second run I started an extra Jazzy process (<code>ros2 topic pub</code>) at second 12. The count was 1 before that process started and 6 by the end. New Jazzy participants and their graph updates bring the line back. A steady system prints it once per Humble process. A busy domain where people keep running Jazzy CLI commands prints it constantly. That matches the Stack Exchange report of the message "repeatedly" in every console.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Error line</th><th>Topic data</th><th>node list / param get</th><th>Service call</th></tr></thead>
+<tbody>
+<tr><td>Same distro everywhere (Humble-Humble, Jazzy-Jazzy, Lyrical-Lyrical)</td><td>0</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Jazzy with Lyrical, Fast DDS</td><td>0</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Jazzy with Lyrical, Cyclone DDS</td><td>0</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Humble with Jazzy or Lyrical, Fast DDS on both</td><td>1 per Humble process</td><td>works</td><td>broken</td><td>works</td></tr>
+<tr><td>Humble with Jazzy or Lyrical, Cyclone DDS on both</td><td>none of this text, other errors (below)</td><td>works</td><td>broken</td><td>works</td></tr>
+<tr><td>Humble Fast DDS, Jazzy Cyclone (or the reverse)</td><td>1 on Humble Fast DDS side</td><td>works</td><td>broken</td><td><strong>timed out after 20 s</strong></td></tr>
+<tr><td>Separate <code>ROS_DOMAIN_ID</code> (Jazzy 32, Humble 33)</td><td>0</td><td>0 messages</td><td>empty</td><td>timed out after 20 s</td></tr>
+</tbody>
+</table>
+
+<h3>Switching both sides to Cyclone DDS doesn't fix it</h3>
+
+<p>I installed <code>rmw_cyclonedds_cpp</code> from apt into each image and set <code>RMW_IMPLEMENTATION=rmw_cyclonedds_cpp</code> on both containers. The "sequence size" text went away, because that text comes from Fast DDS's type support. The graph problem stayed, with different errors. On Humble with a Cyclone Jazzy or Lyrical talker, <code>ros2 node list</code> exited with 1:</p>
+
+<pre><code>Failed to get node names: empty node name returned by the RMW layer, at ./src/rcl/graph.c:360</code></pre>
+
+<p><code>ros2 param get</code> failed with the same line. A Cyclone Humble talker, while a Cyclone Jazzy <code>ros2 topic list</code> ran next to it, wrote 24 log lines, including these:</p>
+
+<pre><code>  'invalid data size, at ./src/serdata.cpp:384'
+  'string data is not null-terminated, at ./src/serdata.cpp:384'
+&gt;&gt;&gt; [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:</code></pre>
+
+<p>During the full five-command Jazzy probe that talker logged 144 lines. Topic data still arrived (89 messages from Jazzy, 90 from Lyrical in 10 s) and <code>ros2 service call</code> still worked in 0.55 to 0.63 seconds. Switching vendors moves the noise around but doesn't give you a working node graph.</p>
+
+<h3>Mixing vendors across the distro line is worse</h3>
+
+<p>With a Cyclone Jazzy talker and a Fast DDS Humble client, topic data arrived (89 messages) but <code>ros2 service call /trigger</code> stayed at <code>waiting for service to become available...</code> until <code>timeout</code> killed it after 20 seconds. The reverse pair (Fast DDS Jazzy talker, Cyclone Humble client) also timed out, and the Jazzy talker logged:</p>
+
+<pre><code>RTPS_READER_HISTORY Error] Change payload size of '24' bytes is larger than the history payload size of '11' bytes and cannot be resized.</code></pre>
+
+<p>If some machines must stay on Humble, pick one RMW vendor for every machine on that domain.</p>
+
+<h3>A separate domain ID only isolates</h3>
+
+<p>Putting Humble on domain 33 and Jazzy on 32 removed the error line. It also removed all communication: 0 messages, an empty node list, and a service call that timed out. That's useful for keeping a Humble robot quiet next to a Jazzy lab, but it isn't a way to connect them. Bridging two domains with a tool such as <code>domain_bridge</code> wasn't part of this test.</p>
+
+<h3>What I'd do</h3>
+
+<ol>
+<li>Put every machine that has to talk on one distro. The <a href="https://huntlab.app/en/ros-2-humble-vs-jazzy-vs-iron-which-distro-before-eol/">Humble vs Jazzy vs Lyrical comparison</a> covers which one to pick before Humble's EOL. Jazzy and Lyrical together passed every check here.</li>
+<li>If one board can't leave Humble (Ubuntu 22.04 only, vendor drivers), run Humble in a container on the newer machines for anything that has to talk to it. Keep the rest on another <code>ROS_DOMAIN_ID</code>.</li>
+<li>If you have to mix, keep one RMW vendor on all machines, use topics and services by name, and expect empty node lists and failing <code>ros2 param</code> across the line. Call <code>/node_name/get_parameters</code> or <code>/node_name/set_parameters</code> directly if you need parameters.</li>
+<li>Don't try to filter the message out. It's a symptom of the graph data being dropped, and hiding it leaves the empty node list in place.</li>
+</ol>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (rmw_fastrtps_cpp 6.2.10, Fast DDS 2.6.12, rmw_dds_common 1.6.0, rosidl_typesupport_fastrtps_cpp 2.2.4) is the only distro that printed the line. Its <code>Gid</code> is <code>char[24]</code>.</li>
+<li>Jazzy (rmw_fastrtps_cpp 8.4.4, Fast DDS 2.14.7, rmw_dds_common 3.1.1) and Lyrical (rmw_fastrtps_cpp 9.4.10, Fast DDS 3.6.2, rmw_dds_common 6.0.0) both use <code>char[16]</code>. They interoperated fully with each other on Fast DDS and on Cyclone DDS, even though Lyrical ships Fast DDS 3.x and Cyclone DDS 11.0.1 while Jazzy ships Fast DDS 2.14 and Cyclone DDS 0.10.5.</li>
+<li>In the Jazzy-to-Lyrical Fast DDS pair, the Lyrical echo got 63 messages instead of about 88, and the first one was <code>talker_jazzy 67</code>. Discovery took a few seconds longer in that one run. The Lyrical echo also printed <code>!rclpy.ok()</code> once when <code>timeout</code> stopped it. Node list and param get still worked.</li>
+<li>Default RMW was <code>rmw_fastrtps_cpp</code> on all three images.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Messages whose definition changed between distros, and actions.</li>
+<li>rmw_zenoh, Connext and GurumDDS.</li>
+<li>Iron and Kilted.</li>
+<li>Two real machines on Wi-Fi or Ethernet. My containers were on one Docker bridge.</li>
+<li><code>domain_bridge</code> or any other bridge between domains.</li>
+<li>rqt_graph, <code>ros2 node info</code>, <code>ros2 lifecycle</code> and launch event handlers across distros.</li>
+<li>Large or high-rate messages across distros.</li>
+<li>The 100% RAM freeze reported when Jazzy calls a Humble service. My Jazzy-to-Humble <code>Trigger</code> call returned in 0.57 s and nothing froze, but I tested only that one small service.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "sequence size exceeds remaining buffer" mean in ROS 2 Humble?</h3>
+<p>A Humble process using Fast DDS received a sample it couldn't deserialize, and dropped it. In my runs this happened only when a Jazzy or Lyrical node was on the same domain. Humble's graph types differ from the newer ones (Gid is 24 bytes on Humble, 16 on Jazzy and Lyrical), so the newer distro's node information is lost on the Humble side.</p>
+
+<h3>Is the message harmful? My topics still work.</h3>
+<p>The line itself is harmless, and topic data with an unchanged definition arrived at full rate. But it signals that node discovery across the distro line is broken. <code>ros2 node list</code> was empty and <code>ros2 param get</code> returned <code>Node not found</code> in both directions.</p>
+
+<h3>Can ROS 2 Humble and Jazzy communicate?</h3>
+<p>Partly, and not officially. Topics and direct service calls worked when both sides used the same RMW vendor. Node lists and <code>ros2 param</code> did not. With Fast DDS on one side and Cyclone DDS on the other, service calls timed out after 20 seconds. Running one distro everywhere was the only setup where every check passed.</p>
+
+<h3>Does switching to Cyclone DDS fix it?</h3>
+<p>No. With Cyclone DDS on both sides the "sequence size" text was gone. Humble's <code>ros2 node list</code> then failed with "empty node name returned by the RMW layer", and the Humble node logged "invalid data size" errors instead.</p>
+
+<h3>Why does Jazzy show no error but also no Humble nodes?</h3>
+<p>Jazzy and Lyrical didn't print anything when they received Humble's graph data, but they didn't list the Humble nodes either. The error line shows up on the Humble processes, including a Humble node that was only publishing.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does sequence size exceeds remaining buffer mean in ROS 2 Humble?", "acceptedAnswer": {"@type": "Answer", "text": "A Humble process using Fast DDS received a sample it could not deserialize and dropped it. In my runs this happened only when a Jazzy or Lyrical node was on the same domain. Humble graph types differ from the newer ones (Gid is 24 bytes on Humble, 16 on Jazzy and Lyrical), so the newer distro's node information is lost on the Humble side."}},
+{"@type": "Question", "name": "Is the message harmful? My topics still work.", "acceptedAnswer": {"@type": "Answer", "text": "The line itself is harmless, and topic data with an unchanged definition arrived at full rate. But it signals that node discovery across the distro line is broken. ros2 node list was empty and ros2 param get returned Node not found in both directions."}},
+{"@type": "Question", "name": "Can ROS 2 Humble and Jazzy communicate?", "acceptedAnswer": {"@type": "Answer", "text": "Partly, and not officially. Topics and direct service calls worked when both sides used the same RMW vendor. Node lists and ros2 param did not. With Fast DDS on one side and Cyclone DDS on the other, service calls timed out after 20 seconds. Running one distro everywhere was the only setup where every check passed."}},
+{"@type": "Question", "name": "Does switching to Cyclone DDS fix it?", "acceptedAnswer": {"@type": "Answer", "text": "No. With Cyclone DDS on both sides the sequence size text was gone. Humble ros2 node list then failed with empty node name returned by the RMW layer, and the Humble node logged invalid data size errors instead."}},
+{"@type": "Question", "name": "Why does Jazzy show no error but also no Humble nodes?", "acceptedAnswer": {"@type": "Answer", "text": "Jazzy and Lyrical did not print anything when they received Humble graph data, but they did not list the Humble nodes either. The error line shows up on the Humble processes, including a Humble node that was only publishing."}}
+]}
+</script>
+
+<p>Measured on 2026-11-06 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Ubuntu 22.04, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Ubuntu 24.04, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Ubuntu 26.04, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10). Cyclone runs added rmw_cyclonedds_cpp 1.3.5 (Humble), 2.2.4 (Jazzy) and 4.1.5 (Lyrical) from apt. Full digests and package versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-31-ros2-humble-jazzy-sequence-size-exceeds/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/118234">ROS2 output error: 'sequence size exceeds remaining buffer'</a>, <a href="https://robotics.stackexchange.com/questions/118150">How to communicate between ros2 humble and ros2 jazzy seamlessly?</a>, <a href="https://robotics.stackexchange.com/questions/118192">Talker/Listener data works, but node discovery (node list, rqt_graph) fails between Jazzy and Humble</a>, <a href="https://robotics.stackexchange.com/questions/115289">Calling service running on ROS2 Humble from Jazzy</a>, <a href="https://github.com/ros2/ros2_documentation/issues/3288">Cross-Distro/Vendor communication in ROS 2</a>, <a href="https://github.com/ros2/rmw_cyclonedds/issues/487">Ubuntu Host (Humble) and Docker (Iron) communication issue</a>.</p>

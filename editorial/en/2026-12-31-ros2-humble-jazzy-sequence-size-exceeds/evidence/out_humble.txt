@@ -1,0 +1,302 @@
+##### subscriber distro: humble  (2026-11-06T14:17:05+09:00)
+
+=== publisher humble (Fast DDS) -> subscriber humble (Fast DDS), domain 32
+ 14:17:05 up 100 days, 18:13,  1 user,  load average: 0.33, 0.42, 0.19
+sub RMW=rmw_fastrtps_cpp
+echo 10s: data lines=90 seq_errors=0 other_stderr=0
+first data line:
+data: talker_humble 40
+stderr sample:
+--- ros2 node list --no-daemon --spin-time 3
+/talker_humble
+exit=0 seq_errors=0
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=0
+--- ros2 service call /trigger (timed)
+waiting for service to become available...
+response:
+std_srvs.srv.Trigger_Response(success=True, message='from talker_humble')
+exit=0 seconds=1.73 seq_errors=0
+--- ros2 param get --no-daemon --spin-time 3 /talker_humble use_sim_time
+Boolean value is: False
+seq_errors=0
+exit=0
+--- publisher (ros:humble-ros-base) log: seq_errors=0 other_lines=0
+
+=== publisher jazzy (Fast DDS) -> subscriber humble (Fast DDS), domain 32
+ 14:17:35 up 100 days, 18:13,  1 user,  load average: 0.27, 0.40, 0.19
+sub RMW=rmw_fastrtps_cpp
+echo 10s: data lines=90 seq_errors=1 other_stderr=0
+first data line:
+data: talker_jazzy 38
+stderr sample:
+      1 sequence size exceeds remaining buffer
+--- ros2 node list --no-daemon --spin-time 3
+exit=0 seq_errors=1
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=1
+--- ros2 service call /trigger (timed)
+waiting for service to become available...
+response:
+std_srvs.srv.Trigger_Response(success=True, message='from talker_jazzy')
+exit=0 seconds=0.73 seq_errors=1
+--- ros2 param get --no-daemon --spin-time 3 /talker_jazzy use_sim_time
+Node not found
+seq_errors=1
+exit=1
+--- publisher (ros:jazzy-ros-base) log: seq_errors=0 other_lines=0
+
+=== publisher lyrical (Fast DDS) -> subscriber humble (Fast DDS), domain 32
+ 14:18:00 up 100 days, 18:14,  1 user,  load average: 0.26, 0.38, 0.19
+sub RMW=rmw_fastrtps_cpp
+echo 10s: data lines=83 seq_errors=1 other_stderr=0
+first data line:
+data: talker_lyrical 37
+stderr sample:
+      1 sequence size exceeds remaining buffer
+--- ros2 node list --no-daemon --spin-time 3
+exit=0 seq_errors=1
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=1
+--- ros2 service call /trigger (timed)
+waiting for service to become available...
+response:
+std_srvs.srv.Trigger_Response(success=True, message='from talker_lyrical')
+exit=0 seconds=0.75 seq_errors=1
+--- ros2 param get --no-daemon --spin-time 3 /talker_lyrical use_sim_time
+Node not found
+seq_errors=1
+exit=1
+--- publisher (ros:lyrical-ros-base) log: seq_errors=0 other_lines=0
+
+=== interface definitions on humble
+# rmw_dds_common/msg/Gid
+char[24] data
+# rmw_dds_common/msg/NodeEntitiesInfo
+string<=256 node_namespace
+string<=256 node_name
+Gid[] reader_gid_seq
+	char[24] data
+Gid[] writer_gid_seq
+	char[24] data
+
+##### rclcpp check and fixes (repro.sh rclcpp humble jazzy; rclcpp humble humble; fixes)
+ 14:21:49 up 100 days, 18:18,  1 user,  load average: 0.24, 0.29, 0.19
+=== rclcpp robot_state_publisher on humble while talker on jazzy runs, 10 s
+ 14:21:49 up 100 days, 18:18,  1 user,  load average: 0.24, 0.29, 0.19
+seq_errors=1
+[INFO] [1793942513.580410917] [robot_state_publisher]: got segment a
+[INFO] [1793942523.277910342] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+=== rclcpp robot_state_publisher on humble while talker on humble runs, 10 s
+ 14:22:03 up 100 days, 18:18,  1 user,  load average: 0.18, 0.28, 0.18
+seq_errors=0
+[INFO] [1793942527.722445932] [robot_state_publisher]: got segment a
+[INFO] [1793942537.512290058] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+=== fix: separate ROS_DOMAIN_ID (jazzy talker on 32, humble probe on 33)
+ 14:22:17 up 100 days, 18:18,  1 user,  load average: 0.28, 0.30, 0.19
+sub RMW=rmw_fastrtps_cpp
+echo 10s: data lines=0 seq_errors=0 other_stderr=0
+first data line:
+stderr sample:
+--- ros2 node list --no-daemon --spin-time 3
+exit=0 seq_errors=0
+--- ros2 topic list --no-daemon --spin-time 3
+/parameter_events
+/rosout
+exit=0 seq_errors=0
+--- ros2 service call /trigger (timed)
+waiting for service to become available...
+exit=124 seconds=20.26 seq_errors=0
+--- ros2 param get --no-daemon --spin-time 3 /talker_jazzy use_sim_time
+Node not found
+seq_errors=0
+exit=1
+--- publisher (ros:jazzy-ros-base) log: seq_errors=0 other_lines=0
+
+=== workaround: call the jazzy node's parameter service directly from humble
+requester: making request: rcl_interfaces.srv.GetParameters_Request(names=['use_sim_time'])
+response:
+rcl_interfaces.srv.GetParameters_Response(values=[rcl_interfaces.msg.ParameterValue(type=1, bool_value=False, integer_value=0, double_value=0.0, string_value='', byte_array_value=[], bool_array_value=[], integer_array_value=[], double_array_value=[], string_array_value=[])])
+
+=== count over time: humble echo for 30 s while jazzy talker runs
+t+0s window: 1 lines
+total=1
+--- start a second jazzy node (ros2 topic pub) during a 20 s humble echo
+before_second_node=1
+after_20s_total=6
+
+##### Cyclone DDS runs (repro.sh cyclone), includes jazzy-side subscribers
+still-running
+ 14:56:49 up 100 days, 18:53,  1 user,  load average: 0.00, 0.03, 0.07
+
+=== publisher jazzy-cy -> subscriber humble-cy, domain 32
+ 14:47:08 up 100 days, 18:43,  1 user,  load average: 0.04, 0.02, 0.09
+sub RMW=rmw_cyclonedds_cpp
+echo 10s: data lines=89 seq_errors=0 other_stderr=0
+first data line:
+data: talker_jazzy 39
+stderr sample:
+--- ros2 node list --no-daemon --spin-time 3
+exit=1 seq_errors=0
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=0
+--- ros2 service call /trigger (timed)
+response:
+std_srvs.srv.Trigger_Response(success=True, message='from talker_jazzy')
+exit=0 seconds=0.55 seq_errors=0
+--- ros2 param get --no-daemon --spin-time 3 /talker_jazzy use_sim_time
+Failed to get node names: empty node name returned by the RMW layer, at ./src/rcl/graph.c:360
+seq_errors=0
+exit=1
+--- publisher (pk22-jazzy-cy) log: seq_errors=0 other_lines=0
+
+=== publisher humble-cy -> subscriber jazzy-cy, domain 32
+ 14:47:34 up 100 days, 18:43,  1 user,  load average: 0.08, 0.04, 0.09
+sub RMW=rmw_cyclonedds_cpp
+echo 10s: data lines=88 seq_errors=0 other_stderr=0
+first data line:
+data: talker_humble 43
+stderr sample:
+--- ros2 node list --no-daemon --spin-time 3
+exit=0 seq_errors=0
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=0
+--- ros2 service call /trigger (timed)
+response:
+std_srvs.srv.Trigger_Response(success=True, message='from talker_humble')
+exit=0 seconds=0.63 seq_errors=0
+--- ros2 param get --no-daemon --spin-time 3 /talker_humble use_sim_time
+Node not found
+seq_errors=0
+exit=1
+--- publisher (pk22-humble-cy) log: seq_errors=0 other_lines=144
+
+>>> [rcutils|error_handling.c:108] rcutils_set_error_state()
+This error state is being overwritten:
+
+=== publisher lyrical-cy -> subscriber humble-cy, domain 32
+ 14:48:02 up 100 days, 18:44,  2 users,  load average: 0.28, 0.08, 0.10
+sub RMW=rmw_cyclonedds_cpp
+echo 10s: data lines=90 seq_errors=0 other_stderr=0
+first data line:
+data: talker_lyrical 36
+stderr sample:
+--- ros2 node list --no-daemon --spin-time 3
+exit=1 seq_errors=0
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=0
+--- ros2 service call /trigger (timed)
+response:
+std_srvs.srv.Trigger_Response(success=True, message='from talker_lyrical')
+exit=0 seconds=0.56 seq_errors=0
+--- ros2 param get --no-daemon --spin-time 3 /talker_lyrical use_sim_time
+Failed to get node names: empty node name returned by the RMW layer, at ./src/rcl/graph.c:360
+seq_errors=0
+exit=1
+--- publisher (pk22-lyrical-cy) log: seq_errors=0 other_lines=0
+
+=== publisher lyrical-cy -> subscriber jazzy-cy, domain 32
+ 14:48:28 up 100 days, 18:44,  2 users,  load average: 0.18, 0.08, 0.10
+sub RMW=rmw_cyclonedds_cpp
+echo 10s: data lines=88 seq_errors=0 other_stderr=0
+first data line:
+data: talker_lyrical 39
+stderr sample:
+--- ros2 node list --no-daemon --spin-time 3
+/talker_lyrical
+exit=0 seq_errors=0
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=0
+--- ros2 service call /trigger (timed)
+response:
+std_srvs.srv.Trigger_Response(success=True, message='from talker_lyrical')
+exit=0 seconds=0.63 seq_errors=0
+--- ros2 param get --no-daemon --spin-time 3 /talker_lyrical use_sim_time
+Boolean value is: False
+seq_errors=0
+exit=0
+--- publisher (pk22-lyrical-cy) log: seq_errors=0 other_lines=0
+
+=== publisher jazzy-cy -> subscriber humble, domain 32
+ 14:48:57 up 100 days, 18:45,  2 users,  load average: 0.16, 0.08, 0.10
+sub RMW=rmw_fastrtps_cpp
+echo 10s: data lines=89 seq_errors=1 other_stderr=0
+first data line:
+data: talker_jazzy 40
+stderr sample:
+      1 sequence size exceeds remaining buffer
+--- ros2 node list --no-daemon --spin-time 3
+exit=0 seq_errors=1
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=1
+--- ros2 service call /trigger (timed)
+waiting for service to become available...
+exit=124 seconds=20.17 seq_errors=1
+--- ros2 param get --no-daemon --spin-time 3 /talker_jazzy use_sim_time
+Node not found
+seq_errors=1
+exit=1
+--- publisher (pk22-jazzy-cy) log: seq_errors=0 other_lines=0
+
+=== publisher jazzy -> subscriber humble-cy, domain 32
+ 14:49:42 up 100 days, 18:46,  2 users,  load average: 0.20, 0.11, 0.11
+sub RMW=rmw_cyclonedds_cpp
+echo 10s: data lines=85 seq_errors=0 other_stderr=0
+first data line:
+data: talker_jazzy 43
+stderr sample:
+--- ros2 node list --no-daemon --spin-time 3
+exit=1 seq_errors=0
+--- ros2 topic list --no-daemon --spin-time 3
+/chatter
+/parameter_events
+/rosout
+exit=0 seq_errors=0
+--- ros2 service call /trigger (timed)
+waiting for service to become available...
+exit=124 seconds=20.26 seq_errors=0
+--- ros2 param get --no-daemon --spin-time 3 /talker_jazzy use_sim_time
+Failed to get node names: empty node name returned by the RMW layer, at ./src/rcl/graph.c:360
+seq_errors=0
+exit=1
+--- publisher (ros:jazzy-ros-base) log: seq_errors=0 other_lines=1
+2026-11-06 05:50:05.830 [RTPS_READER_HISTORY Error] Change payload size of '24' bytes is larger than the history payload size of '11' bytes and cannot be resized. -> Function can_change_be_added_nts
+
+##### Cyclone detail (repro.sh cydetail)
+=== jazzy-cy talker, humble-cy: ros2 node list stderr
+ 14:57:10 up 100 days, 18:53,  1 user,  load average: 0.07, 0.04, 0.07
+Failed to get node names: empty node name returned by the RMW layer, at ./src/rcl/graph.c:360
+
+=== humble-cy talker log while a jazzy-cy ros2 topic list runs
+log lines=24
+      2 with this new error message:
+      2 rcutils_reset_error() should be called after error handling to avoid this.
+      2 This error state is being overwritten:
+      2 >>> [rcutils|error_handling.c:108] rcutils_set_error_state()
+      2 <<<
+      2   'string data is not null-terminated, at ./src/serdata.cpp:384'
+      2   'invalid data size, at ./src/serdata.cpp:384'
