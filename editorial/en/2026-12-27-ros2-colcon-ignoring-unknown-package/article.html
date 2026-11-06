@@ -1,0 +1,194 @@
+<pre><code>$ colcon build --packages-select pkg_aa
+[0.291s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+$ echo $?
+0</code></pre>
+
+<p>Short answer: colcon looked for a package whose <code>&lt;name&gt;</code> in <code>package.xml</code> is exactly <code>pkg_aa</code>, under the folder you ran it from, and found none. It then builds nothing and still exits with code 0. The name has to match the <code>&lt;name&gt;</code> tag, not the folder name, and the package has to be visible from where you run colcon. Ask colcon what it can see, then select one of those names:</p>
+
+<pre><code>cd ~/ros2_ws                 # the workspace root, the folder that contains src/
+colcon list --names-only     # every package colcon found
+colcon build --packages-select pkg_a</code></pre>
+
+<p>If the name you want isn't in the <code>colcon list</code> output, the problem is discovery, not spelling. The usual causes in my runs were a <code>COLCON_IGNORE</code> file in a parent folder, a package placed inside another package's folder, a folder starting with a dot, or a package in a different workspace. All of these behaved the same on Humble, Jazzy and Lyrical.</p>
+
+<p>Because the exit code is 0, a script or CI job that runs <code>colcon build --packages-select</code> with a wrong name passes without building anything. Two ways to make it fail are covered below: <code>--packages-up-to</code>, which exits 1 for an unknown name, and a grep on colcon's output.</p>
+
+<h2>Find your case</h2>
+
+<p>Each row is one <code>colcon build</code> run in a test workspace. Every row gave the same result on all three distros.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Typo: <code>pkg_aa</code> for <code>pkg_a</code></td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td>Dash for underscore: <code>my-py-pkg</code> for <code>my_py_pkg</code></td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td>Wrong case: <code>Pkg_A</code></td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td>Folder name used, <code>&lt;name&gt;</code> is different (<code>src/folder_name</code> holds <code>real_name</code>)</td><td>warning for <code>folder_name</code>. <code>real_name</code> built.</td></tr>
+<tr><td>Package under a folder with an empty <code>COLCON_IGNORE</code></td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td>Package inside another package's folder (<code>src/outer/inner_pkg</code>)</td><td>warning for <code>inner_pkg</code>. <code>outer</code> built.</td></tr>
+<tr><td>Package under a hidden folder (<code>src/.hidden/pkg_hid</code>)</td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td>Package in another workspace (<code>/ws2/src/other_ws_pkg</code>)</td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td>Run from a folder with no packages under it</td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td><code>--base-paths /ws2</code> while selecting a package in <code>/ws/src</code></td><td>warning, 0 packages, exit 0</td></tr>
+<tr><td>Comma list: <code>--packages-select pkg_a,my_py_pkg</code></td><td><code>ignoring unknown package 'pkg_a,my_py_pkg'</code>, 0 packages, exit 0</td></tr>
+<tr><td>Plain CMake folder with no <code>package.xml</code>, selected by folder name</td><td>warning. The <code>project()</code> name built.</td></tr>
+<tr><td>One good and one wrong name</td><td>warning for the wrong one, the good one built, exit 0</td></tr>
+</tbody>
+</table>
+
+<p>Two cases I expected to give the warning did not. An <code>ament_python</code> package with no <code>setup.py</code> was still found, and its build failed with exit 1. A <code>package.xml</code> with broken XML was found too, and failed in CMake. Both are covered below.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-06 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another, as root. The script builds a workspace at <code>/ws</code> with small packages: <code>pkg_a</code> (<code>ament_cmake</code>), <code>my_py_pkg</code> (<code>ament_python</code>), and one package for each broken layout in the table. Then it runs 37 colcon commands. Before each one it deletes <code>build/</code>, <code>install/</code> and <code>log/</code>. After each one it records the output, the exit code, the time in seconds and the folders in <code>install/</code>.</p>
+
+<p>First, <code>colcon list</code> printed what colcon discovered. It found 8 packages. <code>pkg_ign</code>, <code>inner_pkg</code>, <code>pkg_hid</code> and <code>other_ws_pkg</code> were missing, and those four later gave the warning:</p>
+
+<pre><code>bad_xml	src/bad_xml	(cmake)
+my_py_pkg	src/my_py_pkg	(ros.ament_python)
+outer	src/outer	(ros.ament_cmake)
+pkg_a	src/pkg_a	(ros.ament_cmake)
+pkg_link	src/pkg_link	(ros.ament_cmake)
+plain_proj	src/plain_cmake	(cmake)
+py_nosetup	src/py_nosetup	(ros.ament_python)
+real_name	src/folder_name	(ros.ament_cmake)</code></pre>
+
+<p>A correct <code>colcon build --packages-select pkg_a</code> took 1.248 s on Humble, 1.545 s on Jazzy and 1.479 s on Lyrical, and left <code>install/pkg_a</code>. Each run that ended with the warning took between 0.395 and 0.623 seconds and created no package folders in <code>install/</code>. It's fast, which is part of why it's easy to miss.</p>
+
+<h2>The name comes from package.xml, exactly</h2>
+
+<p>colcon matches the string you pass against the <code>&lt;name&gt;</code> in each <code>package.xml</code>. The match is exact. <code>Pkg_A</code> didn't match <code>pkg_a</code>, and <code>my-py-pkg</code> didn't match <code>my_py_pkg</code>. The folder name doesn't count. A folder called <code>src/folder_name</code> holding <code>&lt;name&gt;real_name&lt;/name&gt;</code> was unknown as <code>folder_name</code> and built fine as <code>real_name</code>. This is the cause in the <a href="https://answers.ros.org/question/364278/">"colcon can not find my package"</a> ROS Answers thread, where a copied <code>package.xml</code> still had the old name.</p>
+
+<p>For a plain CMake folder with no <code>package.xml</code>, colcon took the name from <code>project()</code>. The folder <code>src/plain_cmake</code> with <code>project(plain_proj NONE)</code> was listed as <code>plain_proj</code>.</p>
+
+<p>To see every name at once without trusting folder names:</p>
+
+<pre><code>colcon list --names-only
+grep -rho --include=package.xml '&lt;name&gt;[^&lt;]*&lt;/name&gt;' src | sort</code></pre>
+
+<p>The grep found 8 names in my workspace, including <code>pkg_ign</code>, <code>inner_pkg</code> and <code>pkg_hid</code>, which colcon didn't list. It missed the symlinked <code>pkg_link</code> and the broken <code>bad_xml</code>, so treat it as a cross-check, not a full list. A name that grep finds but <code>colcon list</code> doesn't is a discovery problem. The next section covers those.</p>
+
+<h2>colcon didn't find the package at all</h2>
+
+<p>By default colcon searches from the current directory down. Four layouts hid a package that was there on disk:</p>
+
+<ul>
+<li><strong>An ignore marker in a parent folder.</strong> <code>src/ignored/COLCON_IGNORE</code> hid <code>src/ignored/pkg_ign</code>. If you copied an old workspace, or someone parked a package there on purpose, check for <code>COLCON_IGNORE</code>, <code>AMENT_IGNORE</code> or <code>CATKIN_IGNORE</code> files with <code>find src -name '*_IGNORE'</code>. The <a href="https://huntlab.app/en/colcon-build-slow-overlay-colcon-ignore-symlink-install-measured/">COLCON_IGNORE build-time test</a> covers when you'd want one.</li>
+<li><strong>A package inside another package.</strong> With <code>src/outer/package.xml</code> and <code>src/outer/inner_pkg/package.xml</code>, colcon found <code>outer</code> and stopped looking below it. <code>inner_pkg</code> was unknown. Packages placed side by side under <code>src/</code> were all found.</li>
+<li><strong>A hidden folder.</strong> <code>src/.hidden/pkg_hid</code> was never listed.</li>
+<li><strong>Another workspace.</strong> <code>/ws2/src/other_ws_pkg</code> was unknown from <code>/ws</code>. <code>colcon build --base-paths src /ws2/src --packages-select other_ws_pkg</code> built it, exit 0. Passing only <code>--base-paths /ws2</code> made <code>pkg_a</code> unknown in turn, because <code>--base-paths</code> replaces the default search path instead of adding to it.</li>
+</ul>
+
+<p>A symlinked package folder was fine. <code>src/pkg_link</code> pointing to <code>/elsewhere/pkg_link</code> was listed and built.</p>
+
+<h2>Where you run colcon</h2>
+
+<p>From an empty folder, <code>colcon build --packages-select pkg_a</code> gave the warning and exit 0. From <code>/ws/src</code> and from <code>/ws/src/pkg_a</code>, the same command found <code>pkg_a</code> and built it, because the package was below the current directory. But it put <code>build/</code>, <code>install/</code> and <code>log/</code> in that folder. In the <code>/ws/src</code> run the result landed in <code>/ws/src/install/pkg_a</code>. Your <code>/ws/install/setup.bash</code> won't see that copy. So the build "worked" and your change still won't show up. Run colcon from the workspace root.</p>
+
+<h2>Comma lists and flags after --packages-select</h2>
+
+<p><code>--packages-select</code> takes names separated by spaces. <code>pkg_a,my_py_pkg</code> was treated as one package name, and nothing was built. Use <code>--packages-select pkg_a my_py_pkg</code>.</p>
+
+<p>A wrong name next to a good one doesn't stop the build. <code>--packages-select pkg_a pkg_aa</code> printed the warning for <code>pkg_aa</code>, built <code>pkg_a</code>, and exited 0. In a long build log that warning is easy to scroll past.</p>
+
+<p>Mistyped flags after <code>--packages-select</code> behaved differently from the old <a href="https://github.com/colcon/colcon-core/issues/325">colcon-core issue #325</a>, where words with a leading hyphen were taken as package names. In my runs, <code>--packages-select pkg_a -symlink-install</code> (one dash) was rejected:</p>
+
+<pre><code>colcon build: error: argument --packages-select: unrecognized argument: -symlink-install</code></pre>
+
+<p>That printed the usage text and exited with code 2. A shortened flag, <code>--symlink-instal</code>, was accepted as <code>--symlink-install</code>. The build exited 0 and <code>install/pkg_a/share/pkg_a/package.xml</code> was a symlink, the same as with the full flag.</p>
+
+<h2>Missing setup.py and broken package.xml fail differently</h2>
+
+<p>In <a href="https://github.com/colcon/colcon-core/issues/208">colcon-core issue #208</a> (2019), an <code>ament_python</code> package without <code>setup.py</code> produced <code>has no 'setup.py' file</code>, then the unknown-package warning. That's not what I got. With colcon-core 0.21.3 and colcon-ros 0.5.0, <code>py_nosetup</code> was listed as <code>ros.ament_python</code>, the build started, and it failed with exit 1:</p>
+
+<pre><code>AssertionError: Expected ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', '--help-commands'] to pass: /usr/bin/python3: can't open file '/ws/src/py_nosetup/setup.py': [Errno 2] No such file or directory</code></pre>
+
+<p>A <code>package.xml</code> with a mismatched tag (<code>&lt;/nam&gt;</code>) wasn't hidden either. colcon listed it as a plain <code>(cmake)</code> package, named from <code>project()</code>. The build then failed in <code>ament_package()</code> with exit 1:</p>
+
+<pre><code>catkin_pkg.package.InvalidPackage: Error(s) in package '/ws/src/bad_xml/package.xml':
+The manifest contains invalid XML:
+mismatched tag: line 2, column 35</code></pre>
+
+<p>If your folder name and <code>project()</code> name differ from the broken <code>&lt;name&gt;</code>, you would select by the old name and get the unknown-package warning instead. I didn't test that combination.</p>
+
+<h2>Other selection flags</h2>
+
+<table>
+<thead><tr><th>Command with a wrong name</th><th>Output</th><th>Exit</th></tr></thead>
+<tbody>
+<tr><td><code>colcon build --packages-up-to pkg_aa</code></td><td><code>Package 'pkg_aa' specified with --packages-up-to was not found</code></td><td>1</td></tr>
+<tr><td><code>colcon build --packages-skip pkg_aa</code></td><td><code>ignoring unknown package 'pkg_aa' in --packages-skip</code>, then built the rest of the workspace</td><td>1 (my broken test packages failed)</td></tr>
+<tr><td><code>colcon build --packages-ignore pkg_aa --packages-select pkg_a</code></td><td><code>WARNING:colcon.colcon_core.package_discovery:ignoring unknown package 'pkg_aa' in --packages-ignore</code>, <code>pkg_a</code> built</td><td>0</td></tr>
+<tr><td><code>colcon build --packages-select-regex pkg_aa</code></td><td><code>the --packages-select-regex 'pkg_aa' doesn't match any of the package names</code>, 0 packages</td><td>0</td></tr>
+<tr><td><code>colcon test --packages-select pkg_aa</code></td><td>same warning, 0 packages</td><td>0</td></tr>
+<tr><td><code>colcon list --packages-select pkg_aa</code></td><td>same warning, empty list</td><td>0</td></tr>
+<tr><td><code>colcon build --packages-select</code> (no names)</td><td><code>Summary: 0 packages finished</code>, no warning</td><td>0</td></tr>
+</tbody>
+</table>
+
+<p>The <code>--packages-skip</code> exit code of 1 came from the broken packages in my test workspace, not from the wrong name. The point is that a typo in <code>--packages-skip</code> builds the package you meant to skip. A typo in <code>colcon test --packages-select</code> runs no tests and still exits 0.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td>Copy the name from <code>colcon list --names-only</code></td><td>Built. This is the fix for typos, case, dashes and folder names.</td></tr>
+<tr><td>Run from the workspace root</td><td>Built into <code>/ws/install</code>. From <code>src/</code> it built into <code>src/install</code>.</td></tr>
+<tr><td><code>--base-paths src /ws2/src</code></td><td>Built a package from a second workspace. Exit 0.</td></tr>
+<tr><td><code>--packages-up-to</code> instead of <code>--packages-select</code></td><td>Wrong name: exit 1 with a clear message. With a good name it also selects the package's workspace dependencies. My test packages had none, so I didn't measure that part.</td></tr>
+<tr><td>Grep the output in a script</td><td>Exit 1 on the warning (below)</td></tr>
+<tr><td>Rely on colcon's exit code</td><td>0 for every unknown-name case. Doesn't work.</td></tr>
+</tbody>
+</table>
+
+<p>The warning went to stderr. Running with <code>2&gt;/dev/null</code> left only <code>Summary: 0 packages finished</code> on screen. With <code>2&gt;&amp;1 &gt;/dev/null</code> only the warning line was left. It was also written to <code>log/latest_build/logger_all.log</code>, one matching line per run. This guard exited 1 for the typo on every distro:</p>
+
+<pre><code>colcon build --packages-select "$PKG" 2&gt;&amp;1 | tee /tmp/b.log
+! grep -q "ignoring unknown package" /tmp/b.log</code></pre>
+
+<h2>Version notes</h2>
+
+<p>Behavior and message text were the same on all three distros. All three images had the same colcon packages: colcon-core 0.21.3, colcon-package-selection 0.2.10 and colcon-ros 0.5.0. Lyrical had colcon-output 0.2.14 and colcon-parallel-executor 0.4.0, where Humble and Jazzy had 0.2.15 and 0.3.0. Two differences showed up on Lyrical only:</p>
+
+<ul>
+<li>The time prefix on log lines was a large negative number, for example <code>[-1793925401641418752.000s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select</code>. Humble and Jazzy printed <code>[0.291s]</code>-style values. The rest of the line was identical, so search for the text after the bracket.</li>
+<li>CMake 4.2.3 printed <code>CMake Deprecation Warning ... Compatibility with CMake &lt; 3.10 will be removed</code> for my <code>cmake_minimum_required(VERSION 3.8)</code>, so each CMake build on Lyrical also reported <code>1 package had stderr output</code>. That didn't change any exit code.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Older colcon-core and colcon-ros versions (including the ones in issue #208), <code>pyproject.toml</code>-only Python packages, <code>--paths</code>, <code>colcon.meta</code> and <code>defaults.yaml</code> files, mixins, <code>--packages-select-by-dep</code>, packages over network or bind mounts, Windows and macOS, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does colcon say ignoring unknown package when the folder is right there?</h3>
+<p>colcon selects by the <code>&lt;name&gt;</code> in <code>package.xml</code>, not the folder name. If the name matches, the package wasn't discovered: a <code>COLCON_IGNORE</code> file in a parent folder, a package nested inside another package, a hidden folder or another workspace all gave this warning in my runs. <code>colcon list --names-only</code> shows what colcon can see.</p>
+
+<h3>Does colcon build fail when the package name is wrong?</h3>
+<p>No. It printed the warning, <code>Summary: 0 packages finished</code> and exited 0 on Humble, Jazzy and Lyrical. <code>--packages-up-to</code> with a wrong name exits 1, and so does a grep for <code>ignoring unknown package</code> on the output.</p>
+
+<h3>Can I pass several packages with commas?</h3>
+<p>No. <code>pkg_a,my_py_pkg</code> was treated as one unknown name. Separate names with spaces: <code>--packages-select pkg_a my_py_pkg</code>.</p>
+
+<h3>Is a dash the same as an underscore in a package name?</h3>
+<p>No. <code>my-py-pkg</code> was unknown when the package was named <code>my_py_pkg</code>, and <code>Pkg_A</code> was unknown for <code>pkg_a</code>. The match is exact.</p>
+
+<h3>My ament_python package has no setup.py. Will colcon ignore it?</h3>
+<p>Not with colcon-core 0.21.3 and colcon-ros 0.5.0. The package was found and its build failed with exit 1 and <code>can't open file ... setup.py</code>. The 2019 report in colcon-core issue #208 showed the unknown-package warning instead.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does colcon say ignoring unknown package when the folder is right there?", "acceptedAnswer": {"@type": "Answer", "text": "colcon selects by the name tag in package.xml, not the folder name. If the name matches, the package was not discovered: a COLCON_IGNORE file in a parent folder, a package nested inside another package, a hidden folder or another workspace all gave this warning in my runs. colcon list --names-only shows what colcon can see."}},
+{"@type": "Question", "name": "Does colcon build fail when the package name is wrong?", "acceptedAnswer": {"@type": "Answer", "text": "No. It printed the warning, Summary: 0 packages finished and exited 0 on Humble, Jazzy and Lyrical. --packages-up-to with a wrong name exits 1, and so does a grep for ignoring unknown package on the output."}},
+{"@type": "Question", "name": "Can I pass several packages with commas?", "acceptedAnswer": {"@type": "Answer", "text": "No. pkg_a,my_py_pkg was treated as one unknown name. Separate names with spaces: --packages-select pkg_a my_py_pkg."}},
+{"@type": "Question", "name": "Is a dash the same as an underscore in a package name?", "acceptedAnswer": {"@type": "Answer", "text": "No. my-py-pkg was unknown when the package was named my_py_pkg, and Pkg_A was unknown for pkg_a. The match is exact."}},
+{"@type": "Question", "name": "My ament_python package has no setup.py. Will colcon ignore it?", "acceptedAnswer": {"@type": "Answer", "text": "Not with colcon-core 0.21.3 and colcon-ros 0.5.0. The package was found and its build failed with exit 1 and a cannot open file setup.py error. The 2019 report in colcon-core issue 208 showed the unknown-package warning instead."}}
+]}
+</script>
+
+<p>Measured on 2026-11-06 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Python 3.10.12, CMake 3.22.1, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Python 3.12.3, CMake 3.28.3, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Python 3.14.4, CMake 4.2.3, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2), colcon-core 0.21.3 on all three, default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-27-ros2-colcon-ignoring-unknown-package/evidence">evidence folder</a>. Questions this answers: <a href="https://answers.ros.org/question/364278/">colcon can not find my package</a>, <a href="https://get-help.theconstruct.ai/t/warning-colcon-colcon-core-package-selection-ignoring-unknown-package-client-pkg-in-packages-select/25724">ignoring unknown package 'client_pkg' in --packages-select</a>, <a href="https://get-help.theconstruct.ai/t/error-in-example-4-5-of-ros2-in-5-days-python/16440">ignoring unknown package 'custom_interfaces'</a>, <a href="https://github.com/ros-industrial/ros2_canopen/issues/31">ignoring unknown package 'ros_canopen' in --packages-select</a>, <a href="https://github.com/colcon/colcon-core/issues/208">Colcon fails to build valid PEP 517 projects</a>, <a href="https://github.com/colcon/colcon-core/issues/325">Command line words beginning with hyphen treated as package names</a>.</p>

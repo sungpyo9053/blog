@@ -1,0 +1,576 @@
+=== distro=humble
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-implementation 2.8.5-1jammy.20260907.211224
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+colcon-argcomplete 0.3.3
+colcon-bash 0.5.0
+colcon-cd 0.2.1
+colcon-cmake 0.2.30
+colcon-common-extensions 0.3.0
+colcon-core 0.21.3
+colcon-defaults 0.2.9
+colcon-devtools 0.3.0
+colcon-library-path 0.2.1
+colcon-metadata 0.3.1
+colcon-mixin 0.3.2
+colcon-notification 0.3.3
+colcon-output 0.2.15
+colcon-package-information 0.4.1
+colcon-package-selection 0.2.10
+colcon-parallel-executor 0.3.0
+colcon-pkg-config 0.1.0
+colcon-powershell 0.5.0
+colcon-python-setup-py 0.2.9
+colcon-recursive-crawl 0.2.3
+colcon-ros 0.5.0
+colcon-test-result 0.3.8
+colcon-zsh 0.5.0
+rmw default: unset
+=== colcon list (names, paths, types)
+bad_xml	src/bad_xml	(cmake)
+my_py_pkg	src/my_py_pkg	(ros.ament_python)
+outer	src/outer	(ros.ament_cmake)
+pkg_a	src/pkg_a	(ros.ament_cmake)
+pkg_link	src/pkg_link	(ros.ament_cmake)
+plain_proj	src/plain_cmake	(cmake)
+py_nosetup	src/py_nosetup	(ros.ament_python)
+real_name	src/folder_name	(ros.ament_cmake)
+exit=0
+
+### CASE correct
+cwd=/ws
+cmd=colcon build --packages-select pkg_a
+Starting >>> pkg_a
+Finished <<< pkg_a [0.77s]
+
+Summary: 1 package finished [1.00s]
+exit=0 seconds=1.248
+installed: pkg_a 
+pkg_a package.xml in install: regular file
+logger_all.log lines with 'unknown package': 0
+
+### CASE typo
+cwd=/ws
+cmd=colcon build --packages-select pkg_aa
+[0.301s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.475
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE dash
+cwd=/ws
+cmd=colcon build --packages-select my-py-pkg
+[0.298s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'my-py-pkg' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.47
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE uppercase
+cwd=/ws
+cmd=colcon build --packages-select Pkg_A
+[0.303s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'Pkg_A' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.479
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE folder_name
+cwd=/ws
+cmd=colcon build --packages-select folder_name
+[0.298s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'folder_name' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.477
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE real_name
+cwd=/ws
+cmd=colcon build --packages-select real_name
+Starting >>> real_name
+Finished <<< real_name [0.79s]
+
+Summary: 1 package finished [1.01s]
+exit=0 seconds=1.269
+installed: real_name 
+logger_all.log lines with 'unknown package': 0
+
+### CASE colcon_ignore
+cwd=/ws
+cmd=colcon build --packages-select pkg_ign
+[0.298s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_ign' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.464
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE py_no_setup
+cwd=/ws
+cmd=colcon build --packages-select py_nosetup
+Starting >>> py_nosetup
+[0.340s] WARNING:colcon.colcon_ros.task.ament_python.build:Package 'py_nosetup' doesn't explicitly install a marker in the package index (colcon-ros currently does it implicitly but that fallback will be removed in the future)
+[0.340s] WARNING:colcon.colcon_ros.task.ament_python.build:Package 'py_nosetup' doesn't explicitly install the 'package.xml' file (colcon-ros currently does it implicitly but that fallback will be removed in the future)
+--- stderr: py_nosetup
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/executor/__init__.py", line 91, in __call__
+    rc = await self.task(*args, **kwargs)
+  File "/usr/lib/python3/dist-packages/colcon_core/task/__init__.py", line 120, in __call__
+    return await task_method(*args, **kwargs)
+  File "/usr/lib/python3/dist-packages/colcon_ros/task/ament_python/build.py", line 102, in build
+    return await extension.build(additional_hooks=additional_hooks)
+  File "/usr/lib/python3/dist-packages/colcon_core/task/python/build.py", line 101, in build
+    available_commands = await self._get_available_commands(
+  File "/usr/lib/python3/dist-packages/colcon_core/task/python/build.py", line 215, in _get_available_commands
+    output = await check_output(
+  File "/usr/lib/python3/dist-packages/colcon_core/subprocess.py", line 129, in check_output
+    assert not rc, f'Expected {args} to pass: {stderr_data}'
+AssertionError: Expected ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', '--help-commands'] to pass: /usr/bin/python3: can't open file '/ws/src/py_nosetup/setup.py': [Errno 2] No such file or directory
+
+---
+Failed   <<< py_nosetup [0.05s, exited with code 1]
+
+Summary: 0 packages finished [0.28s]
+  1 package failed: py_nosetup
+  1 package had stderr output: py_nosetup
+Expected ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', '--help-commands'] to pass: /usr/bin/python3: can't open file '/ws/src/py_nosetup/setup.py': [Errno 2] No such file or directory
+
+exit=1 seconds=0.532
+installed: py_nosetup 
+logger_all.log lines with 'unknown package': 0
+
+### CASE bad_xml
+cwd=/ws
+cmd=colcon build --packages-select bad_xml
+Starting >>> bad_xml
+--- stderr: bad_xml
+Error parsing '/ws/src/bad_xml/package.xml':
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/catkin_pkg/package.py", line 610, in parse_package_string
+    root = dom.parseString(data)
+  File "/usr/lib/python3.10/xml/dom/minidom.py", line 1995, in parseString
+    return expatbuilder.parseString(string)
+  File "/usr/lib/python3.10/xml/dom/expatbuilder.py", line 925, in parseString
+    return builder.parseString(string)
+  File "/usr/lib/python3.10/xml/dom/expatbuilder.py", line 223, in parseString
+    parser.Parse(string, True)
+xml.parsers.expat.ExpatError: mismatched tag: line 2, column 35
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 150, in <module>
+    main()
+  File "/opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 53, in main
+    raise e
+  File "/opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 49, in main
+    package = parse_package_string(
+  File "/usr/lib/python3/dist-packages/catkin_pkg/package.py", line 612, in parse_package_string
+    raise InvalidPackage('The manifest contains invalid XML:\n%s' % ex, filename)
+catkin_pkg.package.InvalidPackage: Error(s) in package '/ws/src/bad_xml/package.xml':
+The manifest contains invalid XML:
+mismatched tag: line 2, column 35
+CMake Error at /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:95 (message):
+  execute_process(/usr/bin/python3
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py
+  /ws/src/bad_xml/package.xml
+  /ws/build/bad_xml/ament_cmake_core/package.cmake) returned error code 1
+Call Stack (most recent call first):
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:49 (_ament_package_xml)
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package.cmake:63 (ament_package_xml)
+  CMakeLists.txt:4 (ament_package)
+
+
+---
+Failed   <<< bad_xml [0.67s, exited with code 1]
+
+Summary: 0 packages finished [0.90s]
+  1 package failed: bad_xml
+  1 package had stderr output: bad_xml
+exit=1 seconds=1.137
+installed: 
+logger_all.log lines with 'unknown package': 0
+
+### CASE plain_cmake_dir
+cwd=/ws
+cmd=colcon build --packages-select plain_cmake
+[0.298s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'plain_cmake' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.474
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE plain_cmake_proj
+cwd=/ws
+cmd=colcon build --packages-select plain_proj
+Starting >>> plain_proj
+[0.402s] WARNING:colcon.colcon_cmake.task.cmake.build:Could not run installation step for package 'plain_proj' because it has no 'install' target
+Finished <<< plain_proj [0.09s]
+
+Summary: 1 package finished [0.31s]
+exit=0 seconds=0.555
+installed: plain_proj 
+logger_all.log lines with 'unknown package': 0
+
+### CASE nested_inner
+cwd=/ws
+cmd=colcon build --packages-select inner_pkg
+[0.299s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'inner_pkg' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.472
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE nested_outer
+cwd=/ws
+cmd=colcon build --packages-select outer
+Starting >>> outer
+Finished <<< outer [0.78s]
+
+Summary: 1 package finished [1.00s]
+exit=0 seconds=1.263
+installed: outer 
+logger_all.log lines with 'unknown package': 0
+
+### CASE hidden_dir
+cwd=/ws
+cmd=colcon build --packages-select pkg_hid
+[0.297s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_hid' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.467
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE symlink_dir
+cwd=/ws
+cmd=colcon build --packages-select pkg_link
+Starting >>> pkg_link
+Finished <<< pkg_link [0.77s]
+
+Summary: 1 package finished [0.99s]
+exit=0 seconds=1.243
+installed: pkg_link 
+logger_all.log lines with 'unknown package': 0
+
+### CASE other_workspace
+cwd=/ws
+cmd=colcon build --packages-select other_ws_pkg
+[0.299s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'other_ws_pkg' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.469
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE wrong_cwd_empty
+cwd=/tmp/empty
+cmd=colcon build --packages-select pkg_a
+[0.286s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_a' in --packages-select
+
+Summary: 0 packages finished [0.21s]
+exit=0 seconds=0.454
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE cwd_src
+cwd=/ws/src
+cmd=colcon build --packages-select pkg_a
+Starting >>> pkg_a
+Finished <<< pkg_a [0.76s]
+
+Summary: 1 package finished [0.99s]
+exit=0 seconds=1.236
+installed: pkg_a 
+pkg_a package.xml in install: regular file
+logger_all.log lines with 'unknown package': 0
+
+### CASE cwd_pkg
+cwd=/ws/src/pkg_a
+cmd=colcon build --packages-select pkg_a
+Starting >>> pkg_a
+Finished <<< pkg_a [0.77s]
+
+Summary: 1 package finished [0.98s]
+exit=0 seconds=1.224
+installed: pkg_a 
+pkg_a package.xml in install: regular file
+logger_all.log lines with 'unknown package': 0
+
+### CASE base_paths_wrong
+cwd=/ws
+cmd=colcon build --base-paths /ws2 --packages-select pkg_a
+[0.286s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_a' in --packages-select
+
+Summary: 0 packages finished [0.21s]
+exit=0 seconds=0.45
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE base_paths_fix
+cwd=/ws
+cmd=colcon build --base-paths src /ws2/src --packages-select other_ws_pkg
+Starting >>> other_ws_pkg
+Finished <<< other_ws_pkg [0.82s]
+
+Summary: 1 package finished [1.04s]
+exit=0 seconds=1.312
+installed: other_ws_pkg 
+logger_all.log lines with 'unknown package': 0
+
+### CASE one_good_one_bad
+cwd=/ws
+cmd=colcon build --packages-select pkg_a pkg_aa
+[0.305s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select
+Starting >>> pkg_a
+Finished <<< pkg_a [0.94s]
+
+Summary: 1 package finished [1.16s]
+exit=0 seconds=1.485
+installed: pkg_a 
+pkg_a package.xml in install: regular file
+logger_all.log lines with 'unknown package': 1
+
+### CASE comma_list
+cwd=/ws
+cmd=colcon build --packages-select pkg_a,my_py_pkg
+[0.384s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_a,my_py_pkg' in --packages-select
+
+Summary: 0 packages finished [0.25s]
+exit=0 seconds=0.583
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE flag_typo_dash1
+cwd=/ws
+cmd=colcon build --packages-select pkg_a -symlink-install
+usage: colcon build [-h] [--build-base BUILD_BASE]
+                    [--install-base INSTALL_BASE] [--merge-install]
+                    [--symlink-install] [--test-result-base TEST_RESULT_BASE]
+                    [--continue-on-error] [--executor {parallel,sequential}]
+                    [--parallel-workers NUMBER]
+                    [--event-handlers [name1+ [name2- ...]]]
+                    [--ignore-user-meta] [--metas [PATH ...]]
+                    [--base-paths [PATH ...]]
+                    [--packages-ignore [PKG_NAME ...]]
+                    [--packages-ignore-regex [PATTERN ...]]
+                    [--paths [PATH ...]] [--packages-up-to [PKG_NAME ...]]
+                    [--packages-up-to-regex [PATTERN ...]]
+                    [--packages-above [PKG_NAME ...]]
+                    [--packages-above-and-dependencies [PKG_NAME ...]]
+                    [--packages-above-depth DEPTH [PKG_NAME ...]]
+                    [--packages-select-by-dep [PKG_NAME ...]]
+                    [--packages-skip-by-dep [PKG_NAME ...]]
+                    [--packages-skip-up-to [PKG_NAME ...]]
+                    [--packages-select-build-failed | --packages-skip-build-finished | --packages-select-test-failures | --packages-skip-test-passed]
+                    [--packages-select [PKG_NAME ...]]
+                    [--packages-skip [PKG_NAME ...]]
+                    [--packages-select-regex [PATTERN ...]]
+                    [--packages-skip-regex [PATTERN ...]]
+                    [--packages-start PKG_NAME] [--packages-end PKG_NAME]
+                    [--cmake-args [* ...]] [--cmake-target CMAKE_TARGET]
+                    [--cmake-target-skip-unavailable] [--cmake-clean-cache]
+                    [--cmake-clean-first] [--cmake-force-configure]
+                    [--ament-cmake-args [* ...]] [--catkin-cmake-args [* ...]]
+                    [--catkin-skip-building-tests] [--mixin-files [FILE ...]]
+                    [--mixin [mixin1 [mixin2 ...]]]
+colcon build: error: argument --packages-select: unrecognized argument: -symlink-install
+exit=2 seconds=0.229
+installed: (no install dir)
+
+### CASE flag_typo_dash2
+cwd=/ws
+cmd=colcon build --packages-select pkg_a --symlink-instal
+Starting >>> pkg_a
+Finished <<< pkg_a [0.91s]
+
+Summary: 1 package finished [1.13s]
+exit=0 seconds=1.376
+installed: pkg_a 
+pkg_a package.xml in install: symlink
+logger_all.log lines with 'unknown package': 0
+
+### CASE flag_full
+cwd=/ws
+cmd=colcon build --packages-select pkg_a --symlink-install
+Starting >>> pkg_a
+Finished <<< pkg_a [0.91s]
+
+Summary: 1 package finished [1.13s]
+exit=0 seconds=1.37
+installed: pkg_a 
+pkg_a package.xml in install: symlink
+logger_all.log lines with 'unknown package': 0
+
+### CASE select_no_names
+cwd=/ws
+cmd=colcon build --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.46
+installed: 
+logger_all.log lines with 'unknown package': 0
+
+### CASE stderr_only
+cwd=/ws
+cmd=bash -c colcon build --packages-select pkg_aa 2>&1 >/dev/null
+[0.295s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select
+exit=0 seconds=0.463
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE stdout_only
+cwd=/ws
+cmd=bash -c colcon build --packages-select pkg_aa 2>/dev/null
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.462
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE grep_guard
+cwd=/ws
+cmd=bash -c colcon build --packages-select pkg_aa 2>&1 | tee /tmp/b.log; ! grep -q "ignoring unknown package" /tmp/b.log
+[0.295s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select
+
+Summary: 0 packages finished [0.22s]
+exit=1 seconds=0.462
+installed: 
+logger_all.log lines with 'unknown package': 1
+
+### CASE ignore_typo
+cwd=/ws
+cmd=colcon build --packages-ignore pkg_aa --packages-select pkg_a
+[0.321s] WARNING:colcon.colcon_core.package_discovery:ignoring unknown package 'pkg_aa' in --packages-ignore
+Starting >>> pkg_a
+Finished <<< pkg_a [0.77s]
+
+Summary: 1 package finished [0.99s]
+exit=0 seconds=1.233
+installed: pkg_a 
+pkg_a package.xml in install: regular file
+logger_all.log lines with 'unknown package': 1
+
+### CASE up_to_typo
+cwd=/ws
+cmd=colcon build --packages-up-to pkg_aa
+Package 'pkg_aa' specified with --packages-up-to was not found
+exit=1 seconds=0.411
+installed: 
+logger_all.log lines with 'unknown package': 0
+
+### CASE skip_typo
+cwd=/ws
+cmd=colcon build --packages-skip pkg_aa
+[0.295s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-skip
+Starting >>> bad_xml
+Starting >>> my_py_pkg
+--- stderr: bad_xml
+Error parsing '/ws/src/bad_xml/package.xml':
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/catkin_pkg/package.py", line 610, in parse_package_string
+    root = dom.parseString(data)
+  File "/usr/lib/python3.10/xml/dom/minidom.py", line 1995, in parseString
+    return expatbuilder.parseString(string)
+  File "/usr/lib/python3.10/xml/dom/expatbuilder.py", line 925, in parseString
+    return builder.parseString(string)
+  File "/usr/lib/python3.10/xml/dom/expatbuilder.py", line 223, in parseString
+    parser.Parse(string, True)
+xml.parsers.expat.ExpatError: mismatched tag: line 2, column 35
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 150, in <module>
+    main()
+  File "/opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 53, in main
+    raise e
+  File "/opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py", line 49, in main
+    package = parse_package_string(
+  File "/usr/lib/python3/dist-packages/catkin_pkg/package.py", line 612, in parse_package_string
+    raise InvalidPackage('The manifest contains invalid XML:\n%s' % ex, filename)
+catkin_pkg.package.InvalidPackage: Error(s) in package '/ws/src/bad_xml/package.xml':
+The manifest contains invalid XML:
+mismatched tag: line 2, column 35
+CMake Error at /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:95 (message):
+  execute_process(/usr/bin/python3
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/package_xml_2_cmake.py
+  /ws/src/bad_xml/package.xml
+  /ws/build/bad_xml/ament_cmake_core/package.cmake) returned error code 1
+Call Stack (most recent call first):
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:49 (_ament_package_xml)
+  /opt/ros/humble/share/ament_cmake_core/cmake/core/ament_package.cmake:63 (ament_package_xml)
+  CMakeLists.txt:4 (ament_package)
+
+
+---
+Failed   <<< bad_xml [1.48s, exited with code 1]
+Aborted  <<< my_py_pkg [1.64s]
+
+Summary: 0 packages finished [1.89s]
+  1 package failed: bad_xml
+  1 package aborted: my_py_pkg
+  1 package had stderr output: bad_xml
+  6 packages not processed
+exit=1 seconds=2.131
+installed: my_py_pkg 
+logger_all.log lines with 'unknown package': 1
+
+### CASE select_regex
+cwd=/ws
+cmd=colcon build --packages-select-regex pkg_aa
+[0.294s] WARNING:colcon.colcon_core.package_selection:the --packages-select-regex 'pkg_aa' doesn't match any of the package names
+
+Summary: 0 packages finished [0.22s]
+exit=0 seconds=0.457
+installed: 
+logger_all.log lines with 'unknown package': 0
+
+### CASE test_typo
+cwd=/ws
+cmd=colcon test --packages-select pkg_aa
+[0.386s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select
+
+Summary: 0 packages finished [0.29s]
+exit=0 seconds=0.523
+installed: 
+
+### CASE list_typo
+cwd=/ws
+cmd=colcon list --packages-select pkg_aa
+[0.284s] WARNING:colcon.colcon_core.package_selection:ignoring unknown package 'pkg_aa' in --packages-select
+exit=0 seconds=0.425
+installed: (no install dir)
+
+### CASE select_names_only
+cwd=/ws
+cmd=colcon list --names-only
+bad_xml
+my_py_pkg
+outer
+pkg_a
+pkg_link
+plain_proj
+py_nosetup
+real_name
+exit=0 seconds=0.432
+installed: (no install dir)
+
+### grep names in package.xml
+<name>inner_pkg</name>
+<name>my_py_pkg</name>
+<name>outer</name>
+<name>pkg_a</name>
+<name>pkg_hid</name>
+<name>pkg_ign</name>
+<name>py_nosetup</name>
+<name>real_name</name>
