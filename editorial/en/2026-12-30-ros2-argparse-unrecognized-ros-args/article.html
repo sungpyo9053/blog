@@ -1,0 +1,211 @@
+<pre><code>usage: argnode.py [-h] [--speed SPEED]
+argnode.py: error: unrecognized arguments: --ros-args -r __node:=renamed --params-file /tmp/launch_params_vtai2416
+[ERROR] [argnode.py-1]: process has died [pid 221, exit code 2, cmd '/ws/install/argp/lib/argp/argnode.py --speed 2.0 --ros-args -r __node:=renamed --params-file /tmp/launch_params_vtai2416'].</code></pre>
+
+<p>From <code>ros2 run</code> the same error ends with <code>[ros2run]: Process exited with failure 2</code>.</p>
+
+<p><strong>Short answer:</strong> your Python node hands all of <code>sys.argv</code> to <code>argparse</code>, and <code>sys.argv</code> also holds the ROS arguments. <code>ros2 launch</code> adds <code>--ros-args</code> to every <code>Node</code> it starts, even one with no name, remaps or parameters. <code>ros2 run</code> passes on whatever you type after the executable. <code>argparse</code> doesn't know these flags, so it prints the usage line and exits with code 2 before your node exists. Strip the ROS block before parsing, and give the full list to <code>rclpy.init</code>:</p>
+
+<pre><code>import sys
+import argparse
+import rclpy
+from rclpy.utilities import remove_ros_args
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--speed', type=float, default=1.0)
+args = parser.parse_args(remove_ros_args(args=sys.argv)[1:])   # your flags only
+
+rclpy.init(args=sys.argv)    # the full list, so -p, -r and --params-file still apply</code></pre>
+
+<p>With this change the same launch file printed <code>RESULT mode=remove speed=2.0 node=/renamed rate=5</code> on Humble, Jazzy and Lyrical. The user flag, the node rename and the parameter all arrived. In C++, <code>rclcpp::init_and_remove_ros_arguments(argc, argv)</code> does the same job and returns only your arguments.</p>
+
+<h2>Find your error text</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>error: unrecognized arguments: --ros-args</code> (nothing after it), from <code>ros2 launch</code></td><td>launch adds a bare <code>--ros-args</code> to every Node, even without name or parameters</td><td><code>remove_ros_args</code> before <code>parse_args</code></td></tr>
+<tr><td><code>error: unrecognized arguments: --ros-args -r __node:=... --params-file /tmp/launch_params_...</code></td><td><code>name=</code> and <code>parameters=</code> in the launch Node</td><td>same</td></tr>
+<tr><td><code>error: unrecognized arguments: --ros-args -p rate:=5</code> from <code>ros2 run</code></td><td>you typed ROS arguments after the executable</td><td>same</td></tr>
+<tr><td><code>rclpy._rclpy_pybind11.UnknownROSArgsError: ['--speed', '2.0']</code></td><td>your own flag sits inside the <code>--ros-args</code> block</td><td>put your flags first, or close the block with <code>--</code></td></tr>
+<tr><td><code>rclcpp::exceptions::UnknownROSArgsError</code>, <code>found unknown ROS arguments: '--speed', '2.0'</code>, then <code>Aborted</code></td><td>same, in rclcpp</td><td>same</td></tr>
+<tr><td>No error, but your flag keeps its default</td><td><code>parse_known_args</code> swallowed a typo</td><td>switch to <code>remove_ros_args</code></td></tr>
+<tr><td>No error, but <code>-p</code> or <code>-r</code> did nothing</td><td>you passed the cleaned list to <code>rclpy.init</code></td><td>pass the full <code>sys.argv</code> to <code>rclpy.init</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>One <code>ament_cmake</code> package, <code>argp</code>, built with colcon inside the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images. It installs two nodes.</p>
+
+<ul>
+<li><code>argnode.py</code>, an rclpy node with one argparse flag, <code>--speed</code> (float, default 1.0), and one ROS parameter, <code>rate</code> (default 1). It prints <code>sys.argv[1:]</code>, parses it in one of three modes chosen by an environment variable, and then prints the speed, its own full name and <code>rate</code>. The modes are <code>strict</code> (<code>parse_args()</code>), <code>known</code> (<code>parse_known_args()</code>) and <code>remove</code> (<code>parse_args(remove_ros_args(args=sys.argv)[1:])</code>). An optional second flag, <code>-r/--repeat</code>, tests a user flag that shares a letter with a ROS flag.</li>
+<li><code>cppnode</code>, an rclcpp node that calls either <code>rclcpp::init</code> or <code>rclcpp::init_and_remove_ros_arguments</code> and prints the arguments it is left with.</li>
+</ul>
+
+<p>Four launch files start these nodes. <code>plain.launch.py</code> sets only <code>arguments=['--speed', '2.0']</code>. <code>named.launch.py</code> adds <code>name='renamed'</code> and <code>parameters=[{'rate': 5}]</code>. <code>rosargs.launch.py</code> uses <code>ros_arguments=['-p', 'rate:=7']</code>. <code>cpp.launch.py</code> starts the C++ node with a name and a parameter. Each case ran once per distro under <code>timeout 40</code>. I recorded the exit code and the wall time, which includes the startup of <code>ros2 run</code> or <code>ros2 launch</code>. The default RMW was used. The script is <code>repro.sh</code> in the evidence folder.</p>
+
+<p>All three distros gave the same results. Only the version strings, PIDs, temp file names and timings changed, plus the line numbers in one Python traceback.</p>
+
+<h2>What ros2 run and ros2 launch put in sys.argv</h2>
+
+<p>With no ROS arguments, plain <code>parse_args()</code> works. <code>ros2 run argp argnode.py --speed 2.0</code> printed <code>ARGV ['--speed', '2.0']</code> and exited 0. <code>ros2 run</code> adds nothing of its own.</p>
+
+<p>Add any ROS argument and it fails. All three of these exited with code 2:</p>
+
+<table>
+<thead><tr><th>Command (strict parser)</th><th>argparse said</th></tr></thead>
+<tbody>
+<tr><td><code>--speed 2.0 --ros-args -p rate:=5</code></td><td><code>unrecognized arguments: --ros-args -p rate:=5</code></td></tr>
+<tr><td><code>--ros-args -r __node:=renamed</code></td><td><code>unrecognized arguments: --ros-args -r __node:=renamed</code></td></tr>
+<tr><td><code>--speed 2.0 --ros-args --log-level warn</code></td><td><code>unrecognized arguments: --ros-args --log-level warn</code></td></tr>
+</tbody>
+</table>
+
+<p><code>ros2 launch</code> always adds something. Even <code>plain.launch.py</code>, with no name, remaps or parameters, started the node as <code>argnode.py --speed 2.0 --ros-args</code>. A bare <code>--ros-args</code> was enough to kill it:</p>
+
+<pre><code>[argnode.py-1] ARGV ['--speed', '2.0', '--ros-args']
+[argnode.py-1] usage: argnode.py [-h] [--speed SPEED]
+[argnode.py-1] argnode.py: error: unrecognized arguments: --ros-args
+[ERROR] [argnode.py-1]: process has died [pid 214, exit code 2, cmd '/ws/install/argp/lib/argp/argnode.py --speed 2.0 --ros-args'].</code></pre>
+
+<p>Your own <code>arguments</code> always came first, and launch put its ROS block at the end. <code>name=</code> became <code>-r __node:=renamed</code>. <code>parameters=</code> became <code>--params-file</code> with a temp file under <code>/tmp/launch_params_*</code>. <code>ros_arguments=['-p', 'rate:=7']</code> produced two blocks, <code>--ros-args -p rate:=7 --ros-args</code>. That happened on Humble too, so <code>ros_arguments</code> exists there (launch_ros 0.19.14).</p>
+
+<p>One more thing to know when you debug this in CI. In every launch case where the node died with code 2, <code>ros2 launch</code> itself exited 0. The only sign was the <code>process has died</code> line. If a script checks only the exit code of <code>ros2 launch</code>, it will pass.</p>
+
+<h2>Fix 1: remove_ros_args (the one that worked everywhere)</h2>
+
+<p><code>rclpy.utilities.remove_ros_args(args=sys.argv)</code> returns the list without the ROS block. The first item is still the program name, so slice it off with <code>[1:]</code> before you hand it to <code>parse_args</code>.</p>
+
+<table>
+<thead><tr><th>Case</th><th>Left for argparse</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 run ... --speed 2.0 --ros-args -p rate:=5</code></td><td><code>['--speed', '2.0']</code></td><td><code>speed=2.0 node=/argnode rate=5</code>, exit 0</td></tr>
+<tr><td><code>named.launch.py</code></td><td><code>['--speed', '2.0']</code></td><td><code>speed=2.0 node=/renamed rate=5</code>, finished cleanly</td></tr>
+<tr><td>Typo: <code>--sped 2.0 --ros-args -p rate:=5</code></td><td><code>['--sped', '2.0']</code></td><td><code>unrecognized arguments: --sped 2.0</code>, exit 2</td></tr>
+<tr><td>User flag <code>-r</code>, then <code>--ros-args -r __node:=renamed</code></td><td><code>['--speed', '2.0']</code></td><td><code>node=/renamed repeat=none</code>, exit 0</td></tr>
+<tr><td>Two blocks: <code>--ros-args -r __node:=a --ros-args -p rate:=6</code></td><td><code>['--speed', '2.0']</code></td><td><code>node=/a rate=6</code>, exit 0</td></tr>
+</tbody>
+</table>
+
+<p>The typo row matters. With <code>remove_ros_args</code>, argparse still rejects a flag it doesn't know. You keep strict checking for your own arguments and lose it only for the ROS block.</p>
+
+<h3>Pass the full list to rclpy.init</h3>
+
+<p>The cleaned list is for argparse only. I called <code>rclpy.init</code> twice in one script with <code>['prog', '--speed', '2.0', '--ros-args', '-p', 'rate:=5']</code>. Once I passed the cleaned list, once the full one:</p>
+
+<pre><code>init(cleaned) rate = 1
+init(full) rate = 5</code></pre>
+
+<p>Passing the cleaned list raised no error. The parameter just never arrived. The same would happen to remaps, <code>--params-file</code> and <code>__node:=</code>. Call <code>rclpy.init(args=sys.argv)</code>, or <code>rclpy.init()</code>, which reads <code>sys.argv</code> itself.</p>
+
+<h2>Fix 2: parse_known_args (works, with two traps)</h2>
+
+<p><code>parse_known_args()</code> returns your parsed flags plus a list of everything it didn't recognize. It fixed the crash. The leftover list in the launch case was <code>['--ros-args', '-r', '__node:=renamed', '--params-file', '/tmp/launch_params_c8c07ijb']</code>, and the node came up as <code>/renamed</code> with <code>rate=5</code>.</p>
+
+<p>Trap one: typos pass silently. <code>--sped 2.0 --ros-args -p rate:=5</code> exited 0 with <code>speed=1.0</code>. The typo landed in the leftover list next to the ROS block, and the default stayed.</p>
+
+<p>Trap two: a user flag that shares a name with a ROS flag takes the ROS value. I added <code>-r/--repeat</code> to the parser and ran <code>--speed 2.0 --ros-args -r __node:=renamed</code>. argparse treated <code>-r</code> as <code>--repeat</code>:</p>
+
+<pre><code>EXTRA ['--ros-args']
+RESULT mode=known speed=2.0 node=/renamed rate=1 repeat=__node:=renamed</code></pre>
+
+<p>The node was still renamed, because rclpy read the full <code>sys.argv</code>. But your program got <code>repeat=__node:=renamed</code>. <code>remove_ros_args</code> removes the block before argparse sees it, so the same command gave <code>repeat=none</code>. ROS uses <code>-r</code> and <code>-p</code> inside the block. Avoid those short flags in your own parser, or use <code>remove_ros_args</code>.</p>
+
+<h2>Order on the command line: your flags first, or close the block with --</h2>
+
+<p>Everything after <code>--ros-args</code> belongs to ROS until a <code>--</code> or another <code>--ros-args</code>. If you put your own flag inside the block, the ROS parser rejects it:</p>
+
+<table>
+<thead><tr><th>Command</th><th>Mode</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>--ros-args -p rate:=5 -- --speed 2.0</code></td><td>remove</td><td><code>speed=2.0 rate=5</code>, exit 0</td></tr>
+<tr><td><code>--ros-args -p rate:=5 --speed 2.0</code></td><td>remove</td><td><code>rclpy._rclpy_pybind11.UnknownROSArgsError: ['--speed', '2.0']</code>, exit 1</td></tr>
+<tr><td><code>--ros-args -p rate:=5 --speed 2.0</code></td><td>strict</td><td><code>unrecognized arguments: --ros-args -p rate:=5</code>, exit 2</td></tr>
+<tr><td><code>--ros-args -p rate:=5 --speed 2.0</code></td><td>rclcpp, <code>init_and_remove_ros_arguments</code></td><td><code>found unknown ROS arguments: '--speed', '2.0'</code>, <code>Aborted</code></td></tr>
+</tbody>
+</table>
+
+<p>In the strict row, argparse listed only the ROS block as unknown. It had parsed <code>--speed 2.0</code> without trouble. So the message shows what argparse rejected, not where the real ordering mistake is. In the remove row, <code>remove_ros_args</code> raised the error itself, before argparse ran. The rclcpp case ended in <code>terminate called after throwing an instance of 'rclcpp::exceptions::UnknownROSArgsError'</code>, and <code>ros2 run</code> printed <code>[ros2run]: Aborted</code>. My wrapper recorded exit status 250 for it on all three distros.</p>
+
+<p>Launch files don't have this problem. Launch always put <code>arguments</code> before its own <code>--ros-args</code>. The ordering trap only appears when you type the command yourself. The same scoping rule, applied to <code>--params-file</code> and <code>-p</code> placed before <code>--ros-args</code>, is covered in <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">the params YAML and -p errors post</a>.</p>
+
+<h2>rclcpp: argv still holds the ROS block</h2>
+
+<p>C++ nodes don't crash on their own, because nothing parses <code>argv</code> unless you write code that does. But <code>rclcpp::init(argc, argv)</code> leaves <code>argv</code> unchanged. After <code>ros2 run argp cppnode --speed 2.0 --ros-args -p rate:=5</code>, the node saw five arguments:</p>
+
+<pre><code>ARGS_SEEN 5: [--speed] [2.0] [--ros-args] [-p] [rate:=5]
+RESULT cpp node=/cppnode rate=5</code></pre>
+
+<p>Any hand-written loop over <code>argv</code>, or a library such as getopt, gets the ROS block too. <code>rclcpp::init_and_remove_ros_arguments(argc, argv)</code> returned a <code>std::vector&lt;std::string&gt;</code> with the program name plus <code>[--speed] [2.0]</code>, and it still applied the parameter (<code>rate=5</code>). Under <code>cpp.launch.py</code> it gave <code>node=/cpp_renamed rate=5</code> and finished cleanly.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Launch crash fixed</th><th>Typos still rejected</th><th><code>-r</code> user flag safe</th><th>ROS args applied</th></tr></thead>
+<tbody>
+<tr><td><code>parse_args()</code> on <code>sys.argv</code></td><td>No (exit 2)</td><td>Yes</td><td>n/a</td><td>n/a, node never starts</td></tr>
+<tr><td><code>parse_known_args()</code></td><td>Yes</td><td>No (<code>--sped</code> ignored)</td><td>No (<code>repeat=__node:=renamed</code>)</td><td>Yes, with full <code>sys.argv</code> to <code>rclpy.init</code></td></tr>
+<tr><td><code>parse_args(remove_ros_args(args=sys.argv)[1:])</code></td><td>Yes</td><td>Yes</td><td>Yes (<code>repeat=none</code>)</td><td>Yes, with full <code>sys.argv</code> to <code>rclpy.init</code></td></tr>
+<tr><td>Cleaned list passed to <code>rclpy.init</code></td><td>Yes</td><td>depends on the parser</td><td>depends on the parser</td><td>No (<code>rate = 1</code> instead of 5)</td></tr>
+<tr><td>C++ <code>rclcpp::init_and_remove_ros_arguments</code></td><td>Yes</td><td>up to your parser</td><td>Yes</td><td>Yes</td></tr>
+</tbody>
+</table>
+
+<p>Another fix is to drop the command-line flag and declare a ROS parameter instead. Then <code>-p speed:=2.0</code> and <code>parameters=[{'speed': 2.0}]</code> work with no argument handling at all. I didn't measure this as a separate case, but the <code>rate</code> parameter took that path in every run above.</p>
+
+<h3>Timing</h3>
+
+<p>The failure is immediate. In single runs, a strict <code>ros2 run</code> that hit the argparse error took 337 to 344 ms on Humble, 430 to 436 ms on Jazzy and 581 to 646 ms on Lyrical. That includes starting <code>ros2 run</code>. The successful <code>remove_ros_args</code> run of the same command took 487, 587 and 718 ms. These are one run each on a shared 2 vCPU machine, so treat them as rough.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (rclpy 3.3.22, rclcpp 16.0.21, launch_ros 0.19.14, Python 3.10.12), Jazzy (rclpy 7.1.12, rclcpp 28.1.22, launch_ros 0.26.13, Python 3.12.3) and Lyrical (rclpy 10.0.11, rclcpp 32.0.3, launch_ros 0.29.9, Python 3.14.4) behaved the same in every case.</li>
+<li><code>remove_ros_args(args=...)</code> and <code>init_and_remove_ros_arguments</code> exist and work the same on all three.</li>
+<li><code>ros_arguments=</code> in a launch <code>Node</code> worked on Humble as well as Jazzy and Lyrical. On all three it produced a second <code>--ros-args</code> at the end.</li>
+<li>The argparse message text was identical across Python 3.10, 3.12 and 3.14. Only the traceback layout for <code>UnknownROSArgsError</code> differed: Lyrical's Python 3.14 printed an extra source line.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>ament_python packages with <code>console_scripts</code> entry points. I installed the script with <code>install(PROGRAMS)</code> from ament_cmake. The argument list should not depend on the build type, but I didn't run it.</li>
+<li>Other argument libraries such as click, typer and absl.</li>
+<li>Composable nodes in a component container.</li>
+<li>XML and YAML launch files.</li>
+<li><code>ExecuteProcess</code> instead of <code>Node</code>.</li>
+<li>Other RMW implementations. Only the default was used.</li>
+<li>Windows and macOS.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 launch pass --ros-args when my Node has no parameters?</h3>
+<p>launch_ros adds it to every Node. With only <code>arguments=['--speed', '2.0']</code>, the command was <code>argnode.py --speed 2.0 --ros-args</code> on Humble, Jazzy and Lyrical. A bare <code>--ros-args</code> was enough to make strict argparse exit with code 2.</p>
+
+<h3>Should I use parse_known_args or remove_ros_args?</h3>
+<p><code>remove_ros_args</code>. Both stopped the crash. But <code>parse_known_args</code> silently ignored the typo <code>--sped</code>, and it gave a user <code>-r</code> flag the value <code>__node:=renamed</code>. <code>remove_ros_args</code> still rejected the typo and kept <code>-r</code> safe.</p>
+
+<h3>Why are my -p parameters ignored after the fix?</h3>
+<p>You probably passed the cleaned list to <code>rclpy.init</code>. With the cleaned list, <code>rate</code> stayed at 1. With the full list, it was 5. Give argparse the cleaned list and <code>rclpy.init</code> the full <code>sys.argv</code>.</p>
+
+<h3>What does UnknownROSArgsError with my own flag in it mean?</h3>
+<p>Your flag is inside the <code>--ros-args</code> block. <code>--ros-args -p rate:=5 --speed 2.0</code> failed in rclpy and rclcpp. <code>--speed 2.0 --ros-args -p rate:=5</code> and <code>--ros-args -p rate:=5 -- --speed 2.0</code> both worked.</p>
+
+<h3>Why does ros2 launch exit 0 when my node died?</h3>
+<p>In these runs launch reported <code>process has died [pid ..., exit code 2, ...]</code>, and ros2 launch still returned 0. Check for the <code>process has died</code> line, not only for the exit code.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 launch pass --ros-args when my Node has no parameters?", "acceptedAnswer": {"@type": "Answer", "text": "launch_ros adds it to every Node. With only arguments set to --speed 2.0, the command was argnode.py --speed 2.0 --ros-args on Humble, Jazzy and Lyrical. A bare --ros-args was enough to make strict argparse exit with code 2."}},
+{"@type": "Question", "name": "Should I use parse_known_args or remove_ros_args?", "acceptedAnswer": {"@type": "Answer", "text": "remove_ros_args. Both stopped the crash. But parse_known_args silently ignored the typo --sped, and it gave a user -r flag the value __node:=renamed. remove_ros_args still rejected the typo and kept -r safe."}},
+{"@type": "Question", "name": "Why are my -p parameters ignored after the fix?", "acceptedAnswer": {"@type": "Answer", "text": "You probably passed the cleaned list to rclpy.init. With the cleaned list, rate stayed at 1. With the full list, it was 5. Give argparse the cleaned list and rclpy.init the full sys.argv."}},
+{"@type": "Question", "name": "What does UnknownROSArgsError with my own flag in it mean?", "acceptedAnswer": {"@type": "Answer", "text": "Your flag is inside the --ros-args block. --ros-args -p rate:=5 --speed 2.0 failed in rclpy and rclcpp. --speed 2.0 --ros-args -p rate:=5 and --ros-args -p rate:=5 -- --speed 2.0 both worked."}},
+{"@type": "Question", "name": "Why does ros2 launch exit 0 when my node died?", "acceptedAnswer": {"@type": "Answer", "text": "In these runs launch reported process has died with exit code 2, and ros2 launch still returned 0. Check for the process has died line, not only for the exit code."}}
+]}
+</script>
+
+<p>Measured on 2026-11-06 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, launch_ros 0.19.14, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, launch_ros 0.26.13, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, launch_ros 0.29.9, Python 3.14.4), default RMW. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-30-ros2-argparse-unrecognized-ros-args/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103032">--ros-args argument is always present in launched Node</a>, <a href="https://github.com/ichiro-its/kumo/issues/40">ros2 launch passes extra --ros-args flag</a>, <a href="https://github.com/klintan/ros2_video_streamer/issues/10">ROS arguments passed via the CLI crash the node</a>, <a href="https://github.com/rsasaki0109/lidar_localization_ros2/pull/185">Let the quickstart bringup check run as a launched node</a>, <a href="https://github.com/cyberbotics/webots_ros2/issues/65">webots_launcher: error: unrecognized arguments: --ros-args</a>.</p>

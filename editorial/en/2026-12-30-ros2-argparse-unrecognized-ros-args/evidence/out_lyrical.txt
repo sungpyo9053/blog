@@ -1,0 +1,220 @@
+=== distro=lyrical
+ros-lyrical-launch 3.9.8-1resolute.20260728.172811
+ros-lyrical-launch-ros 0.29.9-1resolute.20260915.064616
+ros-lyrical-rcl 10.4.5-1resolute.20260915.060844
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+Python 3.14.4
+RMW_IMPLEMENTATION=default
+build ok
+
+===== A. ros2 run, strict argparse (parse_args)
+
+### A1
+$ MODE=strict ros2 run argp argnode.py --speed 2.0
+ARGV ['--speed', '2.0']
+RESULT mode=strict speed=2.0 node=/argnode rate=1
+EXIT=0 ELAPSED_MS=974
+
+### A2
+$ MODE=strict ros2 run argp argnode.py --speed 2.0 --ros-args -p rate:=5
+ARGV ['--speed', '2.0', '--ros-args', '-p', 'rate:=5']
+usage: argnode.py [-h] [--speed SPEED]
+argnode.py: error: unrecognized arguments: --ros-args -p rate:=5
+[ros2run]: Process exited with failure 2
+EXIT=2 ELAPSED_MS=581
+
+### A3
+$ MODE=strict ros2 run argp argnode.py --ros-args -r __node:=renamed
+ARGV ['--ros-args', '-r', '__node:=renamed']
+usage: argnode.py [-h] [--speed SPEED]
+argnode.py: error: unrecognized arguments: --ros-args -r __node:=renamed
+[ros2run]: Process exited with failure 2
+EXIT=2 ELAPSED_MS=646
+
+### A4
+$ MODE=strict ros2 run argp argnode.py --speed 2.0 --ros-args --log-level warn
+ARGV ['--speed', '2.0', '--ros-args', '--log-level', 'warn']
+usage: argnode.py [-h] [--speed SPEED]
+argnode.py: error: unrecognized arguments: --ros-args --log-level warn
+[ros2run]: Process exited with failure 2
+EXIT=2 ELAPSED_MS=593
+
+===== B. ros2 launch, strict argparse
+
+### B1
+$ MODE=strict ros2 launch argp plain.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [argnode.py-1]: process started with pid [194]
+[argnode.py-1] ARGV ['--speed', '2.0', '--ros-args']
+[argnode.py-1] usage: argnode.py [-h] [--speed SPEED]
+[argnode.py-1] argnode.py: error: unrecognized arguments: --ros-args
+[ERROR] [argnode.py-1]: process has died [pid 194, exit code 2, cmd '/ws/install/argp/lib/argp/argnode.py --speed 2.0 --ros-args'].
+EXIT=0 ELAPSED_MS=1722
+
+### B2
+$ MODE=strict ros2 launch argp named.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [argnode.py-1]: process started with pid [204]
+[argnode.py-1] ARGV ['--speed', '2.0', '--ros-args', '-r', '__node:=renamed', '--params-file', '/tmp/launch_params_3u47j2eq']
+[argnode.py-1] usage: argnode.py [-h] [--speed SPEED]
+[argnode.py-1] argnode.py: error: unrecognized arguments: --ros-args -r __node:=renamed --params-file /tmp/launch_params_3u47j2eq
+[ERROR] [argnode.py-1]: process has died [pid 204, exit code 2, cmd '/ws/install/argp/lib/argp/argnode.py --speed 2.0 --ros-args -r __node:=renamed --params-file /tmp/launch_params_3u47j2eq'].
+EXIT=0 ELAPSED_MS=755
+
+### B3
+$ MODE=strict ros2 launch argp rosargs.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [argnode.py-1]: process started with pid [214]
+[argnode.py-1] ARGV ['--speed', '2.0', '--ros-args', '-p', 'rate:=7', '--ros-args']
+[argnode.py-1] usage: argnode.py [-h] [--speed SPEED]
+[argnode.py-1] argnode.py: error: unrecognized arguments: --ros-args -p rate:=7 --ros-args
+[ERROR] [argnode.py-1]: process has died [pid 214, exit code 2, cmd '/ws/install/argp/lib/argp/argnode.py --speed 2.0 --ros-args -p rate:=7 --ros-args'].
+EXIT=0 ELAPSED_MS=740
+
+===== C. parse_known_args
+
+### C1
+$ MODE=known ros2 run argp argnode.py --speed 2.0 --ros-args -p rate:=5
+ARGV ['--speed', '2.0', '--ros-args', '-p', 'rate:=5']
+EXTRA ['--ros-args', '-p', 'rate:=5']
+RESULT mode=known speed=2.0 node=/argnode rate=5
+EXIT=0 ELAPSED_MS=719
+
+### C2
+$ MODE=known ros2 launch argp named.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [argnode.py-1]: process started with pid [249]
+[argnode.py-1] ARGV ['--speed', '2.0', '--ros-args', '-r', '__node:=renamed', '--params-file', '/tmp/launch_params_sjq1p4tp']
+[argnode.py-1] EXTRA ['--ros-args', '-r', '__node:=renamed', '--params-file', '/tmp/launch_params_sjq1p4tp']
+[argnode.py-1] RESULT mode=known speed=2.0 node=/renamed rate=5
+[INFO] [argnode.py-1]: process has finished cleanly [pid 249]
+EXIT=0 ELAPSED_MS=891
+
+### C3
+$ MODE=known ros2 run argp argnode.py --sped 2.0 --ros-args -p rate:=5
+ARGV ['--sped', '2.0', '--ros-args', '-p', 'rate:=5']
+EXTRA ['--sped', '2.0', '--ros-args', '-p', 'rate:=5']
+RESULT mode=known speed=1.0 node=/argnode rate=5
+EXIT=0 ELAPSED_MS=735
+
+### C4
+$ MODE=known RFLAG=1 ros2 run argp argnode.py --speed 2.0 --ros-args -r __node:=renamed
+ARGV ['--speed', '2.0', '--ros-args', '-r', '__node:=renamed']
+EXTRA ['--ros-args']
+RESULT mode=known speed=2.0 node=/renamed rate=1 repeat=__node:=renamed
+EXIT=0 ELAPSED_MS=726
+
+===== D. remove_ros_args
+
+### D1
+$ MODE=remove ros2 run argp argnode.py --speed 2.0 --ros-args -p rate:=5
+ARGV ['--speed', '2.0', '--ros-args', '-p', 'rate:=5']
+REMOVED ['--speed', '2.0']
+RESULT mode=remove speed=2.0 node=/argnode rate=5
+EXIT=0 ELAPSED_MS=718
+
+### D2
+$ MODE=remove ros2 launch argp named.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [argnode.py-1]: process started with pid [349]
+[argnode.py-1] ARGV ['--speed', '2.0', '--ros-args', '-r', '__node:=renamed', '--params-file', '/tmp/launch_params_o2rmbb96']
+[argnode.py-1] REMOVED ['--speed', '2.0']
+[argnode.py-1] RESULT mode=remove speed=2.0 node=/renamed rate=5
+[INFO] [argnode.py-1]: process has finished cleanly [pid 349]
+EXIT=0 ELAPSED_MS=878
+
+### D3
+$ MODE=remove ros2 run argp argnode.py --sped 2.0 --ros-args -p rate:=5
+ARGV ['--sped', '2.0', '--ros-args', '-p', 'rate:=5']
+REMOVED ['--sped', '2.0']
+usage: argnode.py [-h] [--speed SPEED]
+argnode.py: error: unrecognized arguments: --sped 2.0
+[ros2run]: Process exited with failure 2
+EXIT=2 ELAPSED_MS=593
+
+### D4
+$ MODE=remove RFLAG=1 ros2 run argp argnode.py --speed 2.0 --ros-args -r __node:=renamed
+ARGV ['--speed', '2.0', '--ros-args', '-r', '__node:=renamed']
+REMOVED ['--speed', '2.0']
+RESULT mode=remove speed=2.0 node=/renamed rate=1 repeat=none
+EXIT=0 ELAPSED_MS=729
+
+### D5
+$ MODE=remove ros2 run argp argnode.py --ros-args -p rate:=5 -- --speed 2.0
+ARGV ['--ros-args', '-p', 'rate:=5', '--', '--speed', '2.0']
+REMOVED ['--speed', '2.0']
+RESULT mode=remove speed=2.0 node=/argnode rate=5
+EXIT=0 ELAPSED_MS=728
+
+### D6
+$ MODE=remove ros2 run argp argnode.py --ros-args -p rate:=5 --speed 2.0
+ARGV ['--ros-args', '-p', 'rate:=5', '--speed', '2.0']
+Traceback (most recent call last):
+  File "/ws/install/argp/lib/argp/argnode.py", line 18, in <module>
+    rest = remove_ros_args(args=sys.argv)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/utilities.py", line 55, in remove_ros_args
+    return rclpy_implementation.rclpy_remove_ros_args(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        args if args is not None else sys.argv)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+rclpy._rclpy_pybind11.UnknownROSArgsError: ['--speed', '2.0']
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED_MS=595
+
+### D7
+$ MODE=strict ros2 run argp argnode.py --ros-args -p rate:=5 --speed 2.0
+ARGV ['--ros-args', '-p', 'rate:=5', '--speed', '2.0']
+usage: argnode.py [-h] [--speed SPEED]
+argnode.py: error: unrecognized arguments: --ros-args -p rate:=5
+[ros2run]: Process exited with failure 2
+EXIT=2 ELAPSED_MS=589
+
+### D8
+$ MODE=remove ros2 run argp argnode.py --speed 2.0 --ros-args -r __node:=a --ros-args -p rate:=6
+ARGV ['--speed', '2.0', '--ros-args', '-r', '__node:=a', '--ros-args', '-p', 'rate:=6']
+REMOVED ['--speed', '2.0']
+RESULT mode=remove speed=2.0 node=/a rate=6
+EXIT=0 ELAPSED_MS=723
+
+===== E. rclcpp
+
+### E1
+$ CPPMODE=plain ros2 run argp cppnode --speed 2.0 --ros-args -p rate:=5
+ARGS_SEEN 5: [--speed] [2.0] [--ros-args] [-p] [rate:=5]
+RESULT cpp node=/cppnode rate=5
+EXIT=0 ELAPSED_MS=458
+
+### E2
+$ CPPMODE=remove ros2 run argp cppnode --speed 2.0 --ros-args -p rate:=5
+ARGS_SEEN 2: [--speed] [2.0]
+RESULT cpp node=/cppnode rate=5
+EXIT=0 ELAPSED_MS=468
+
+### E3
+$ CPPMODE=remove ros2 launch argp cpp.launch.py
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [cppnode-1]: process started with pid [529]
+[cppnode-1] ARGS_SEEN 2: [--speed] [2.0]
+[cppnode-1] RESULT cpp node=/cpp_renamed rate=5
+[INFO] [cppnode-1]: process has finished cleanly [pid 529]
+EXIT=0 ELAPSED_MS=621
+
+### E4
+$ CPPMODE=remove ros2 run argp cppnode --ros-args -p rate:=5 --speed 2.0
+terminate called after throwing an instance of 'rclcpp::exceptions::UnknownROSArgsError'
+  what():  found unknown ROS arguments: '--speed', '2.0'
+[ros2run]: Aborted
+EXIT=250 ELAPSED_MS=490
+
+===== F. rclpy.init with sys.argv vs a cleaned list (strict parser, ROS args still applied?)
+
+### F1
+$  python3 /tmp/f.py
+init(cleaned) rate = 1
+init(full) rate = 5
+EXIT=0 ELAPSED_MS=425
+
+=== done
