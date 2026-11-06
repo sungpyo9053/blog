@@ -1,0 +1,221 @@
+<pre><code>$ ros2 control list_controllers
+usage: ros2 [-h] [--use-python-default-buffering]
+            Call `ros2 &lt;command&gt; -h` for more detailed usage. ...
+ros2: error: argument Call `ros2 &lt;command&gt; -h` for more detailed usage.: invalid choice: 'control' (choose from 'action', 'bag', 'component', 'daemon', 'doctor', 'extension_points', 'extensions', 'interface', 'launch', 'lifecycle', 'multicast', 'node', 'param', 'pkg', 'plugin', 'run', 'security', 'service', 'topic', 'wtf')</code></pre>
+
+<p>The related message is <code>Failed to load entry point 'record': ...</code>, which you see when a command is installed but its Python code can't be imported.</p>
+
+<p>Short answer: "invalid choice" means no installed Python package told <code>ros2</code> about that command, so the list in brackets is every command <code>ros2</code> knows. Compare your word against that list. If it's a typo, fix the spelling. If the command is missing, install the package that provides it, or source the workspace that contains it. For <code>ros2 control</code> that is:</p>
+
+<pre><code>sudo apt install ros-$ROS_DISTRO-ros2controlcli
+ros2 control -h      # worked in the same shell, no re-source needed</code></pre>
+
+<p>"Failed to load entry point 'x'" is a different problem. The command is registered, but importing its module failed. The text after the colon is the real error, for example <code>No module named ...</code> or a missing shared library. Fix that import and the command comes back.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every row below was measured on Humble, Jazzy and Lyrical in the official <code>ros:&lt;distro&gt;-ros-base</code> images. The exit codes were the same on all three.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>What was actually wrong</th><th>Exit code</th></tr></thead>
+<tbody>
+<tr><td><code>invalid choice: 'control'</code></td><td>The package for that command isn't installed (<code>ros2controlcli</code> isn't in ros-base)</td><td>2</td></tr>
+<tr><td><code>invalid choice: 'topics'</code> or <code>'Topic'</code></td><td>Typo or wrong case. Matching is exact</td><td>2</td></tr>
+<tr><td><code>ros2 topic: error: ... invalid choice: 'lst'</code></td><td>Typo in the subcommand, the second word</td><td>2</td></tr>
+<tr><td><code>invalid choice: 'hello'</code> for your own command</td><td>The workspace with the command was built but not sourced</td><td>2</td></tr>
+<tr><td><code>Failed to load entry point 'hello': No module named '...'</code>, then <code>KeyError: 'hello'</code></td><td>The command's module raises an ImportError</td><td>1</td></tr>
+<tr><td><code>Failed to load entry point 'hello': module '...' has no attribute 'HeloCommand'</code></td><td>The entry point string in <code>setup.py</code> names a class that doesn't exist</td><td>1</td></tr>
+<tr><td><code>ImportError: librcl_action.so: cannot open shared object file</code> for every command</td><td><code>LD_LIBRARY_PATH</code> is missing</td><td>1</td></tr>
+<tr><td><code>PackageNotFoundError: No package metadata was found for ros2cli</code></td><td><code>PYTHONPATH</code> is missing</td><td>1</td></tr>
+<tr><td><code>sudo: ros2: command not found</code></td><td>sudo replaced <code>PATH</code>, even with <code>-E</code></td><td>1</td></tr>
+</tbody>
+</table>
+
+<p>Two things to notice. First, none of the environment problems produced "invalid choice". When <code>LD_LIBRARY_PATH</code> or <code>PYTHONPATH</code> was missing, <code>ros2</code> crashed before it built the command list. So if you see "invalid choice", your ROS environment loaded and the command is truly not registered. Second, exit code 2 always meant an argument problem. Exit code 1 meant something failed to import.</p>
+
+<h2>What I ran</h2>
+
+<p>One script, <code>repro.sh</code>, ran as root inside each image on a 2 vCPU Linux host, one distro after another. It:</p>
+
+<ul>
+<li>printed the command list from <code>ros2 --help</code> and which package registers each command,</li>
+<li>called a command that isn't installed (<code>ros2 control</code>), three typos and a subcommand typo,</li>
+<li>installed <code>ros2controlcli</code> with apt and called it again in the same shell,</li>
+<li>built a one-file workspace package that adds a <code>ros2 hello</code> command, then called it unsourced, sourced, with a broken import and with a wrong class name,</li>
+<li>removed <code>LD_LIBRARY_PATH</code>, <code>PYTHONPATH</code> and <code>AMENT_PREFIX_PATH</code> one at a time, and ran <code>ros2</code> through <code>sudo</code>,</li>
+<li>timed <code>ros2 --help</code> and an invalid command five times each.</li>
+</ul>
+
+<p>The ros-base images list the same 20 command names on all three distros: <code>action</code>, <code>bag</code>, <code>component</code>, <code>daemon</code>, <code>doctor</code>, <code>extension_points</code>, <code>extensions</code>, <code>interface</code>, <code>launch</code>, <code>lifecycle</code>, <code>multicast</code>, <code>node</code>, <code>param</code>, <code>pkg</code>, <code>plugin</code>, <code>run</code>, <code>security</code>, <code>service</code>, <code>topic</code> and <code>wtf</code>. The one you most often need beyond that, <code>control</code>, isn't there.</p>
+
+<h2>A command that isn't installed</h2>
+
+<p><code>ros2</code> has no built-in list of commands. Every command is a Python entry point in the group <code>ros2cli.command</code>, and each comes from a separate package. This one-liner printed which package registered each command in my images:</p>
+
+<pre><code class="language-bash">python3 -c "from importlib.metadata import distributions as d; [print(e.name, '-&gt;', x.metadata['Name']) for x in d() for e in x.entry_points if e.group == 'ros2cli.command']" | sort</code></pre>
+
+<pre><code>action -&gt; ros2action
+bag -&gt; ros2bag
+...
+plugin -&gt; ros2plugin
+run -&gt; ros2run
+security -&gt; sros2
+service -&gt; ros2service
+topic -&gt; ros2topic
+wtf -&gt; ros2doctor</code></pre>
+
+<p>The apt name is that package name with <code>ros-&lt;distro&gt;-</code> in front and underscores turned into dashes. To find the package for a command you don't have yet, search apt:</p>
+
+<pre><code>apt-cache search --names-only "^ros-$ROS_DISTRO-ros2[a-z]"</code></pre>
+
+<p>On all three distros that search listed <code>ros2controlcli</code>, <code>ros2plugin</code>, <code>ros2test</code>, <code>ros2trace</code>, <code>ros2acceleration</code> and <code>ros2nodl</code> among others. Installing <code>ros2controlcli</code> took this much:</p>
+
+<table>
+<thead><tr><th>Distro</th><th>ros2controlcli version</th><th>New packages</th><th>Download</th><th>Install time</th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>2.54.3</td><td>30</td><td>17.4 MB</td><td>12.0 s</td></tr>
+<tr><td>Jazzy</td><td>4.48.1</td><td>52</td><td>24.2 MB</td><td>15.1 s</td></tr>
+<tr><td>Lyrical</td><td>6.10.1</td><td>52</td><td>26.6 MB</td><td>16.5 s</td></tr>
+</tbody>
+</table>
+
+<p>Install time is the <code>apt-get install</code> alone, after an <code>apt-get update</code> that took another 7.3 to 9.9 s. Right after the install, <code>ros2 control -h</code> worked in the same shell on all three distros. I didn't re-source anything. <code>ros2</code> scans the installed packages each time it starts, so a new apt package shows up on the next call. Jazzy and Lyrical listed one more subcommand than Humble, <code>cleanup_controller</code>.</p>
+
+<p>With nothing else running, <code>ros2 control list_controllers</code> printed <code>waiting for service /controller_manager/list_controllers to become available...</code> and then <code>Could not contact service</code> after 10 seconds. That's a different problem: the command exists, but no controller manager is running. If you get that message, start your <code>ros2_control</code> launch first.</p>
+
+<p><code>ros2 plugin</code> is worth a mention because one of the questions below asks why it's missing. In the ros-base images it was present on all three distros, provided by <code>ros2plugin</code>. If your install doesn't have it, <code>ros-&lt;distro&gt;-ros2plugin</code> is the package to install. I didn't test a minimal install where it's missing.</p>
+
+<h2>Typos: no suggestions, exact case</h2>
+
+<p><code>ros2 topics list</code> and <code>ros2 Topic list</code> both failed with "invalid choice", exit code 2, on every distro. No version printed a "did you mean" hint, not even Lyrical, which runs Python 3.14. Matching is case-sensitive, so <code>Topic</code> doesn't match <code>topic</code>.</p>
+
+<p>The prefix of the message tells you which word was wrong. <code>ros2: error:</code> refers to the first word. <code>ros2 topic: error:</code> or <code>ros2 bag: error:</code> refers to the second word, and the list in brackets is that command's subcommands:</p>
+
+<pre><code>ros2 bag: error: argument Call `ros2 bag &lt;command&gt; -h` for more detailed usage.: invalid choice: 'recrod' (choose from 'burst', 'convert', 'info', 'list', 'play', 'record', 'reindex')</code></pre>
+
+<p>That output is from Jazzy. Humble's list was the same without <code>burst</code>. A subcommand list is a quick way to check whether a tutorial was written for a newer distro than yours.</p>
+
+<h2>Your own command: build, then source</h2>
+
+<p>A package can add its own <code>ros2</code> command through an entry point in <code>setup.py</code>. Mine was:</p>
+
+<pre><code class="language-python">entry_points={'ros2cli.command': ['hello = my_cli.command.hello:HelloCommand']}</code></pre>
+
+<p><code>HelloCommand</code> subclasses <code>ros2cli.command.CommandExtension</code> and prints one line. <code>colcon build</code> finished in 1.33 s on Humble and 1.70 s on Jazzy and Lyrical. Then:</p>
+
+<table>
+<thead><tr><th>State</th><th>Result of <code>ros2 hello</code></th><th>Exit</th></tr></thead>
+<tbody>
+<tr><td>Built, <code>install/setup.bash</code> not sourced</td><td><code>invalid choice: 'hello'</code></td><td>2</td></tr>
+<tr><td>Sourced</td><td><code>hello from my_cli</code>, and <code>hello</code> appeared in <code>ros2 --help</code></td><td>0</td></tr>
+<tr><td>Sourced, <code>import this_module_does_not_exist</code> at the top of the module</td><td><code>Failed to load entry point 'hello': No module named 'this_module_does_not_exist'</code>, then a traceback ending in <code>KeyError: 'hello'</code></td><td>1</td></tr>
+<tr><td>Sourced, entry point says <code>HeloCommand</code></td><td><code>Failed to load entry point 'hello': module 'my_cli.command.hello' has no attribute 'HeloCommand'</code>, then <code>KeyError: 'hello'</code></td><td>1</td></tr>
+</tbody>
+</table>
+
+<p>The build finished without errors in both broken cases. colcon doesn't import your command module, so a broken import only shows up when you run the command.</p>
+
+<p>The <code>KeyError</code> traceback looks like a bug in ros2cli, but it's a side effect. The first line already gave the cause. Fix that import and the traceback goes away.</p>
+
+<p>A broken command didn't break the others. With the bad import in place, <code>ros2 topic list</code>, <code>ros2 topic list --no-daemon</code> and <code>ros2 node list</code> all ran normally with exit 0 and no warning. <code>ros2 --help</code> printed the <code>Failed to load entry point</code> line, then left <code>hello</code> out of the list. So if one command has disappeared from <code>ros2 --help</code>, run <code>ros2 --help</code> and look for that line at the top.</p>
+
+<p>The same message appears when the failing import is inside an installed package. In the Windows question below, it was <code>DLL load failed while importing _reader</code> for <code>ros2 bag record</code>. I didn't reproduce that one, because it needs a Windows install. The fix follows the same logic: read the text after <code>Failed to load entry point 'x':</code> and fix that import.</p>
+
+<h2>Missing environment variables</h2>
+
+<p>The setup script sets <code>PATH</code>, <code>LD_LIBRARY_PATH</code>, <code>PYTHONPATH</code> and <code>AMENT_PREFIX_PATH</code>. I removed them one at a time after sourcing:</p>
+
+<table>
+<thead><tr><th>Removed</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>LD_LIBRARY_PATH</code></td><td>Every command, even <code>ros2 --help</code>, failed with <code>ImportError: librcl_action.so: cannot open shared object file</code> and a note that the rclpy C extension "failed to be imported while being present on the system". Exit 1</td></tr>
+<tr><td><code>PYTHONPATH</code></td><td><code>importlib.metadata.PackageNotFoundError: No package metadata was found for ros2cli</code>. Exit 1</td></tr>
+<tr><td><code>AMENT_PREFIX_PATH</code></td><td><code>ros2 topic list</code> and <code>ros2 --help</code> still worked. Exit 0</td></tr>
+</tbody>
+</table>
+
+<p>That last row matters. The command list comes from Python package metadata on <code>PYTHONPATH</code>, not from the ament index. So "invalid choice" is never caused by a missing <code>AMENT_PREFIX_PATH</code>.</p>
+
+<p>On Humble the <code>LD_LIBRARY_PATH</code> traceback was 31 lines, on Jazzy 38 and on Lyrical 34. Jazzy and Lyrical point to their own troubleshooting page. Humble's link still has a literal <code>{distro}</code> in it.</p>
+
+<h3>sudo</h3>
+
+<p>Running <code>ros2</code> under sudo is the most common way to lose these variables. Inside the containers, <code>sudo -E</code> kept <code>AMENT_PREFIX_PATH</code>, set <code>PATH</code> to its own secure path and emptied <code>LD_LIBRARY_PATH</code> and <code>PYTHONPATH</code>. The <code>-E</code> flag did not stop that. The results:</p>
+
+<table>
+<thead><tr><th>Command</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>sudo -E ros2 topic list</code></td><td><code>sudo: ros2: command not found</code></td></tr>
+<tr><td><code>sudo env PATH=$PATH ros2 topic list</code></td><td><code>PackageNotFoundError: ... ros2cli</code></td></tr>
+<tr><td><code>sudo -E env PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH PYTHONPATH=$PYTHONPATH ros2 topic list</code></td><td>worked</td></tr>
+<tr><td><code>sudo bash -c 'source /opt/ros/$ROS_DISTRO/setup.bash ...'</code></td><td>worked</td></tr>
+</tbody>
+</table>
+
+<p>Sourcing inside the sudo shell is shorter and also picks up any workspace you add to the same line. The same problem shows up in cron jobs, systemd units and IDE run configurations that don't source anything. Source the setup file in the command that runs <code>ros2</code>. If <code>ros2</code> itself is not found, see <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">ros2: command not found and local_setup.bash vs setup.bash</a>.</p>
+
+<h2>The fix options compared</h2>
+
+<table>
+<thead><tr><th>Cause</th><th>Fix</th><th>Measured result</th></tr></thead>
+<tbody>
+<tr><td>Command package not installed</td><td><code>sudo apt install ros-$ROS_DISTRO-&lt;package&gt;</code>, found with <code>apt-cache search</code></td><td><code>ros2 control</code> worked in the same shell, 12.0 to 16.5 s to install</td></tr>
+<tr><td>Typo</td><td>Copy the word from the list in the error</td><td>No hints on any distro</td></tr>
+<tr><td>Workspace command</td><td><code>source install/setup.bash</code> in each new shell</td><td>Worked right after sourcing</td></tr>
+<tr><td>Failed to load entry point</td><td>Fix the import named after the colon, rebuild</td><td>Other commands were unaffected meanwhile</td></tr>
+<tr><td>sudo, cron or IDE</td><td>Source the setup file in the same command</td><td>Worked on all three distros</td></tr>
+<tr><td>Only one variable restored</td><td><code>env PATH=$PATH</code> alone</td><td>Still failed. <code>LD_LIBRARY_PATH</code> and <code>PYTHONPATH</code> are both needed</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The failing call itself is fast. <code>ros2 nosuchverb</code> exited after 136 to 141 ms on Humble, 183 to 189 ms on Jazzy and 285 to 289 ms on Lyrical. A full <code>ros2 --help</code> took 396 to 406 ms, 470 to 496 ms and 488 to 496 ms.</li>
+<li>Lyrical prints the choices without quotes, for example <code>(choose from action, bag, component, ...)</code>. Humble and Jazzy quote each name. If you search for the error text, try both forms.</li>
+<li><code>ros2 bag</code> on Jazzy and Lyrical has a <code>burst</code> subcommand that Humble lacks.</li>
+<li><code>ros2 control</code> on Jazzy and Lyrical has <code>cleanup_controller</code>. Humble's ros2controlcli 2.54.3 doesn't.</li>
+<li>The ros-base images ship the same 20 command names on all three distros, including <code>plugin</code>.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Windows and macOS installs, including the <code>DLL load failed</code> case.</li>
+<li>Source builds of ROS 2, and the <code>desktop</code> images.</li>
+<li>Mixing two distros in one shell.</li>
+<li>Python virtual environments and conda.</li>
+<li>Non-root users and real sudoers files on a host. My sudo tests ran as root inside the containers with the default Ubuntu configuration.</li>
+<li>Whether <code>ros2 plugin</code> is missing from some apt install profiles.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "invalid choice" mean in ros2?</h3>
+<p>No installed Python package registered that command, so argparse rejected it with exit code 2. The list in brackets is every command <code>ros2</code> found. Your word is either misspelled or its package isn't installed or sourced.</p>
+
+<h3>How do I fix ros2: invalid choice: 'control'?</h3>
+<p>Install <code>ros-$ROS_DISTRO-ros2controlcli</code>. In my test, <code>ros2 control -h</code> worked in the same shell right after the install, without re-sourcing, on Humble, Jazzy and Lyrical.</p>
+
+<h3>My own ros2 command says invalid choice after colcon build. Why?</h3>
+<p>The workspace wasn't sourced. After <code>source install/setup.bash</code> the command ran and appeared in <code>ros2 --help</code>. Without it, I got invalid choice with exit code 2.</p>
+
+<h3>What does "Failed to load entry point" mean?</h3>
+<p>The command is registered, but importing its module failed. The text after the colon is the real error, such as <code>No module named ...</code> or a missing class. The <code>KeyError</code> traceback that follows is a side effect. Other <code>ros2</code> commands kept working.</p>
+
+<h3>Why does ros2 fail under sudo?</h3>
+<p>sudo reset <code>PATH</code> and emptied <code>LD_LIBRARY_PATH</code> and <code>PYTHONPATH</code>, even with <code>-E</code>. The result was <code>sudo: ros2: command not found</code> or <code>PackageNotFoundError</code>. Running <code>sudo bash -c 'source /opt/ros/$ROS_DISTRO/setup.bash ...'</code> fixed it.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does invalid choice mean in ros2?", "acceptedAnswer": {"@type": "Answer", "text": "No installed Python package registered that command, so argparse rejected it with exit code 2. The list in brackets is every command ros2 found. Your word is either misspelled or its package is not installed or sourced."}},
+{"@type": "Question", "name": "How do I fix ros2: invalid choice: 'control'?", "acceptedAnswer": {"@type": "Answer", "text": "Install ros-ROS_DISTRO-ros2controlcli with apt, for example ros-jazzy-ros2controlcli. In my test, ros2 control -h worked in the same shell right after the install, without re-sourcing, on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "My own ros2 command says invalid choice after colcon build. Why?", "acceptedAnswer": {"@type": "Answer", "text": "The workspace was not sourced. After source install/setup.bash the command ran and appeared in ros2 --help. Without it, I got invalid choice with exit code 2."}},
+{"@type": "Question", "name": "What does Failed to load entry point mean?", "acceptedAnswer": {"@type": "Answer", "text": "The command is registered, but importing its module failed. The text after the colon is the real error, such as No module named or a missing class. The KeyError traceback that follows is a side effect. Other ros2 commands kept working."}},
+{"@type": "Question", "name": "Why does ros2 fail under sudo?", "acceptedAnswer": {"@type": "Answer", "text": "sudo reset PATH and emptied LD_LIBRARY_PATH and PYTHONPATH, even with -E. The result was sudo: ros2: command not found or PackageNotFoundError. Sourcing the setup file inside sudo bash -c fixed it."}}
+]}
+</script>
+
+<p>Measured on 2026-11-06 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Ubuntu 22.04, Python 3.10.12, ros2cli 0.18.20, rclpy 3.3.22, rclcpp 16.0.21, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Ubuntu 24.04, Python 3.12.3, ros2cli 0.32.13, rclpy 7.1.12, rclcpp 28.1.22, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Ubuntu 26.04, Python 3.14.4, ros2cli 0.40.9, rclpy 10.0.11, rclcpp 32.0.3, rmw 7.10.2), default RMW. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-29-ros2-invalid-choice-command/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/102443">ROS2 Control Argument not available</a>, <a href="https://robotics.stackexchange.com/questions/117645">ROS2 plugin not found as a ros2 command</a>, <a href="https://robotics.stackexchange.com/questions/105417">ros2 bag record failed to load entry point 'record'</a>, <a href="https://robotics.stackexchange.com/questions/97678">failed to load entry point issue</a>, <a href="https://robotics.stackexchange.com/questions/93849">ros2 interface command doesn't work</a>, <a href="https://robotics.stackexchange.com/questions/98101">Unable to use ros2 after installing using debian-packages</a>.</p>
