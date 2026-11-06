@@ -1,0 +1,158 @@
+<pre><code>rclpy._rclpy_pybind11.InvalidHandle: cannot use Destroyable because destruction was requested</code></pre>
+
+<p>The last frames before that line tell you which object it was. These are the three chains I logged (innermost frame first):</p>
+
+<pre><code>_take_subscription: with sub.handle: &lt;- handler: arg = take_from_wait_list(entity)        (Humble, subscription)
+add_to_wait_set: with self.__event: &lt;- _wait_for_ready_callbacks: waitable.add_to_wait_set(wait_set)   (Jazzy, Lyrical, subscription)
+send_response: with self.handle: &lt;- _execute_service: srv.send_response(response, header)   (Humble, service; Jazzy says _execute)</code></pre>
+
+<p>Short answer: rclpy raises this when code touches an object after <code>destroy_*()</code> was called on it. That covers your own code, like a <code>publish()</code> after <code>destroy_publisher()</code>, and the executor, when it still holds the object in its wait set. The exception comes out of <code>executor.spin()</code>, so the thread that was spinning ends, and with it every callback on that executor. Inside the executor, my runs found two triggers. A service that destroys itself inside its own callback failed 15 out of 15 times. The fix is to let the callback return and destroy the service from a one-shot timer:</p>
+
+<pre><code class="language-python">def srv_cb(self, req, res):
+    # don't call self.destroy_service(self.srv) here; the response hasn't been sent yet
+    self.kill_timer = self.create_timer(0.0, self.finish)
+    res.success = True
+    return res
+
+def finish(self):
+    self.destroy_timer(self.kill_timer)
+    self.destroy_service(self.srv)</code></pre>
+
+<p>That version answered the call and removed the service in 15 out of 15 runs on Humble, Jazzy and Lyrical. The other trigger is a subscription that one thread creates and destroys while a <code>MultiThreadedExecutor</code> spins in another. On Humble that killed the executor in all 5 runs when each subscription got its own callback group. If you can, use a <code>SingleThreadedExecutor</code> for nodes that create and destroy subscriptions at runtime. It had 0 failures in every subscription, timer and publisher case I ran.</p>
+
+<h2>Find your case</h2>
+
+<p>Every count below is the number of failed runs out of 5. In one run the script creates and destroys an entity 200 times (or 1000 times where noted; the service and <code>destroy_node()</code> runs stop after the first), while a separate process publishes on the topic at about 500 Hz. "Failed" means <code>spin()</code> raised <code>InvalidHandle</code> and the executor thread stopped.</p>
+
+<table>
+<thead><tr><th>What the code did</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>destroy_service()</code> inside that service's own callback</td><td>5/5</td><td>5/5</td><td>5/5</td></tr>
+<tr><td>Same, but destroyed from a one-shot timer after the callback returned</td><td>0/5</td><td>0/5</td><td>0/5</td></tr>
+<tr><td>Main thread creates and destroys subscriptions, <code>MultiThreadedExecutor</code> spinning in a thread, new <code>MutuallyExclusiveCallbackGroup</code> per subscription</td><td>5/5</td><td>0/5</td><td>1/5</td></tr>
+<tr><td>Same, one callback group created once and reused</td><td>1/5</td><td>0/5</td><td>0/5</td></tr>
+<tr><td>Same, new group per subscription, every group object kept in a list</td><td>5/5</td><td>0/5</td><td>0/5</td></tr>
+<tr><td>Same, default callback group, 200 cycles with 20 ms gaps</td><td>0/5</td><td>1/5</td><td>0/5</td></tr>
+<tr><td>Same, default callback group, 1000 cycles with 1 ms gaps</td><td>1/5</td><td>0/5</td><td>0/5</td></tr>
+<tr><td>Timer callback on a <code>MultiThreadedExecutor</code> destroys and recreates the subscription (new group each time)</td><td>5/5</td><td>1/5</td><td>0/5</td></tr>
+<tr><td>Main thread creates and destroys subscriptions, <code>SingleThreadedExecutor</code> spinning in a thread (200 cycles, then 1000 cycles with 1 ms gaps)</td><td>0/5, 0/5</td><td>0/5, 0/5</td><td>0/5, 0/5</td></tr>
+<tr><td>Same with timers, then with publishers</td><td>0/5, 0/5</td><td>0/5, 0/5</td><td>0/5, 0/5</td></tr>
+<tr><td>Timer callback on a <code>SingleThreadedExecutor</code> destroys and recreates the subscription</td><td>0/5</td><td>0/5</td><td>0/5</td></tr>
+<tr><td>Subscription callback destroys its own subscription and creates a new one</td><td>0/5</td><td>0/5</td><td>0/5</td></tr>
+<tr><td>Timer callback destroys its own timer and creates a new one</td><td>0/5</td><td>0/5</td><td>0/5</td></tr>
+<tr><td><code>node.destroy_node()</code> from the main thread while a single- or multi-threaded executor spins</td><td>0/5, 0/5</td><td>0/5, 0/5</td><td>0/5, 0/5</td></tr>
+<tr><td>rclcpp: <code>subscription.reset()</code> from the main thread while a <code>SingleThreadedExecutor</code> spins</td><td>0/5</td><td>0/5</td><td>0/5</td></tr>
+</tbody>
+</table>
+
+<p>Calls on an object you already destroyed failed on all three distros. Nothing has to race for this one:</p>
+
+<table>
+<thead><tr><th>Call</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>publisher.publish()</code> after <code>node.destroy_publisher(publisher)</code></td><td><code>InvalidHandle: cannot use Destroyable because destruction was requested</code></td></tr>
+<tr><td><code>publisher.publish()</code> after <code>node.destroy_node()</code></td><td>same exception</td></tr>
+<tr><td><code>node.create_subscription(...)</code> after <code>node.destroy_node()</code></td><td>same exception</td></tr>
+<tr><td><code>node.destroy_publisher(p)</code> called twice</td><td>first call returned <code>True</code>, second returned <code>False</code>, no exception</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, with the default RMW (Fast DDS) and one container per distro, run one after another. A small <code>talker.py</code> published <code>std_msgs/String</code> on <code>/chatter</code> from a 2 ms timer for the whole session. <code>race.py</code> took a case name and ran as a fresh process five times per case. Each run counted the cycles it finished. It also recorded whether the executor thread was still alive and, if <code>spin()</code> raised, the exception and its last three frames. In the background-thread cases each cycle was <code>create_subscription</code>, <code>time.sleep(0.02)</code>, <code>destroy_subscription</code>. The C++ test did the same with <code>create_subscription</code> and <code>reset()</code> on a shared pointer. The container had 1.5 CPUs and 1200 MB, and the 1-minute load on the host stayed under 2.0 for the whole session.</p>
+
+<h2>A service that destroys itself in its callback</h2>
+
+<p>This was the only case that failed on the first try every time. The callback calls <code>destroy_service()</code> and returns a response. Then the executor tries to send that response through the service it just lost. The frames show it: <code>send_response: with self.handle:</code> called from <code>_execute_service</code> on Humble and from <code>_execute</code> on Jazzy. Lyrical failed the same way in 5 of 5 runs, but my script didn't capture its frames. The same report is open as <a href="https://github.com/ros2/ros2/issues/1351">ros2/ros2#1351</a>, which was filed on Galactic.</p>
+
+<p>The fix moves the destroy out of the callback. A zero-period timer created inside the callback fires on the next pass of the executor. That's after the response went out, so the destroy is safe there. Each run printed <code>response received=True success=True service destroyed=True server still visible to client=False</code>. So the client got its answer, and one second later it no longer saw the server. The timer has to destroy itself too, or it will fire again on every spin.</p>
+
+<p>Timers and subscriptions didn't have this problem. A timer that destroyed itself in its own callback ran over 200 cycles without an error on all three distros. So did a subscription callback that destroyed its own subscription. Only the service failed, because the executor still has work to do with the service after your callback returns.</p>
+
+<h2>Subscriptions destroyed from another thread</h2>
+
+<p>This is the pattern from <a href="https://robotics.stackexchange.com/questions/103667">the Robotics Stack Exchange question</a> and from <a href="https://github.com/ros2/rclpy/issues/1206">rclpy#1206</a>. One thread spins the executor. Another thread, often a state machine or a test, creates a subscription, waits for a message, and destroys it. The executor may still hold that subscription in its wait set, so when it reaches it, it gets <code>InvalidHandle</code>.</p>
+
+<p>On Humble the callback group decided the outcome. With a new <code>MutuallyExclusiveCallbackGroup</code> for each subscription, as in rclpy#1206, the <code>MultiThreadedExecutor</code> died in 5 of 5 runs. It got through 17, 103, 97, 102 and 106 cycles. Keeping every group object alive in a list didn't help (5/5, after 101 to 106 cycles). Reusing one group created once dropped it to 1/5 (after 49 cycles). With the node's default group it was 0/5 at 200 cycles, and 1/5 at 1000 cycles with a 1 ms gap. So the default group made the error rarer, but it didn't remove it.</p>
+
+<p>Jazzy and Lyrical failed much less often, but they still failed. Jazzy failed once with the default group (after 134 cycles), and Lyrical failed once with a new group per subscription (after 121 cycles). Their frames were different from Humble's. The error came from <code>add_to_wait_set: with self.__event:</code> while the executor was building its wait set, not from taking a message. So the newer executor still has a window where a destroy from another thread can land. It's just smaller.</p>
+
+<p>The <code>SingleThreadedExecutor</code> didn't fail in any background-thread subscription, timer or publisher case on any distro. That was 5 runs of 200 cycles, 5 runs of 1000 cycles with 1 ms gaps, plus timers and publishers, and one extra run of 400 cycles. Publishers never failed at all. The executor doesn't wait on them, so destroying one from another thread doesn't race with <code>spin()</code>. It only hurts if your own code publishes on it afterwards.</p>
+
+<h2>destroy_node() while spinning</h2>
+
+<p>A node destroyed from the main thread while the executor spun in another thread didn't raise in 30 runs (5 per executor type per distro). The executor thread kept running with nothing left to do. That doesn't make the node usable. Every later call on that node or its publishers raised <code>InvalidHandle</code> right away. If you see the error at shutdown, look for a timer or another thread that publishes after <code>destroy_node()</code>. The order that worked for me at shutdown is in <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">my Ctrl+C and SIGTERM measurements</a>.</p>
+
+<h2>The fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Destroy the service from a one-shot timer, not inside its callback</td><td>0/5</td><td>0/5</td><td>0/5</td><td>Response delivered every time</td></tr>
+<tr><td>Use <code>SingleThreadedExecutor</code> for the node that creates and destroys subscriptions</td><td>0 failures</td><td>0 failures</td><td>0 failures</td><td>All single-threaded subscription, timer and publisher cases in the first table</td></tr>
+<tr><td>Do the create/destroy inside a timer callback on a <code>SingleThreadedExecutor</code></td><td>0/5</td><td>0/5</td><td>0/5</td><td>The executor never touches an object mid-destroy</td></tr>
+<tr><td>Same, but on a <code>MultiThreadedExecutor</code> with a new group each time</td><td>5/5</td><td>1/5</td><td>0/5</td><td>Doesn't help on Humble</td></tr>
+<tr><td>Stop the spin thread (a loop of <code>spin_once(0.01)</code>), join it, destroy, then spin again, on a <code>MultiThreadedExecutor</code></td><td>5/5</td><td>0/5</td><td>0/5</td><td>Doesn't help on Humble</td></tr>
+<tr><td>Wrap <code>spin_once()</code> in a loop that catches <code>InvalidHandle</code> and keeps going</td><td>0/5 died</td><td>0/5 died</td><td>0/5 died</td><td>Humble caught 85, 62, 32, 68 and 84 exceptions in 200 cycles</td></tr>
+<tr><td>Reuse one callback group instead of making a new one per subscription</td><td>1/5</td><td>0/5</td><td>0/5</td><td>Better on Humble, but it still failed once</td></tr>
+</tbody>
+</table>
+
+<p>Stopping the thread didn't help on Humble, and that surprised me. My stop loop called <code>spin_once()</code>, and with a <code>MultiThreadedExecutor</code> that call hands the callback to the executor's own worker threads. Joining my loop thread doesn't wait for those, so the destroy can still land while a worker is mid-take. I didn't confirm that from the rclpy source. I'm reporting what the counts show.</p>
+
+<p>The catch-and-continue loop kept the executor alive on all three. On Humble it caught dozens of exceptions per run, so treat it as a crash guard, not a fix. I didn't measure whether a callback was lost each time it caught one.</p>
+
+<pre><code class="language-python">from rclpy._rclpy_pybind11 import InvalidHandle
+
+while rclpy.ok():
+    try:
+        executor.spin_once(timeout_sec=0.1)
+    except InvalidHandle:
+        pass  # an entity was destroyed under the executor; keep spinning</code></pre>
+
+<p>The import path was the same on all three distros. <code>rclpy._rclpy_pybind11.InvalidHandle</code> printed as the class name on Humble, Jazzy and Lyrical.</p>
+
+<h2>rclcpp doesn't have this error</h2>
+
+<p>In C++ a subscription is a <code>shared_ptr</code>. Calling <code>reset()</code> on it from the main thread while a <code>SingleThreadedExecutor</code> spun in another thread finished 200 cycles in 5 of 5 runs on every distro, and every run exited with code 0. The executor keeps its own reference until it's done with the entity, so there's nothing to race with. That's my reading of why. The counts are what I measured. If you hit this error in a mixed system, it comes from the Python nodes.</p>
+
+<h2>Version notes</h2>
+
+<p>Humble (rclpy 3.3.22) was much worse than Jazzy (rclpy 7.1.12) and Lyrical (rclpy 10.0.11) in the multi-threaded cases. Four multi-threaded Humble cases failed 5/5. No Jazzy or Lyrical case did, apart from the service. The failing frame changed too. Humble failed while taking a message (<code>_take_subscription</code>), and Jazzy and Lyrical failed while building the wait set (<code>add_to_wait_set</code>, <code>self.__event</code>). The service failure had the same innermost frame on Humble and Jazzy, apart from the caller's name (<code>_execute_service</code> on Humble, <code>_execute</code> on Jazzy). The exception class and message text were identical on all three.</p>
+
+<p>One side observation. In the default-group <code>MultiThreadedExecutor</code> case (200 cycles, no failures on Humble), Humble delivered only 5 to 35 messages per run. Jazzy delivered 126 to 616 and Lyrical 92 to 520. The single-threaded version of the same case delivered 738 to 2036 on all three. I didn't look into why.</p>
+
+<h2>Not tested</h2>
+
+<p>Keeping a subscription alive and ignoring messages with a flag instead of destroying it. Actions (<code>destroy_action_server</code> during a goal). Clients destroyed while a call is pending. Cyclone DDS and Zenoh. Callback groups other than <code>MutuallyExclusiveCallbackGroup</code>. Executors with more than 2 threads. The rclcpp <code>MultiThreadedExecutor</code>. <code>launch_pytest</code> fixtures from <a href="https://github.com/ros2/rclpy/issues/1142">rclpy#1142</a>. Whether the client got a reply in the self-destroying service case. Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "cannot use Destroyable because destruction was requested" mean?</h3>
+<p>Something used an rclpy object after <code>destroy_*()</code> was called on it. Either your code did, for example <code>publish()</code> after <code>destroy_publisher()</code> or after <code>destroy_node()</code>, or the executor did because it still had the object in its wait set. The last frames above the message name the object.</p>
+
+<h3>Why does my executor stop calling callbacks after this error?</h3>
+<p>The exception is raised inside <code>spin()</code>, and nothing catches it, so the thread running <code>spin()</code> ends. In my subscription runs that thread was no longer alive at the end of the run. Either fix the destroy, or spin with a <code>spin_once()</code> loop that catches <code>InvalidHandle</code>.</p>
+
+<h3>How do I destroy a service from inside its own callback?</h3>
+<p>Don't do it in the callback itself. Create a zero-period timer in the callback, return the response, and in the timer callback destroy the timer and then the service. This worked in 15 of 15 runs. Destroying the service inside its callback failed in 15 of 15.</p>
+
+<h3>Is it safe to destroy a subscription from another thread?</h3>
+<p>With a <code>SingleThreadedExecutor</code> it never failed in my runs. With a <code>MultiThreadedExecutor</code> it failed on all three distros, most on Humble. There a new callback group per subscription failed 5 of 5 runs. Do the create and destroy in a callback of a single-threaded executor, or keep the subscription.</p>
+
+<h3>Does rclcpp have the same problem?</h3>
+<p>Not in my test. Resetting the subscription pointer from another thread while spinning finished 200 cycles in all 15 runs, with exit code 0 every time.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does cannot use Destroyable because destruction was requested mean?", "acceptedAnswer": {"@type": "Answer", "text": "Something used an rclpy object after destroy was called on it. Either your code did, for example publish() after destroy_publisher() or after destroy_node(), or the executor did because it still had the object in its wait set. The last frames above the message name the object."}},
+{"@type": "Question", "name": "Why does my executor stop calling callbacks after this error?", "acceptedAnswer": {"@type": "Answer", "text": "The exception is raised inside spin(), and nothing catches it, so the thread running spin() ends. In my subscription runs that thread was no longer alive at the end of the run. Either fix the destroy, or spin with a spin_once() loop that catches InvalidHandle."}},
+{"@type": "Question", "name": "How do I destroy a service from inside its own callback?", "acceptedAnswer": {"@type": "Answer", "text": "Don't do it in the callback itself. Create a zero-period timer in the callback, return the response, and in the timer callback destroy the timer and then the service. This worked in 15 of 15 runs. Destroying the service inside its callback failed in 15 of 15."}},
+{"@type": "Question", "name": "Is it safe to destroy a subscription from another thread?", "acceptedAnswer": {"@type": "Answer", "text": "With a SingleThreadedExecutor it never failed in my runs. With a MultiThreadedExecutor it failed on all three distros, most on Humble. There a new callback group per subscription failed 5 of 5 runs. Do the create and destroy in a callback of a single-threaded executor, or keep the subscription."}},
+{"@type": "Question", "name": "Does rclcpp have the same problem?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my test. Resetting the subscription pointer from another thread while spinning finished 200 cycles in all 15 runs, with exit code 0 every time."}}
+]}
+</script>
+
+<p>Measured on 2026-11-06 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10, Python 3.14.4), default RMW. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2026-12-26-rclpy-invalidhandle-destroyable/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103667">Destroying a publisher using node.destroy_publisher raises Invalid Handle exception</a>, <a href="https://github.com/ros2/rclpy/issues/1206">MultiThreadExecutor may throw exception after destroying subscription with non-default callback group</a>, <a href="https://github.com/ros2/rclpy/issues/1355">Thread-Safety issue in rclpy executor leading to InvalidHandle exception</a>, <a href="https://github.com/ros2/rclpy/issues/1491">cannot use Destroyable because destruction was requested</a>, <a href="https://github.com/ros2/ros2/issues/1351">calling destroy_service while processing the callback occurs a exception</a>, <a href="https://github.com/ros2/rclpy/issues/1142">[launch_pytest] publishing error: cannot use Destroyable because destruction was requested</a>.</p>
