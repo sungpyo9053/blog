@@ -1,0 +1,208 @@
+=== distro=humble date=2026-11-06T00:55:05Z
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+cmake version 3.22.1
+Python 3.10.12
+RMW_IMPLEMENTATION=unset
+
+### CASE c01_lambda_ok
+stmt: t_ = create_wall_timer(500ms, [this]() { cb(); });
+chrono_literals: 1
+build_exit=0 seconds=3.7 log_lines=3 error_lines=0
+
+### CASE c02_bind_ok
+stmt: t_ = create_wall_timer(500ms, std::bind(&N::cb, this));
+chrono_literals: 1
+build_exit=0 seconds=4.0 log_lines=3 error_lines=0
+
+### CASE c03_no_chrono_literals
+stmt: t_ = create_wall_timer(500ms, [this]() { cb(); });
+chrono_literals: 0
+build_exit=2 seconds=3.3 log_lines=9 error_lines=1
+c03_no_chrono_literals.cpp:8:28: error: unable to find numeric literal operator ‘operator""ms’
+
+### CASE c04_double_period
+stmt: t_ = create_wall_timer(0.5, [this]() { cb(); });
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=20 error_lines=1
+c04_double_period.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(double, N::N()::<lambda()>)’
+
+### CASE c05_int_period
+stmt: t_ = create_wall_timer(500, [this]() { cb(); });
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=20 error_lines=1
+c05_int_period.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(int, N::N()::<lambda()>)’
+
+### CASE c06_rclcpp_duration_period
+stmt: t_ = create_wall_timer(rclcpp::Duration(1, 0), [this]() { cb(); });
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=20 error_lines=1
+c06_rclcpp_duration_period.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(rclcpp::Duration, N::N()::<lambda()>)’
+
+### CASE c07_duration_to_chrono
+stmt: t_ = create_wall_timer(rclcpp::Duration(1, 0).to_chrono<std::chrono::nanoseconds>(), [this]() { cb(); });
+chrono_literals: 1
+build_exit=0 seconds=3.7 log_lines=3 error_lines=0
+
+### CASE c08_fractional_seconds_literal
+stmt: t_ = create_wall_timer(0.5s, [this]() { cb(); });
+chrono_literals: 1
+build_exit=0 seconds=3.7 log_lines=3 error_lines=0
+
+### CASE c09_member_pointer_no_bind
+stmt: t_ = create_wall_timer(500ms, &N::cb);
+chrono_literals: 1
+build_exit=2 seconds=3.5 log_lines=37 error_lines=4
+c09_member_pointer_no_bind.cpp:9:27:   required from here
+<ros>/include/rclcpp/rclcpp/function_traits.hpp:52:40: error: ‘operator()’ is not a member of ‘void (N::*)()’
+<ros>/include/rclcpp/rclcpp/function_traits.hpp:52:40: error: ‘operator()’ is not a member of ‘void (N::*)()’
+<ros>/include/rclcpp/rclcpp/function_traits.hpp:52:40: error: ‘operator()’ is not a member of ‘void (N::*)()’
+c09_member_pointer_no_bind.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(std::chrono::milliseconds, void (N::*)())’
+
+### CASE c10_bind_without_this
+stmt: t_ = create_wall_timer(500ms, std::bind(&N::cb));
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=92 error_lines=7
+c10_bind_without_this.cpp:9:44:   required from here
+/usr/include/c++/11/functional:756:21: error: static assertion failed: Wrong number of arguments for pointer-to-member
+c10_bind_without_this.cpp:9:44:   required from here
+/usr/include/c++/11/functional:464:15: error: no type named ‘type’ in ‘struct std::result_of<void (N::*&())()>’
+c10_bind_without_this.cpp:9:44:   required from here
+/usr/include/c++/11/functional:464:15: error: no type named ‘type’ in ‘struct std::result_of<void (N::*&())()>’
+<ros>/include/rclcpp/rclcpp/timer.hpp:227:3:   required from here
+<ros>/include/rclcpp/rclcpp/timer.hpp:244:14: error: no match for call to ‘(std::_Bind<void (N::*())()>) ()’
+
+### CASE c11_lambda_no_this_capture
+stmt: t_ = create_wall_timer(500ms, []() { cb(); });
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=10 error_lines=2
+c11_lambda_no_this_capture.cpp:9:44: error: ‘this’ was not captured for this lambda function
+c11_lambda_no_this_capture.cpp:9:44: error: cannot call member function ‘void N::cb()’ without object
+
+### CASE c12_cb_int_bind_no_arg
+stmt: t_ = create_wall_timer(500ms, std::bind(&N::cb_int, this));
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=42 error_lines=4
+c12_cb_int_bind_no_arg.cpp:9:44:   required from here
+/usr/include/c++/11/functional:756:21: error: static assertion failed: Wrong number of arguments for pointer-to-member
+c12_cb_int_bind_no_arg.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(std::chrono::milliseconds, std::_Bind_helper<false, void (N::*)(int), N*>::type)’
+c12_cb_int_bind_no_arg.cpp:9:27:   required from here
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+
+### CASE c13_cb_int_bind_value
+stmt: t_ = create_wall_timer(500ms, std::bind(&N::cb_int, this, 5));
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=29 error_lines=3
+c13_cb_int_bind_value.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(std::chrono::milliseconds, std::_Bind_helper<false, void (N::*)(int), N*, int>::type)’
+c13_cb_int_bind_value.cpp:9:27:   required from here
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+
+### CASE c14_cb_int_placeholder_1
+stmt: t_ = create_wall_timer(500ms, std::bind(&N::cb_int, this, std::placeholders::_1));
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=29 error_lines=3
+c14_cb_int_placeholder_1.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(std::chrono::milliseconds, std::_Bind_helper<false, void (N::*)(int), N*, const std::_Placeholder<1>&>::type)’
+c14_cb_int_placeholder_1.cpp:9:27:   required from here
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+
+### CASE c15_cb_timerbase_ref
+stmt: t_ = create_wall_timer(500ms, std::bind(&N::cb_timer, this, std::placeholders::_1));
+chrono_literals: 1
+build_exit=0 seconds=3.7 log_lines=3 error_lines=0
+
+### CASE c16_cb_timer_shared_ptr
+stmt: t_ = create_wall_timer(500ms, [this](rclcpp::TimerBase::SharedPtr) { cb(); });
+chrono_literals: 1
+build_exit=2 seconds=4.1 log_lines=29 error_lines=3
+c16_cb_timer_shared_ptr.cpp:9:27: error: no matching function for call to ‘N::create_wall_timer(std::chrono::milliseconds, N::N()::<lambda(rclcpp::TimerBase::SharedPtr)>)’
+c16_cb_timer_shared_ptr.cpp:9:27:   required from here
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+<ros>/include/rclcpp/rclcpp/node_impl.hpp:110:1: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+
+### CASE c17_std_function_int_create_timer
+stmt: std::function<void(int)> f = std::bind(&N::cb_int, this, std::placeholders::_1); t_ = rclcpp::create_timer(this, get_clock(), rclcpp::Duration(1, 0), f);
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=28 error_lines=2
+c17_std_function_int_create_timer.cpp:9:111:   required from here
+<ros>/include/rclcpp/rclcpp/create_timer.hpp:44:60: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+<ros>/include/rclcpp/rclcpp/create_timer.hpp:44:60: error: no type named ‘type’ in ‘struct std::enable_if<false, void>’
+
+### CASE c18_create_timer_free_ok
+stmt: t_ = rclcpp::create_timer(this, get_clock(), rclcpp::Duration(1, 0), [this]() { cb(); });
+chrono_literals: 1
+build_exit=0 seconds=3.9 log_lines=3 error_lines=0
+
+### CASE c19_create_timer_free_chrono
+stmt: t_ = rclcpp::create_timer(this, get_clock(), 500ms, [this]() { cb(); });
+chrono_literals: 1
+build_exit=0 seconds=3.7 log_lines=3 error_lines=0
+
+### CASE c20_node_create_timer_member
+stmt: t_ = this->create_timer(500ms, [this]() { cb(); });
+chrono_literals: 1
+build_exit=2 seconds=3.3 log_lines=9 error_lines=1
+c20_node_create_timer_member.cpp:9:16: error: ‘class N’ has no member named ‘create_timer’
+
+### CASE c21_std_function_void_ok
+stmt: std::function<void()> f = std::bind(&N::cb, this); t_ = create_wall_timer(500ms, f);
+chrono_literals: 1
+build_exit=0 seconds=3.7 log_lines=3 error_lines=0
+
+### CASE c22_lambda_calls_cb_int_5
+stmt: t_ = create_wall_timer(500ms, [this]() { cb_int(5); });
+chrono_literals: 1
+build_exit=0 seconds=3.7 log_lines=3 error_lines=0
+
+### CASE c23_std_function_wraps_bind_value
+stmt: std::function<void()> f = std::bind(&N::cb_int, this, 5); t_ = create_wall_timer(500ms, f);
+chrono_literals: 1
+build_exit=0 seconds=3.8 log_lines=3 error_lines=0
+
+### CASE rt
+build_exit=0 seconds=4.3 log_lines=3 error_lines=0
+
+=== runtime (rclcpp)
+mode=member_100ms ticks=10 clock_type=1
+exit=0
+mode=local_discarded_100ms ticks=0 clock_type=1
+exit=0
+mode=negative_period exception=St16invalid_argument what=timer period cannot be negative
+exit=3
+mode=zero_period_spin_200ms ticks=172 clock_type=1
+exit=0
+mode=cancel_after_3 ticks=3 clock_type=1
+exit=0
+mode=sim_time_no_clock ticks=0 clock_type=1
+exit=0
+mode=sim_time_wall_timer ticks=10 clock_type=1
+exit=0
+
+=== runtime (rclpy)
+mode=member_100ms ticks=10 timers_held_by_node=1
+exit=0
+mode=local_discarded_100ms ticks=10 timers_held_by_node=1
+exit=0
+mode=int_period_1 ticks=1 timers_held_by_node=1
+exit=0
+mode=ms_as_period_100 ticks=0 timers_held_by_node=1
+exit=0
+Traceback (most recent call last):
+  File "/w/py_rt.py", line 32, in <module>
+    spin_for(1.05)
+TypeError: cb() missing 1 required positional argument: 'event'
+mode=callback_with_arg exception=TypeError: cb() missing 1 required positional argument: 'event'
+exit=0
+Traceback (most recent call last):
+  File "/w/py_rt.py", line 31, in <module>
+    keep = n.create_timer(-0.1, inc)
+rclpy._rclpy_pybind11.RCLError: failed to create timer: timer period must be non-negative, at ./src/rcl/timer.c:139
+mode=negative_period exception=RCLError: failed to create timer: timer period must be non-negative, at ./src/rcl/timer.c:139
+exit=0
+=== done 2026-11-06T00:56:46Z
