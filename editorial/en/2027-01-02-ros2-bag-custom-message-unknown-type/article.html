@@ -1,0 +1,198 @@
+<pre><code>[WARN] [rosbag2_player]: Ignoring a topic '/reading', reason: package 'my_msgs' not found, searching: [/opt/ros/humble].</code></pre>
+
+<p>The recording side prints a different line, and the bag ends up without the topic:</p>
+
+<pre><code>[WARN] [ROSBAG2_TRANSPORT]: Topic '/reading' has unknown type 'my_msgs/msg/Reading' . Only topics with known type are supported. Reason: 'package 'my_msgs' not found, searching: [/opt/ros/humble]</code></pre>
+
+<p>Short answer: <code>ros2 bag</code> can only record or play a custom message type if the shell running it has sourced the workspace that built that type. Your nodes can work fine in one terminal while <code>ros2 bag</code> runs in another terminal that only sourced <code>/opt/ros/&lt;distro&gt;</code>. The <code>searching: [...]</code> list in the message tells you exactly which install prefixes it looked in. If your workspace isn't in that list, source it in the same terminal and run the command again:</p>
+
+<pre><code>source /opt/ros/humble/setup.bash
+source ~/ws/install/setup.bash        # the workspace that built my_msgs
+ros2 bag record /reading -o my_bag    # Jazzy and later: --topics /reading also works
+ros2 bag play my_bag</code></pre>
+
+<p>In my run that was the whole fix on Humble, Jazzy and Lyrical. Every message in the bag reached a subscriber. Without it, recording stored 0 messages for the topic and playback delivered 0, and both commands still exited normally. MCAP storage didn't change this. A bag recorded with an MCAP file, which stores the message schema, was ignored the same way when the player shell wasn't sourced.</p>
+
+<h2>Find your message</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>What it meant in my run</th></tr></thead>
+<tbody>
+<tr><td><code>Ignoring a topic '/x', reason: package 'pkg' not found, searching: [/opt/ros/...]</code> from <code>ros2 bag play</code></td><td>The player shell didn't source the workspace. The topic isn't played, and the exit code is still 0.</td></tr>
+<tr><td><code>Topic '/x' has unknown type 'pkg/msg/T' . Only topics with known type are supported.</code> from <code>ros2 bag record</code></td><td>The recorder shell didn't source the workspace. The topic isn't written to the bag at all.</td></tr>
+<tr><td><code>Ignoring a topic '/x', reason: could not create publisher: Type support not from this implementation</code> (Humble)</td><td>The package was found through <code>AMENT_PREFIX_PATH</code>, but its libraries weren't on the library path. The workspace was half-sourced.</td></tr>
+<tr><td><code>Ignoring a topic '/x', reason: dlopen error: libpkg__rosidl_generator_c.so: cannot open shared object file</code> (Jazzy, Lyrical)</td><td>The same half-sourced workspace, worded differently on newer distros.</td></tr>
+<tr><td><code>Publisher for topic '/x' not found</code> right after the "Ignoring" line (Jazzy)</td><td>A follow-up from the same ignored topic, not a second problem.</td></tr>
+<tr><td>No warning at all, and the subscriber gets nothing</td><td>The message definition changed after recording, but the package name stayed the same.</td></tr>
+<tr><td><code>ModuleNotFoundError: No module named 'pkg'</code> in a Python script using <code>rosbag2_py</code></td><td>Reading raw bytes worked. Deserializing needs the sourced workspace.</td></tr>
+<tr><td><code>failed to deserialize ROS message: Fast CDR exception deserializing message of type pkg::msg::dds_::T_</code></td><td>The bag was recorded with an older definition of the message.</td></tr>
+<tr><td><code>Packages installing interfaces must include '&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;'</code></td><td>A <code>package.xml</code> problem. The message package never built, so there is nothing to source.</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another, each with <code>--network none</code> and <code>ROS_DOMAIN_ID=88</code>. The stock Humble image has no MCAP plugin. <code>ros2 bag record --help</code> listed only <code>sqlite3</code> and a test plugin, and <code>-s mcap</code> stopped at the argparse usage message with exit code 2. So for Humble I installed <code>ros-humble-rosbag2-storage-mcap</code> and measured on that image.</p>
+
+<p>Each container built four small workspaces with one message type each:</p>
+
+<ul>
+<li><code>ws1</code>: <code>my_msgs/msg/Reading</code> with <code>int32 seq</code>, <code>float64 value</code>, <code>string note</code>.</li>
+<li><code>ws2</code>: the same package name, but with <code>value</code> and <code>seq</code> swapped and an extra <code>float64 extra</code> field. This is the "I changed the .msg file after recording" case.</li>
+<li><code>ws3</code>: the same message in a package whose <code>package.xml</code> has no <code>member_of_group</code> line.</li>
+<li><code>ws4</code>: the same message with <code>&lt;architecture_independent/&gt;</code> in the <code>package.xml</code> export block.</li>
+</ul>
+
+<p>Each workspace built in 8 to 12 seconds, except <code>ws3</code>, which failed on every distro (more below). A Python publisher, with the workspace sourced, sent <code>Reading</code> messages on <code>/reading</code> at 20 Hz for 7 seconds (138 or 139 sent). For each case, <code>ros2 bag record</code> ran for 5 seconds, from a shell that either had or hadn't sourced <code>ws1</code>. Then <code>ros2 bag play</code> ran against a Python subscriber, and the subscriber counted what arrived. A last step read the bags with <code>rosbag2_py</code>.</p>
+
+<h2>Recording: the topic is silently left out</h2>
+
+<table>
+<thead><tr><th>Recorder shell</th><th>Storage</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>sourced <code>ws1</code></td><td>sqlite3</td><td>94 messages</td><td>88</td><td>80</td></tr>
+<tr><td>sourced <code>ws1</code></td><td>mcap</td><td>93</td><td>88</td><td>83</td></tr>
+<tr><td><code>/opt/ros</code> only</td><td>sqlite3</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>/opt/ros</code> only</td><td>mcap</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>/opt/ros</code> only, <code>-a</code></td><td>sqlite3</td><td>7 (all <code>/rosout</code>)</td><td>9 (all <code>/rosout</code>)</td><td>12 (all <code>/rosout</code>)</td></tr>
+</tbody>
+</table>
+
+<p>The unsourced recorder never failed. It created the bag directory, wrote a valid bag, and stopped normally on SIGINT. <code>ros2 bag info</code> then showed <code>Messages: 0</code>, and <code>/reading</code> wasn't listed at all. With <code>-a</code>, the bag held <code>/rosout</code>, <code>/parameter_events</code> and the rosbag2 event topics, but not <code>/reading</code>. If you only check that a bag file exists after a test drive, you won't notice.</p>
+
+<p>The warning behaves differently across distros. Humble printed the <code>has unknown type</code> line every 100 ms or so: 48 times in the 5-second sqlite3 run and 46 times in the MCAP run. Jazzy and Lyrical printed it once and then went quiet for the rest of the recording. On Jazzy and Lyrical, a single line is easy to miss when it scrolls past at startup.</p>
+
+<h2>Playback: the topic is ignored, and the exit code is 0</h2>
+
+<table>
+<thead><tr><th>Player shell</th><th>Bag</th><th>Humble received</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>sourced <code>ws1</code></td><td>sqlite3</td><td>94 of 94</td><td>88 of 88</td><td>80 of 80</td></tr>
+<tr><td>sourced <code>ws1</code></td><td>mcap</td><td>93 of 93</td><td>88 of 88</td><td>83 of 83</td></tr>
+<tr><td><code>/opt/ros</code> only</td><td>sqlite3</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>/opt/ros</code> only, <code>--topics /reading</code></td><td>sqlite3</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>/opt/ros</code> only</td><td>mcap</td><td>0</td><td>0</td><td>0</td></tr>
+</tbody>
+</table>
+
+<p>The subscriber was always sourced. Only the player's shell changed. Every unsourced playback printed the <code>Ignoring a topic</code> warning once, with the distro's own prefix in the search list, then "played" the bag for its full length (about 5 seconds) and exited with code 0. On Jazzy it added <code>Publisher for topic '/reading' not found</code> about 100 ms later. Naming the topic with <code>--topics /reading</code> didn't turn the warning into an error.</p>
+
+<p>The MCAP rows matter because of a common hope: MCAP files carry the message definition, so maybe the player doesn't need the package. It does. <code>ros2 bag play</code> creates a real ROS publisher for each topic, and that needs the compiled type support libraries, not a text schema. A long-running rosbag2 feature request, <a href="https://github.com/ros2/rosbag2/issues/782">Store message definition in bag</a>, is about the definitions, and in this version the player still needs the package installed.</p>
+
+<h2>ros2 bag info works without the workspace</h2>
+
+<p>From an unsourced shell, <code>ros2 bag info</code> printed the right type and count on all three distros, for example <code>Topic: /reading | Type: my_msgs/msg/Reading | Count: 94 | Serialization Format: cdr</code>. That's because <code>info</code> reads only the metadata. So a correct <code>ros2 bag info</code> doesn't prove that playback will work. Run <code>ros2 bag play</code> in the same shell and look for the warning.</p>
+
+<h2>Half-sourced workspaces give a different error</h2>
+
+<p>Some setups only export <code>AMENT_PREFIX_PATH</code>, for example a hand-written Dockerfile <code>ENV</code> line or a launcher script. I tried exactly that: <code>AMENT_PREFIX_PATH</code> pointing at <code>ws1/install/my_msgs</code>, with no <code>setup.bash</code>. The package was now found, and loading its libraries failed instead:</p>
+
+<pre><code># Humble
+Ignoring a topic '/reading', reason: could not create publisher: Type support not from this implementation. Got:
+    Handle's typesupport identifier (rosidl_typesupport_cpp) is not supported by this library, ...
+    Could not load library libmy_msgs__rosidl_typesupport_fastrtps_cpp.so: dlopen error: libmy_msgs__rosidl_typesupport_fastrtps_cpp.so: cannot open shared object file: No such file or directory
+
+# Jazzy and Lyrical
+Ignoring a topic '/reading', reason: dlopen error: libmy_msgs__rosidl_generator_c.so: cannot open shared object file: No such file or directory</code></pre>
+
+<p>The subscriber again received 0 messages. The fix is the same: source the workspace's <code>install/setup.bash</code> and don't rebuild the environment by hand. Sourcing also sets the library path and <code>PYTHONPATH</code>.</p>
+
+<h2>Changed message definitions: no warning, no messages</h2>
+
+<p>This is the quiet one. I played the <code>ws1</code> bags from a shell that sourced <code>ws2</code>, where the package name is the same but the fields are different. The subscriber also used <code>ws2</code>. The player found the package, printed no warning, and ran for the full length. The subscriber received 0 messages on all three distros, with both sqlite3 and MCAP bags. Neither process printed an error.</p>
+
+<p><code>rosbag2_py</code> showed what was happening. With <code>ws2</code> sourced, reading the raw bytes worked (all 94, 88 and 80 records), and deserializing the first one failed:</p>
+
+<pre><code>RMWError failed to deserialize ROS message: Fast CDR exception deserializing message of type my_msgs::msg::dds_::Reading_., at ./src/type_support_common.cpp:118</code></pre>
+
+<p>On Lyrical the same message ended in <code>type_support_common.cpp:139</code>. Jazzy and Lyrical bags store a hash of the definition. The <code>metadata.yaml</code> had <code>type_description_hash: RIHS01_6e686bae...</code> next to the type, and metadata version 9. Humble's bag used metadata version 5 with no hash. Even on Jazzy and Lyrical, the player didn't warn that the hash differed from the sourced package. If a bag plays without warnings but your subscriber stays silent, compare the <code>.msg</code> file with the one used at recording time. The fix is to check out or rebuild the old definition, play the bag from that workspace, and convert the data if you need it in the new layout. I didn't measure the conversion step.</p>
+
+<h2>Reading bags in Python with rosbag2_py</h2>
+
+<table>
+<thead><tr><th>Shell</th><th>Raw read</th><th><code>deserialize_message</code></th></tr></thead>
+<tbody>
+<tr><td><code>/opt/ros</code> only</td><td>all records</td><td><code>ModuleNotFoundError: No module named 'my_msgs'</code></td></tr>
+<tr><td>sourced <code>ws1</code></td><td>all records</td><td>worked, e.g. <code>my_msgs.msg.Reading(seq=8, value=4.0, note='n8')</code></td></tr>
+<tr><td>sourced <code>ws2</code> (changed definition)</td><td>all records</td><td><code>Fast CDR exception deserializing message</code></td></tr>
+</tbody>
+</table>
+
+<p>This held for both storage formats on all three distros. <code>get_all_topics_and_types()</code> returned <code>{'/reading': 'my_msgs/msg/Reading'}</code> without the workspace on Humble and Jazzy. So a script can list a bag's topics anywhere, but it needs the right workspace to decode a message. On Lyrical, <code>read_next()</code> also printed a <code>DeprecationWarning</code> suggesting <code>read_next_ext()</code>.</p>
+
+<h2>package.xml: member_of_group matters, architecture_independent doesn't</h2>
+
+<p>One <a href="https://answers.ros.org/question/417078/">ROS Answers thread</a> ends with the asker fixing <code>has unknown type</code> through a <code>package.xml</code> change. I tested the two changes that usually come up. Without <code>&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;</code>, <code>colcon build</code> failed in about 1 to 2 seconds on all three distros:</p>
+
+<pre><code>CMake Error at /opt/ros/humble/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:229 (message):
+  Packages installing interfaces must include
+  '&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;' in their
+  package.xml</code></pre>
+
+<p>Jazzy and Lyrical reported the same error at line 223. With that build failing, there's no installed package, so recording that type produced 0 messages, and in my script the publisher couldn't even import it. Adding <code>&lt;architecture_independent/&gt;</code> to the export block changed nothing. That package built and recorded 92, 89 and 80 messages. If your build log for the message package is clean and the package shows up in <code>install/</code>, <code>package.xml</code> isn't your problem.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Result in my run</th></tr></thead>
+<tbody>
+<tr><td>Source <code>install/setup.bash</code> in the record and play shells</td><td>All messages recorded and played on Humble, Jazzy and Lyrical, with both sqlite3 and MCAP</td></tr>
+<tr><td>Record or play with <code>--topics /reading</code> but unsourced</td><td>No change, still 0</td></tr>
+<tr><td>Use MCAP storage instead of sqlite3</td><td>No change, still 0 without the workspace</td></tr>
+<tr><td>Set only <code>AMENT_PREFIX_PATH</code></td><td>Package found, libraries not loaded, still 0</td></tr>
+<tr><td>Rebuild with a changed <code>.msg</code> but the same name</td><td>No warning, 0 delivered. Play from a workspace with the original definition instead.</td></tr>
+<tr><td>Add <code>&lt;architecture_independent/&gt;</code> to <code>package.xml</code></td><td>No effect</td></tr>
+</tbody>
+</table>
+
+<p>In practice, record and play from the same terminal you use for <code>ros2 run</code>. Put the workspace <code>source</code> line in the script or launch wrapper that starts the recorder. And after a test recording, check that your topic appears in <code>ros2 bag info</code> with a non-zero count. If the bag also needs converting between distros or formats, see <a href="https://huntlab.app/en/ros-2-bag-convert-db3-to-mcap-jazzy-bag-in-humble/">how to convert a .db3 bag to MCAP and play Jazzy bags in Humble</a>. A converter needs the same sourced workspace for custom types, though I didn't run <code>ros2 bag convert</code> here.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble</strong>: the stock <code>ros-base</code> image has no MCAP plugin (<code>-s {sqlite3,my_test_plugin}</code>), so you need <code>ros-humble-rosbag2-storage-mcap</code>. The recorder repeats the unknown-type warning about every 100 ms. Topics are positional arguments, and <code>record --help</code> has no <code>--topics</code> flag. Bag metadata is version 5, with no type hash.</li>
+<li><strong>Jazzy</strong>: MCAP is included. The unknown-type warning prints once. Playback adds <code>Publisher for topic ... not found</code>. Metadata version 9 stores <code>type_description_hash</code>.</li>
+<li><strong>Lyrical</strong>: MCAP is listed first among storage plugins. The recorder logs <code>No input serialization format specified, using default rmw serialization format: 'cdr'</code> on every start. Bag file names start with an index and a timestamp, for example <code>0_bag_src_db3_2026_11_07-02_23_17.db3</code>. The player draws a progress block with terminal escape codes, and the <code>Ignoring a topic</code> line is printed inside it.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li><code>ros2 bag convert</code> with unknown types (see <a href="https://github.com/ros2/rosbag2/issues/1811">rosbag2 issue 1811</a>).</li>
+<li>Recording from a separate Docker container that lacks the workspace. I expect it to behave like my unsourced shell, but I didn't run it.</li>
+<li>Cyclone DDS, Zenoh or any RMW other than the default Fast DDS.</li>
+<li>Services and actions in bags, compressed bags, and ROS 1 bags through <code>rosbag2_bag_v2</code>.</li>
+<li>C++ readers using <code>rosbag2_cpp</code>.</li>
+<li><code>ros2 interface show</code> as a pre-check, Foxy, Iron and Rolling.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 bag play say Ignoring a topic, package not found?</h3>
+<p>The terminal running <code>ros2 bag play</code> hasn't sourced the workspace that built the message package. The <code>searching: [...]</code> list shows where it looked. Source that workspace's <code>install/setup.bash</code> in the same terminal. In my run the topic then played in full on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why is my custom topic missing from the bag after ros2 bag record?</h3>
+<p>The recorder shell didn't know the type, so it printed <code>has unknown type</code> and skipped the topic. It still wrote a valid bag and exited normally. Humble repeats the warning about every 100 ms, while Jazzy and Lyrical print it once. Source the workspace before recording.</p>
+
+<h3>Does MCAP storage let me play custom messages without the package?</h3>
+<p>No. A bag recorded with MCAP was ignored by an unsourced player on all three distros, just like sqlite3. The player needs the compiled message libraries to create a publisher.</p>
+
+<h3>ros2 bag info shows my type. Why does playback still fail?</h3>
+<p><code>ros2 bag info</code> only reads metadata, so it worked without the workspace. Playback and deserialization need the package, and in a half-sourced setup they also need its libraries.</p>
+
+<h3>The bag plays with no warning but my subscriber gets nothing. What now?</h3>
+<p>Check whether the message definition changed after recording. With the same package name and different fields, the player printed nothing and the subscriber received 0 messages. <code>rosbag2_py</code> showed a <code>Fast CDR exception deserializing message</code> error. Play from a workspace that has the original definition.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 bag play say Ignoring a topic, package not found?", "acceptedAnswer": {"@type": "Answer", "text": "The terminal running ros2 bag play has not sourced the workspace that built the message package. The searching list shows where it looked. Source that workspace's install/setup.bash in the same terminal. In my run the topic then played in full on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why is my custom topic missing from the bag after ros2 bag record?", "acceptedAnswer": {"@type": "Answer", "text": "The recorder shell did not know the type, so it printed has unknown type and skipped the topic. It still wrote a valid bag and exited normally. Humble repeats the warning about every 100 ms, while Jazzy and Lyrical print it once. Source the workspace before recording."}},
+{"@type": "Question", "name": "Does MCAP storage let me play custom messages without the package?", "acceptedAnswer": {"@type": "Answer", "text": "No. A bag recorded with MCAP was ignored by an unsourced player on all three distros, just like sqlite3. The player needs the compiled message libraries to create a publisher."}},
+{"@type": "Question", "name": "ros2 bag info shows my type. Why does playback still fail?", "acceptedAnswer": {"@type": "Answer", "text": "ros2 bag info only reads metadata, so it worked without the workspace. Playback and deserialization need the package, and in a half-sourced setup they also need its libraries."}},
+{"@type": "Question", "name": "The bag plays with no warning but my subscriber gets nothing. What now?", "acceptedAnswer": {"@type": "Answer", "text": "Check whether the message definition changed after recording. With the same package name and different fields, the player printed nothing and the subscriber received 0 messages. rosbag2_py showed a Fast CDR exception deserializing message error. Play from a workspace that has the original definition."}}
+]}
+</script>
+
+<p>Measured on 2026-11-07 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, plus <code>ros-humble-rosbag2-storage-mcap</code> 0.15.17, rosbag2 0.15.17, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rosbag2 0.26.11, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rosbag2 0.33.4, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-02-ros2-bag-custom-message-unknown-type/evidence">evidence folder</a>. Questions this answers: <a href="https://answers.ros.org/question/400761/">ros2 bag ignored topics</a>, <a href="https://answers.ros.org/question/417078/">ROS2 bagging custom msg: Topic has unknown type</a>, <a href="https://github.com/carla-simulator/ros-bridge/issues/720">Unable to record any carla_msgs</a>, <a href="https://github.com/ros2/rosbag2/issues/782">Store message definition in bag</a>, <a href="https://github.com/ros2/rosbag2/issues/1811">ros2 bag convert ignoring messages with unknown types</a>.</p>
