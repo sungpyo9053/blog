@@ -1,0 +1,205 @@
+<pre><code>Traceback (most recent call last):
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 88, in init
+    context.init(args, domain_id=domain_id)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 70, in init
+    raise RuntimeError('Context.init() must only be called once')
+RuntimeError: Context.init() must only be called once</code></pre>
+
+<p>The C++ version of the same mistake aborts the process:</p>
+
+<pre><code>terminate called after throwing an instance of 'rclcpp::ContextAlreadyInitialized'
+  what():  context is already initialized</code></pre>
+
+<p>Short answer: something called <code>rclpy.init()</code> (or <code>rclcpp::init()</code>) a second time while the default context was still running. A shut-down context can be initialized again, and that worked on Humble, Jazzy and Lyrical. So either call init once per process, or make sure every init has a matching shutdown before the next one. If you can't control who calls it first, guard it:</p>
+
+<pre><code class="language-python">import rclpy
+
+def main():
+    if not rclpy.ok():          # False before init and after shutdown
+        rclpy.init()
+    node = rclpy.create_node('my_node')
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()    # safe even if something already shut it down</code></pre>
+
+<pre><code class="language-cpp">if (!rclcpp::ok()) {
+  rclcpp::init(argc, argv);
+}
+// ... nodes ...
+rclcpp::shutdown();</code></pre>
+
+<p>In tests, put the shutdown in <code>tearDown</code> (or <code>TearDown</code> in gtest), or move init and shutdown to the class level. In notebooks, wrap the cell in <code>try</code>/<code>finally</code> with <code>rclpy.try_shutdown()</code>. The sections below show which pattern produces the error and which fix cleared it, measured on all three distros.</p>
+
+<h2>Find your error text</h2>
+
+<p>The messages were identical on Humble, Jazzy and Lyrical. Only the <code>with rclpy.init()</code> row changes by distro.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>What happened</th><th>Section</th></tr></thead>
+<tbody>
+<tr><td><code>RuntimeError: Context.init() must only be called once</code></td><td><code>rclpy.init()</code> ran while the default context was still initialized</td><td>Init called twice</td></tr>
+<tr><td><code>terminate called after throwing an instance of 'rclcpp::ContextAlreadyInitialized'</code>, <code>what(): context is already initialized</code>, exit code 134</td><td>Same thing in C++, not caught, so the process aborted</td><td>Init called twice</td></tr>
+<tr><td>First test passes, the rest error with the message above</td><td>Each test calls init in setup, nothing shuts down</td><td>Tests</td></tr>
+<tr><td>A notebook cell works once, then fails on every re-run</td><td>The first run never reached <code>rclpy.shutdown()</code></td><td>Re-running code</td></tr>
+<tr><td><code>AttributeError: __enter__</code> (Humble) or <code>TypeError: 'NoneType' object does not support the context manager protocol</code> (Jazzy)</td><td><code>with rclpy.init():</code> on a distro where <code>rclpy.init()</code> returns <code>None</code></td><td>with rclpy.init()</td></tr>
+<tr><td><code>[WARN] [rclcpp]: logging was initialized more than once</code></td><td>A second <code>rclcpp::Context</code> was initialized in the same process. A warning only, it kept working</td><td>Fix options</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>Each distro ran in its own <code>ros:&lt;distro&gt;-ros-base</code> container with <code>--network none</code>, <code>ROS_DOMAIN_ID=88</code>, one CPU, 1 GiB of memory and the default RMW (Fast DDS). One after another, not in parallel.</p>
+
+<p>The Python side is one script, <code>exp_py.py</code>, with one case per run, and every case starts in a fresh interpreter. The cases are: init twice; init, shutdown and init again; an <code>rclpy.ok()</code> guard; <code>try_shutdown()</code> twice; <code>with rclpy.init()</code> twice; a second <code>Context</code> object; running a "notebook cell" file twice with <code>runpy</code>; three <code>unittest</code> classes with different setup and teardown; and a timing loop. A final case calls <code>rclpy.init()</code> twice without catching anything, to get the real traceback and exit code.</p>
+
+<p>The C++ side is one small executable, <code>init_twice.cpp</code>, built with colcon in the same container. It runs the same ideas: init twice, re-init after shutdown, an <code>rclcpp::ok()</code> guard, a gtest-style loop of three "tests" with and without shutdown in teardown, a second <code>rclcpp::Context</code>, timing, and an uncaught double init. I didn't link gtest. The loop does what <code>SetUp()</code> and <code>TearDown()</code> would do.</p>
+
+<p>I ran the timing loops three times on each distro. Everything else ran once per distro, because those cases are pass or fail and came out the same everywhere.</p>
+
+<h2>Init called twice: the first context survives</h2>
+
+<p>The simplest case is two <code>rclpy.init()</code> calls in one process. The second one raised <code>RuntimeError: Context.init() must only be called once</code> on all three distros. Left uncaught, the script exited with code 1.</p>
+
+<p>The failed call didn't damage anything. After catching it, <code>rclpy.ok()</code> was still <code>True</code>, and the script still created a node and published a message on the original context. C++ behaved the same way. <code>rclcpp::init()</code> threw <code>rclcpp::ContextAlreadyInitialized</code>, <code>rclcpp::ok()</code> stayed at 1, and a node created afterwards published normally.</p>
+
+<p>That matters for the fix. The second call is redundant, not harmful, so a guard that skips it is enough. You don't need to tear anything down and start over.</p>
+
+<p>In real code the two calls are rarely next to each other. These are the shapes that produce them:</p>
+
+<ul>
+<li>Each node class calls <code>rclpy.init()</code> or <code>rclcpp::init()</code> in its constructor, and one process creates two of those classes.</li>
+<li>A library you import creates a node at import time and calls init itself. Then your own <code>main()</code> calls init again. One reported case: <a href="https://github.com/IMRCLab/crazyswarm2/discussions/608">crazyswarm2 discussion #608</a>.</li>
+<li>Two plugins loaded into the same host process each call <code>rclcpp::init()</code>. That is the Gazebo case in <a href="https://github.com/ros-simulation/gazebo_ros_pkgs/pull/859">gazebo_ros_pkgs PR #859</a>, which fixed it by checking first.</li>
+</ul>
+
+<p>In C++ the uncaught version is harsher. The process printed <code>terminate called after throwing an instance of 'rclcpp::ContextAlreadyInitialized'</code> and exited with code 134, which is SIGABRT.</p>
+
+<h2>Tests that call init in setup</h2>
+
+<p>This is the pattern in the Robotics Stack Exchange question about initializing rclcpp inside a test class. Each test's setup calls init, so the first test works, and every later test starts with a context that is already up.</p>
+
+<p>I ran three Python <code>unittest</code> classes, each with three tests that create and destroy a node:</p>
+
+<table>
+<thead><tr><th>Test class</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>setUp</code> calls <code>rclpy.init()</code>, no teardown</td><td>3 ran, 2 errors</td><td>3 ran, 2 errors</td><td>3 ran, 2 errors</td></tr>
+<tr><td><code>setUp</code> init, <code>tearDown</code> calls <code>rclpy.shutdown()</code></td><td>3 ran, 0 errors</td><td>3 ran, 0 errors</td><td>3 ran, 0 errors</td></tr>
+<tr><td><code>setUpClass</code> init, <code>tearDownClass</code> shutdown</td><td>3 ran, 0 errors</td><td>3 ran, 0 errors</td><td>3 ran, 0 errors</td></tr>
+</tbody>
+</table>
+
+<p>Both errors in the first class were <code>RuntimeError: Context.init() must only be called once</code>. The C++ loop gave the same split. Without a shutdown in teardown, 1 of 3 "tests" passed and 2 threw <code>context is already initialized</code>. With <code>rclcpp::shutdown()</code> in teardown, all 3 passed on every distro.</p>
+
+<p>Re-init after shutdown is what makes per-test setup work. After <code>rclpy.shutdown()</code>, a new <code>rclpy.init()</code> succeeded and a node could be created on it. In C++, <code>rclcpp::ok()</code> returned 0 after shutdown, and the next <code>rclcpp::init()</code> succeeded. This held on all three distros.</p>
+
+<p>The same error has hit ROS 2's own test suites. <a href="https://github.com/ros2/launch_ros/issues/407">launch_ros issue #407</a> and <a href="https://github.com/ros2/examples/issues/391">ros2/examples issue #391</a> are 2024 buildfarm reports of this <code>RuntimeError</code> in launch tests. <a href="https://github.com/aerostack2/aerostack2/issues/184">aerostack2 issue #184</a> is a 2023 test failure from more than one rclpy context being initialized.</p>
+
+<h2>Re-running code in the same interpreter</h2>
+
+<p>Notebooks, IPython and anything that re-executes a script inside one Python process hit this all the time. The usual sequence: the cell spins a node, you interrupt it, and the <code>rclpy.shutdown()</code> at the bottom never runs. The context stays initialized, and the next run fails on its first line.</p>
+
+<p>I simulated that with two small files run twice each through <code>runpy.run_path</code> in one interpreter. Each file raises <code>KeyboardInterrupt</code> where a real cell would be interrupted during <code>spin</code>.</p>
+
+<ul>
+<li><strong>No <code>finally</code>:</strong> run 1 ended with the <code>KeyboardInterrupt</code>. Run 2 failed at <code>rclpy.init()</code> with <code>Context.init() must only be called once</code>. <code>rclpy.ok()</code> was still <code>True</code> afterwards.</li>
+<li><strong><code>try</code>/<code>finally</code> with <code>rclpy.try_shutdown()</code>:</strong> both runs got past init and reached the interrupt. <code>rclpy.ok()</code> was <code>False</code> at the end, so the next run starts clean.</li>
+</ul>
+
+<p>The result was the same on Humble, Jazzy and Lyrical. I used <code>try_shutdown()</code> rather than <code>shutdown()</code> because calling it twice in a row raised nothing on any distro. The shutdown post below shows why: on Humble and Jazzy, plain <code>rclpy.shutdown()</code> raises an error if Ctrl+C already shut the context down.</p>
+
+<h2>with rclpy.init() works only on Lyrical</h2>
+
+<p>Newer examples use <code>rclpy.init()</code> as a context manager. I ran <code>with rclpy.init(): ...</code> twice in a row in one process:</p>
+
+<table>
+<thead><tr><th></th><th>Humble (rclpy 3.3.22)</th><th>Jazzy (rclpy 7.1.12)</th><th>Lyrical (rclpy 10.0.11)</th></tr></thead>
+<tbody>
+<tr><td>First <code>with</code></td><td><code>AttributeError: __enter__</code></td><td><code>TypeError: 'NoneType' object does not support the context manager protocol</code></td><td>OK</td></tr>
+<tr><td>Second <code>with</code></td><td><code>Context.init() must only be called once</code></td><td><code>Context.init() must only be called once</code></td><td>OK</td></tr>
+<tr><td><code>rclpy.ok()</code> at the end</td><td><code>True</code></td><td><code>True</code></td><td><code>False</code></td></tr>
+</tbody>
+</table>
+
+<p>On Humble and Jazzy, <code>rclpy.init()</code> returns <code>None</code>. On Lyrical it returned an <code>rclpy.InitContextManager</code> object. The trap on the older distros is the order. <code>rclpy.init()</code> runs and initializes the context before Python finds out it can't use the result as a context manager. So the first error is about <code>__enter__</code>, the context is left initialized, and the next attempt gets the init-once error. If you copied a <code>with rclpy.init():</code> example onto Humble or Jazzy, replace it with an explicit init and a <code>try</code>/<code>finally</code>.</p>
+
+<p>On Lyrical, two context managers in a row worked, and each one shut the context down on exit. <a href="https://github.com/ros2/rclpy/pull/1314">rclpy PR #1314</a> fixed a bug with multiple <code>rclpy.init</code> context managers in one process. The version I tested didn't have that problem.</p>
+
+<h2>The fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Result in my runs</th><th>Use it when</th></tr></thead>
+<tbody>
+<tr><td>Call init once, in <code>main()</code>, and pass nodes around</td><td>No error by construction</td><td>You own the process</td></tr>
+<tr><td>Guard: <code>if not rclpy.ok(): rclpy.init()</code> / <code>if (!rclcpp::ok()) rclcpp::init(...)</code></td><td>Skipped the call when already up, ran it after shutdown. All three distros</td><td>Libraries, plugins, code that may run after someone else's init</td></tr>
+<tr><td>Shutdown in <code>tearDown</code> / <code>TearDown</code></td><td>3 of 3 tests passed (Python and C++)</td><td>Tests that need a fresh context each time</td></tr>
+<tr><td>Init in <code>setUpClass</code>, shutdown in <code>tearDownClass</code></td><td>3 of 3 tests passed</td><td>Tests that can share one context</td></tr>
+<tr><td><code>try</code>/<code>finally</code> with <code>rclpy.try_shutdown()</code></td><td>Re-running the same code worked</td><td>Notebooks, scripts run more than once in one interpreter</td></tr>
+<tr><td>A separate <code>Context</code> object</td><td>Initialized fine while the default one was up. A node ran on it</td><td>You really need two independent ROS contexts in one process</td></tr>
+</tbody>
+</table>
+
+<p>A separate context is not a way around the rule. It has the same rule. Calling <code>rclpy.init(context=ctx)</code> twice on the same <code>ctx</code> raised the same <code>RuntimeError</code>, and a second <code>ctx-&gt;init()</code> on an <code>rclcpp::Context</code> threw <code>ContextAlreadyInitialized</code>. The C++ run also printed <code>[WARN] [rclcpp]: logging was initialized more than once</code> when the second context came up. Nodes must be created with that context explicitly: <code>rclpy.create_node(name, context=ctx)</code> in Python, <code>NodeOptions().context(ctx)</code> in C++.</p>
+
+<p>Shutting down and initializing again for every test is cheap. These are the averages over 50 cycles, as the range across three timing runs:</p>
+
+<table>
+<thead><tr><th>Loop body (50 times)</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>rclpy: init + shutdown</td><td>0.36 to 0.53 ms</td><td>0.38 to 0.42 ms</td><td>0.40 to 0.41 ms</td></tr>
+<tr><td>rclpy: init + create node + destroy + shutdown</td><td>9.68 to 11.61 ms</td><td>12.93 to 13.51 ms</td><td>12.71 to 13.16 ms</td></tr>
+<tr><td>rclcpp: init + shutdown</td><td>0.36 to 0.41 ms</td><td>0.38 ms (all three runs)</td><td>0.44 to 0.81 ms</td></tr>
+<tr><td>rclcpp: init + node + publish + shutdown</td><td>7.51 to 8.67 ms</td><td>9.67 to 10.32 ms</td><td>10.27 to 28.92 ms</td></tr>
+</tbody>
+</table>
+
+<p>The 28.92 ms on Lyrical came from the first of the three runs. The other two were 10.92 and 10.27 ms. Either way, init and shutdown take well under a millisecond, and node creation is most of the cost. Per-test init and shutdown add milliseconds to a test suite, not seconds.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The error text was the same on all three distros: <code>Context.init() must only be called once</code> from rclpy and <code>context is already initialized</code> from rclcpp. The line number inside <code>rclpy/context.py</code> differs (70 on Humble, 97 on Jazzy, 93 on Lyrical).</li>
+<li>On Lyrical, <code>rclpy.init()</code> returns an <code>InitContextManager</code>, and <code>with rclpy.init():</code> works, including twice in a row. On Humble and Jazzy it returns <code>None</code> and the <code>with</code> form fails, as shown in the table above.</li>
+<li>Re-init after shutdown, the <code>ok()</code> guard, <code>try_shutdown()</code> twice and separate contexts behaved the same on all three distros, in both Python and C++.</li>
+<li>On Jazzy every init printed two <code>[WARN] [rcl]</code> lines saying <code>ROS_LOCALHOST_ONLY</code> is deprecated. That came from my container settings, not from the double init. Humble and Lyrical didn't print it.</li>
+<li>Uncaught, the Python error exited with code 1 and the C++ error with code 134 on all three distros.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>pytest fixtures (I used the standard library's <code>unittest</code>, which has the same setup and teardown order), real gtest binaries, <code>launch_testing</code> and the regressions in the GitHub issues above, actual Jupyter or IPython kernels, a real Ctrl+C during <code>spin</code> (a raised <code>KeyboardInterrupt</code> stood in for it), Gazebo or other plugin hosts, other RMW implementations, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Context.init() must only be called once" mean?</h3>
+<p><code>rclpy.init()</code> ran while the default context was still initialized. Some earlier code called it and never called <code>rclpy.shutdown()</code>. The first context keeps working, so you can skip the second call with <code>if not rclpy.ok(): rclpy.init()</code>.</p>
+
+<h3>Can I call rclpy.init() again after rclpy.shutdown()?</h3>
+<p>Yes. Init, shutdown and init again worked on Humble, Jazzy and Lyrical, and a node could be created on the new context. The same is true for <code>rclcpp::init()</code> after <code>rclcpp::shutdown()</code>.</p>
+
+<h3>Why does only my first unit test pass?</h3>
+<p>Each test calls init in its setup and nothing shuts down in teardown. In my run, 2 of 3 tests failed that way. Adding <code>rclpy.shutdown()</code> to <code>tearDown</code>, or moving init and shutdown to <code>setUpClass</code> and <code>tearDownClass</code>, made all 3 pass. The same applies to <code>rclcpp::shutdown()</code> in gtest's <code>TearDown()</code>.</p>
+
+<h3>Why does my Jupyter cell fail the second time I run it?</h3>
+<p>The first run was interrupted before <code>rclpy.shutdown()</code>, so the context stayed up. Put the node code in a <code>try</code> block with <code>rclpy.try_shutdown()</code> in <code>finally</code>. Then every run starts with a clean context.</p>
+
+<h3>Why does with rclpy.init() fail with __enter__ or NoneType?</h3>
+<p>On Humble and Jazzy, <code>rclpy.init()</code> returns <code>None</code>, so it can't be used with <code>with</code>. It still initializes the context before the error, which is why your next attempt fails with the init-once error. Only Lyrical supported <code>with rclpy.init():</code> in my test.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Context.init() must only be called once mean?", "acceptedAnswer": {"@type": "Answer", "text": "rclpy.init() ran while the default context was still initialized. Some earlier code called it and never called rclpy.shutdown(). The first context keeps working, so you can skip the second call with if not rclpy.ok(): rclpy.init()."}},
+{"@type": "Question", "name": "Can I call rclpy.init() again after rclpy.shutdown()?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Init, shutdown and init again worked on Humble, Jazzy and Lyrical, and a node could be created on the new context. The same is true for rclcpp::init() after rclcpp::shutdown()."}},
+{"@type": "Question", "name": "Why does only my first unit test pass?", "acceptedAnswer": {"@type": "Answer", "text": "Each test calls init in its setup and nothing shuts down in teardown. In my run, 2 of 3 tests failed that way. Adding rclpy.shutdown() to tearDown, or moving init and shutdown to setUpClass and tearDownClass, made all 3 pass. The same applies to rclcpp::shutdown() in the gtest TearDown()."}},
+{"@type": "Question", "name": "Why does my Jupyter cell fail the second time I run it?", "acceptedAnswer": {"@type": "Answer", "text": "The first run was interrupted before rclpy.shutdown(), so the context stayed up. Put the node code in a try block with rclpy.try_shutdown() in finally. Then every run starts with a clean context."}},
+{"@type": "Question", "name": "Why does with rclpy.init() fail with __enter__ or NoneType?", "acceptedAnswer": {"@type": "Answer", "text": "On Humble and Jazzy, rclpy.init() returns None, so it cannot be used with with. It still initializes the context before the error, which is why your next attempt fails with the init-once error. Only Lyrical supported with rclpy.init() in my test."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, rmw 6.1.4, ros2cli 0.18.20, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, rmw 7.3.4, ros2cli 0.32.13, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, rmw 7.10.2, ros2cli 0.40.9, Python 3.14.4), default RMW (Fast DDS), <code>--network none</code>. Full digests and package versions are in <code>digests.txt</code>. For the shutdown side of the same lifecycle, see <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">ROS 2 node shutdown: Ctrl+C, SIGTERM and "rcl_shutdown already called"</a>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-04-rclpy-context-init-called-once/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/25178">ROS2 - Initialize rclcpp within a class (for tests)</a>, <a href="https://github.com/IMRCLab/crazyswarm2/discussions/608">RuntimeError: Context.init() must only be called once (crazyswarm2)</a>, <a href="https://github.com/ros2/launch_ros/issues/407">Context.init() must only be called once test regression (launch_ros)</a>, <a href="https://github.com/aerostack2/aerostack2/issues/184">Test failing due to multiple rclpy context initialized (aerostack2)</a>, <a href="https://github.com/ros-simulation/gazebo_ros_pkgs/pull/859">rclcpp::ContextAlreadyInitialized with two Gazebo plugins</a>.</p>

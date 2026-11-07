@@ -1,0 +1,125 @@
+=== distro humble
+Python 3.10.12
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw 6.1.4-1jammy.20260907.194822
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-rmw-implementation 2.8.5-1jammy.20260907.211224
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+RMW_IMPLEMENTATION=<unset, default>
+
+##### rclpy
+--- py:twice
+second rclpy.init(): RAISED builtins.RuntimeError: Context.init() must only be called once
+rclpy.ok() after failed init: True
+use default context after failed init: OK -> node created and published
+rclpy.shutdown(): OK
+exit=0
+--- py:reinit
+init after shutdown: OK
+create_node after re-init: OK -> re
+shutdown again: OK
+exit=0
+--- py:guard
+guarded second init: OK -> skipped, already ok
+guarded init after shutdown: OK -> init called
+exit=0
+--- py:try_shutdown
+try_shutdown #1: OK
+try_shutdown #2: OK
+init after try_shutdown: OK
+exit=0
+--- py:ctxmgr
+with rclpy.init() #1: RAISED builtins.AttributeError: __enter__
+with rclpy.init() #2: RAISED builtins.RuntimeError: Context.init() must only be called once
+rclpy.ok() at end: True
+exit=0
+--- py:context
+rclpy.init(context=ctx) while default is up: OK
+node on ctx: OK -> on_ctx
+second rclpy.init(context=ctx): RAISED builtins.RuntimeError: Context.init() must only be called once
+exit=0
+--- py:rerun
+no finally run 1: RAISED builtins.KeyboardInterrupt: 
+no finally run 2: RAISED builtins.RuntimeError: Context.init() must only be called once
+rclpy.ok() after the two no finally runs: True
+try/finally try_shutdown run 1: RAISED builtins.KeyboardInterrupt: 
+try/finally try_shutdown run 2: RAISED builtins.KeyboardInterrupt: 
+rclpy.ok() after the two try/finally try_shutdown runs: False
+exit=0
+--- py:unittest
+NoTeardown: ran=3 errors=2 failures=0 ['RuntimeError: Context.init() must only be called once']
+WithTeardown: ran=3 errors=0 failures=0 []
+ClassLevel: ran=3 errors=0 failures=0 []
+exit=0
+--- py:timing
+init+shutdown x50: 0.38 ms each
+init+create_node+destroy+shutdown x50: 9.89 ms each
+exit=0
+--- py:timing
+init+shutdown x50: 0.36 ms each
+init+create_node+destroy+shutdown x50: 9.68 ms each
+exit=0
+--- py:timing
+init+shutdown x50: 0.53 ms each
+init+create_node+destroy+shutdown x50: 11.61 ms each
+exit=0
+--- py:uncaught (full stderr)
+Traceback (most recent call last):
+  File "/exp/exp_py.py", line 137, in <module>
+    rclpy.init()
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 88, in init
+    context.init(args, domain_id=domain_id)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 70, in init
+    raise RuntimeError('Context.init() must only be called once')
+RuntimeError: Context.init() must only be called once
+exit=1
+
+##### rclcpp
+colcon exit=0
+Finished <<< it [8.03s]
+
+Summary: 1 package finished [8.40s]
+--- cpp:twice
+second rclcpp::init: THREW N6rclcpp25ContextAlreadyInitializedE: context is already initialized
+rclcpp::ok() after failed init: 1
+use default context after failed init: OK
+exit=0
+--- cpp:reinit
+rclcpp::ok() after shutdown: 0
+init after shutdown: OK
+node after re-init: OK
+exit=0
+--- cpp:guard
+  (skipped, already ok)
+guarded with rclcpp::ok(): OK
+  (init called)
+guarded with rclcpp::ok() after shutdown: OK
+exit=0
+--- cpp:fixture
+fixture no TearDown shutdown: passed=1 threw=2 context is already initialized
+fixture with TearDown shutdown: passed=3 threw=0 
+exit=0
+--- cpp:context
+[WARN] [1794095349.849997316] [rclcpp]: logging was initialized more than once
+ctx->init while default is up: OK
+node on ctx: OK
+second ctx->init: THREW N6rclcpp25ContextAlreadyInitializedE: context is already initialized
+exit=0
+--- cpp:timing
+init+shutdown x50: 0.36 ms each
+init+node+publish+shutdown x50: 7.51 ms each
+exit=0
+--- cpp:timing
+init+shutdown x50: 0.41 ms each
+init+node+publish+shutdown x50: 8.12 ms each
+exit=0
+--- cpp:timing
+init+shutdown x50: 0.36 ms each
+init+node+publish+shutdown x50: 8.67 ms each
+exit=0
+--- cpp:uncaught
+terminate called after throwing an instance of 'rclcpp::ContextAlreadyInitialized'
+  what():  context is already initialized
+timeout: the monitored command dumped core
+exit=134

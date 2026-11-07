@@ -1,0 +1,124 @@
+=== distro lyrical
+Python 3.14.4
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+RMW_IMPLEMENTATION=<unset, default>
+
+##### rclpy
+--- py:twice
+second rclpy.init(): RAISED builtins.RuntimeError: Context.init() must only be called once
+rclpy.ok() after failed init: True
+use default context after failed init: OK -> node created and published
+rclpy.shutdown(): OK
+exit=0
+--- py:reinit
+init after shutdown: OK -> <rclpy.InitContextManager object at 0x70cbfcf7ae90>
+create_node after re-init: OK -> re
+shutdown again: OK
+exit=0
+--- py:guard
+guarded second init: OK -> skipped, already ok
+guarded init after shutdown: OK -> init called
+exit=0
+--- py:try_shutdown
+try_shutdown #1: OK
+try_shutdown #2: OK
+init after try_shutdown: OK -> <rclpy.InitContextManager object at 0x74483814ae90>
+exit=0
+--- py:ctxmgr
+with rclpy.init() #1: OK -> cm
+with rclpy.init() #2: OK -> cm
+rclpy.ok() at end: False
+exit=0
+--- py:context
+rclpy.init(context=ctx) while default is up: OK -> <rclpy.InitContextManager object at 0x7353f6faefd0>
+node on ctx: OK -> on_ctx
+second rclpy.init(context=ctx): RAISED builtins.RuntimeError: Context.init() must only be called once
+exit=0
+--- py:rerun
+no finally run 1: RAISED builtins.KeyboardInterrupt: 
+no finally run 2: RAISED builtins.RuntimeError: Context.init() must only be called once
+rclpy.ok() after the two no finally runs: True
+try/finally try_shutdown run 1: RAISED builtins.KeyboardInterrupt: 
+try/finally try_shutdown run 2: RAISED builtins.KeyboardInterrupt: 
+rclpy.ok() after the two try/finally try_shutdown runs: False
+exit=0
+--- py:unittest
+NoTeardown: ran=3 errors=2 failures=0 ['RuntimeError: Context.init() must only be called once']
+WithTeardown: ran=3 errors=0 failures=0 []
+ClassLevel: ran=3 errors=0 failures=0 []
+exit=0
+--- py:timing
+init+shutdown x50: 0.40 ms each
+init+create_node+destroy+shutdown x50: 13.16 ms each
+exit=0
+--- py:timing
+init+shutdown x50: 0.41 ms each
+init+create_node+destroy+shutdown x50: 12.71 ms each
+exit=0
+--- py:timing
+init+shutdown x50: 0.41 ms each
+init+create_node+destroy+shutdown x50: 12.76 ms each
+exit=0
+--- py:uncaught (full stderr)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/__init__.py", line 137, in init
+    return InitContextManager(args, context, domain_id, signal_handler_options)
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/__init__.py", line 95, in __init__
+    self.context.init(args, domain_id=domain_id)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/context.py", line 93, in init
+    raise RuntimeError('Context.init() must only be called once')
+RuntimeError: Context.init() must only be called once
+exit=1
+
+##### rclcpp
+colcon exit=0
+
+Summary: 1 package finished [10.5s]
+  1 package had stderr output: it
+--- cpp:twice
+second rclcpp::init: THREW N6rclcpp25ContextAlreadyInitializedE: context is already initialized
+rclcpp::ok() after failed init: 1
+use default context after failed init: OK
+exit=0
+--- cpp:reinit
+rclcpp::ok() after shutdown: 0
+init after shutdown: OK
+node after re-init: OK
+exit=0
+--- cpp:guard
+  (skipped, already ok)
+guarded with rclcpp::ok(): OK
+  (init called)
+guarded with rclcpp::ok() after shutdown: OK
+exit=0
+--- cpp:fixture
+fixture no TearDown shutdown: passed=1 threw=2 context is already initialized
+fixture with TearDown shutdown: passed=3 threw=0 
+exit=0
+--- cpp:context
+[WARN] [1794095401.007761495] [rclcpp]: logging was initialized more than once
+ctx->init while default is up: OK
+node on ctx: OK
+second ctx->init: THREW N6rclcpp25ContextAlreadyInitializedE: context is already initialized
+exit=0
+--- cpp:timing
+init+shutdown x50: 0.81 ms each
+init+node+publish+shutdown x50: 28.92 ms each
+exit=0
+--- cpp:timing
+init+shutdown x50: 0.62 ms each
+init+node+publish+shutdown x50: 10.92 ms each
+exit=0
+--- cpp:timing
+init+shutdown x50: 0.44 ms each
+init+node+publish+shutdown x50: 10.27 ms each
+exit=0
+--- cpp:uncaught
+terminate called after throwing an instance of 'rclcpp::ContextAlreadyInitialized'
+  what():  context is already initialized
+exit=134
