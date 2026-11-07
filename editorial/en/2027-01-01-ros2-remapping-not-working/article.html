@@ -1,0 +1,179 @@
+<pre><code>$ python3 rm_node.py --ros-args -r __ns:=/robot1 -r /scan:=/scan_front
+# no error, no warning, and the node still publishes /robot1/scan
+
+$ python3 rm_node.py --ros-args -r '**/scan:=scan_front'
+rclpy._rclpy_pybind11.RCLError: failed to initialize rcl: Couldn't parse remap rule: '-r **/scan:=scan_front'. Error: Wildcard '**' is not implemented, at ./src/rcl/arguments.c:1167, at ./src/rcl/arguments.c:371</code></pre>
+
+<p>Both are from my Humble run. The second one, <code>Couldn't parse remap rule</code>, is the only kind of remap error you will see. The first case is the usual one: no error at all, and the old name stays.</p>
+
+<p>Short answer: a remap rule only applies when its left side matches the node's name after expansion. Relative names expand with the node's namespace before the match, so <code>scan:=scan_front</code> follows the node into any namespace. An absolute rule like <code>/scan:=/scan_front</code> matches only a node in the root namespace. If you push the node into <code>/robot1</code>, the topic becomes <code>/robot1/scan</code> and the rule is skipped without a word. Use a relative rule, or write the full expanded name:</p>
+
+<pre><code>ros2 run my_pkg my_node --ros-args -r __ns:=/robot1 -r scan:=scan_front
+# or
+ros2 run my_pkg my_node --ros-args -r __ns:=/robot1 -r /robot1/scan:=/robot1/scan_front</code></pre>
+
+<p>Both gave <code>/robot1/scan_front</code> on Humble, Jazzy and Lyrical. In a launch file, the same applies to <code>remappings=[('scan', 'scan_front')]</code>. A pair with leading slashes did nothing once the node had a namespace.</p>
+
+<h2>Find your case</h2>
+
+<p>Every row is one <code>python3 rm_node.py --ros-args ...</code> run, and the result is the name the ROS graph reported for that node. All rows matched on the three distros except the action row.</p>
+
+<table>
+<thead><tr><th>Code name</th><th>Namespace</th><th>Rule</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>scan</code></td><td>/</td><td><code>scan:=scan_front</code></td><td><code>/scan_front</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>/scan:=/scan_front</code></td><td><code>/scan_front</code></td></tr>
+<tr><td><code>scan</code></td><td>/robot1</td><td><code>scan:=scan_front</code></td><td><code>/robot1/scan_front</code></td></tr>
+<tr><td><code>scan</code></td><td>/robot1</td><td><code>/scan:=/scan_front</code></td><td>ignored, <code>/robot1/scan</code></td></tr>
+<tr><td><code>scan</code></td><td>/robot1</td><td><code>/robot1/scan:=/robot1/scan_front</code></td><td><code>/robot1/scan_front</code></td></tr>
+<tr><td><code>/abs_scan</code></td><td>/</td><td><code>abs_scan:=front</code></td><td><code>/front</code></td></tr>
+<tr><td><code>/abs_scan</code></td><td>/robot1</td><td><code>abs_scan:=front</code></td><td>ignored, <code>/abs_scan</code></td></tr>
+<tr><td><code>/abs_scan</code></td><td>/robot1</td><td><code>/abs_scan:=front</code></td><td><code>/robot1/front</code></td></tr>
+<tr><td><code>/tf</code></td><td>/robot1</td><td><code>/tf:=tf</code></td><td><code>/robot1/tf</code></td></tr>
+<tr><td><code>~/priv</code></td><td>/</td><td><code>priv:=priv2</code></td><td>ignored, <code>/rm_node/priv</code></td></tr>
+<tr><td><code>~/priv</code></td><td>/</td><td><code>~/priv:=priv2</code></td><td><code>/priv2</code></td></tr>
+<tr><td><code>~/priv</code></td><td>/</td><td><code>/rm_node/priv:=/priv2</code></td><td><code>/priv2</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>rm_node:scan:=scan_front</code></td><td><code>/scan_front</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>other_node:scan:=scan_front</code></td><td>ignored</td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>scan:=first -r scan:=second</code></td><td><code>/first</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>scan:=a -r a:=b</code></td><td><code>/a</code> (rules don't chain)</td></tr>
+<tr><td>action <code>fib</code></td><td>/</td><td><code>fib:=fib2</code></td><td>Humble: ignored. Jazzy, Lyrical: <code>/fib2/_action/*</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>*/scan:=...</code> or <code>**/scan:=...</code></td><td>node fails: <code>Wildcard '*' is not implemented</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>scan=scan_front</code></td><td>node fails: <code>Expected lexeme type (19) not found, search ended at index 4</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>scan:=scan-front</code></td><td>node fails: <code>Expected lexeme type (19) not found, search ended at index 10</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>scan:=2d_scan</code></td><td>node fails: <code>Error: error not set</code></td></tr>
+<tr><td><code>scan</code></td><td>/</td><td><code>scan:= scan_front</code> (space)</td><td>node fails: <code>Couldn't parse remap rule: '-r scan:='. Error: error not set</code></td></tr>
+</tbody>
+</table>
+
+<p>Two things stand out. Only the syntax errors stop the node, and they stop it fast: the failed runs exited with code 1 in a median of 0.21 s on Humble, 0.25 s on Jazzy and 0.32 s on Lyrical. A rule that just doesn't match never shows an error, a warning or a log line. In every row marked "ignored", in the Humble action row and in the launch case below, the node started normally and kept its original name.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-07 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one after another on a 2 vCPU Linux host. Each container ran with <code>--network none</code> and <code>ROS_DOMAIN_ID=77</code>, so no outside traffic could reach the graph. The test node is one rclpy script, <code>rm_node</code>. It creates publishers on <code>scan</code>, <code>/abs_scan</code>, <code>~/priv</code> and <code>/tf</code>, a subscription on <code>cmd_vel</code>, a service <code>reset</code> and an action server <code>fib</code> (type <code>tf2_msgs/action/LookupTransform</code>). Then it asks the graph which names belong to it, with <code>get_publisher_names_and_types_by_node()</code> and the matching subscriber and service calls, prints them and exits. So the results show what other nodes would see, not what the code asked for.</p>
+
+<p>The script ran the node 35 times with different <code>-r</code> rules. It then started five nodes from one launch file with <code>remappings</code>, <code>PushRosNamespace</code> and <code>SetRemap</code>. It recorded about 50 messages on <code>/scan</code> into a bag and played the bag back with four ways of remapping, while <code>ros2 topic echo --once /scan_front</code> listened. Last, it started a node that recreates its subscription when a parameter changes. Remap rules added no visible startup time. The 29 runs that started had a median of 0.47 s on Humble, 0.56 s on Jazzy and 0.58 s on Lyrical, from start to exit.</p>
+
+<h2>Why an absolute rule stops matching in a namespace</h2>
+
+<p>rcl expands both sides of a rule before it compares anything. A relative left side gets the node's namespace in front. A relative right side does too. The name your code passes to <code>create_publisher</code> is expanded the same way. Then rcl compares the two full strings, and only an exact match counts.</p>
+
+<p>In the root namespace, <code>scan</code> in code and <code>/scan</code> in a rule both end up as <code>/scan</code>, so either form works. That is why many examples use absolute rules and seem fine. Add <code>-r __ns:=/robot1</code>, or <code>namespace='robot1'</code> in launch, and the code's <code>scan</code> becomes <code>/robot1/scan</code>, while the rule still says <code>/scan</code>. No match, and nothing tells you. The rule order doesn't matter here. <code>-r scan:=scan_front -r __ns:=/robot1</code> gave <code>/robot1/scan_front</code>, the same as putting the namespace first.</p>
+
+<p>The opposite case is a name that is absolute in code, like tf2's <code>/tf</code> or my <code>/abs_scan</code>. It never moves into a namespace. A relative rule <code>abs_scan:=front</code> expands to <code>/robot1/abs_scan</code> and misses it. The left side has to be absolute: <code>/abs_scan:=front</code>. The right side may be relative, and then it lands in the node's namespace. That gave <code>/robot1/front</code>.</p>
+
+<p>This is how multi-robot setups move tf. <code>-r /tf:=tf</code> in <code>/robot1</code> gave <code>/robot1/tf</code>, in both <code>ros2 run</code> and launch. It's the remap the multi-robot tf questions below come down to. By the same rules, <code>/tf_static</code> needs its own <code>/tf_static:=tf_static</code>, and nodes that read tf need the rules too, not only the ones that publish it. I only measured publisher names. I didn't run <code>/tf_static</code> or a tf listener.</p>
+
+<h2>Private ~/ names</h2>
+
+<p>A name like <code>~/priv</code> expands to the node's full name plus the rest, here <code>/rm_node/priv</code>. The rule <code>priv:=priv2</code> expands to <code>/priv</code> and misses. Two forms worked: <code>~/priv:=priv2</code> and the full <code>/rm_node/priv:=/priv2</code>. Both gave <code>/priv2</code>, not <code>/rm_node/priv2</code>. The right side of a rule expands against the namespace, not the node name. If you want the result under the node's name, write that full name on the right side. I didn't run that form.</p>
+
+<p>Driver nodes often publish on <code>~/scan</code>. That gives topics like <code>/ldlidar_node/scan</code>, and a plain <code>scan:=/scan</code> rule won't move them. Remap from the full name you see in <code>ros2 topic list</code>.</p>
+
+<h2>Node-specific rules and renamed nodes</h2>
+
+<p>A rule can start with a node name and a colon: <code>rm_node:scan:=scan_front</code>. It worked, and <code>other_node:scan:=scan_front</code> was ignored, again without a warning. The prefix is checked against the node's name after renaming. With <code>-r __node:=lidar</code>, the rule <code>rm_node:scan:=scan_front</code> stopped working and the topic stayed <code>/scan</code>, while a plain <code>scan:=scan_front</code> still applied. If you rename a node in launch with <code>name=</code>, use the new name in node-specific rules.</p>
+
+<p>Rules don't combine. With two rules for the same name, the first one wins: <code>-r scan:=first -r scan:=second</code> gave <code>/first</code>. They don't chain either: <code>-r scan:=a -r a:=b</code> gave <code>/a</code>, not <code>/b</code>.</p>
+
+<h2>Launch files</h2>
+
+<p>The launch results matched <code>ros2 run</code> on every distro:</p>
+
+<table>
+<thead><tr><th>Launch code</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>Node(namespace='robot1', remappings=[('scan', 'scan_front')])</code></td><td><code>/robot1/scan_front</code></td></tr>
+<tr><td><code>Node(namespace='robot1', remappings=[('/scan', '/scan_front')])</code></td><td>ignored, <code>/robot1/scan</code></td></tr>
+<tr><td><code>Node(namespace='robot1', remappings=[('/tf', 'tf')])</code></td><td><code>/robot1/tf</code></td></tr>
+<tr><td><code>GroupAction([PushRosNamespace('robot2'), SetRemap(src='scan', dst='scan_front'), Node(...)])</code></td><td><code>/robot2/scan_front</code></td></tr>
+<tr><td><code>GroupAction([PushRosNamespace('robot3'), SetRemap(src='/robot3/scan', dst='/robot3/scan_front'), Node(...)])</code></td><td><code>/robot3/scan_front</code></td></tr>
+</tbody>
+</table>
+
+<p><code>SetRemap</code> applies to every node later in the same group, and it follows the same matching rules. A launch remap is the same <code>-r</code> rule on the command line. So when a remap does nothing in launch, run the node by hand with that rule, then check <code>ros2 topic list</code>.</p>
+
+<h2>Services and actions</h2>
+
+<p><code>-r reset:=reset2</code> renamed the service on all three distros. Actions differ by distro. On Humble, <code>-r fib:=fib2</code> changed nothing: all five action names stayed <code>/fib/_action/feedback</code>, <code>/fib/_action/status</code>, <code>/fib/_action/send_goal</code>, <code>/fib/_action/cancel_goal</code> and <code>/fib/_action/get_result</code>. On Jazzy and Lyrical the same rule moved all five to <code>/fib2/_action/...</code>. A rule on one of the inner names, <code>/fib/_action/feedback:=/fb2</code>, moved only that one topic on all three. The other four stayed under <code>/fib</code>, so don't use that as a Humble workaround. On Humble, a namespace worked: <code>__ns:=/robot1</code> moved the action to <code>/robot1/fib/_action/*</code>. Reading the action name from a parameter should also work, but I didn't run it. I tested an rclpy action server only, not rclcpp or the client side.</p>
+
+<h2>ros2 bag play --remap, and recording under another name</h2>
+
+<p>A bag stores the topic name it recorded. To get it under another name, remap at playback. Playing a 51-message bag on Humble (50 on Jazzy and Lyrical):</p>
+
+<table>
+<thead><tr><th>Command</th><th>Message on /scan_front</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 bag play bag1 --remap /scan:=/scan_front</code></td><td>received</td></tr>
+<tr><td><code>ros2 bag play bag1 --remap scan:=scan_front</code></td><td>received</td></tr>
+<tr><td><code>ros2 bag play bag1 -m /scan:=/scan_front</code></td><td>received</td></tr>
+<tr><td><code>ros2 bag play bag1 --ros-args -r /scan:=/scan_front</code></td><td>exit code 2: <code>argument -r/--rate: /scan:=/scan_front is not the valid type (float)</code></td></tr>
+<tr><td><code>ros2 bag play bag1</code> (control)</td><td>nothing, the listener timed out</td></tr>
+</tbody>
+</table>
+
+<p>The <code>--ros-args -r</code> form is the trap. <code>ros2 bag play</code> has its own <code>-r</code>, short for <code>--rate</code>, and argparse takes it first. Use <code>--remap</code> or <code>-m</code>. I didn't test renaming while recording. To store <code>/scan_filtered</code> as <code>/scan</code>, the measured path is to record it as is, then play it with <code>--remap /scan_filtered:=/scan</code>.</p>
+
+<h2>Changing a topic at runtime</h2>
+
+<p>Remap rules are read once, when the node starts. No <code>ros2</code> command remaps a running node. If you need to switch topics without a restart, make the topic name a parameter and recreate the subscription when it changes. My <code>dyn_node</code> does that in an <code>add_on_set_parameters_callback</code>: destroy the old subscription, create a new one. The graph showed <code>/scan</code> for six one-second checks. Then <code>ros2 param set /dyn_node in_topic scan_front</code> printed <code>Set parameter successful</code>, and every later check showed only <code>/scan_front</code>. That held on all three distros. Messages published between the destroy and the create are lost, and I didn't measure how many.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Works in a namespace</th><th>Notes from the runs</th></tr></thead>
+<tbody>
+<tr><td>Relative rule, <code>scan:=scan_front</code></td><td>yes</td><td>Best default. Misses names that are absolute in code.</td></tr>
+<tr><td>Full expanded rule, <code>/robot1/scan:=/robot1/scan_front</code></td><td>yes</td><td>Exact, but has to change with the namespace.</td></tr>
+<tr><td>Absolute rule, <code>/scan:=/scan_front</code></td><td>no</td><td>Root namespace only, silently ignored elsewhere.</td></tr>
+<tr><td>Node-specific rule, <code>node:scan:=x</code></td><td>yes</td><td>Uses the node's final name, after <code>__node</code> or <code>name=</code>.</td></tr>
+<tr><td><code>SetRemap</code> in a launch group</td><td>yes</td><td>Same matching rules, applies to all later nodes in the group.</td></tr>
+<tr><td>Wildcards <code>*</code> and <code>**</code></td><td>-</td><td>Not implemented. The node fails at startup on all three distros.</td></tr>
+<tr><td>Parameter plus resubscribe</td><td>yes</td><td>The only way I found to change a topic at runtime.</td></tr>
+</tbody>
+</table>
+
+<p>The design article <a href="https://design.ros2.org/articles/static_remapping.html">Remapping Names</a> describes wildcards and <code>\1</code> back-references, which is why people try them. rcl rejects both <code>*</code> and <code>**</code> with <code>Wildcard '*' is not implemented</code> (or <code>'**'</code>). If you need to move many topics, put the node in a namespace or list every rule.</p>
+
+<h2>Version notes</h2>
+
+<p>All rule results except one were the same on Humble, Jazzy and Lyrical. The exception is action remapping, which did nothing on Humble and worked on Jazzy and Lyrical. The error texts matched too. Only the source line numbers differ: <code>Wildcard '*' is not implemented, at ./src/rcl/arguments.c:1164</code> on Humble, <code>:1216</code> on Jazzy and <code>:1215</code> on Lyrical. Drop the numbers when you search.</p>
+
+<p>The old syntax without <code>--ros-args</code> still works on all three. <code>rm_node.py -r scan:=scan_front</code> remapped the topic, and rcl printed <code>Found remap rule 'scan:=scan_front'. This syntax is deprecated. Use '--ros-args --remap scan:=scan_front' instead.</code> Even <code>-r scan:=scan_front __ns:=/robot1</code>, without the flag, applied both rules. That's different from parameters, which the <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">params-file and -p errors post</a> found ignored without <code>--ros-args</code>. Don't count on the old syntax. Put every rule after <code>--ros-args</code>. <code>--remap</code> and <code>-r</code> behaved the same.</p>
+
+<p>Humble recorded the bag as <code>sqlite3</code>, Jazzy and Lyrical as <code>mcap</code>. <code>bag play --remap</code> worked the same on all three. On Lyrical the script passes the topic with <code>--topics</code>, not as a positional argument.</p>
+
+<h2>Not tested</h2>
+
+<p>rclcpp nodes (the rules are parsed in rcl, which both client libraries use, but I only ran rclpy), action clients, tf listeners under <code>/tf:=tf</code>, <code>~/priv:=~/priv2</code>, renaming topics during <code>ros2 bag record</code>, component containers and <code>ros2 component load --remap</code>, Cyclone DDS and Zenoh, YAML and XML launch files, how many messages are lost while resubscribing, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why is my ROS 2 remapping not working?</h3>
+<p>Most often the rule doesn't match the node's expanded name, and rcl doesn't report that. In my runs that happened with an absolute rule on a namespaced node, a relative rule for a name that is absolute in code, a <code>~/</code> name remapped without <code>~/</code>, a node-specific rule with the old node name, and an action on Humble. Check <code>ros2 topic list</code> for the real name, then remap from exactly that name.</p>
+
+<h3>Should I write remappings with or without a leading slash?</h3>
+<p>Without, if the name in code is relative. <code>scan:=scan_front</code> worked in the root namespace and in <code>/robot1</code>. <code>/scan:=/scan_front</code> worked only in the root namespace. For a name that is absolute in code, such as <code>/tf</code>, the left side must have the slash.</p>
+
+<h3>Can I remap a topic at runtime in ROS 2?</h3>
+<p>Not with remap rules. They're read when the node starts. Make the topic a parameter and recreate the subscription in a parameter callback. After <code>ros2 param set</code> the node's subscription moved from <code>/scan</code> to <code>/scan_front</code> on Humble, Jazzy and Lyrical.</p>
+
+<h3>Do wildcards work in ROS 2 remap rules?</h3>
+<p>No. <code>*/scan:=...</code> and <code>**/scan:=...</code> made the node fail at startup with <code>Couldn't parse remap rule ... Wildcard '*' is not implemented</code> (or <code>'**'</code>) on all three distros. Use a namespace or one rule per topic.</p>
+
+<h3>How do I play a bag with a different topic name?</h3>
+<p>Use <code>ros2 bag play bag --remap /old:=/new</code> or <code>-m /old:=/new</code>. Both worked on all three distros. <code>--ros-args -r</code> failed with exit code 2, because <code>-r</code> is <code>--rate</code> for <code>ros2 bag play</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why is my ROS 2 remapping not working?", "acceptedAnswer": {"@type": "Answer", "text": "Most often the rule doesn't match the node's expanded name, and rcl doesn't report that. In my runs that happened with an absolute rule on a namespaced node, a relative rule for a name that is absolute in code, a ~/ name remapped without ~/, a node-specific rule with the old node name, and an action on Humble. Check ros2 topic list for the real name, then remap from exactly that name."}},
+{"@type": "Question", "name": "Should I write remappings with or without a leading slash?", "acceptedAnswer": {"@type": "Answer", "text": "Without, if the name in code is relative. scan:=scan_front worked in the root namespace and in /robot1. /scan:=/scan_front worked only in the root namespace. For a name that is absolute in code, such as /tf, the left side must have the slash."}},
+{"@type": "Question", "name": "Can I remap a topic at runtime in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "Not with remap rules. They're read when the node starts. Make the topic a parameter and recreate the subscription in a parameter callback. After ros2 param set the node's subscription moved from /scan to /scan_front on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Do wildcards work in ROS 2 remap rules?", "acceptedAnswer": {"@type": "Answer", "text": "No. */scan:=... and **/scan:=... made the node fail at startup with Couldn't parse remap rule ... Wildcard is not implemented on all three distros. Use a namespace or one rule per topic."}},
+{"@type": "Question", "name": "How do I play a bag with a different topic name?", "acceptedAnswer": {"@type": "Answer", "text": "Use ros2 bag play bag --remap /old:=/new or -m /old:=/new. Both worked on all three distros. --ros-args -r failed with exit code 2, because -r is --rate for ros2 bag play."}}
+]}
+</script>
+
+<p>Measured on 2026-11-07 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rcl 5.3.13, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, launch_ros 0.19.14, rosbag2 0.15.17, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rcl 9.2.11, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, launch_ros 0.26.13, rosbag2 0.26.11, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rcl 10.4.5, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, launch_ros 0.29.9, rosbag2 0.33.4, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-01-ros2-remapping-not-working/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104831">Topic Remapping at Runtime</a>, <a href="https://robotics.stackexchange.com/questions/104118">ROS 2 Bag Record with Topic Remapping</a>, <a href="https://robotics.stackexchange.com/questions/103373">ros2 remapping wildcard</a>, <a href="https://robotics.stackexchange.com/questions/111918">remapping lifecycle node from /ldlidar_node/scan to /scan data not published</a>, <a href="https://robotics.stackexchange.com/questions/102337">Multi robot /tf with namespaces for tf or with frame_prefix?</a>, <a href="https://robotics.stackexchange.com/questions/99926">ROS2 equivalent for tf_prefix or tf_remap</a>.</p>
