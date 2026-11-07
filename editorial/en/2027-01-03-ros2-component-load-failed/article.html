@@ -1,0 +1,206 @@
+<pre><code>$ ros2 component load /C comp_demo comp_demo::Unregistered
+Failed to load component: Failed to find class with the requested plugin name.
+
+[ERROR] [C]: Failed to find class with the requested plugin name 'comp_demo::Unregistered' in the loaded library</code></pre>
+
+<p>The other common one, from the same container, is <code>Could not find requested resource in ament index</code>. In a launch file both show up as <code>[ERROR] [launch_ros.actions.load_composable_nodes]: Failed to load node 'typo_one' of type 'comp_demo::Talkr' in container '/mixed': ...</code> followed by the same text.</p>
+
+<p>Short answer: a component container finds your class through the ament index, not through your executable or your library name. Two things have to be there. CMake must register the class, and the <code>.cpp</code> must have the export macro. The package must also be visible to the container process. This layout loaded on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-cpp">// src/Talker.cpp, at the end of the file, outside the namespace
+#include &lt;rclcpp_components/register_node_macro.hpp&gt;
+RCLCPP_COMPONENTS_REGISTER_NODE(comp_demo::Talker)</code></pre>
+
+<pre><code class="language-cmake">add_library(Talker_lib SHARED src/Talker.cpp)
+target_link_libraries(Talker_lib rclcpp::rclcpp rclcpp_components::component)
+rclcpp_components_register_node(Talker_lib PLUGIN "comp_demo::Talker" EXECUTABLE talker_exec)
+install(TARGETS Talker_lib LIBRARY DESTINATION lib ARCHIVE DESTINATION lib RUNTIME DESTINATION bin)</code></pre>
+
+<pre><code>ros2 component load /C comp_demo comp_demo::Talker
+Loaded component 1 into '/C' container node as '/talker'</code></pre>
+
+<p>The plugin name is the full C++ class name with its namespace, written with <code>::</code>, exactly as in the macro and in CMake. To see what the index really holds, run <code>ros2 component types</code> in the same environment as the container. A class that isn't listed there won't load.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row below gave the same text on Humble, Jazzy and Lyrical. "CLI" is what <code>ros2 component load</code> printed. "Container" is the container's own log. <code>ros2 component load</code> exited with 1 in every failing row, and the container kept running in every row.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Error</th></tr></thead>
+<tbody>
+<tr><td>Macro in the <code>.cpp</code>, but no <code>rclcpp_components_register_node(s)</code> call in CMake</td><td>CLI: <code>Failed to find class with the requested plugin name.</code> Container: <code>... 'comp_demo::Unregistered' in the loaded library</code></td></tr>
+<tr><td>CMake registration, but no <code>RCLCPP_COMPONENTS_REGISTER_NODE</code> macro</td><td>Same text. The container log shows <code>Load Library: .../libNoMacro_lib.so</code> first.</td></tr>
+<tr><td>Class name without namespace (<code>Talker</code>)</td><td><code>Failed to find class with the requested plugin name</code></td></tr>
+<tr><td>Wrong case (<code>comp_demo::talker</code>)</td><td>Same</td></tr>
+<tr><td>Slash instead of <code>::</code> (<code>comp_demo/Talker</code>)</td><td>Same</td></tr>
+<tr><td>Library target name (<code>Talker_lib</code>)</td><td>Same</td></tr>
+<tr><td>Executable name (<code>talker_exec</code>)</td><td>Same</td></tr>
+<tr><td>Package name typo (<code>comp_dem</code>)</td><td><code>Could not find requested resource in ament index</code></td></tr>
+<tr><td>An <code>ament_python</code> package (<code>py_demo</code>, plugin <code>py_demo.node:PyTalker</code>)</td><td><code>Could not find requested resource in ament index</code></td></tr>
+<tr><td>Package built and sourced in the CLI shell, but the container started with only <code>/opt/ros/&lt;distro&gt;/setup.bash</code></td><td><code>Could not find requested resource in ament index</code></td></tr>
+<tr><td>Library has an unresolved symbol</td><td><code>Failed to load library: could not load library dlopen error: .../libundef_lib.so: undefined symbol: never_defined_value, at ./src/shared_library.c:99</code> (<code>:96</code> on Lyrical)</td></tr>
+<tr><td>Constructor throws <code>std::runtime_error("camera not found")</code></td><td><code>Component constructor threw an exception: camera not found</code></td></tr>
+<tr><td><code>add_library(... STATIC ...)</code> plus registration</td><td>No runtime error. <code>colcon build</code> stopped with <code>rclcpp_components_register_nodes() first argument 'static_talker' is not a shared library target</code></td></tr>
+<tr><td>Container name that doesn't exist (<code>/NoSuchContainer</code>)</td><td><code>Unable to find container node '/NoSuchContainer'</code>, after 335 to 440 ms</td></tr>
+</tbody>
+</table>
+
+<p>The split is simple. <code>Could not find requested resource in ament index</code> means the container found no component list at all for that package name. <code>Failed to find class with the requested plugin name</code> means the package has a list, but your name isn't on it, or the library has no factory for it.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-07 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro at a time, each in a container with <code>--network none</code> and <code>ROS_DOMAIN_ID=88</code>. Three packages were built with <code>colcon build</code>:</p>
+
+<ul>
+<li><code>comp_demo</code> (ament_cmake): five shared libraries, one class each. <code>Talker</code> is correct. <code>Unregistered</code> has the macro but no CMake registration. <code>NoMacro</code> has CMake registration but no macro. <code>Undef</code> reads an <code>extern int</code> that is never defined. <code>Thrower</code> throws in its constructor. Each constructor logs <code>constructed, build v1</code>, and the version string comes from a CMake variable so I could rebuild with <code>v2</code>.</li>
+<li><code>comp_static</code>: the same talker as a <code>STATIC</code> library with registration.</li>
+<li><code>py_demo</code> (ament_python): an rclpy node with a console script.</li>
+</ul>
+
+<p>I started <code>rclcpp_components component_container</code> as <code>/C</code> and ran <code>ros2 component load</code> 15 times with the inputs in the table. Then I tried a container started without the workspace, a rebuild while the container was running, and two launch files. Most loads took 1.0 to 1.4 seconds, whether they worked or failed. A few took 2.1 to 3.8 seconds on Jazzy and Lyrical, with no pattern by case. The build of <code>comp_demo</code> took 18.9 s on Humble, 20.5 s on Jazzy and 27.1 s on Lyrical on a 2 vCPU machine.</p>
+
+<p>After the build, <code>ros2 component types</code> printed this for <code>comp_demo</code> on all three distros:</p>
+
+<pre><code>comp_demo
+  comp_demo::Talker
+  comp_demo::NoMacro
+  comp_demo::Undef
+  comp_demo::Thrower</code></pre>
+
+<p><code>Unregistered</code> is missing, and <code>NoMacro</code> is listed even though it can't load. The command reads the index file, not the library. That file is plain text, one line per class:</p>
+
+<pre><code>install/comp_demo/share/ament_index/resource_index/rclcpp_components/comp_demo
+comp_demo::Talker;lib/libTalker_lib.so
+comp_demo::NoMacro;lib/libNoMacro_lib.so
+comp_demo::Undef;lib/libUndef_lib.so
+comp_demo::Thrower;lib/libThrower_lib.so</code></pre>
+
+<p><code>py_demo</code> and <code>comp_static</code> have no such file, so they never appear in <code>ros2 component types</code>.</p>
+
+<h2>Cause 1: the class isn't registered in CMake</h2>
+
+<p>The <code>RCLCPP_COMPONENTS_REGISTER_NODE</code> macro alone isn't enough. It puts a factory into the library, but the container never opens the library unless the index file names it. With the macro and no CMake call, the container log had no <code>Load Library</code> line at all. It went straight to the error, which says "in the loaded library" even though no library was loaded. Don't let that wording send you looking at the <code>.so</code>.</p>
+
+<p>The fix is one line per class, after <code>add_library</code>:</p>
+
+<pre><code class="language-cmake">rclcpp_components_register_nodes(Unregistered_lib "comp_demo::Unregistered")</code></pre>
+
+<p>Or use the singular form, <code>rclcpp_components_register_node(target PLUGIN "ns::Class" EXECUTABLE name)</code>. It registers the class and also builds a standalone executable. <code>ros2 run comp_demo talker_exec</code> started the same <code>Talker</code> and logged <code>Talker constructed, build v1</code> on all three distros. Use it when you also want to run the node outside a container.</p>
+
+<p>If your package has no registered classes at all, you get <code>Could not find requested resource in ament index</code> instead. Your package has no index file, so the container doesn't know it as a component package.</p>
+
+<h2>Cause 2: the macro is missing</h2>
+
+<p>This one looks fine in <code>ros2 component types</code>, because CMake wrote the class into the index. The container then loads the library, looks for a factory called <code>rclcpp_components::NodeFactoryTemplate&lt;comp_demo::NoMacro&gt;</code>, doesn't find one, and logs <code>Failed to find class with the requested plugin name 'comp_demo::NoMacro' in the loaded library</code>. The <code>Load Library</code> line right before the error tells you this case apart from cause 1. Add the macro at the end of the <code>.cpp</code>, outside any namespace, with the fully qualified class name.</p>
+
+<p>The name in the macro and the name in CMake must be the same string. If they differ, you're in cause 1 or 2, depending on which name you load.</p>
+
+<h2>Cause 3: the plugin name is wrong</h2>
+
+<p>The lookup is an exact string match against the index file. <code>Talker</code>, <code>comp_demo::talker</code>, <code>comp_demo/Talker</code>, the library target <code>Talker_lib</code> and the executable <code>talker_exec</code> all failed with <code>Failed to find class with the requested plugin name</code>. Only <code>comp_demo::Talker</code> worked. The same applies to <code>plugin=</code> in a launch file. A typo there (<code>comp_demo::Talkr</code>) gave:</p>
+
+<pre><code>[ERROR] [launch_ros.actions.load_composable_nodes]: Failed to load node 'typo_one' of type 'comp_demo::Talkr' in container '/mixed': Failed to find class with the requested plugin name.</code></pre>
+
+<p>Copy the name from <code>ros2 component types</code> instead of typing it.</p>
+
+<h2>Cause 4: the container can't see the package</h2>
+
+<p>The container uses its own environment, not the shell you run <code>ros2 component load</code> from. I started one container with only <code>/opt/ros/&lt;distro&gt;/setup.bash</code> sourced, then loaded <code>comp_demo::Talker</code> from a shell that had sourced the workspace. It failed with <code>Could not find requested resource in ament index</code>, while the same command worked against a container started after <code>source install/setup.bash</code>. The CLI shell was fine. The container wasn't.</p>
+
+<p>In practice that means: source the workspace in the terminal that runs <code>component_container</code>, or start the container from a launch file run in a sourced shell. Also check the package name. A typo (<code>comp_dem</code>) gives the same message. So does a package that failed to build: <code>comp_static</code> never installed, and loading from it said <code>Could not find requested resource in ament index</code> too.</p>
+
+<h2>Cause 5: a Python node</h2>
+
+<p><code>rclcpp_components</code> loads C++ shared libraries. An <code>ament_python</code> package has nothing it can load. Loading <code>py_demo</code> with plugin <code>py_demo.node:PyTalker</code> failed with <code>Could not find requested resource in ament index</code>, and so did <code>rclpy</code> as the package name. On all three images, <code>ros2 pkg list</code> showed only <code>rclcpp_components</code> and <code>ros2component</code> with "component" in the name. No Python container was installed. Run Python nodes as normal processes with <code>Node</code> in the launch file, next to the container.</p>
+
+<h2>Cause 6: the library itself won't load</h2>
+
+<p>Three failures happen after the name check passes.</p>
+
+<p><strong>Undefined symbol.</strong> A shared library links even with symbols it doesn't define. The error shows up only when the container calls <code>dlopen</code>. The container logged <code>Failed to load library: Could not load library dlopen error: /ws/install/comp_demo/lib/libUndef_lib.so: undefined symbol: never_defined_value</code>. The CLI printed the same message with the path in lowercase (<code>libundef_lib.so</code>), so use the container log when you look for the file. The usual fix is a missing source file in <code>add_library</code> or a missing <code>target_link_libraries</code> entry. Run <code>ldd -r</code> on the library to list unresolved symbols before loading. I didn't run <code>ldd -r</code> in this test.</p>
+
+<p><strong>Constructor exception.</strong> The library loaded and the factory was found, then <code>Component constructor threw an exception: camera not found</code>. The text after the colon is <code>what()</code> of your exception, so this one points at your own code.</p>
+
+<p><strong>STATIC library.</strong> One of the questions below reports <code>invalid ELF header</code> from a library built without <code>SHARED</code>. I couldn't get that far. On Humble, Jazzy and Lyrical, <code>rclcpp_components_register_nodes</code> refused the target at configure time: <code>first argument 'static_talker' is not a shared library target</code>. Add <code>SHARED</code> to <code>add_library</code>. The runtime ELF error is "Not tested".</p>
+
+<h2>A rebuild doesn't reach a running container</h2>
+
+<p>I rebuilt <code>comp_demo</code> with the version string set to <code>v2</code> while container <code>/C</code> was running, then loaded <code>comp_demo::Talker</code> again into <code>/C</code>. It loaded, and it logged <code>Talker constructed, build v1</code>. The library was already open in that process, and the container didn't open it again. A new container started after the rebuild logged <code>build v2</code>. Same result on all three distros. If your change "doesn't do anything", restart the container.</p>
+
+<p>Adding a registration is different. I added the missing <code>rclcpp_components_register_nodes</code> line for <code>Unregistered</code>, rebuilt, and loaded it into the same running <code>/C</code> without sourcing anything again. It loaded (<code>Loaded component 5 into '/C' container node as '/unregistered'</code>). The index file is read on each load, and that library had never been opened before.</p>
+
+<p>Loading a second <code>Talker</code> under the same node name worked, but logged <code>Publisher already registered for provided node name</code> on Humble. On Jazzy and Lyrical the text was <code>Publisher already registered for node name: 'talker'</code>. Pass <code>--node-name</code> to <code>ros2 component load</code> or <code>name=</code> in <code>ComposableNode</code> to keep names apart.</p>
+
+<h2>In a launch file</h2>
+
+<p>I launched one <code>ComposableNodeContainer</code> with three nodes: a good <code>Talker</code>, a misspelled plugin and the <code>Thrower</code>. The good one loaded (<code>Loaded node '/good_one' in container '/mixed'</code>). The other two each logged a <code>Failed to load node</code> error. Launch didn't exit, and the container kept running with <code>/good_one</code> in <code>ros2 component list</code> until I stopped it with SIGINT after 15 seconds. A bad component doesn't stop the launch, so read the log above the running output.</p>
+
+<p>A wrong container name in <code>LoadComposableNodes</code> is quieter. With <code>target_container='/my_containr'</code> and the real container named <code>my_container</code>, launch printed nothing about the node until I stopped it at 20 seconds. No error and no waiting message appeared on any distro. On SIGINT it ended with <code>Caught exception in launch (see debug for traceback): cannot use Destroyable because destruction was requested</code>. If a node from <code>LoadComposableNodes</code> never shows up and launch says nothing, compare <code>target_container</code> with <code>ros2 component list</code>. The name needs the namespace and the leading slash as the container reports it.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Result in my run</th><th>When to use it</th></tr></thead>
+<tbody>
+<tr><td>Add <code>rclcpp_components_register_nodes(target "ns::Class")</code></td><td>Class appears in <code>ros2 component types</code>, loads after rebuild, even into a running container</td><td>Macro present, class missing from the list</td></tr>
+<tr><td>Use <code>rclcpp_components_register_node(... PLUGIN ... EXECUTABLE ...)</code></td><td>Registers and builds a <code>ros2 run</code> executable</td><td>You want both component and standalone node</td></tr>
+<tr><td>Add <code>RCLCPP_COMPONENTS_REGISTER_NODE(ns::Class)</code></td><td>Fixes the error that follows a <code>Load Library</code> line</td><td>Class listed but won't load</td></tr>
+<tr><td>Copy the name from <code>ros2 component types</code></td><td>Only the exact <code>ns::Class</code> string loaded</td><td>Any name typo</td></tr>
+<tr><td>Source the workspace before starting the container</td><td>Same load went from ament index error to loaded</td><td>Works in one terminal, not from another</td></tr>
+<tr><td>Restart the container after a rebuild</td><td>Only a new container ran the <code>v2</code> code</td><td>Code changes ignored</td></tr>
+<tr><td>Add <code>SHARED</code> to <code>add_library</code></td><td>Without it, CMake stopped at configure</td><td>"is not a shared library target"</td></tr>
+</tbody>
+</table>
+
+<p>I wrote the CMake with <code>target_link_libraries(... rclcpp::rclcpp rclcpp_components::component)</code> so the same file builds on all three distros. Lyrical removed <code>ament_target_dependencies</code>; see <a href="https://huntlab.app/en/ros-2-lyrical-unknown-cmake-command-ament-target-dependencies/">Unknown CMake command ament_target_dependencies in ROS 2 Lyrical</a> for that change.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Every error text in the first table was the same on Humble, Jazzy and Lyrical, except the source line in the dlopen message: <code>shared_library.c:99</code> on Humble and Jazzy, <code>shared_library.c:96</code> on Lyrical.</li>
+<li>The duplicate-name warning changed after Humble, from <code>Publisher already registered for provided node name</code> to <code>Publisher already registered for node name: 'talker'</code>.</li>
+<li>Lyrical's CMake printed <code>Compatibility with CMake &lt; 3.10 will be removed from a future version of CMake</code> for <code>cmake_minimum_required(VERSION 3.8)</code>. It was a warning, and the build finished.</li>
+<li>The silent wait on a wrong <code>target_container</code> and the <code>cannot use Destroyable</code> line on SIGINT happened on all three.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>The runtime <code>invalid ELF header</code> error. CMake refused the static library first.</li>
+<li><code>component_container_mt</code> and <code>component_container_isolated</code>. I used only <code>component_container</code>.</li>
+<li>Lifecycle nodes as components, and components with parameters files.</li>
+<li><code>ldd -r</code> as a check for undefined symbols.</li>
+<li>RMWs other than the default Fast DDS, and loading across machines.</li>
+<li>Foxy, Iron and Kilted.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Failed to find class with the requested plugin name" mean?</h3>
+<p>The package has a component list in the ament index, but the name you asked for isn't on it, or the library has no factory for it. Check the name against <code>ros2 component types</code>. If the class is missing there, add <code>rclcpp_components_register_nodes</code> in CMake. If it's listed but still fails, the <code>RCLCPP_COMPONENTS_REGISTER_NODE</code> macro is missing.</p>
+
+<h3>What does "Could not find requested resource in ament index" mean when loading a component?</h3>
+<p>The container found no component list for that package name. In my run that came from a package name typo, a package with no registered classes, an <code>ament_python</code> package, a package that failed to build, and a container started without sourcing the workspace.</p>
+
+<h3>Can I load a Python node into a component container?</h3>
+<p>Not into <code>rclcpp_components component_container</code>. Loading an <code>ament_python</code> package failed with <code>Could not find requested resource in ament index</code> on Humble, Jazzy and Lyrical, and none of the three images had a Python component container installed. Run the Python node as its own process.</p>
+
+<h3>I rebuilt my component but the container runs the old code. Why?</h3>
+<p>The container had already opened the library and kept using it. A load into the same container after the rebuild still logged <code>build v1</code>. A new container logged <code>build v2</code>. Restart the container after rebuilding.</p>
+
+<h3>Why does LoadComposableNodes do nothing without an error?</h3>
+<p>In my run, a <code>target_container</code> name that didn't match any container produced no message for 20 seconds on any distro. Compare it with <code>ros2 component list</code>, including the leading slash and the namespace.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Failed to find class with the requested plugin name mean?", "acceptedAnswer": {"@type": "Answer", "text": "The package has a component list in the ament index, but the name you asked for is not on it, or the library has no factory for it. Check the name against ros2 component types. If the class is missing there, add rclcpp_components_register_nodes in CMake. If it is listed but still fails, the RCLCPP_COMPONENTS_REGISTER_NODE macro is missing."}},
+{"@type": "Question", "name": "What does Could not find requested resource in ament index mean when loading a component?", "acceptedAnswer": {"@type": "Answer", "text": "The container found no component list for that package name. In my run that came from a package name typo, a package with no registered classes, an ament_python package, a package that failed to build, and a container started without sourcing the workspace."}},
+{"@type": "Question", "name": "Can I load a Python node into a component container?", "acceptedAnswer": {"@type": "Answer", "text": "Not into rclcpp_components component_container. Loading an ament_python package failed with Could not find requested resource in ament index on Humble, Jazzy and Lyrical, and none of the three images had a Python component container installed. Run the Python node as its own process."}},
+{"@type": "Question", "name": "I rebuilt my component but the container runs the old code. Why?", "acceptedAnswer": {"@type": "Answer", "text": "The container had already opened the library and kept using it. A load into the same container after the rebuild still logged build v1. A new container logged build v2. Restart the container after rebuilding."}},
+{"@type": "Question", "name": "Why does LoadComposableNodes do nothing without an error?", "acceptedAnswer": {"@type": "Answer", "text": "In my run, a target_container name that did not match any container produced no message for 20 seconds on any distro. Compare it with ros2 component list, including the leading slash and the namespace."}}
+]}
+</script>
+
+<p>Measured on 2026-11-07 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclcpp and rclcpp_components 16.0.21, rclpy 3.3.22, ros2cli and ros2component 0.18.20, launch_ros 0.19.14, class_loader 2.2.0, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclcpp and rclcpp_components 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, launch_ros 0.26.13, class_loader 2.7.1, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclcpp and rclcpp_components 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, launch_ros 0.29.9, class_loader 2.9.4, rmw 7.10.2), default RMW (Fast DDS: rmw_fastrtps_cpp 6.2.10, 8.4.4 and 9.4.10). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-03-ros2-component-load-failed/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/25213">How to build a python node as a component?</a>, <a href="https://robotics.stackexchange.com/questions/113860">ROS2 Humble Python composable node</a>, <a href="https://robotics.stackexchange.com/questions/99386">ROS2 Foxy composable node: Failed to load component due to undefined symbol</a>, <a href="https://robotics.stackexchange.com/questions/111986">Invalid ELF header when launching composable node ROS2 Foxy/Humble</a>, <a href="https://robotics.stackexchange.com/questions/97210">ROS2: load a composable node through launch</a>.</p>
