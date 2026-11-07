@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "candidate_id": "foundation-ros2-pointcloud2-float32-large-coordinate-precision-local-origin",
+  "title": "큰 지도 좌표를 ROS 2 PointCloud2의 float32 필드에 그대로 넣으면 몇 m 단위로 반올림될까: 원점에서 400만 m 떨어진 점의 0.25 m 간격을 계산하고 가까운 원점으로 옮기기",
+  "slug": "ros2-pointcloud2-float32-large-coordinate-precision-local-origin",
+  "reader_question": "GPS나 대형 지도 좌표계에서 받은 미터 단위 좌표(예: 원점에서 약 4,000,000 m)를 rclpy의 sensor_msgs_py.point_cloud2.create_cloud로 FLOAT32 x·y·z 필드에 그대로 넣으면, 다시 읽었을 때 몇 m 단위로 반올림되나요? 몇 cm 떨어진 점 두 개가 같은 좌표가 되기도 하나요? 원점을 어디로 옮겨야 이 문제를 피할 수 있나요? (Robotics Stack Exchange 피드에 그대로 있는 질문이 아니라, REP-103의 float32 정밀도 권고에서 끌어낸 파생 질문이다.)",
+  "target_reader": "야외 로봇이나 지도 데이터를 다루며 GPS·대형 지도 좌표를 PointCloud2 같은 ROS 2 메시지에 처음 넣어 보는 입문자. rclpy로 PointCloud2를 만들어 봤고, 2의 거듭제곱과 나눗셈 정도를 알면 따라올 수 있다.",
+  "learning_outcome": "독자는 좌표 크기 x가 [2^k, 2^(k+1)) 구간에 있을 때 float32 값 사이의 간격을 2^k ÷ 2^23으로 직접 계산할 수 있다. 그 결과 원점에서 4,000,000 m 떨어진 점은 0.25 m 간격(최대 반올림 오차 0.125 m), 5,000,000 m에서는 0.5 m 간격이 된다는 것을 숫자로 확인한다. 다음으로 float64 상태에서 가까운 원점을 먼저 빼고 float32로 저장하면, 100 m 거리의 간격이 약 7.6×10⁻⁶ m로 32768배 작아진다는 것을 계산한다. 이 계산을 바탕으로 '원점 이동은 float32로 바꾸기 전에 한다'는 순서를 자기 노드 코드에 적용하고, create_cloud → read_points 왕복으로 4000000.3이 4000000.25로 돌아오는지 확인하는 테스트를 직접 만들 수 있다.",
+  "unique_takeaway": "REP-103은 큰 float32 값의 정밀도 문제를 피하려면 시작 위치처럼 가까운 원점을 고르라고 한 줄로만 권한다. 이 레슨은 그 '큰 값'이 얼마나 큰지를 구간별 간격 계산으로 바꿔 보여 준다. 400만 m대에서는 1 m 안에 들어가는 float32 값이 4개뿐이다. 5 cm 떨어진 두 점(4000000.05와 4000000.10)은 둘 다 4000000.0으로 저장돼 차이가 0이 된다. 그리고 원점을 빼는 계산이 float32로 저장한 뒤에 오면 이미 잃은 정밀도는 되돌릴 수 없다.",
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/ros-infrastructure/rep/master/rep-0103.rst",
+      "publisher": "ROS Infrastructure",
+      "claim_scope": "SI units and coordinate conventions; not universal robot hardware behavior",
+      "checked_at": "2026-11-08T02:02:09.662281+09:00"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/ros2/common_interfaces/jazzy/sensor_msgs_py/sensor_msgs_py/point_cloud2.py",
+      "publisher": "ROS 2 common_interfaces maintainers",
+      "claim_scope": "How sensor_msgs_py reads and creates PointCloud2 in Jazzy (read_points, read_points_numpy, create_cloud, field offsets, skip_nans); source code, not performance",
+      "checked_at": "2026-11-08T02:02:09.662281+09:00"
+    }
+  ],
+  "worked_example": {
+    "path": "editorial/generated-foundations/20261107T170201Z-3701c25341-ros2-pointcloud2-float32-large-coordinate-precision-local-origin/example.py",
+    "sha256": "2d2eaab7abc58ac9eb2437316ecb0eb67584bfc7da17078a43fc045c84c7e80f",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/f26c0f6378ac494aa1d56c32560f93a95d805a7b/editorial/generated-foundations/20261107T170201Z-3701c25341-ros2-pointcloud2-float32-large-coordinate-precision-local-origin/example.py"
+  },
+  "verification": {
+    "path": "editorial/generated-foundations/20261107T170201Z-3701c25341-ros2-pointcloud2-float32-large-coordinate-precision-local-origin/verification.json",
+    "sha256": "43de4c31ff90141cda5af2d625447e0e4f1f5efed0c45f663c17d5eff305afd1",
+    "public_url": "https://github.com/sungpyo9053/blog/blob/f26c0f6378ac494aa1d56c32560f93a95d805a7b/editorial/generated-foundations/20261107T170201Z-3701c25341-ros2-pointcloud2-float32-large-coordinate-precision-local-origin/verification.json"
+  },
+  "author_id": "discovery-writer-070df22c060c425c9e65b9a85846b2c3"
+}
