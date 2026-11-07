@@ -62,6 +62,7 @@
 - WORK-END `3 17 * * *`: [HuntLab $200 퇴근] 평가(상승/보합/하락, 실수익 revenue-actual.tsv와 GA4 activeUsers만), 오늘 한 일·못 한 일·내일 할 일을 kakao-me로 보고, 내일 plan 초안 작성, 임시 측정 서버가 남아 있고 측정이 끝났으면 회수·삭제. (11/01 추가) 보고 전에 `scripts/glance_new.sh ko`·`scripts/glance_new.sh en`으로 그날 공개 글에 표 그림 넣기(이미 있으면 건너뜀).
 - WEEKLY `7 10 * * 1`: [HuntLab $200 WEEKLY] 09:30 goal_report 결과 + GSC 색인 수로 마일스톤 판정, 미달 시 조치 반영·주간 기록 추가, 카톡 보고. 마지막에 CronList에서 [HuntLab $200 출근/업무/퇴근/WEEKLY]를 지우고 이 절의 cron식·내용으로 재등록(7일 만료 방지).
 - 마일스톤 판정 일회성: 10/20 21:23(방향), 10/24 21:43, 11/30 21:43, 12/31 21:43 (이후 것은 12/31 판정 때 등록).
+- 11/30 판단 기준(2026-11-07 사용자에게 제안·추천 진행 승인 "추천 ㄱㄱ"): 주간 구글 검색 유입(GA4 Organic Search activeUsers, 7일) 100명 이상 + 색인(URL Inspection Submitted and indexed) 200편 이상. 둘 다 미달이면 방향 재논의(사용자와). 11/07 기준 33명·133편. 예상(11/07 계산): 월 $200 ≈ 월 10만 PV ≈ 현재의 약 200배 — 주 +40%면 2027년 2월 말, +20%면 5월 말, +10%면 2027년 말. 미색인 글이 계속 늘면 하루 8편 축소를 사용자에게 제안.
 - 업무 기준(이전 크론에서 옮김): 네이버 요약은 editorial/naver/backlog.md 위부터, 원문 복사·쿠팡 링크 금지, 게시 순서 blog.naver.com/sungpyo9053?Redirect=Write& → 도움말 닫기 → 입력 → iframe#mainFrame 발행 → 확인 발행. 장비 글은 equip-pipeline.md 단계 순서(측정 서버는 끝나면 반드시 삭제). 커뮤니티 자기 글 하루 1개 이하. Reddit 조회는 하루 1~2회(10/13 차단 이력).
 - 세션(터미널)이 꺼지거나 사용 한도에 걸리면 크론도 멈춘다. 서버 타이머(예약 공개, prepare 02:00·14:00, 사이트맵 10:20, goal_report 월 09:30)는 계속 돈다.
 
