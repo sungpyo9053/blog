@@ -1,0 +1,519 @@
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+<meta content="IE=edge" http-equiv="X-UA-Compatible">
+<meta content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0,user-scalable=no,target-densitydpi=medium-dpi" name="viewport">
+<title>통행요금조회</title>
+<link rel="stylesheet" type="text/css" href="/css/site/portal/common.css" />
+<link rel="stylesheet" type="text/css" href="/css/site/portal/sub.css" />
+<link rel="stylesheet" type="text/css" href="/css/site/portal/reaction.css" />
+<script type="text/javascript" src="/js/site/cmm/jquery-1.11.3.min.js"></script>
+<script type="text/javascript" src="/js/site/cmm/jquery.bxslider.min.js"></script>
+<script type="text/javascript" src="/js/site/portal/common.js"></script>
+<script type="text/javascript" src="/js/site/portal/common-ui.js"></script>
+<script type="text/javascript" src="/js/site/cmm/etc-ui.js"></script>
+<script type="text/javascript" src="/js/site/cmm/prohibitionChk.js"></script>
+<script type="text/javascript">
+
+function press(event) {
+	if (event.keyCode==13) { fn_useSearch();}
+}
+
+function fn_useSearch() {
+	var zonename1 = $('#zonename1').val().replace("TG","");
+	var zonename2 = $('#zonename2').val().replace("TG","");
+	if(zonename1 == '' || zonename1 == null){
+		alert("출발 요금소를 입력 하시기 바랍니다.");
+		document.frm1.zonename1.focus();
+		return false;
+	}
+	if(zonename2 == '' || zonename2 == null){
+		alert("도착 요금소를 입력 하시기 바랍니다.");
+		document.frm1.zonename2.focus();
+		return false;
+	}
+	if(zonename1 == '남양주'){ zonename1 = '남양주(서울양양)'; }
+	if(zonename2 == '남양주'){ zonename2 = '남양주(서울양양)'; }
+	fn_pathVali(zonename1, zonename2);
+}
+
+function fn_pathVali(zonenm1, zonenm2) {
+	$.ajax({
+        type     : "POST"
+    ,   url      : "/portal/usefee/pathCheckN.do"
+    ,   data     : { zonename1:zonenm1, zonename2:zonenm2 }
+    ,	dataType : 'json'
+    ,   error    : function(x,e) {}
+	,	success : function(result) {
+			var zone1 = result[0];
+			var zone2 = result[1];
+
+			if(zone1.length == 0) { alert("해당하는 출발 요금소가 없습니다.\n요금소검색을 이용해 주세요"); }
+			else {
+				if(zone2.length == 0) {alert("해당하는 도착 요금소가 없습니다.\n요금소검색을 이용해 주세요");
+				}else{ 
+					 var zonenm1 = zone1[0].nosunNm;
+					 var zonenm2 = zone2[0].nosunNm;
+					zonechk(zonenm1,zonenm2);
+				}
+			}
+		}
+	});
+}
+
+function zonechk(zonenm1,zonenm2){
+	document.frm1.target = "";
+	document.frm1.zonename1.value = zonenm1;
+	document.frm1.zonename2.value = zonenm2;
+	document.frm1.action = "/portal/usefee/selectUseFeeNList.do";
+	document.frm1.submit();
+}
+
+/* 레이어팝업 */
+$(document).ready(function(){
+	/* 비주얼 */
+	$(".tripVisual ul").bxSlider({
+		auto:true, autoControls:true, pager:true, autoControlsCombine:true, pause:5000, autoHover:true,
+		onSliderLoad: function(currentIndex){
+			$('.bx-pager-link').each(function(index) {
+				var slideNum = index + 1;
+				$(this).attr('title', slideNum + '번 슬라이드 이동');
+				$(this).attr('aria-label', slideNum + '번 슬라이드 이동');
+			});
+			$('.bx-pager-link').eq(currentIndex).attr('title', (currentIndex + 1) + '번 슬라이드 (현재 선택됨)');
+			$('.bx-pager-link').eq(currentIndex).attr('aria-current', 'true');
+		},
+		onSlideAfter: function($slideElement, oldIndex, newIndex){
+			$('.bx-pager-link').each(function(index) {
+				$(this).attr('title', (index + 1) + '번 슬라이드 이동');
+				$(this).removeAttr('aria-current');
+			});
+			$('.bx-pager-link').eq(newIndex).attr('title', (newIndex + 1) + '번 슬라이드 (현재 선택됨)');
+			$('.bx-pager-link').eq(newIndex).attr('aria-current', 'true');
+		}
+	});
+	$('.PopupN').click(function(){$('.layer_popup1').css('display','block');$('.layer1').css('display','block');$('#pclose1').focus();});
+	$('.popup_close1').click(function(){$('.layer_popup1').css('display','none');	$('.layer1').css('display','none');});
+	$('.PopupB').click(function(){$('.layer_popup2').css('display','block');$('.layer2').css('display','block');$('#pclose2').focus();});
+	$('.popup_close2').click(function(){$('.layer_popup2').css('display','none');	$('.layer2').css('display','none');});
+	$('.PopupC').click(function(){$('.layer_popup3').css('display','block');$('.layer3').css('display','block');$('#pclose3').focus();});
+	$('.popup_close3').click(function(){$('.layer_popup3').css('display','none');	$('.layer3').css('display','none');});
+	
+	if(eval("false") || eval("false") || eval("false")){
+
+		var noMinjaRange = $('#noMinja').find('#range').text().replace('Km','');
+		var minjaRange   = $('#minja').find('#minjaRange').text().replace('Km','');
+		var minjaRange2  = $('#minja2').find('#minjaRange2').text().replace('Km','');
+		var noMinjaHtml  = $('#noMinja').html();
+		var minjaHtml    = $('#minja').html();
+		var minja2Html   = $('#minja2').html();
+		var routeHtml    = "";
+		noMinjaRange = Number((noMinjaRange == '') ? '999' : noMinjaRange);
+		minjaRange   = Number((minjaRange   == '') ? '999' : minjaRange);
+		minjaRange2  = Number((minjaRange2  == '') ? '999' : minjaRange2);
+		if(noMinjaRange > minjaRange) {
+			if(minjaRange > minjaRange2) {
+				routeHtml = minja2Html.replace('경로','경로1') + minjaHtml.replace('경로','경로2') + noMinjaHtml.replace('경로','경로3');	//mj2 mj nm
+			} else if(noMinjaRange > minjaRange2) {
+				routeHtml = minjaHtml.replace('경로','경로1') + minja2Html.replace('경로','경로2') + noMinjaHtml.replace('경로','경로3');	//mj mj2 nm
+			} else {
+				routeHtml = minjaHtml.replace('경로','경로1') + noMinjaHtml.replace('경로','경로2') + minja2Html.replace('경로','경로3');	//mj nm mj2
+			}
+		} else {
+			if(noMinjaRange > minjaRange2) {
+				routeHtml = minja2Html.replace('경로','경로1') + noMinjaHtml.replace('경로','경로2') + minjaHtml.replace('경로','경로3');	//mj2 nm mj
+			} else if(minjaRange > minjaRange2) {
+				routeHtml = noMinjaHtml.replace('경로','경로1') + minja2Html.replace('경로','경로2') + minjaHtml.replace('경로','경로3');	//nm mj2 mj
+			} else {
+				routeHtml = noMinjaHtml.replace('경로','경로1') + minjaHtml.replace('경로','경로2') + minja2Html.replace('경로','경로3');	//nm mj mj2
+			}
+		}
+		if(routeHtml.indexOf('경로2') < 0) {
+			routeHtml = routeHtml.replace('경로1','경로');
+		}
+		$('#routeList').html(routeHtml);
+	}
+
+	$(".bx-controls-auto").click(function(){
+		//$(this).attr('tabindex','0').focus();
+	});
+	
+	$(".bx-controls-auto").on('focus',function(){
+		$(this).css('border','1px solid #000');
+	})
+
+	$(".bx-controls-auto").on('focusout',function(){
+		$(this).css('border','none');
+	})
+});
+
+function fn_serviceArea(type) {
+	var title   = "serviceAreaPop";
+	var status  = "scrollbars=yes,top=180px,left=300px,width=550px,height=445px";
+	var popForm = document.listForm2;
+	
+	if(type == 'noMinjaPath') {
+		popForm.path.value = "";
+	} else if(type == 'minjaPath') {
+		popForm.path.value = "";
+	} else {
+		popForm.path.value = "";
+	}
+	window.open('', title, status);
+	popForm.target = title;
+	popForm.action = "/portal/usefee/selectZoneServiceArea.do";
+	popForm.method = "POST";
+	popForm.submit();
+}
+
+function fn_zoneSearch(){
+	var title   = "zonePop";
+	var status  = "scrollbars=yes,top=180px,left=300px,width=700px,height=740px";
+	var frm = document.frm1;
+	frm.zonename1.value = "";
+	frm.zonename2.value = "";
+	window.open('', title, status);
+	frm.target =title;
+	frm.action = "/portal/usefee/selectZoneNPop.do";	
+	frm.submit();
+}
+
+</script>
+
+</head>
+<body>
+
+<div class="contents">
+	
+		<div class="tripVisual mb35">
+			<ul>
+				<li><img src="/images/site/portal/use/img_tripbanrN1.jpg" alt="소중한 통행료 더 좋은 길로 이어집니다. ex한국도로공사" /></li>
+				<li><img src="/images/site/portal/use/img_tripbanrN2.jpg" alt="평일.주말 차등요금 시행중 / 평일 통행료 할인(20,50%), 월~금 05~09시, 18~22시, 20km 미만 / 주말 통행료 할증(5%), 토.일.공휴일 07~21시, 1종 차량" /></li>
+				<li><img src="/images/site/portal/use/img_tripbanrN3.jpg" alt="화물차 고속도로 심야할인 확대시행(2019.3.25~) / 대상 : 사업용 화물차 및 건설 기계 / 할인율 : 기존 20~50% → 확대 30~50%(심야시간 이용비율 기준)" /></li>
+			</ul>
+		</div>
+	
+	<form name="listForm1"><input name="seoiCd" type="hidden"></form>
+	<form name="listForm2"><input name="path" type="hidden"></form>
+	<form name="frm1" method="post">
+		<div id="zoneCheck"><input name="zoneCheck" type="hidden" value="false"></div>
+		<h4 class="list_typeA">요금조회</h4>
+		<div class="select_high2 mt20">
+			<ul class="list_typeC mb15">
+				<li>한국도로공사가 관리하는 요금소 기준입니다.</li>
+				<li>할인&middot;할증이 적용되는 경우에는 통행요금안내 &gt; 통행요금제도 &gt; 할인/할증제도"를 참조하십시오.
+				<a class="btn_tbl line_gray ml5" href="https://hipass.co.kr/board/TollPaySearchList_Close.do" target="_blank"  title="새 창으로 열기">통행요금 조회 바로가기</a>
+				</li>				
+			</ul>
+		</div>
+	</form>
+	<div class="tab_contents"> 
+		<div class="over_h tr">	 
+			<!--  <a href="/cmm/fms/FileDown.do?atchFileId=FILE_000000000043349&fileSn=0" class="fee"><img src="/images/site/portal/use/img_trip01.jpg" alt="통행요금표 엑셀파일 다운로드"></a> -->
+			<a href="/cmm/fms/FileDownGuid.do?guidId=524f3e2a9b2608c2e063ac10a4f0f093" class="btn_tbl line_gray ml5">통행요금표</a>
+		</div>
+		
+
+		<div class="areaC_minza">
+			<div class="layer_popup2">
+				<div class="layer2 clearfix">
+					<div class="areaC_head">
+						<h1 class="stit">개방식 현황</h1>
+					</div>
+					<div class="areaC_con">
+						<ul class="list_c1 over_h">
+							<li class="mt0">개방식 요금제란? 나들목마다 요금소를 설치하기 곤란하여 일정 지점에 요금소를 설치하고 요금소별 최단이용 거리에 해당하는 통행료를 수납하는 방식입니다.</li>
+							<li>개방식 요금체계 적용요금소 : 구리남양주, 김포, 남인천, 대왕판교, 성남, 시흥, 인천, 청계, 토평, 판교, 하남, 서영암, 순천만, 일로, 내서, 대동, 가락</li>
+						</ul>
+						<div class="tbl_pc">
+							<div class="manage_list mt15 mb0">
+								<table>
+									<caption>경로-차종별 경로와 총거리 및 요금 정보 제공</caption>
+									<colgroup><col/><col style="width:12%"/><col style="width:12%"/><col style="width:12%"/><col style="width:12%"/><col style="width:12%"/><col style="width:12%"/></colgroup>
+									<thead>
+										<tr><th scope="col">요금소명</th><th scope="col">1종</th><th scope="col">2종</th><th scope="col">3종</th><th scope="col">4종</th><th scope="col">5종</th><th scope="col">1종(경차)</th></tr>
+									</thead>
+									<tbody>
+										<tr><td class="cen">구리남양주</td><td class="cen">800</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">400</td></tr>
+										<tr><td class="cen">김포</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">남인천</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">대왕판교</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">성남</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">시흥</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">1000</td><td class="cen">450</td></tr>
+										<tr><td class="cen">인천</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">450</td></tr>
+										<tr><td class="cen">청계</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">토평</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td><td class="cen">400</td></tr>
+										<tr><td class="cen">판교</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">하남</td><td class="cen">800</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">400</td></tr>
+										<tr><td class="cen">서영암</td><td class="cen">900</td><td class="cen">900</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">순천만</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">일로</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td><td class="cen">400</td></tr>
+										<tr><td class="cen">내서</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">1100</td><td class="cen">500</td></tr>
+										<tr><td class="cen">대동</td><td class="cen">800</td><td class="cen">800</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td><td class="cen">400</td></tr>
+										<tr><td class="cen">가락</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">금토</td><td class="cen">1100</td><td class="cen">1100</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">1300</td><td class="cen">550</td></tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+						<div class="tbl_mobile">
+							<div class="manage_list mt15 mb0">
+								<table class="mb15">
+									<caption>경로-차종별 경로와 총거리 및 요금 정보 제공</caption>
+									<colgroup><col/><col style="width:15%"/><col style="width:15%"/><col style="width:15%"/><col style="width:15%"/></colgroup>
+									<thead>
+										<tr><th scope="col">요금소명</th><th scope="col">1종</th><th scope="col">2종</th><th scope="col">3종</th></tr>
+									</thead>
+									<tbody>
+										<tr><td class="cen">구리남양주</td><td class="cen">800</td><td class="cen">900</td><td class="cen">900</td></tr>
+										<tr><td class="cen">김포</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td></tr>
+										<tr><td class="cen">남인천</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td></tr>
+										<tr><td class="cen">대왕판교</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td></tr>
+										<tr><td class="cen">성남</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td></tr>
+										<tr><td class="cen">시흥</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td></tr>
+										<tr><td class="cen">인천</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td></tr>
+										<tr><td class="cen">청계</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td></tr>
+										<tr><td class="cen">토평</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td></tr>
+										<tr><td class="cen">판교</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td></tr>
+										<tr><td class="cen">하남</td><td class="cen">800</td><td class="cen">900</td><td class="cen">900</td></tr>
+										<tr><td class="cen">서영암</td><td class="cen">900</td><td class="cen">900</td><td class="cen">1000</td></tr>
+										<tr><td class="cen">순천만</td><td class="cen">900</td><td class="cen">900</td><td class="cen">900</td></tr>
+										<tr><td class="cen">일로</td><td class="cen">800</td><td class="cen">800</td><td class="cen">800</td></tr>
+										<tr><td class="cen">내서</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td></tr>
+										<tr><td class="cen">대동</td><td class="cen">800</td><td class="cen">800</td><td class="cen">900</td></tr>
+										<tr><td class="cen">가락</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">1000</td></tr>
+										<tr><td class="cen">금토</td><td class="cen">1100</td><td class="cen">1100</td><td class="cen">1100</td></tr>
+									</tbody>
+								</table>
+								<table>
+									<caption>경로-차종별 경로와 총거리 및 요금 정보 제공</caption>
+									<colgroup><col/><col style="width:22%"/><col style="width:22%"/><col style="width:22%"/></colgroup>
+									<thead>
+										<tr><th scope="col">요금소명</th><th scope="col">4종</th><th scope="col">5종</th><th scope="col">1종(경차)</th></tr>
+									</thead>
+									<tbody>
+										<tr><td class="cen">구리남양주</td><td class="cen">900</td><td class="cen">900</td><td class="cen">400</td></tr>
+										<tr><td class="cen">김포</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">남인천</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">대왕판교</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">성남</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">시흥</td><td class="cen">900</td><td class="cen">1000</td><td class="cen">450</td></tr>
+										<tr><td class="cen">인천</td><td class="cen">1000</td><td class="cen">1000</td><td class="cen">450</td></tr>
+										<tr><td class="cen">청계</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">토평</td><td class="cen">800</td><td class="cen">800</td><td class="cen">400</td></tr>
+										<tr><td class="cen">판교</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">하남</td><td class="cen">900</td><td class="cen">900</td><td class="cen">400</td></tr>
+										<tr><td class="cen">서영암</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">순천만</td><td class="cen">1000</td><td class="cen">1100</td><td class="cen">450</td></tr>
+										<tr><td class="cen">일로</td><td class="cen">800</td><td class="cen">800</td><td class="cen">400</td></tr>
+										<tr><td class="cen">내서</td><td class="cen">1100</td><td class="cen">1100</td><td class="cen">500</td></tr>
+										<tr><td class="cen">대동</td><td class="cen">900</td><td class="cen">900</td><td class="cen">400</td></tr>
+										<tr><td class="cen">가락</td><td class="cen">1100</td><td class="cen">1200</td><td class="cen">500</td></tr>
+										<tr><td class="cen">금토</td><td class="cen">1200</td><td class="cen">1300</td><td class="cen">550</td></tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+						<a  id="pclose2" class="popup_close2" href="#close">팝업창 닫기</a>
+					</div>
+				</div>
+			</div> 
+		</div>
+		
+		<div class="areaC_minza mr5">
+			<div class="layer_popup1">
+				<div class="layer1 clearfix">
+					<div class="areaC_head">
+						<h1 class="stit">민자노선 운영사 현황</h1>
+					</div>
+					<div class="areaC_con">
+						<div class="tbl_pc">
+							<div class="manage_list  mb0">
+								<table>
+									<caption>경로-차종별 경로와 총거리 및 요금 정보 제공</caption>
+									<colgroup><col style="width:25%"/><col style="width:25%"/><col style="width:20%"/><col/></colgroup>
+									<thead>
+										<tr><th scope="col">노선명</th><th scope="col">운영사</th><th scope="col">연락처</th><th scope="col">홈페이지</th></tr>
+									</thead>
+									<tbody>
+								    <tr><td>광주원주선</td><td>제2영동고속도로</td><td class="cen">1877-0200</td><td>www.2ydway.co.kr</td></tr>
+								    <tr><td>논산천안선</td><td>천안논산고속도로</td><td class="cen">041-850-6700</td><td>www.cneway.co.kr</td></tr>
+									<tr><td>동해선</td><td>부산울산고속도로</td><td class="cen">052-701-6200</td><td>www.busanulsanway.co.kr</td></tr>
+									<tr><td>상주영천선</td><td>상주영천고속도로</td><td class="cen">1877-0111</td><td>www.syeway.co.kr</td></tr>
+									<tr><td>서울양양선</td><td>서울춘천고속도로</td><td class="cen">1588-2504</td><td>www.schighway.co.kr</td></tr>	
+									<tr><td>서울외곽순환선</td><td>서울고속도로</td><td class="cen">1644-2505</td><td>www.seoulbeltway.co.kr</td></tr>
+									<tr><td>수도권제2순환</td><td>경기고속도로</td><td class="cen">1877-1505</td><td>www.ggex.co.kr</td></tr>								
+									<tr><td>수원광명선</td><td>수도권서부고속도로</td><td class="cen">1877-1505</td><td>www.mweway.co.kr</td></tr>
+									<tr><td>인천국제공항선</td><td>인천국제공항고속도로</td><td class="cen">032-560-6114</td><td>www.hiway21.com</td></tr>									
+									<tr><td>용인서울선, 오산화성선</td><td>경수고속도로</td><td class="cen">1599-2505</td><td>www.yseway.com</td></tr>	
+									<tr><td>제2경인선(인천대교)</td><td>인천대교</td><td class="cen">032-745-8000</td><td>www.incheonbridge.com</td></tr>								
+									<tr><td>중앙선</td><td>新대구부산고속도로</td><td class="cen">1688-7003</td><td>www.dbeway.co.kr</td></tr>
+									<tr><td>평택시흥선</td><td>제2서해안고속도로</td><td class="cen">1661-5688</td><td>www.sseway.co.kr</td></tr>
+									<tr><td>평택화성선</td><td>경기고속도로</td><td class="cen">1877-1505</td><td>www.ggex.co.kr</td></tr>
+									<tr><td>옥산오창선</td><td>옥산오창고속도로</td><td class="cen">070-4421-8690</td><td></td></tr>
+									<tr><td>봉담송산선</td><td>경기동서순환도로</td><td class="cen">1877-0427</td><td>www.bshighway.co.kr</td></tr>
+								</tbody>
+								
+							</table>
+						</div>
+					</div>
+					<div class="tbl_mobile">
+						<div class="manage_list mb0">
+							<table>
+								<caption>경로-차종별 경로와 총거리 및 요금 정보 제공</caption>
+								<colgroup><col style="width:30%"/><col /></colgroup>
+								<thead>
+									<tr><th scope="col">노선명</th><th scope="col">운영사, 연락처 및 홈페이지</th></tr>
+								</thead>
+								<tbody>
+									<tr><td>광주원주선</td><td>제2영동고속도로<br />1877-0200<br />www.2ydway.co.kr</td></tr>
+									<tr><td>논산천안선</td><td>천안논산고속도로<br />041-850-6700<br />www.cneway.co.kr</td></tr>
+									<tr><td>동해선</td><td>부산울산고속도로<br />052-701-6200<br />www.busanulsanway.co.kr</td></tr>
+									<tr><td>상주영천선</td><td>상주영천고속도로<br />1877-0111<br />www.syeway.co.kr</td></tr>
+									<tr><td>서울양양선</td><td>서울춘천고속도로<br />1588-2504<br />www.schighway.co.kr</td></tr>
+									<tr><td>서울외곽순환선</td><td>서울고속도로<br />1644-2505<br />www.seoulbeltway.co.kr</td></tr>
+									<tr><td>수도권제2순환</td><td>경기고속도로<br />1877-1505<br />www.ggex.co.kr</td></tr>		
+									<tr><td>수원광명선</td><td>수도권서부고속도로<br />1877-1505<br />www.mweway.co.kr</td></tr>
+									<tr><td>인천국제공항선</td><td>인천국제공항고속도로<br />032-560-6114<br />www.hiway21.com</td></tr>
+									<tr><td>용인서울선, 오산화성선</td><td>경수고속도로<br />1599-2505<br />www.yseway.com</td></tr>
+									<tr><td>제2경인선(인천대교)</td><td>인천대교<br />032-745-8000<br />www.incheonbridge.com</td></tr>
+									<tr><td>중앙선</td><td>新대구부산고속도로<br />1688-7003<br />www.dbeway.co.kr</td></tr>
+									<tr><td>평택시흥선</td><td>제2서해안고속도로<br />1661-5688<br />www.sseway.co.kr</td></tr>
+									<tr><td>평택화성선</td><td>경기고속도로<br />1877-1505<br />www.ggex.co.kr</td></tr>
+									<tr><td>옥산오창선</td><td>옥산오창고속도로<br />070-4421-8690</td></tr>
+									<tr><td>봉담송산선</td><td>경기동서순환도로<br />1877-0427<br />www.bshighway.co.kr</td></tr>
+								</tbody>
+							</table>
+							</div>
+						</div>
+					</div>
+				</div>
+				<a id="pclose1" class="popup_close1" href="#close">팝업창 닫기</a>
+			</div> 
+		</div>
+		
+		<div class="areaC_minza">
+			<div class="layer_popup3">
+				<div class="layer3 clearfix">
+					<div class="areaC_head">
+						<h1 class="stit">원톨링 시스템(무정차 통행료 시스템, One Tolling System)</h1>
+					</div>
+					<div class="areaC_con">
+						<ul class="list_c1 over_h">
+							<li class="mt0">원톨링 시스템이란? 하이패스와 같은 무선 통신을 이용한 자동 지불 방식을 이용하지 않는 차량이 요금소에 중간 정차하여 통행료를 뽑거나 요금을 정산할 필요 없이 최종 출구 요금소에서 한번만 통행료를 정산하는 방식이다.</li>
+							<li>이 시스템이 적용되는 요금소 자리에 설치된 자동영상촬영 장비로 차량번호를 확인한다.</li>
+						</ul>
+						<a id="pclose3" class="popup_close3" href="#close">팝업창 닫기</a>
+					</div>
+				</div>
+			</div> 
+		</div>
+
+		<h4 class="list_typeA mt33">차종구분</h4>
+		<div class="manage_list mb5">
+			<table>
+				<caption>차종 구분-차종별 분류기준과 적용차량(예시)</caption>
+				<colgroup>
+					<col style="width:18%;" />
+					<col style="width:auto;" />
+					<col style="width:35%;" />
+				</colgroup>
+				<thead>
+				<tr>
+					<th scope="col">차종</th>
+					<th scope="col">차종분류기준</th>
+					<th scope="col">적용차량(예시)</th>
+				</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<th class="cen">1종(소형차)</th>
+						<td>2축 차량, 윤폭 279.4mm 이하</td>
+						<td>승용차, 소형승합차, 소형화물차</td>
+					</tr>
+					<tr>
+						<th class="cen">2종(중형차)</th>
+						<td>2축 차량, 윤폭 279.4mm초과, 윤거 1,800mm 이하</td>
+						<td>중형승합차, 중형화물차</td>
+					</tr>
+					<tr>
+						<th class="cen">3종(대형차)</th>
+						<td>2축 차량, 윤폭 279.4mm초과, 윤거 1,800mm 초과</td>
+						<td>대형승합차, 2축 대형화물차</td>
+					</tr>
+					<tr>
+						<th class="cen">4종(대형화물차)</th>
+						<td>3축 대형화물차</td>
+						<td>&nbsp;</td>
+					</tr>
+					<tr>
+						<th class="cen">5종(특수화물차)</th>
+						<td>4축 이상 특수화물차</td>
+						<td>&nbsp;</td>
+					</tr>
+					<tr>
+						<th class="cen">1종(경형자동차)</th>
+						<td>배기량 1000cc 미만으로 길이3.6m, 너비1.6m, 높이2.0m 이하</td>
+						<td>&nbsp;</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		
+		<p class="btm_write new">※ 차종구분은 차종분류기준(축수, 윤폭, 윤거)에 의하며, 적용차량은 차량별 제원 등에 따라 달라질 수 있음</p>
+		<h4 class="list_typeA mt33">연계요금</h4>
+		<ul class="list_typeB mb5">
+			<li>연계요금이란 : 영업체제를 연계시켜 총 이용거리(출발지~목적지)에 비례한 통행요금 산정 후 최초요금소 납부요금 공제금액</li>
+			<li>적용대상 : 연계구간 이용차량 중 전자지불수단으로 통행료 납부 차량</li>
+			<li>연계구간 : 통행요금표 참조</li>
+			<li>유효시간 : 직전 영업소 요금 수납 후 2시간 이내</li>
+			<li>통행료 산정방식
+				<div class="manage_list mb0 mt5">
+					<table>
+						<caption>통행료 요금산정과 수납방법</caption>
+						<colgroup>
+							<col style="width:20%;" />
+							<col style="width:40%;" />
+							<col style="width:40%;" />
+						</colgroup>
+						<thead>
+						<tr>
+							<th scope="col">구분</th>
+							<th scope="col">현금</th>
+							<th scope="col">전자지불수단</th>
+						</tr>
+						</thead>
+						<tbody>
+						<tr>
+							<th class="cen">요금산정</th>
+							<td>개별요금 적용</td>
+							<td>연계요금 적용</td>
+						</tr>
+						<tr>
+							<th class="cen">수납방법</th>
+							<td>영업체제별 산정한 통행요금을 각 요금소에서 수납</td>
+							<td>최초요금소 구간요금 수납<br />최종요금소에서 연계요금 적용수납</td>
+						</tr>
+						</tbody>
+					</table>
+				</div>
+			</li>
+		</ul>
+		<p class="btm_write new" style="margin-left: 30px;">※ 동일한 전자지불수단 사용 시 적용</p>
+	</div>
+</div>
+</body>
+</html>
