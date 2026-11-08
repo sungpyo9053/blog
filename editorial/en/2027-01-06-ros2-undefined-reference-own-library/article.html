@@ -1,0 +1,212 @@
+<pre><code>/usr/bin/ld: CMakeFiles/app.dir/src/app.cpp.o: in function `main':
+app.cpp:(.text+0x13): undefined reference to `mylib::add(int, int)'
+collect2: error: ld returned 1 exit status</code></pre>
+
+<p>The same broken link can also show up at run time instead, after the build has passed:</p>
+
+<pre><code>install/app/lib/app/app: symbol lookup error: install/app/lib/app/app: undefined symbol: _ZN5mylib3addEii
+[ros2run]: Process exited with failure 127</code></pre>
+
+<p>Short answer: the linker found the declaration of your function in a header, but no library it was given contains the compiled code. In a ROS 2 workspace that comes down to one missing CMake line in most cases. Inside one package, add <code>target_link_libraries(app mylib)</code>. Across two packages, the library package has to export itself, and the setup that worked on Humble, Jazzy and Lyrical was this:</p>
+
+<pre><code class="language-cmake"># library package (mylib)
+add_library(mylib SHARED src/mylib.cpp)
+target_include_directories(mylib PUBLIC
+  $&lt;BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include&gt;
+  $&lt;INSTALL_INTERFACE:include&gt;)
+install(DIRECTORY include/ DESTINATION include)
+install(TARGETS mylib EXPORT export_mylib
+  LIBRARY DESTINATION lib ARCHIVE DESTINATION lib RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include)
+ament_export_targets(export_mylib HAS_LIBRARY_TARGET)
+# ament_export_dependencies(rcutils)   # for every package mylib links PUBLIC
+ament_package()
+
+# executable package (app)
+find_package(mylib REQUIRED)
+add_executable(app src/app.cpp)
+target_link_libraries(app mylib::mylib)</code></pre>
+
+<p>And if you changed the library's function signatures, rebuild everything that uses it, not only the library. <code>colcon build --packages-select mylib</code> leaves the old executable in <code>install/</code>, and that executable is what prints <code>symbol lookup error</code>.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row below came from a build I ran on all three distros. The left column is what was wrong in the CMake files or the code.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>What colcon printed</th></tr></thead>
+<tbody>
+<tr><td>Library and executable in one package, no <code>target_link_libraries</code></td><td><code>undefined reference to `mylib::add(int, int)'</code></td></tr>
+<tr><td>The <code>.cpp</code> that defines the function isn't listed in <code>add_library</code></td><td>Same <code>undefined reference</code>. The library itself built without complaint</td></tr>
+<tr><td>C function (<code>.c</code> file) called from C++, header without <code>extern "C"</code></td><td><code>undefined reference to `c_add(int, int)'</code></td></tr>
+<tr><td>Template defined in the <code>.cpp</code>, no explicit instantiation</td><td><code>undefined reference to `int mylib::twice&lt;int&gt;(int)'</code></td></tr>
+<tr><td>Library package exports nothing</td><td><code>fatal error: mylib/mylib.hpp: No such file or directory</code></td></tr>
+<tr><td>Library exports only its include directory</td><td><code>undefined reference to `mylib::add(int, int)'</code></td></tr>
+<tr><td>App links <code>mylib::mylib</code>, library has no <code>ament_export_targets</code></td><td>Humble: <code>Target "app" links to target "mylib::mylib" but the target was not found.</code> Jazzy, Lyrical: <code>Target "app" links to:</code> / <code>mylib::mylib</code> / <code>but the target was not found.</code></td></tr>
+<tr><td>Library links <code>rcutils::rcutils</code> PUBLIC but doesn't <code>ament_export_dependencies(rcutils)</code></td><td>Humble: <code>Target "app" links to target "rcutils::rcutils" but the target was not</code> Jazzy, Lyrical: the error points into <code>export_mylibExport.cmake:61 (set_target_properties)</code> and names <code>rcutils::rcutils</code></td></tr>
+<tr><td>Library rebuilt with a new signature, app not rebuilt</td><td>Build passes. At run time: <code>symbol lookup error: ... undefined symbol: _ZN5mylib3addEii</code>, exit code 127</td></tr>
+<tr><td><code>ament_target_dependencies</code> on Lyrical</td><td><code>Unknown CMake command "ament_target_dependencies".</code></td></tr>
+</tbody>
+</table>
+
+<p>The <code>undefined reference</code> rows all end with <code>collect2: error: ld returned 1 exit status</code> and colcon exit code 2. The two "target was not found" rows fail earlier, at CMake's generate step, with exit code 1 and <code>CMake Generate step failed.</code></p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-08 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images with no network. They ship CMake 3.22.1, 3.28.3 and 4.2.3, and GCC 11.4.0, 13.3.0 and 15.2.0. A script wrote small <code>ament_cmake</code> workspaces and built each one with <code>colcon build</code>. The library has one function, <code>int mylib::add(int a, int b)</code>, in <code>include/mylib/mylib.hpp</code> and <code>src/mylib.cpp</code>. The executable calls <code>mylib::add(2, 3)</code> and prints <code>add(2,3)=5</code>. Whenever a build passed, I ran the program with <code>ros2 run</code>.</p>
+
+<p>There were three groups of tests:</p>
+
+<ul>
+<li>Seven single-package builds, with the library and the executable in one <code>CMakeLists.txt</code>.</li>
+<li>Twelve two-package builds, with <code>mylib</code> and <code>app</code> as separate packages, where <code>app</code> has <code>&lt;depend&gt;mylib&lt;/depend&gt;</code>.</li>
+<li>A stale-binary test. I built both packages, changed <code>add</code> to take <code>long</code>, then tried several rebuild commands. I repeated that 10 more times per distro.</li>
+</ul>
+
+<p>Each full build took 1.3 to 3.3 seconds. The table above and the sections below are from those outputs. Every row behaved the same on all three distros unless the text says otherwise.</p>
+
+<h2>Inside one package: four ways to get it</h2>
+
+<h3>No target_link_libraries</h3>
+
+<p>This is the most common one in a package that builds a helper library and a node. <code>target_include_directories(app PRIVATE include)</code> lets the compiler find the header, so <code>app.cpp</code> compiles. The linker is never told about <code>libmylib.so</code>, so it fails. Adding <code>target_link_libraries(app mylib)</code> fixed it, and the program printed <code>add(2,3)=5</code>. Use the target name from <code>add_library</code>, not a file name or a path.</p>
+
+<h3>The source file isn't in add_library</h3>
+
+<p>I listed a different, empty source file in <code>add_library</code> and left <code>mylib.cpp</code> out. The library still built, because a shared library may contain nothing. The error showed up one step later, when <code>app</code> linked, and it was word for word the same as the missing-link case. If <code>target_link_libraries</code> is already there, check that the <code>.cpp</code> with the definition is in the <code>add_library</code> list. Also check that the definition's namespace and parameter types match the header. The linker looks for the exact signature it prints.</p>
+
+<h3>A C function called from C++</h3>
+
+<p>This happens with vendor sensor drivers and other C code. The function is defined in <code>cfun.c</code>, which CMake compiles as C, and the header has no <code>extern "C"</code>. The C++ caller then looks for the mangled C++ name and the linker reports <code>undefined reference to `c_add(int, int)'</code>. The parameter list in the message is the hint. Plain C symbols don't carry parameter types, so a message with types in it means C++ was looking. Wrapping the declarations fixed it:</p>
+
+<pre><code class="language-c">#pragma once
+#ifdef __cplusplus
+extern "C" {
+#endif
+int c_add(int a, int b);
+#ifdef __cplusplus
+}
+#endif</code></pre>
+
+<h3>A template defined in the .cpp file</h3>
+
+<p>I declared <code>template &lt;typename T&gt; T twice(T x);</code> in the header and defined it in <code>mylib.cpp</code>. The call <code>mylib::twice(4)</code> compiled and then failed with <code>undefined reference to `int mylib::twice&lt;int&gt;(int)'</code>. Nothing in <code>mylib.cpp</code> used <code>twice&lt;int&gt;</code>, so the compiler never generated it. One line at the end of <code>mylib.cpp</code>, <code>template int twice&lt;int&gt;(int);</code>, fixed it, and the program printed <code>twice(4)=8</code>. The other fix is to move the template body into the header. I didn't build that variant.</p>
+
+<h2>Across two packages: what the library has to export</h2>
+
+<p>This is the case in <a href="https://robotics.stackexchange.com/questions/24837">ament_target_dependencies not linking an upstream ament package?</a> and <a href="https://robotics.stackexchange.com/questions/95644">using ament_cmake to build and use a shared library</a>. <code>find_package(mylib REQUIRED)</code> succeeded in every two-package test. In most of them the library package still told <code>app</code> nothing useful, because finding the package isn't the same as getting its include path and library.</p>
+
+<table>
+<thead><tr><th>What mylib exports</th><th>How app links</th><th>Humble, Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>nothing</td><td><code>target_link_libraries(app mylib)</code></td><td>header not found</td><td>header not found</td></tr>
+<tr><td>nothing</td><td><code>ament_target_dependencies(app mylib)</code></td><td>header not found</td><td>Unknown CMake command</td></tr>
+<tr><td><code>ament_export_include_directories(include)</code></td><td><code>ament_target_dependencies(app mylib)</code></td><td>undefined reference</td><td>Unknown CMake command</td></tr>
+<tr><td><code>ament_export_include_directories(include)</code></td><td><code>${mylib_INCLUDE_DIRS}</code> and <code>${mylib_LIBRARIES}</code></td><td>undefined reference</td><td>undefined reference</td></tr>
+<tr><td>include dirs plus <code>ament_export_libraries(mylib)</code></td><td><code>ament_target_dependencies(app mylib)</code></td><td>works</td><td>Unknown CMake command</td></tr>
+<tr><td>include dirs plus <code>ament_export_libraries(mylib)</code></td><td><code>${mylib_INCLUDE_DIRS}</code> and <code>${mylib_LIBRARIES}</code></td><td>works</td><td>works</td></tr>
+<tr><td>include dirs plus <code>ament_export_libraries(mylib)</code></td><td><code>target_link_libraries(app mylib::mylib)</code></td><td>target was not found</td><td>target was not found</td></tr>
+<tr><td><code>ament_export_targets(export_mylib HAS_LIBRARY_TARGET)</code></td><td><code>target_link_libraries(app mylib::mylib)</code></td><td>works</td><td>works</td></tr>
+<tr><td><code>ament_export_targets(export_mylib HAS_LIBRARY_TARGET)</code></td><td><code>ament_target_dependencies(app mylib)</code></td><td>works</td><td>Unknown CMake command</td></tr>
+<tr><td><code>ament_export_targets(export_mylib)</code> (no <code>HAS_LIBRARY_TARGET</code>)</td><td><code>target_link_libraries(app mylib::mylib)</code></td><td>works</td><td>works</td></tr>
+</tbody>
+</table>
+
+<p>Three things stand out.</p>
+
+<p>First, exporting only the include directory is the trap that gives you <code>undefined reference</code> rather than a missing header. The header is found and the code compiles, but <code>mylib_LIBRARIES</code> is empty, so <code>ament_target_dependencies</code> and the variable form both link nothing. This matches the second question above, where the client package couldn't use the library until <code>ament_export_libraries</code> was added.</p>
+
+<p>Second, <code>ament_target_dependencies(app mylib)</code> isn't the cause on Humble and Jazzy. It linked correctly whenever the library exported either its libraries or its targets. It can only pass along what the upstream package exported. On Lyrical the command doesn't exist, which is covered in <a href="https://huntlab.app/en/ros-2-lyrical-unknown-cmake-command-ament-target-dependencies/">Unknown CMake command "ament_target_dependencies" in ROS 2 Lyrical</a>.</p>
+
+<p>Third, a namespaced name like <code>mylib::mylib</code> only exists if the library package exported targets. With <code>ament_export_libraries</code> alone, CMake treated <code>mylib::mylib</code> as a target name, found no such target and stopped at the generate step. The old variable style and the target style don't mix. Pick one on both sides. The target style is the one that worked unchanged on all three distros.</p>
+
+<p>I expected <code>HAS_LIBRARY_TARGET</code> to matter at run time. It didn't in my run. Without it the program still ran, and after sourcing <code>install/setup.bash</code>, <code>LD_LIBRARY_PATH</code> contained <code>mylib/lib</code> in both variants. The executable had no RPATH or RUNPATH entry, so it found the library through <code>LD_LIBRARY_PATH</code>. I kept the flag in the recommended setup because it's what the ament_cmake docs show for libraries. I didn't measure what it changes.</p>
+
+<h3>The library's own dependencies</h3>
+
+<p>When <code>mylib</code> linked <code>rcutils::rcutils</code> with <code>PUBLIC</code> and exported its targets, the exported file referred to <code>rcutils::rcutils</code>. My <code>app</code> never called <code>find_package(rcutils)</code>, so CMake couldn't resolve that name and stopped. Adding <code>ament_export_dependencies(rcutils)</code> to <code>mylib</code> fixed it without touching <code>app</code>. In real packages <code>app</code> often calls <code>find_package(rclcpp)</code> anyway, which can hide a missing export until someone uses the library from a package that doesn't. Export every dependency that appears in your public link interface.</p>
+
+<h2>"symbol lookup error" after rebuilding only the library</h2>
+
+<p>This is the case in <a href="https://robotics.stackexchange.com/questions/97188">[ROS2] symbol lookup error and undefined symbol while using image transport cpp</a>. The build passes and the program fails when it starts. I built both packages and ran <code>app</code>. Then I changed <code>int add(int a, int b)</code> to <code>long add(long a, long b)</code> in the header and the source and ran <code>colcon build --packages-select mylib</code>. The library now exported <code>mylib::add(long, long)</code>. The old <code>app</code> binary still asked for <code>mylib::add(int, int)</code>:</p>
+
+<pre><code>&lt;ws&gt;/install/app/lib/app/app: symbol lookup error: &lt;ws&gt;/install/app/lib/app/app: undefined symbol: _ZN5mylib3addEii
+[ros2run]: Process exited with failure 127</code></pre>
+
+<p><code>_ZN5mylib3addEii</code> is the mangled form of <code>mylib::add(int, int)</code>. Pipe it through <code>c++filt</code> to read it, or compare it with <code>nm -D --defined-only libmylib.so | c++filt</code> for the library you have now. If the names differ only in parameter types, the executable is older than the library. That happened in all 33 rebuilds of this kind across the three distros. The same thing happens when apt updates a ROS package and your workspace was built against the old version. I didn't test the apt case.</p>
+
+<p>The fix is to rebuild everything that uses the library. <code>colcon build --packages-above mylib</code> rebuilds <code>mylib</code> and every package that depends on it. <code>colcon build --packages-up-to app --cmake-clean-first</code> also worked every time. Each rebuild took under a second here.</p>
+
+<p>One result surprised me. The edits came from a script, and I first ran <code>--packages-above</code> within the same second as the previous build. In that case it didn't always help. Out of 15 such tries (5 per distro), 3 rebuilt correctly. 6 relinked <code>app</code> without recompiling <code>app.cpp</code> and failed with <code>undefined reference to `mylib::add(int, int)'</code>. The other 6 finished with colcon exit code 0 and left the stale binary, so <code>ros2 run</code> still exited 127. The object file's dependency list did include <code>mylib.hpp</code>. In one Jazzy failure, the installed header and <code>app.cpp.o</code> had the same whole-second timestamp. When the script waited 2 seconds before the edit, <code>--packages-above</code> worked in 15 of 15 tries. A person editing a file won't hit this, but a script or CI job can. If it does, <code>--cmake-clean-first</code> rebuilt <code>app</code> correctly every time I used it.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Fixes</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>target_link_libraries(app mylib)</code> in the same package</td><td>missing link</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td><code>extern "C"</code> block in the C header</td><td>C function from C++</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Explicit instantiation in the <code>.cpp</code></td><td>template in <code>.cpp</code></td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td><code>ament_export_targets(... HAS_LIBRARY_TARGET)</code> plus <code>target_link_libraries(app mylib::mylib)</code></td><td>cross-package link</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td><code>ament_export_include_directories</code> plus <code>ament_export_libraries</code>, app uses <code>ament_target_dependencies</code></td><td>cross-package link</td><td>works</td><td>works</td><td>Unknown CMake command</td></tr>
+<tr><td>Same exports, app uses <code>${mylib_INCLUDE_DIRS}</code> and <code>${mylib_LIBRARIES}</code></td><td>cross-package link</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td><code>ament_export_dependencies(rcutils)</code></td><td>dependency target not found</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td><code>colcon build --packages-above mylib</code></td><td>symbol lookup error</td><td>works*</td><td>works*</td><td>works*</td></tr>
+<tr><td><code>--cmake-clean-first</code> on the app (or <code>--packages-up-to app</code>)</td><td>symbol lookup error</td><td>works</td><td>works</td><td>works</td></tr>
+</tbody>
+</table>
+
+<p>* 5 of 5 per distro when the edit came 2 seconds after the previous build. It was unreliable when the edit came in the same second, as described above.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The linker messages (<code>undefined reference to</code>, <code>collect2: error: ld returned 1 exit status</code>) were the same on GCC 11.4.0, 13.3.0 and 15.2.0. The offsets, such as <code>app.cpp:(.text+0x13)</code>, were the same too.</li>
+<li>CMake 3.22.1 on Humble prints the missing target on one line: <code>Target "app" links to target "mylib::mylib" but the target was not found.</code> CMake 3.28.3 on Jazzy and 4.2.3 on Lyrical split it into <code>Target "app" links to:</code>, the target name, and <code>but the target was not found.  Possible reasons include:</code>. Search for the target name, not the whole line.</li>
+<li>For the missing <code>ament_export_dependencies</code>, Humble reported the error at <code>CMakeLists.txt:5 (add_executable)</code> in <code>app</code>. Jazzy and Lyrical reported it inside the library's generated <code>export_mylibExport.cmake:61</code>, which makes the library look broken when the missing line is in its <code>CMakeLists.txt</code>.</li>
+<li>Lyrical has no <code>ament_target_dependencies</code>, so every variant that used it stopped with <code>Unknown CMake command</code>, whatever the library exported.</li>
+<li>The exported include path reached <code>app</code> as <code>-isystem &lt;ws&gt;/install/mylib/include</code> on all three distros.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Prebuilt third-party <code>.so</code> files linked with <code>find_library</code>, and <code>cannot open shared object file</code> at run time.</li>
+<li>Static libraries, <code>-fPIC</code> relocation errors and link order between static libraries.</li>
+<li>Libraries that use messages generated in the same package (<code>rosidl_typesupport</code> link errors).</li>
+<li>Plugins and components loaded with <code>dlopen</code>.</li>
+<li>Symbol lookup errors after an apt upgrade of ROS packages.</li>
+<li>The Ninja generator, <code>--symlink-install</code>, clang, and the other RMW implementations. The RMW doesn't take part in linking.</li>
+<li>Moving template bodies into the header.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "undefined reference to" mean in a ROS 2 colcon build?</h3>
+<p>The compiler found a declaration of the function, usually in a header, and the linker found no compiled definition in any library it was given. In my tests that was a missing <code>target_link_libraries</code>, a source file left out of <code>add_library</code>, a C function without <code>extern "C"</code>, a template defined in a <code>.cpp</code>, or a library package that exported only its include directory.</p>
+
+<h3>How do I link a library from another package in ROS 2?</h3>
+<p>In the library package, install the target with <code>EXPORT export_mylib</code> and call <code>ament_export_targets(export_mylib HAS_LIBRARY_TARGET)</code>. In the other package, call <code>find_package(mylib REQUIRED)</code> and <code>target_link_libraries(app mylib::mylib)</code>. That built and ran on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why doesn't ament_target_dependencies link my own library?</h3>
+<p>It links only what the upstream package exported. With just <code>ament_export_include_directories</code>, the header was found but nothing was linked, which gave <code>undefined reference</code>. Exporting the library with <code>ament_export_libraries</code> or <code>ament_export_targets</code> made <code>ament_target_dependencies</code> work on Humble and Jazzy. Lyrical doesn't have the command at all.</p>
+
+<h3>What does "symbol lookup error: undefined symbol" mean when I run a node?</h3>
+<p>The executable was built against an older version of a library. In my run, changing a function's parameter types and rebuilding only the library gave this error and exit code 127 every time. Rebuild the dependent packages with <code>colcon build --packages-above mylib</code>, or with <code>--cmake-clean-first</code> if a build in the same second skipped them.</p>
+
+<h3>What does "links to target mylib::mylib but the target was not found" mean?</h3>
+<p>The executable links a namespaced CMake target, and the library package didn't export targets. Add <code>install(TARGETS mylib EXPORT export_mylib ...)</code> and <code>ament_export_targets(export_mylib HAS_LIBRARY_TARGET)</code> to the library. If the missing name is a dependency such as <code>rcutils::rcutils</code>, add <code>ament_export_dependencies(rcutils)</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does undefined reference to mean in a ROS 2 colcon build?", "acceptedAnswer": {"@type": "Answer", "text": "The compiler found a declaration of the function, usually in a header, and the linker found no compiled definition in any library it was given. In my tests that was a missing target_link_libraries, a source file left out of add_library, a C function without extern C, a template defined in a .cpp, or a library package that exported only its include directory."}},
+{"@type": "Question", "name": "How do I link a library from another package in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "In the library package, install the target with EXPORT export_mylib and call ament_export_targets(export_mylib HAS_LIBRARY_TARGET). In the other package, call find_package(mylib REQUIRED) and target_link_libraries(app mylib::mylib). That built and ran on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why does ament_target_dependencies not link my own library?", "acceptedAnswer": {"@type": "Answer", "text": "It links only what the upstream package exported. With just ament_export_include_directories, the header was found but nothing was linked, which gave undefined reference. Exporting the library with ament_export_libraries or ament_export_targets made ament_target_dependencies work on Humble and Jazzy. Lyrical does not have the command at all."}},
+{"@type": "Question", "name": "What does symbol lookup error undefined symbol mean when I run a node?", "acceptedAnswer": {"@type": "Answer", "text": "The executable was built against an older version of a library. In my run, changing a function's parameter types and rebuilding only the library gave this error and exit code 127 every time. Rebuild the dependent packages with colcon build --packages-above mylib, or with --cmake-clean-first if a build in the same second skipped them."}},
+{"@type": "Question", "name": "What does links to target mylib::mylib but the target was not found mean?", "acceptedAnswer": {"@type": "Answer", "text": "The executable links a namespaced CMake target, and the library package did not export targets. Add install(TARGETS mylib EXPORT export_mylib) and ament_export_targets(export_mylib HAS_LIBRARY_TARGET) to the library. If the missing name is a dependency such as rcutils::rcutils, add ament_export_dependencies(rcutils)."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, ament_cmake 1.3.14, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10, CMake 3.22.1, GCC 11.4.0), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, ament_cmake 2.5.6, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4, CMake 3.28.3, GCC 13.3.0) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, ament_cmake 2.8.8, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10, CMake 4.2.3, GCC 15.2.0), colcon-core 0.21.3, default RMW, Makefile generator. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-06-ros2-undefined-reference-own-library/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/24837">ament_target_dependencies not linking an upstream ament package?</a>, <a href="https://robotics.stackexchange.com/questions/95644">using ament_cmake to build and use a shared library</a>, <a href="https://robotics.stackexchange.com/questions/101664">Undefined Reference in Linking Using colcon</a>, <a href="https://robotics.stackexchange.com/questions/97188">[ROS2] symbol lookup error and undefined symbol while using image transport cpp</a>, <a href="https://robotics.stackexchange.com/questions/114238">Undefined Reference Error</a>.</p>

@@ -1,0 +1,209 @@
+distro=lyrical cmake=cmake version 4.2.3 gcc=15.2.0 colcon-core=0.21.3
+
+### CASE S0_linked 
+colcon exit=0 seconds=2.0
+Summary: 1 package finished [1.58s]
+add(2,3)=5
+run exit=0
+
+### CASE S1_no_target_link_libraries 
+colcon exit=2 seconds=1.5
+app.cpp:(.text+0x13): undefined reference to `mylib::add(int, int)'
+collect2: error: ld returned 1 exit status
+Failed   <<< solo [1.11s, exited with code 2]
+Summary: 0 packages finished [1.25s]
+  1 package failed: solo
+
+### CASE S2_source_not_in_add_library 
+colcon exit=2 seconds=1.6
+app.cpp:(.text+0x13): undefined reference to `mylib::add(int, int)'
+collect2: error: ld returned 1 exit status
+Failed   <<< solo [1.17s, exited with code 2]
+Summary: 0 packages finished [1.31s]
+  1 package failed: solo
+
+### CASE S3_c_function_no_extern_c 
+colcon exit=2 seconds=1.6
+app.cpp:(.text+0x13): undefined reference to `c_add(int, int)'
+collect2: error: ld returned 1 exit status
+Failed   <<< solo [1.15s, exited with code 2]
+Summary: 0 packages finished [1.29s]
+  1 package failed: solo
+
+### CASE S3_fix_extern_c 
+colcon exit=0 seconds=1.6
+Summary: 1 package finished [1.35s]
+c_add(2,3)=5
+run exit=0
+
+### CASE S4_template_in_cpp 
+colcon exit=2 seconds=1.6
+app.cpp:(.text+0xe): undefined reference to `int mylib::twice<int>(int)'
+collect2: error: ld returned 1 exit status
+Failed   <<< solo [1.16s, exited with code 2]
+Summary: 0 packages finished [1.31s]
+  1 package failed: solo
+
+### CASE S4_fix_explicit_instantiation 
+colcon exit=0 seconds=1.7
+Summary: 1 package finished [1.36s]
+twice(4)=8
+run exit=0
+
+### CASE X1_no_exports_plain_name 
+colcon exit=2 seconds=2.6
+<ws>/src/app/src/app.cpp:2:10: fatal error: mylib/mylib.hpp: No such file or directory
+Failed   <<< app [1.00s, exited with code 2]
+Summary: 1 package finished [2.26s]
+  1 package failed: app
+
+### CASE X2_no_exports_ament_target_dependencies 
+colcon exit=1 seconds=2.3
+CMake Error at CMakeLists.txt:6 (ament_target_dependencies):
+  Unknown CMake command "ament_target_dependencies".
+Failed   <<< app [0.79s, exited with code 1]
+Summary: 1 package finished [2.05s]
+  1 package failed: app
+
+### CASE X3_include_only_ament_target_dependencies 
+colcon exit=1 seconds=2.3
+CMake Error at CMakeLists.txt:6 (ament_target_dependencies):
+  Unknown CMake command "ament_target_dependencies".
+Failed   <<< app [0.79s, exited with code 1]
+Summary: 1 package finished [2.04s]
+  1 package failed: app
+
+### CASE X3_include_only_variables 
+colcon exit=2 seconds=2.6
+app.cpp:(.text+0x13): undefined reference to `mylib::add(int, int)'
+collect2: error: ld returned 1 exit status
+Failed   <<< app [1.08s, exited with code 2]
+Summary: 1 package finished [2.34s]
+  1 package failed: app
+
+### CASE X4_fix_export_libraries_ament_target_dependencies 
+colcon exit=1 seconds=2.4
+CMake Error at CMakeLists.txt:6 (ament_target_dependencies):
+  Unknown CMake command "ament_target_dependencies".
+Failed   <<< app [0.80s, exited with code 1]
+Summary: 1 package finished [2.06s]
+  1 package failed: app
+Package 'app' not found
+run exit=1
+
+### CASE X4_fix_export_libraries_variables 
+colcon exit=0 seconds=2.7
+Summary: 2 packages finished [2.39s]
+add(2,3)=5
+run exit=0
+
+### CASE X5_namespaced_target_not_exported 
+colcon exit=1 seconds=2.5
+CMake Error at CMakeLists.txt:6 (target_link_libraries):
+  Target "app" links to:
+    mylib::mylib
+  but the target was not found.  Possible reasons include:
+CMake Generate step failed.  Build files cannot be regenerated correctly.
+Failed   <<< app [0.94s, exited with code 1]
+Summary: 1 package finished [2.20s]
+  1 package failed: app
+
+### CASE X6_fix_export_targets 
+colcon exit=0 seconds=2.7
+Summary: 2 packages finished [2.39s]
+add(2,3)=5
+run exit=0
+
+### CASE X6_export_targets_ament_target_dependencies 
+colcon exit=1 seconds=2.4
+CMake Error at CMakeLists.txt:6 (ament_target_dependencies):
+  Unknown CMake command "ament_target_dependencies".
+Failed   <<< app [0.80s, exited with code 1]
+Summary: 1 package finished [2.06s]
+  1 package failed: app
+Package 'app' not found
+run exit=1
+
+### CASE X7_export_targets_without_HAS_LIBRARY_TARGET 
+colcon exit=0 seconds=2.8
+Summary: 2 packages finished [2.50s]
+add(2,3)=5
+run exit=0
+LD_LIBRARY_PATH has mylib/lib after sourcing X6: 1
+LD_LIBRARY_PATH has mylib/lib after sourcing X7: 1
+RUNPATH of X7 app: 0 entries
+
+### CASE X8_dependency_not_exported 
+colcon exit=1 seconds=2.6
+CMake Error at <ws>/install/mylib/share/mylib/cmake/export_mylibExport.cmake:61 (set_target_properties):
+    rcutils::rcutils
+  but the target was not found.  Possible reasons include:
+CMake Generate step failed.  Build files cannot be regenerated correctly.
+Failed   <<< app [0.96s, exited with code 1]
+Summary: 1 package finished [2.26s]
+  1 package failed: app
+
+### CASE X8_fix_export_dependencies 
+colcon exit=0 seconds=2.7
+Summary: 2 packages finished [2.39s]
+add(2,3)=5
+run exit=0
+
+### CASE X9_initial_build 
+colcon exit=0 seconds=2.7
+Summary: 2 packages finished [2.40s]
+add(2,3)=5
+run exit=0
+exported symbol before: mylib::add(int, int) 
+namespace mylib { long add(long a, long b); }
+
+### CASE X9_rebuild_library_only --packages-select mylib
+colcon exit=0 seconds=0.7
+Summary: 1 package finished [0.37s]
+exported symbol after: mylib::add(long, long) 
+<ws>/install/app/lib/app/app: symbol lookup error: <ws>/install/app/lib/app/app: undefined symbol: _ZN5mylib3addEii
+[ros2run]: Process exited with failure 127
+run exit=127
+
+### CASE X9_rebuild_packages_above --packages-above mylib
+colcon exit=0 seconds=0.8
+Summary: 2 packages finished [0.50s]
+add(2,3)=5
+run exit=0
+app include flags: CXX_INCLUDES = -isystem <ws>/install/mylib/include
+app.cpp.o depends on mylib.hpp (lines in compiler_depend/depend files): 2
+app.cpp.o references:                  U mylib::add(long, long)
+installed header: namespace mylib { long add(long a, long b); }
+mtime installed header vs app.cpp.o: 1794105013 1794105015
+
+### CASE X9_packages_above_second_try --packages-above mylib
+colcon exit=0 seconds=0.7
+Summary: 2 packages finished [0.40s]
+add(2,3)=5
+run exit=0
+
+### CASE X9_rebuild_app_cmake_clean_first --packages-select app --cmake-clean-first
+colcon exit=0 seconds=0.7
+Summary: 1 package finished [0.41s]
+add(2,3)=5
+run exit=0
+
+### CASE X9_revert_then_packages_up_to_app_clean_first --packages-up-to app --cmake-clean-first
+colcon exit=0 seconds=0.9
+Summary: 2 packages finished [0.63s]
+add(2,3)=5
+run exit=0
+
+### CASE X10_repeat (initial build, edit, --packages-select mylib, --packages-above mylib)
+sleep_before_edit=0s try=1 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=0] undefined_reference_lines=0
+sleep_before_edit=0s try=2 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=127] undefined_reference_lines=0
+sleep_before_edit=0s try=3 after_select_mylib:[run exit=127] packages_above_colcon_exit=2 after_packages_above:[run exit=127] undefined_reference_lines=1
+sleep_before_edit=0s try=4 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=127] undefined_reference_lines=0
+sleep_before_edit=0s try=5 after_select_mylib:[run exit=127] packages_above_colcon_exit=2 after_packages_above:[run exit=127] undefined_reference_lines=1
+sleep_before_edit=2s try=1 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=0] undefined_reference_lines=0
+sleep_before_edit=2s try=2 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=0] undefined_reference_lines=0
+sleep_before_edit=2s try=3 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=0] undefined_reference_lines=0
+sleep_before_edit=2s try=4 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=0] undefined_reference_lines=0
+sleep_before_edit=2s try=5 after_select_mylib:[run exit=127] packages_above_colcon_exit=0 after_packages_above:[run exit=0] undefined_reference_lines=0
+
+### DONE
