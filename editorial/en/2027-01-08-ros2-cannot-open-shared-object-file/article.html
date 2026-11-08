@@ -1,0 +1,198 @@
+<pre><code>$ ros2 run cam_node cam
+&lt;ws&gt;/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+[ros2run]: Process exited with failure 127</code></pre>
+
+<p>Short answer: <code>colcon build</code> succeeded because the linker could see the library, and the copy of your node in <code>build/</code> still knows where it is. <code>ros2 run</code> starts the copy in <code>install/</code>, and CMake strips that path when it installs the executable. The usual fix is to install every file of the prebuilt library into your package's <code>lib</code> folder, including the versioned ones, and to source the workspace again:</p>
+
+<pre><code class="language-cmake">file(GLOB VENDOR_FILES ${PROJECT_SOURCE_DIR}/thirdparty/lib/libvendor.so*)
+install(FILES ${VENDOR_FILES} DESTINATION lib)</code></pre>
+
+<pre><code>colcon build &amp;&amp; source install/setup.bash &amp;&amp; ros2 run cam_node cam
+[INFO] [t] [cam]: vendor_read()=42</code></pre>
+
+<p>If the node must also start without sourcing the workspace (a systemd unit, a copied <code>install/</code> folder), add <code>set_target_properties(cam PROPERTIES INSTALL_RPATH "$ORIGIN/..")</code> as well. If the library lives outside your package, for example an SDK in <code>/opt</code> or libtorch in your home folder, <code>set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)</code> worked. A library copied to <code>/usr/local/lib</code> needs <code>sudo ldconfig</code>. All of this behaved the same on Humble, Jazzy and Lyrical.</p>
+
+<h2>Find your case</h2>
+
+<p>Read the file name in the error first. It's the name the executable asked for, not necessarily the file you linked. In my test I linked <code>libvendor.so</code>, and the error asked for <code>libvendor.so.4</code>, the library's soname.</p>
+
+<table>
+<thead><tr><th>Your setup</th><th>What happened in my run</th><th>Fix that worked</th></tr></thead>
+<tbody>
+<tr><td>Prebuilt <code>.so</code> inside the package, found with <code>find_library</code>, never installed</td><td><code>build/</code> binary ran, <code>ros2 run</code> failed with exit 127</td><td><code>install(FILES ...)</code> for every <code>libvendor.so*</code> file</td></tr>
+<tr><td>Same, but only <code>libvendor.so</code> installed</td><td>Installed as a broken symlink to <code>libvendor.so.4</code>, same error</td><td>Install the <code>.so.4</code> and <code>.so.4.6.0</code> files too</td></tr>
+<tr><td>Same, with <code>CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE</code></td><td>The source path was not added, same error</td><td>Doesn't help for a library inside the package</td></tr>
+<tr><td>SDK in <code>/opt/vendor_sdk/lib</code> (outside the package)</td><td>Same error</td><td><code>CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE</code></td></tr>
+<tr><td>Library copied to <code>/usr/local/lib</code>, no <code>ldconfig</code></td><td>Same error</td><td><code>ldconfig</code></td></tr>
+<tr><td>Your own <code>add_library(... SHARED)</code>, only the executable installed</td><td><code>libown.so: cannot open shared object file</code></td><td><code>install(TARGETS own LIBRARY DESTINATION lib)</code></td></tr>
+<tr><td>Everything installed, but the workspace isn't sourced</td><td>Same error, exit 127</td><td>Source <code>install/setup.bash</code>, or set <code>INSTALL_RPATH "$ORIGIN/.."</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-08 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another, with no network. The script first builds a small "vendor SDK" with <code>g++</code>, laid out the way real SDKs ship. There is one real file and two symlinks:</p>
+
+<pre><code>libvendor.so -&gt; libvendor.so.4
+libvendor.so.4 -&gt; libvendor.so.4.6.0
+libvendor.so.4.6.0
+vendor SONAME: [libvendor.so.4]</code></pre>
+
+<p>The ament_cmake package <code>cam_node</code> has one rclcpp executable, <code>cam</code>. It calls <code>vendor_read()</code> from the library, logs the result (42) and exits. Each case is its own workspace with a different <code>CMakeLists.txt</code>. The base version looks like the ones in the questions below:</p>
+
+<pre><code class="language-cmake">find_library(VENDOR_LIB vendor HINTS ${PROJECT_SOURCE_DIR}/thirdparty/lib NO_DEFAULT_PATH)
+add_executable(cam src/cam.cpp)
+target_include_directories(cam PRIVATE ${PROJECT_SOURCE_DIR}/thirdparty/include)
+target_link_libraries(cam rclcpp::rclcpp ${VENDOR_LIB})
+install(TARGETS cam DESTINATION lib/${PROJECT_NAME})</code></pre>
+
+<p>For every case I recorded the RUNPATH of the <code>build/</code> and <code>install/</code> binaries with <code>readelf -d</code>, the files in <code>install/cam_node/lib</code>, and the result of <code>ros2 run</code>. I also ran the installed binary directly, both with the workspace sourced and with only <code>/opt/ros</code> sourced. Every <code>colcon build</code> succeeded, in 5.1 to 6.7 seconds. That matters: no case produced a build error, and every failure showed up only at run time.</p>
+
+<h2>Why build/ works and install/ doesn't</h2>
+
+<p>In the base case, the two copies of the same executable differ in one field:</p>
+
+<pre><code>-- RUNPATH build/:   /opt/ros/humble/lib:&lt;ws&gt;/src/cam_node/thirdparty/lib:
+-- RUNPATH install/:
+-- NEEDED vendor:    libvendor.so.4</code></pre>
+
+<p>CMake writes the library's folder into the <code>build/</code> binary so you can run it in place. When it installs the binary it clears that path, unless you set an install RPATH. Running <code>build/cam_node/cam</code> directly printed <code>vendor_read()=42</code>. <code>ros2 run</code> started <code>install/cam_node/lib/cam_node/cam</code> and failed with exit code 127. Every failing <code>ros2 run</code> in this test returned in 0.15 to 0.52 seconds. <code>ldd</code> on the installed file shows the same thing without starting the node:</p>
+
+<pre><code>$ ldd install/cam_node/lib/cam_node/cam | grep 'not found'
+	libvendor.so.4 =&gt; not found</code></pre>
+
+<p>To see where the loader looked, set <code>LD_DEBUG=libs</code>. It tried the folders in <code>LD_LIBRARY_PATH</code> (only <code>/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib</code>), then <code>/etc/ld.so.cache</code>, then the system folders. The workspace wasn't in any of them. After sourcing <code>install/setup.bash</code>, <code>LD_LIBRARY_PATH</code> had no entry for the workspace at all, because <code>install/cam_node/lib</code> held no library.</p>
+
+<p>Under <code>ros2 launch</code> the same failure looked like this:</p>
+
+<pre><code>[INFO] [cam-1]: process started with pid [...]
+[ERROR] [cam-1]: process has died [pid 248, exit code 127, cmd '&lt;ws&gt;/install/cam_node/lib/cam_node/cam --ros-args'].
+[cam-1] &lt;ws&gt;/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory</code></pre>
+
+<p>The library error came after the "process has died" line, and <code>ros2 launch</code> itself exited with code 0. If you only look at the exit status of a launch command, you will miss it. Exit code 127 from a C++ node is the hint to look for this line.</p>
+
+<h2>Installing only libvendor.so isn't enough</h2>
+
+<p>The obvious first fix is <code>install(FILES .../libvendor.so DESTINATION lib)</code>. It built, and this is what landed in <code>install/cam_node/lib</code>:</p>
+
+<pre><code>lrwxrwxrwx libvendor.so -&gt; libvendor.so.4</code></pre>
+
+<p>CMake copied the symlink as a symlink, and its target wasn't installed. The executable asks for <code>libvendor.so.4</code> anyway, because the linker records the soname, not the file name you linked. <code>ros2 run</code> failed with the same <code>libvendor.so.4</code> error. This matches the Xsens question below: the asker's <code>lib</code> folder had <code>libxsensdeviceapi.so -&gt; libxsensdeviceapi.so.4 -&gt; libxsensdeviceapi.so.4.6.0</code>, and the error named the <code>.so.4</code> file.</p>
+
+<p>Installing all three files with the <code>file(GLOB ...)</code> from the short answer worked:</p>
+
+<pre><code>lrwxrwxrwx libvendor.so -&gt; libvendor.so.4
+lrwxrwxrwx libvendor.so.4 -&gt; libvendor.so.4.6.0
+-rw-r--r-- libvendor.so.4.6.0
+-- ros2 run cam_node cam: exit=0
+     [INFO] [t] [cam]: vendor_read()=42</code></pre>
+
+<p>The installed binary still had an empty RUNPATH. It worked because the loader now had a place to look. colcon had written an <code>ld_library_path_lib</code> hook for the package, and after sourcing, <code>LD_LIBRARY_PATH</code> included <code>&lt;ws&gt;/install/cam_node/lib</code>. In the base case, with no library in that folder, <code>LD_LIBRARY_PATH</code> had no workspace entry. The installed copy is independent of the source tree. I deleted <code>src/cam_node/thirdparty/lib</code>, and <code>ros2 run</code> still worked. The file lost its execute bit on install (<code>-rw-r--r--</code>), which didn't stop it from loading.</p>
+
+<p>This fix depends on the workspace being sourced. With only <code>/opt/ros/humble/setup.bash</code> sourced, the same installed binary failed again with exit 127. That is the case when you start a node from a systemd unit, from a script that sources only ROS, or from a shell that sourced <code>local_setup.bash</code> of another workspace. If you mix up those two setup files, see <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">local_setup.bash vs setup.bash</a>.</p>
+
+<h2>Making the binary find the library itself</h2>
+
+<p>An RPATH stored in the binary works without any environment variable. I tried two ways to set one.</p>
+
+<h3>$ORIGIN/.. together with the install rule</h3>
+
+<pre><code class="language-cmake">file(GLOB VENDOR_FILES ${PROJECT_SOURCE_DIR}/thirdparty/lib/libvendor.so*)
+install(FILES ${VENDOR_FILES} DESTINATION lib)
+set_target_properties(cam PROPERTIES INSTALL_RPATH "$ORIGIN/..")</code></pre>
+
+<p><code>$ORIGIN</code> is the folder of the executable, <code>install/cam_node/lib/cam_node</code>, so <code>$ORIGIN/..</code> is <code>install/cam_node/lib</code>. The installed RUNPATH was the literal text <code>$ORIGIN/..</code>. It worked through <code>ros2 run</code> and when I ran the binary directly with only <code>/opt/ros</code> sourced. It also worked after I deleted the source copy of the library and ran a copy of the whole <code>install/</code> tree from another folder. Of everything I tried, only this one passed all of those runs.</p>
+
+<h3>CMAKE_INSTALL_RPATH_USE_LINK_PATH</h3>
+
+<p>This variable is often suggested for this error. It tells CMake to keep link folders in the installed RPATH. For the library inside the package it did nothing useful:</p>
+
+<pre><code>-- RUNPATH install/: /opt/ros/humble/lib</code></pre>
+
+<p>CMake kept <code>/opt/ros/humble/lib</code> and dropped <code>&lt;ws&gt;/src/cam_node/thirdparty/lib</code>. The CMake documentation says the variable adds folders "outside the project", and a folder inside your package's source tree doesn't count. <code>ros2 run</code> failed exactly as before.</p>
+
+<p>It did work when the library lived outside the project. I copied the SDK to <code>/opt/vendor_sdk/lib</code> and pointed <code>find_library</code> there. Without the variable, <code>ros2 run</code> failed with the same error. With <code>set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)</code> the installed RUNPATH became <code>/opt/ros/humble/lib:/opt/vendor_sdk/lib</code>. The node ran through <code>ros2 run</code> and without the workspace sourced. This is the libtorch case from the Stack Overflow question below. The library stays where it is, and the binary remembers the absolute path. That ties the binary to that path, so on another machine the library has to be in the same place.</p>
+
+<h2>A library in /usr/local/lib needs ldconfig</h2>
+
+<p>The ORB-SLAM3 question below fails on <code>libpango_vars.so</code> from Pangolin, a library built from source outside the workspace. A library like that usually ends up in its own folder (the section above) or in <code>/usr/local/lib</code> after <code>make install</code>. I copied the vendor files to <code>/usr/local/lib</code> to test the second case. <code>/usr/local/lib</code> is listed in <code>/etc/ld.so.conf.d/libc.conf</code> in all three images, but the loader reads <code>/etc/ld.so.cache</code>, not that list. Before running <code>ldconfig</code>, <code>ldconfig -p | grep vendor</code> found 0 entries:</p>
+
+<ul>
+<li>The <code>build/</code> binary ran, because its RUNPATH included <code>/usr/local/lib</code>.</li>
+<li><code>ros2 run</code> failed with the same <code>libvendor.so.4</code> error.</li>
+<li>After <code>ldconfig</code>, the cache listed <code>libvendor.so.4 =&gt; /usr/local/lib/libvendor.so.4</code>, and <code>ros2 run</code> worked without rebuilding.</li>
+</ul>
+
+<p>On a normal machine that is <code>sudo ldconfig</code>. In a Dockerfile, put <code>RUN ldconfig</code> after the step that installs the library.</p>
+
+<h2>Your own library: install(TARGETS) for the library too</h2>
+
+<p>The same error shows up with a library you build yourself. I used <code>add_library(own SHARED src/own.cpp)</code> and linked it to the executable, with <code>install(TARGETS cam ...)</code> only. It built, <code>install/own_pkg/lib</code> held only the executable's folder, and <code>ros2 run</code> failed:</p>
+
+<pre><code>&lt;ws&gt;/install/own_pkg/lib/own_pkg/cam: error while loading shared libraries: libown.so: cannot open shared object file: No such file or directory
+[ros2run]: Process exited with failure 127</code></pre>
+
+<p>Adding <code>install(TARGETS own LIBRARY DESTINATION lib)</code> put <code>libown.so</code> into <code>install/own_pkg/lib</code>, and the node printed <code>own_read()=7</code>. Like the vendor case, it failed again when only <code>/opt/ros</code> was sourced. Link errors at build time (<code>undefined reference to</code>) are a different problem and weren't part of this test.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th><code>ros2 run</code>, workspace sourced</th><th>Binary run, workspace not sourced</th><th>Survives deleting or moving the source library</th></tr></thead>
+<tbody>
+<tr><td>None (link only)</td><td>Failed, 127</td><td>Not tested</td><td>n/a</td></tr>
+<tr><td><code>LD_LIBRARY_PATH=&lt;pkg&gt;/thirdparty/lib</code></td><td>Worked</td><td>Not tested</td><td>Not tested (it points at the source folder)</td></tr>
+<tr><td><code>install(FILES)</code> of <code>libvendor.so</code> only</td><td>Failed, 127</td><td>Not tested</td><td>n/a</td></tr>
+<tr><td><code>install(FILES)</code> of all <code>libvendor.so*</code></td><td>Worked</td><td>Failed, 127</td><td>Yes</td></tr>
+<tr><td><code>CMAKE_INSTALL_RPATH_USE_LINK_PATH</code>, library inside the package</td><td>Failed, 127</td><td>Not tested</td><td>n/a</td></tr>
+<tr><td><code>CMAKE_INSTALL_RPATH_USE_LINK_PATH</code>, library in <code>/opt/vendor_sdk/lib</code></td><td>Worked</td><td>Worked</td><td>Not tested (it needs the absolute path)</td></tr>
+<tr><td><code>install(FILES)</code> of all files plus <code>INSTALL_RPATH "$ORIGIN/.."</code></td><td>Worked</td><td>Worked</td><td>Yes, also from a copied <code>install/</code> tree</td></tr>
+<tr><td><code>ldconfig</code> for <code>/usr/local/lib</code></td><td>Worked</td><td>Not tested</td><td>n/a</td></tr>
+</tbody>
+</table>
+
+<p>My order of preference: install the files, and add <code>$ORIGIN/..</code> if anything starts the node outside a sourced shell. Use <code>CMAKE_INSTALL_RPATH_USE_LINK_PATH</code> for big libraries that you don't want to copy, such as libtorch, and keep their path the same on every machine. Use <code>LD_LIBRARY_PATH</code> only to confirm the diagnosis. It worked, but it points at the source tree and has to be set in every shell, launch file and service.</p>
+
+<h2>Version notes</h2>
+
+<p>Every case gave the same result on Humble, Jazzy and Lyrical, with the same error text, exit code 127 and the same fixes. The toolchains differ a lot: CMake 3.22.1, 3.28.3 and 4.2.3, GCC 11.4.0, 13.3.0 and 15.2.0, glibc 2.35, 2.39 and 2.43. The only differences I saw:</p>
+
+<ul>
+<li>On Lyrical, the RUNPATH also contained <code>/opt/ros/lyrical/lib/x86_64-linux-gnu</code>, in the <code>build/</code> binary and in the installed one with <code>CMAKE_INSTALL_RPATH_USE_LINK_PATH</code>. On Humble and Jazzy it was only <code>/opt/ros/&lt;distro&gt;/lib</code>.</li>
+<li>On Jazzy every node that started printed two <code>[rcl]</code> warnings about <code>ROS_LOCALHOST_ONLY</code> being deprecated. That came from my script, which set both <code>ROS_LOCALHOST_ONLY</code> and <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code> to keep DDS traffic local. It has nothing to do with the library error.</li>
+<li>The <code>process has died</code> pid differed between runs, as you'd expect.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Gazebo plugins (<code>Failed to load plugin libgazebo_ros2_control.so</code>), pluginlib and component libraries loaded with <code>dlopen</code>, <code>colcon build --merge-install</code>, <code>--symlink-install</code>, <code>IMPORTED</code> CMake targets, static libraries, rviz2 failing on its own system libraries after a partial apt upgrade, ARM64, Windows, and Foxy, Iron or Rolling. I didn't test copying an installed binary to another machine, only to another folder on the same container.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does colcon build succeed but ros2 run says "cannot open shared object file"?</h3>
+<p>The linker found the library at build time, and the <code>build/</code> copy of your node keeps its folder in its RUNPATH. CMake clears that path when it installs the node. <code>ros2 run</code> starts the installed copy, which can't find the library unless it was installed into <code>install/&lt;pkg&gt;/lib</code> or an install RPATH was set. In my run the <code>build/</code> binary worked and the <code>install/</code> one failed on all three distros.</p>
+
+<h3>I installed libfoo.so but the error asks for libfoo.so.4. Why?</h3>
+<p>The executable records the library's soname, here <code>libvendor.so.4</code>, not the file you linked. Installing only <code>libvendor.so</code> copied a symlink pointing at <code>libvendor.so.4</code>, which wasn't installed. Install every <code>libfoo.so*</code> file. Check the name with <code>readelf -d</code> on your executable (the NEEDED line).</p>
+
+<h3>Does CMAKE_INSTALL_RPATH_USE_LINK_PATH fix this?</h3>
+<p>Only for a library outside your project. For a library in <code>/opt/vendor_sdk/lib</code> it added that folder to the installed RUNPATH, and the node ran. For a library inside the package's source folder, CMake left the folder out and the error stayed.</p>
+
+<h3>The library is in /usr/local/lib. Why can't the node find it?</h3>
+<p>The loader looks in <code>/etc/ld.so.cache</code>, and a library copied there without <code>ldconfig</code> isn't in the cache yet. Before <code>ldconfig</code>, <code>ros2 run</code> failed. After it, the node ran without a rebuild. Run <code>sudo ldconfig</code>, or <code>RUN ldconfig</code> in a Dockerfile.</p>
+
+<h3>It works in my terminal but not from systemd. What's different?</h3>
+<p>Your terminal sourced <code>install/setup.bash</code>, which adds <code>install/&lt;pkg&gt;/lib</code> to <code>LD_LIBRARY_PATH</code>. With only <code>/opt/ros</code> sourced, the installed node failed with exit 127 even with the library installed. Source the workspace in the service, or set <code>INSTALL_RPATH "$ORIGIN/.."</code>, which worked without any sourcing.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does colcon build succeed but ros2 run says cannot open shared object file?", "acceptedAnswer": {"@type": "Answer", "text": "The linker found the library at build time, and the build/ copy of your node keeps its folder in its RUNPATH. CMake clears that path when it installs the node. ros2 run starts the installed copy, which can't find the library unless it was installed into install/pkg/lib or an install RPATH was set. In my run the build/ binary worked and the install/ one failed on all three distros."}},
+{"@type": "Question", "name": "I installed libfoo.so but the error asks for libfoo.so.4. Why?", "acceptedAnswer": {"@type": "Answer", "text": "The executable records the library's soname, here libvendor.so.4, not the file you linked. Installing only libvendor.so copied a symlink pointing at libvendor.so.4, which wasn't installed. Install every libfoo.so* file. Check the name with readelf -d on your executable (the NEEDED line)."}},
+{"@type": "Question", "name": "Does CMAKE_INSTALL_RPATH_USE_LINK_PATH fix this?", "acceptedAnswer": {"@type": "Answer", "text": "Only for a library outside your project. For a library in /opt/vendor_sdk/lib it added that folder to the installed RUNPATH, and the node ran. For a library inside the package's source folder, CMake left the folder out and the error stayed."}},
+{"@type": "Question", "name": "The library is in /usr/local/lib. Why can't the node find it?", "acceptedAnswer": {"@type": "Answer", "text": "The loader looks in /etc/ld.so.cache, and a library copied there without ldconfig isn't in the cache yet. Before ldconfig, ros2 run failed. After it, the node ran without a rebuild. Run sudo ldconfig, or RUN ldconfig in a Dockerfile."}},
+{"@type": "Question", "name": "It works in my terminal but not from systemd. What's different?", "acceptedAnswer": {"@type": "Answer", "text": "Your terminal sourced install/setup.bash, which adds install/pkg/lib to LD_LIBRARY_PATH. With only /opt/ros sourced, the installed node failed with exit 127 even with the library installed. Source the workspace in the service, or set INSTALL_RPATH $ORIGIN/.. which worked without any sourcing."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, CMake 3.22.1, GCC 11.4.0, glibc 2.35), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, CMake 3.28.3, GCC 13.3.0, glibc 2.39) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, CMake 4.2.3, GCC 15.2.0, glibc 2.43), default RMW (Fast DDS), colcon-core 0.21.3. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-08-ros2-cannot-open-shared-object-file/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105973">ROS2 port of ORB SLAM3: error while loading shared libraries: libpango_vars.so</a>, <a href="https://robotics.stackexchange.com/questions/101222">error while loading shared libraries: libxsensdeviceapi.so.4: cannot open shared object file</a>, <a href="https://robotics.stackexchange.com/questions/104721">linking .so files to ros2 package</a>, <a href="https://stackoverflow.com/questions/73885228">Shared runtime libraries not found in ros2 at launch</a>.</p>

@@ -1,0 +1,194 @@
+distro=jazzy cmake=cmake version 3.28.3 gcc=13.3.0 glibc=2.39
+vendor files:
+  lrwxrwxrwx libvendor.so -> libvendor.so.4
+  lrwxrwxrwx libvendor.so.4 -> libvendor.so.4.6.0
+  -rwxr-xr-x libvendor.so.4.6.0  
+vendor SONAME: [libvendor.so.4]
+
+### CASE C0_link_only
+colcon exit=0 seconds=6.7
+Summary: 1 package finished [6.29s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:<ws>/src/cam_node/thirdparty/lib:
+-- RUNPATH install/: 
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+-- build/ binary run directly: exit=0 seconds=0.16
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+-- ros2 run cam_node cam: exit=127 seconds=0.28
+     <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+     [ros2run]: Process exited with failure 127
+-- ros2 launch cam.launch.py: exit=0 seconds=0.68
+     [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-08-04-17-27-227171-56f29f53ccd2-229
+     [INFO] [launch]: Default logging verbosity is set to INFO
+     [INFO] [cam-1]: process started with pid [t]
+     [cam-1] <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+     [ERROR] [cam-1]: process has died [pid 232, exit code 127, cmd '<ws>/install/cam_node/lib/cam_node/cam --ros-args'].
+-- ldd install binary (vendor line):
+     	libvendor.so.4 => not found
+-- LD_DEBUG=libs for libvendor (search path shortened to 2 entries):
+     	find library=libvendor.so.4 [0]; searching
+     	 search path=/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/lib		(LD_LIBRARY_PATH)
+     	 search cache=/etc/ld.so.cache
+     	 search path=/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v4:/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v3:...		(system search path)
+<ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+-- workspace entries in LD_LIBRARY_PATH after sourcing:
+-- env hook files: ament_prefix_path.dsv ament_prefix_path.sh path.dsv path.sh 
+-- ros2 run with LD_LIBRARY_PATH=<pkg>/thirdparty/lib prepended: exit=0 seconds=0.35
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+
+### CASE C1_install_so_symlink_only
+colcon exit=0 seconds=5.3
+Summary: 1 package finished [5.06s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:<ws>/src/cam_node/thirdparty/lib:
+-- RUNPATH install/: 
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+     lrwxrwxrwx libvendor.so -> libvendor.so.4
+-- ros2 run cam_node cam: exit=127 seconds=0.21
+     <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+     [ros2run]: Process exited with failure 127
+
+### CASE C2_install_all_files
+colcon exit=0 seconds=5.3
+Summary: 1 package finished [5.02s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:<ws>/src/cam_node/thirdparty/lib:
+-- RUNPATH install/: 
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+     lrwxrwxrwx libvendor.so -> libvendor.so.4
+     lrwxrwxrwx libvendor.so.4 -> libvendor.so.4.6.0
+     -rw-r--r-- libvendor.so.4.6.0  
+-- ros2 run cam_node cam: exit=0 seconds=0.35
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+-- workspace entries in LD_LIBRARY_PATH after sourcing:
+     <ws>/install/cam_node/lib
+-- env hook files: ament_prefix_path.dsv ament_prefix_path.sh path.dsv path.sh 
+-- colcon hook files: cmake_prefix_path.dsv cmake_prefix_path.ps1 cmake_prefix_path.sh ld_library_path_lib.dsv ld_library_path_lib.ps1 ld_library_path_lib.sh 
+-- install binary, workspace NOT sourced: exit=127 seconds=0.0
+     <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+-- ros2 run after deleting src/.../thirdparty/lib: exit=0 seconds=0.35
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+
+### CASE C3_rpath_use_link_path
+colcon exit=0 seconds=5.6
+Summary: 1 package finished [5.22s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:<ws>/src/cam_node/thirdparty/lib:
+-- RUNPATH install/: /opt/ros/jazzy/lib
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+-- ros2 run cam_node cam: exit=127 seconds=0.2
+     <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+     [ros2run]: Process exited with failure 127
+-- ros2 run after moving src/.../thirdparty away: exit=127 seconds=0.21
+     <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+     [ros2run]: Process exited with failure 127
+
+### CASE C4_install_plus_origin_rpath
+colcon exit=0 seconds=5.3
+Summary: 1 package finished [5.01s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:<ws>/src/cam_node/thirdparty/lib:
+-- RUNPATH install/: $ORIGIN/..
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+     lrwxrwxrwx libvendor.so -> libvendor.so.4
+     lrwxrwxrwx libvendor.so.4 -> libvendor.so.4.6.0
+     -rw-r--r-- libvendor.so.4.6.0  
+-- ros2 run cam_node cam: exit=0 seconds=0.35
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+-- install binary, workspace NOT sourced: exit=0 seconds=0.15
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+-- copied install/ tree, src lib deleted, NOT sourced: exit=0 seconds=0.14
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+
+/etc/ld.so.conf.d files listing /usr/local/lib: /etc/ld.so.conf.d/libc.conf /etc/ld.so.conf.d/x86_64-linux-gnu.conf 
+ldconfig -p | grep -c vendor before ldconfig: 0
+
+### CASE C5_usr_local_no_ldconfig
+colcon exit=0 seconds=5.3
+Summary: 1 package finished [4.99s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:/usr/local/lib:
+-- RUNPATH install/: 
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+-- build/ binary run directly: exit=0 seconds=0.14
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+-- ros2 run cam_node cam: exit=127 seconds=0.21
+     <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+     [ros2run]: Process exited with failure 127
+-- ran ldconfig; ldconfig -p | grep vendor: 	libvendor.so.4 => /usr/local/lib/libvendor.so.4;	libvendor.so => /usr/local/lib/libvendor.so;
+-- ros2 run after ldconfig: exit=0 seconds=0.36
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+
+### CASE C8a_opt_sdk_link_only
+colcon exit=0 seconds=6.2
+Summary: 1 package finished [5.89s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:/opt/vendor_sdk/lib:
+-- RUNPATH install/: 
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+-- ros2 run cam_node cam: exit=127 seconds=0.21
+     <ws>/install/cam_node/lib/cam_node/cam: error while loading shared libraries: libvendor.so.4: cannot open shared object file: No such file or directory
+     [ros2run]: Process exited with failure 127
+
+### CASE C8b_opt_sdk_rpath_use_link_path
+colcon exit=0 seconds=5.3
+Summary: 1 package finished [4.99s]
+-- RUNPATH build/:   /opt/ros/jazzy/lib:/opt/vendor_sdk/lib:
+-- RUNPATH install/: /opt/ros/jazzy/lib:/opt/vendor_sdk/lib
+-- NEEDED vendor:    libvendor.so.4
+-- install/cam_node/lib:
+     drwxr-xr-x cam_node  
+-- ros2 run cam_node cam: exit=0 seconds=0.35
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+-- install binary, workspace NOT sourced: exit=0 seconds=0.15
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: vendor_read()=42
+
+### CASE C6_own_lib_not_installed
+colcon exit=0 seconds=5.4
+Summary: 1 package finished [5.11s]
+-- install/own_pkg/lib: own_pkg 
+-- ros2 run own_pkg cam: exit=127 seconds=0.2
+     <ws>/install/own_pkg/lib/own_pkg/cam: error while loading shared libraries: libown.so: cannot open shared object file: No such file or directory
+     [ros2run]: Process exited with failure 127
+
+### CASE C7_own_lib_installed
+colcon exit=0 seconds=5.3
+Summary: 1 package finished [5.07s]
+-- install/own_pkg/lib: libown.so own_pkg 
+-- ros2 run own_pkg cam: exit=0 seconds=0.34
+     [WARN] [t] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+     [WARN] [t] [rcl]: 'localhost_only' is enabled, 'automatic_discovery_range' and 'static_peers' will be ignored.
+     [INFO] [t] [cam]: own_read()=7
+-- C7 install binary, workspace NOT sourced: exit=127 seconds=0.0
+     <ws>/install/own_pkg/lib/own_pkg/cam: error while loading shared libraries: libown.so: cannot open shared object file: No such file or directory
+
+DONE jazzy
