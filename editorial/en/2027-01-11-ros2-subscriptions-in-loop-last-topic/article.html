@@ -1,0 +1,186 @@
+<pre><code>for topic in ['/robot1/pose', '/robot2/pose', '/robot3/pose']:
+    self.create_subscription(
+        String, topic,
+        lambda msg: self.listener_callback(msg, topic),
+        10)
+
+# what the callback reported after 20 messages on each topic:
+sent_per_topic 20 received 60 label_matches_source 20 label_wrong 40
+labels_seen {'/robot3/pose': 60}</code></pre>
+
+<p>There is no error message. Every message arrives, but every callback says it came from the last topic in the list. That's the output above, and it was the same on Humble, Jazzy and Lyrical.</p>
+
+<p>Short answer: the lambda doesn't store the topic name. It looks up the variable <code>topic</code> when the callback runs, and by then the loop has finished and <code>topic</code> holds the last value. This is plain Python late binding, not a ROS bug. Bind the value when you create the subscription. Any of these gave 60 out of 60 correct labels on all three distros:</p>
+
+<pre><code class="language-python">import functools
+
+for topic in topics:
+    # 1. default argument: the value is copied when the lambda is created
+    self.create_subscription(String, topic,
+        lambda msg, t=topic: self.listener_callback(msg, t), 10)
+
+    # 2. functools.partial: also copies the value now
+    self.create_subscription(String, topic,
+        functools.partial(self.listener_callback, topic=topic), 10)</code></pre>
+
+<p>In C++ the trap is different. A subscription you don't keep a <code>SharedPtr</code> to is destroyed at once and never receives anything. In rclpy you don't need to keep the return value, but you do need it later if you want to unsubscribe with <code>destroy_subscription()</code>.</p>
+
+<h2>Find your case</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause</th><th>Fix that worked</th></tr></thead>
+<tbody>
+<tr><td>rclpy: all callbacks report the last topic</td><td><code>lambda msg: cb(msg, topic)</code> in a loop reads <code>topic</code> late</td><td><code>lambda msg, t=topic: ...</code>, <code>functools.partial</code>, or a factory function</td></tr>
+<tr><td>rclcpp: callback never runs, subscription count 0</td><td>Return value of <code>create_subscription</code> not stored</td><td>Keep the <code>SharedPtr</code> in a member or a container</td></tr>
+<tr><td>rclpy: subscription not stored, wondering if it is collected</td><td>Not a problem. The node holds its own reference</td><td>Keep it anyway if you want to destroy it later</td></tr>
+<tr><td>Need to stop listening to one topic</td><td>No "unsubscribe" call by that name</td><td>rclpy <code>node.destroy_subscription(sub)</code>, rclcpp <code>sub.reset()</code> on the last copy</td></tr>
+<tr><td>Not sure the subscriber is really gone</td><td>Reading the wrong counter</td><td>Publisher's <code>get_subscription_count()</code>, or <code>ros2 topic info</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>One Python script creates a subscriber node with three <code>std_msgs/String</code> subscriptions in a loop, on <code>/robot1/pose</code>, <code>/robot2/pose</code> and <code>/robot3/pose</code>. A publisher node in the same process sends 20 messages on each topic. Each message carries the name of the topic it was sent on. The callback records that name and the topic name it was given. If the two match, the label is right. I ran six ways of building the callback: the plain lambda, a lambda with a default argument, a lambda with a keyword-only default, <code>functools.partial</code>, a small factory function, and the partial version without keeping the return value.</p>
+
+<p>A second script tests <code>destroy_subscription()</code> in the same process, three runs per distro. A third splits publisher and subscriber into two processes. The publisher prints its matched subscription count with a wall-clock time every time it changes, polling every 10 ms. The subscriber listens for 3 s, destroys its subscription, and keeps spinning for 3 s more. About 0.8 s after the subscriber process exits, I ran <code>ros2 topic info</code> with the daemon and with <code>--no-daemon</code>. Three runs per distro.</p>
+
+<p>The C++ test is one <code>rclcpp</code> package with three modes: subscriptions created in a loop without storing them, stored in a <code>std::vector</code>, and stored then released with <code>reset()</code> after 1 s of traffic. Each container ran with <code>--network none</code>, <code>ROS_DOMAIN_ID=88</code> and localhost-only discovery, 1.5 CPUs and 1500 MB of memory, using the default RMW (Fast DDS).</p>
+
+<h2>Why every callback gets the last topic</h2>
+
+<p>A Python lambda, like any nested function, keeps a reference to the variable, not a copy of its value. The three lambdas in the loop all point to the same <code>topic</code> variable. When a message arrives, the loop is long finished and <code>topic</code> is <code>'/robot3/pose'</code>. So every callback passes that string to <code>listener_callback</code>.</p>
+
+<p>The subscriptions themselves are fine. Each one is on the right topic and gets its own messages. In the measured run all 60 messages were received, 20 from each topic. Only the label was wrong. The 20 "correct" labels were the messages that really came from <code>/robot3/pose</code>. The other 40 were mislabeled.</p>
+
+<p>This matters for debugging. If you log only the label, it looks like two of the three topics are silent and the third is getting three times the traffic. Before you suspect QoS or discovery, log something from the message itself, such as <code>msg.header.frame_id</code> for a stamped type, or print the subscription's topic name. If the messages really don't arrive at all, the cause is somewhere else, and an <a href="https://huntlab.app/en/ros2-incompatible-qos-reliability-no-messages-will-be-sent/">incompatible QoS between publisher and subscriber</a> is a common one.</p>
+
+<h2>Passing the topic name into the callback: fixes compared</h2>
+
+<p>Every fix binds the value at the moment the subscription is created. Here are the results, 60 messages sent each time:</p>
+
+<table>
+<thead><tr><th>Callback passed to <code>create_subscription</code></th><th>Received</th><th>Correct labels</th><th>Parameters rclpy saw</th></tr></thead>
+<tbody>
+<tr><td><code>lambda msg: self.cb(msg, topic)</code></td><td>60</td><td>20 (all said <code>/robot3/pose</code>)</td><td><code>['msg']</code></td></tr>
+<tr><td><code>lambda msg, t=topic: self.cb(msg, t)</code></td><td>60</td><td>60</td><td><code>['msg', 't']</code></td></tr>
+<tr><td><code>lambda msg, *, t=topic: self.cb(msg, t)</code></td><td>60</td><td>60</td><td><code>['msg', 't']</code></td></tr>
+<tr><td><code>functools.partial(self.cb, topic=topic)</code></td><td>60</td><td>60</td><td><code>['msg', 'topic']</code></td></tr>
+<tr><td>Factory: <code>def make_cb(t): return lambda msg: self.cb(msg, t)</code></td><td>60</td><td>60</td><td><code>['msg']</code></td></tr>
+<tr><td><code>partial</code>, return value not stored</td><td>60</td><td>60</td><td>n/a</td></tr>
+</tbody>
+</table>
+
+<p>The numbers were identical on Humble, Jazzy and Lyrical.</p>
+
+<p>I tested the default-argument form on purpose. It gives the callback two parameters, and I wanted to see whether rclpy would fill the second one with something else. It didn't. On all three distros the default value stayed in place and every label was correct. The keyword-only version, with <code>*</code> before <code>t</code>, did the same. If you want to be safe from a caller ever passing a second positional argument, the keyword-only form or <code>functools.partial</code> with a keyword (<code>topic=topic</code>) protects you. Those values can't be overwritten by position.</p>
+
+<p>Which one to pick is a matter of style. <code>functools.partial</code> is the clearest when the callback is a method. The factory function is the most explicit, because the value lives in its own scope. The default-argument lambda is the shortest, but it's the one a later reader is most likely to "clean up" into the broken form. If you go with it, add a comment.</p>
+
+<p>Python 3.10, 3.12 and 3.14 shipped with the three images, and all behaved the same. Late binding is part of the language, so no distro or rclpy version changes it.</p>
+
+<h2>Do you need to store the subscription?</h2>
+
+<p>In rclpy, no. The last row of the table above dropped the return value of <code>create_subscription</code> and still got all 60 messages. The node keeps every subscription it creates until you destroy it or the node.</p>
+
+<p>In rclcpp, yes. <code>create_subscription</code> returns a <code>SharedPtr</code>, and the node doesn't keep a strong reference. If you drop the return value, the subscription is destroyed at the end of that statement:</p>
+
+<pre><code class="language-cpp">for (const auto &amp; topic : topics) {
+  // dropped: destroyed right away
+  node-&gt;create_subscription&lt;String&gt;(topic, 10, cb);
+
+  // kept: works
+  subs_.push_back(node-&gt;create_subscription&lt;String&gt;(topic, 10, cb));
+}</code></pre>
+
+<p>Measured results for the C++ modes, the same on all three distros:</p>
+
+<table>
+<thead><tr><th>rclcpp mode</th><th>Publisher matched count</th><th><code>count_subscribers()</code></th><th>Received (of 60)</th></tr></thead>
+<tbody>
+<tr><td>Return value not stored</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>Stored in <code>std::vector</code></td><td>1</td><td>1</td><td>60, all labels correct</td></tr>
+</tbody>
+</table>
+
+<p>Nothing is printed when this happens. No warning, no error, just a subscription that isn't there. If a C++ subscriber created in a loop or in a helper function never fires, check this first.</p>
+
+<p>C++ doesn't have the late binding problem. My callback was <code>[&amp;, topic](const String &amp; msg) {...}</code>, which copies <code>topic</code> into each lambda when it is created, and all 60 labels were right. If you capture the loop variable by reference instead, each lambda refers to a variable that no longer exists after the loop. I didn't measure that case, because what it does is undefined behavior and not something to rely on either way.</p>
+
+<h2>Unsubscribing: destroy_subscription and reset()</h2>
+
+<p>ROS 2 has no <code>unsubscribe()</code>. In rclpy you call <code>node.destroy_subscription(sub)</code>, which is why you keep the return value after all. In rclcpp you release the <code>SharedPtr</code>, for example with <code>sub.reset()</code> or by erasing it from your container. The subscription goes away when the last copy is released.</p>
+
+<table>
+<thead><tr><th>Test (3 runs per distro)</th><th>Messages before</th><th>Messages after</th><th>Publisher matched count</th></tr></thead>
+<tbody>
+<tr><td>rclpy <code>destroy_subscription</code>, same process</td><td>47 each run</td><td>0</td><td>0 at the first check after the call</td></tr>
+<tr><td>rclcpp <code>reset()</code> on all three, same process</td><td>60 each run</td><td>0</td><td>0 at the first check, <code>count_subscribers()</code> 0 after 5 s</td></tr>
+<tr><td>rclpy <code>destroy_subscription</code>, separate processes</td><td>235 to 293</td><td>0</td><td>0 within 9 to 10 ms of the call</td></tr>
+</tbody>
+</table>
+
+<p><code>destroy_subscription</code> returned <code>True</code> every time. In the two-process test the publisher polls every 10 ms, so "9 to 10 ms" is really "by the next poll". None of the 27 runs in this table left a subscriber hanging around in the publisher's count.</p>
+
+<p>About 0.8 s after the subscriber process exited, <code>ros2 topic info</code> showed this whenever it found the topic:</p>
+
+<pre><code>Type: std_msgs/msg/String
+Publisher count: 1
+Subscription count: 0</code></pre>
+
+<p>It never showed a stale subscription count of 1. But four of the 18 CLI calls printed <code>Unknown topic '/xproc_topic'</code> instead, even though the publisher was still running. That was Jazzy run 1 (with and without the daemon), Jazzy run 2 with <code>--no-daemon</code>, and Lyrical run 1 with the daemon. That's the CLI not finishing discovery in time, not the topic being gone. If <code>ros2 topic info</code> or <code>ros2 topic list</code> gives a strange answer right after nodes start or stop, run it again before you draw conclusions.</p>
+
+<p>One more thing about "topics that persist". A topic exists in the graph while any publisher or subscription on it exists, anywhere. After you destroy your subscription, the topic is still listed as long as the other side is alive. In my test, <code>Publisher count: 1</code> stayed because the publisher process was still running. That isn't a leaked subscriber.</p>
+
+<p>All my tests created, used and destroyed subscriptions on the thread that spins the executor.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Every Python result (late binding, the four fixes, the unstored subscription, <code>destroy_subscription</code>) was identical on Humble (rclpy 3.3.22, Python 3.10.12), Jazzy (rclpy 7.1.12, Python 3.12.3) and Lyrical (rclpy 10.0.11, Python 3.14.4).</li>
+<li>Every C++ result was identical on rclcpp 16.0.21, 28.1.22 and 32.0.3.</li>
+<li>The C++ package used <code>target_link_libraries(subs rclcpp::rclcpp ${std_msgs_TARGETS})</code> instead of <code>ament_target_dependencies</code>, so the same <code>CMakeLists.txt</code> built on all three distros, in 12.8 to 13.1 s.</li>
+<li>On Lyrical the build printed <code>CMake Deprecation Warning ... Compatibility with CMake &lt; 3.10 will be removed from a future version of CMake</code> for <code>cmake_minimum_required(VERSION 3.8)</code>. It's harmless today. Raise the minimum to 3.10 to silence it. Humble and Jazzy didn't print it.</li>
+<li>The <code>Unknown topic</code> answers from <code>ros2 topic info</code> showed up only on Jazzy and Lyrical, but with three runs each that isn't enough to call it a version difference.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Capturing the loop variable by reference in a C++ lambda (undefined behavior).</li>
+<li>Re-creating a subscription on the same topic after destroying it.</li>
+<li>Destroying subscriptions from a thread other than the spinning one, and <code>MultiThreadedExecutor</code>.</li>
+<li>Cyclone DDS, Zenoh and other RMWs, and traffic between machines. All runs used Fast DDS, inside one container.</li>
+<li>How long <code>ros2 topic list</code> keeps showing a topic after every node on it has exited.</li>
+<li>Message types other than <code>std_msgs/String</code>, and <code>message_filters</code> subscribers.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why do all my rclpy subscriptions created in a loop report the same topic?</h3>
+<p>The lambda reads the loop variable when the callback runs, not when it was created. By then it holds the last topic. In my test, 60 messages from three topics were all labeled with the third topic. Bind the value with <code>lambda msg, t=topic:</code>, <code>functools.partial</code> or a factory function.</p>
+
+<h3>How do I pass the topic name to a ROS 2 Python callback?</h3>
+<p>Use <code>functools.partial(self.callback, topic=topic)</code>, or a lambda with a default argument, <code>lambda msg, t=topic: self.callback(msg, t)</code>. Both gave 60 of 60 correct labels on Humble, Jazzy and Lyrical. rclpy left the default argument alone.</p>
+
+<h3>How do I unsubscribe from a topic in ROS 2?</h3>
+<p>In rclpy, call <code>node.destroy_subscription(sub)</code>. In rclcpp, release the last <code>SharedPtr</code>, for example with <code>sub.reset()</code>. In both cases no message arrived afterwards, and the publisher's matched count was 0 at the next check.</p>
+
+<h3>Why does my rclcpp subscription never receive messages?</h3>
+<p>If you didn't store the <code>SharedPtr</code> that <code>create_subscription</code> returns, the subscription is destroyed right away. It received 0 of 60 messages and the publisher saw 0 subscribers. Keep it in a member variable or a container.</p>
+
+<h3>Does an rclpy subscription get garbage collected if I don't keep it?</h3>
+<p>No. With the return value thrown away, the subscriptions still received all 60 messages on every distro. The node holds a reference until you destroy the subscription or the node.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why do all my rclpy subscriptions created in a loop report the same topic?", "acceptedAnswer": {"@type": "Answer", "text": "The lambda reads the loop variable when the callback runs, not when it was created, and by then it holds the last topic. In my test, 60 messages from three topics were all labeled with the third topic. Bind the value with a default argument, functools.partial or a factory function."}},
+{"@type": "Question", "name": "How do I pass the topic name to a ROS 2 Python callback?", "acceptedAnswer": {"@type": "Answer", "text": "Use functools.partial(self.callback, topic=topic), or a lambda with a default argument such as lambda msg, t=topic: self.callback(msg, t). Both gave 60 of 60 correct labels on Humble, Jazzy and Lyrical. rclpy left the default argument alone."}},
+{"@type": "Question", "name": "How do I unsubscribe from a topic in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "In rclpy, call node.destroy_subscription(sub). In rclcpp, release the last SharedPtr, for example with sub.reset(). In both cases no message arrived afterwards, and the publisher matched count was 0 at the next check."}},
+{"@type": "Question", "name": "Why does my rclcpp subscription never receive messages?", "acceptedAnswer": {"@type": "Answer", "text": "If you did not store the SharedPtr that create_subscription returns, the subscription is destroyed right away. It received 0 of 60 messages and the publisher saw 0 subscribers. Keep it in a member variable or a container."}},
+{"@type": "Question", "name": "Does an rclpy subscription get garbage collected if I do not keep it?", "acceptedAnswer": {"@type": "Answer", "text": "No. With the return value thrown away, the subscriptions still received all 60 messages on every distro. The node holds a reference until you destroy the subscription or the node."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-11-ros2-subscriptions-in-loop-last-topic/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/109639">Creation of ROS2 subscriptions dynamically in loop vs manually</a>, <a href="https://robotics.stackexchange.com/questions/97254">ROS2/create_subscription: How to pass callback arguments</a>, <a href="https://robotics.stackexchange.com/questions/96187">How to unsubscribe from a topic</a>, <a href="https://robotics.stackexchange.com/questions/104683">Ros2, topics still persist after subscribers/publishers go out of scope</a>, <a href="https://robotics.stackexchange.com/questions/25111">Dynamically creating publishers in ROS2 Humble</a>.</p>
