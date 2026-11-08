@@ -1,0 +1,167 @@
+<pre><code>[INFO] [controller_manager]: update rate is 100 Hz
+[INFO] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number &lt;1&gt;(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.</code></pre>
+
+<p>Short answer: this is a warning, not a crash. <code>ros2_control_node</code> tried to move its update loop thread to the <code>SCHED_FIFO</code> real-time policy at priority 50. The kernel said no, so the thread stayed on the normal scheduler and the controller manager kept running. In my Docker tests it disappeared with either of two flags, and neither one needed a real-time kernel:</p>
+
+<pre><code># root inside the container (the default for ros images)
+docker run --cap-add SYS_NICE ... ros2 run controller_manager ros2_control_node ...
+
+# root or a non-root user
+docker run --ulimit rtprio=99 ... ros2 run controller_manager ros2_control_node ...</code></pre>
+
+<p>With either flag the log said <code>Successful set up FIFO RT scheduling policy with priority 50.</code> and <code>chrt</code> showed one thread of the process on <code>SCHED_FIFO</code> priority 50. <code>--cap-add SYS_ADMIN</code>, a common suggestion, did not help. Neither did <code>--cap-add SYS_NICE</code> for a non-root user. On a desktop install without Docker the same rule applies: the user needs an <code>rtprio</code> limit of at least 50. The ros2_control docs describe this with a <code>realtime</code> group in <code>/etc/security/limits.conf</code>. I measured Docker only.</p>
+
+<h2>Find your setup</h2>
+
+<p>Each row is one <code>docker run</code> of the same container: a mock robot (<code>mock_components/GenericSystem</code>), <code>robot_state_publisher</code>, <code>ros2_control_node</code> at 100 Hz and a <code>joint_state_broadcaster</code>. Results were identical on Humble, Jazzy and Lyrical.</p>
+
+<table>
+<thead><tr><th>docker run flags</th><th>User</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>none</td><td>root</td><td>Warning, every thread <code>SCHED_OTHER</code></td></tr>
+<tr><td><code>--cap-add SYS_NICE</code></td><td>root</td><td>FIFO priority 50</td></tr>
+<tr><td><code>--ulimit rtprio=99</code></td><td>root</td><td>FIFO priority 50</td></tr>
+<tr><td><code>--cap-add SYS_ADMIN</code></td><td>root</td><td>Warning</td></tr>
+<tr><td><code>--privileged</code></td><td>root</td><td>FIFO priority 50</td></tr>
+<tr><td>none</td><td><code>--user 1000:1000</code></td><td>Warning</td></tr>
+<tr><td><code>--ulimit rtprio=99</code></td><td><code>--user 1000:1000</code></td><td>FIFO priority 50</td></tr>
+<tr><td><code>--cap-add SYS_NICE</code></td><td><code>--user 1000:1000</code></td><td>Warning</td></tr>
+<tr><td><code>--ulimit rtprio=40</code></td><td>root</td><td>Warning</td></tr>
+<tr><td><code>--ulimit rtprio=40</code> plus <code>-p thread_priority:=40</code></td><td>root</td><td>FIFO priority 40</td></tr>
+<tr><td><code>--cpu-rt-runtime=950000 --cap-add SYS_NICE</code></td><td>root</td><td>Container did not start: <code>kernel does not support CPU real-time scheduler</code>, exit 125</td></tr>
+</tbody>
+</table>
+
+<p>In all 12 containers that started (the 10 rows above that ran, plus two memory-lock runs described further down), the spawner exited 0, <code>/joint_states</code> arrived, and <code>ros2 topic hz</code> reported between 99.97 and 100.56 Hz. The warning did not stop anything on an idle machine.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-08 I ran the tests on a 2 vCPU cloud VM with Docker on cgroup v2, kernel <code>7.0.0-1009-aws</code>. That is a normal kernel, not PREEMPT_RT: <code>/sys/kernel/realtime</code> does not exist. The host's <code>/proc/sys/kernel/sched_rt_runtime_us</code> was 950000, the default. For each distro I installed <code>controller_manager</code>, <code>ros2controlcli</code>, <code>joint_state_broadcaster</code> and <code>robot_state_publisher</code> from apt into the official <code>ros:&lt;distro&gt;-ros-base</code> image and committed it. Then I ran 13 containers one after another with different flags. Each one ran with <code>--network none</code> and <code>ROS_DOMAIN_ID=88</code>.</p>
+
+<p>Inside each container the script printed the user ID, <code>ulimit -r</code> (the rtprio limit), <code>ulimit -l</code> (memlock) and the effective capability mask from <code>/proc/self/status</code>. It then started the controller manager with this file:</p>
+
+<pre><code class="language-yaml">/controller_manager:
+  ros__parameters:
+    update_rate: 100
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster</code></pre>
+
+<p>After six seconds it ran <code>chrt -p</code> on every thread of <code>ros2_control_node</code>, read <code>VmLck</code> from <code>/proc/&lt;pid&gt;/status</code>, ran the spawner, echoed one <code>/joint_states</code> message and measured its rate with <code>ros2 topic hz</code> for about nine seconds. All of the controller manager's WARN and ERROR lines were collected at the end.</p>
+
+<h2>Why the default container gets "Operation not permitted"</h2>
+
+<p>Linux lets a thread switch to <code>SCHED_FIFO</code> in two cases. The process has the <code>CAP_SYS_NICE</code> capability, or the requested priority is at or below its <code>RLIMIT_RTPRIO</code> limit (<code>ulimit -r</code>). A default Docker container has neither. Root in the container had the capability mask <code>00000000a80425fb</code>, which leaves out <code>CAP_SYS_NICE</code>, and <code>ulimit -r</code> was 0. The controller manager asked for priority 50, the call failed with errno 1 (<code>EPERM</code>), and the log printed <code>error number &lt;1&gt;(Operation not permitted)</code>.</p>
+
+<p>Being root inside the container does not help by itself, because Docker drops <code>CAP_SYS_NICE</code> from root. That is why the default container failed even though <code>id -u</code> printed 0.</p>
+
+<h2>--cap-add SYS_NICE: works for root only</h2>
+
+<p>With <code>--cap-add SYS_NICE</code> the mask became <code>00000000a88425fb</code>, and the log changed to:</p>
+
+<pre><code>[INFO] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[INFO] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.</code></pre>
+
+<p>Only one thread moved. On Humble <code>chrt</code> listed 14 threads named <code>ros2_control_no</code>. One was <code>SCHED_FIFO</code> priority 50 and the other 13 were <code>SCHED_OTHER</code>. On Jazzy and Lyrical the DDS threads (<code>dds.udp.*</code>, <code>dds.shm.*</code>, <code>dds.ev.0</code>) and the executor threads also stayed on <code>SCHED_OTHER</code>. Only the update loop that calls <code>read()</code>, <code>update()</code> and <code>write()</code> gets real-time priority. Your service callbacks and the spawner's requests don't.</p>
+
+<p>The same flag did nothing for <code>--user 1000:1000</code>. The effective capability mask of that user was <code>0000000000000000</code>. Docker adds the capability to the container's bounding set, but a non-root process does not get it as an effective capability. If your image switches to a non-root user, which many dev containers do, <code>--cap-add SYS_NICE</code> alone leaves the warning in place.</p>
+
+<h2>--ulimit rtprio: works for any user</h2>
+
+<p>With <code>--ulimit rtprio=99</code>, <code>ulimit -r</code> printed 99 inside the container and the capability mask stayed the default. That worked for root, and it also worked for <code>--user 1000:1000</code> with an all-zero mask. It is the only flag in my tests that fixed the non-root case without <code>--privileged</code>.</p>
+
+<p>The limit has to cover the priority that ros2_control asks for. With <code>--ulimit rtprio=40</code> the default request of 50 failed with the same <code>Operation not permitted</code> warning. Adding <code>-p thread_priority:=40</code> to the controller manager changed the log line to <code>Spawning controller_manager RT thread with scheduler priority: 40</code>, then <code>Successful set up FIFO RT scheduling policy with priority 40.</code>. <code>chrt</code> showed priority 40. So either raise the limit to at least 50, or lower <code>thread_priority</code> to fit the limit you have. The <code>thread_priority</code> parameter was accepted on all three distros.</p>
+
+<h2>SYS_ADMIN, --privileged and --cpu-rt-runtime</h2>
+
+<p>The <a href="https://github.com/ros-controls/ros2_control/pull/748">pull request</a> that added FIFO scheduling to ros2_control says a container needs <code>CAP_SYS_ADMIN</code> and root. Its example command also passes <code>--privileged</code>. In my run <code>--cap-add SYS_ADMIN</code> changed the mask to <code>00000000a82425fb</code>, but the warning stayed and every thread stayed on <code>SCHED_OTHER</code>. The capability that matters is <code>SYS_NICE</code>.</p>
+
+<p><code>--privileged</code> worked (mask <code>000001ffffffffff</code>), because it grants every capability, <code>SYS_NICE</code> included. That is why the pull request's example works. It also turns off most of the container's isolation, so it's a heavy fix for one warning.</p>
+
+<p>Docker's documentation for real-time containers also mentions <code>--cpu-rt-runtime</code>. On this cgroup v2 host Docker refused to start the container:</p>
+
+<pre><code>docker: Error response from daemon: kernel does not support CPU real-time scheduler
+docker exit 125</code></pre>
+
+<p>That flag needs the kernel's real-time group scheduling (<code>CONFIG_RT_GROUP_SCHED</code>), which this kernel doesn't have. You don't need it. <code>SYS_NICE</code> or <code>rtprio</code> alone gave FIFO scheduling here.</p>
+
+<h2>You don't need a real-time kernel to remove the warning</h2>
+
+<p>The test kernel was a stock cloud kernel with no PREEMPT_RT patch. None of the runs printed anything about a missing real-time kernel, and <code>SCHED_FIFO</code> was set whenever the permission was there. The warning is about permission. A PREEMPT_RT kernel improves worst-case latency for a FIFO thread, but it is a separate decision. Installing one without fixing the permission would leave the same warning.</p>
+
+<p>The reverse also matters. On this normal kernel the FIFO thread did not stop overruns. Jazzy and Lyrical print <code>Overruns handling is : enabled</code> at startup and warn when a cycle runs late. In my runs these appeared once each around the spawner, with or without FIFO:</p>
+
+<table>
+<thead><tr><th>Distro and case</th><th>FIFO?</th><th>Overrun line</th></tr></thead>
+<tbody>
+<tr><td>Jazzy, default</td><td>No</td><td><code>The loop took 17.233024 ms (missed cycles : 2).</code></td></tr>
+<tr><td>Lyrical, <code>--cap-add SYS_NICE</code></td><td>Yes</td><td><code>The loop took 25.729677 ms (missed cycles : 3).</code></td></tr>
+<tr><td>Lyrical, <code>--privileged</code></td><td>Yes</td><td><code>The loop took 12.708486 ms (missed cycles : 2).</code></td></tr>
+<tr><td>Lyrical, non-root + <code>SYS_NICE</code></td><td>No</td><td><code>The loop took 12.484860 ms (missed cycles : 2).</code></td></tr>
+<tr><td>Lyrical, <code>rtprio=40</code> + <code>thread_priority:=40</code></td><td>Yes</td><td><code>The loop took 16.784687 ms (missed cycles : 2).</code></td></tr>
+</tbody>
+</table>
+
+<p>Every other case had none. Humble printed no overrun lines in any case and has no "Overruns handling" line at startup. Five single events can't tell you whether FIFO reduces jitter. They do show that FIFO on a normal kernel didn't stop a late cycle during controller activation. If your loop timing matters, measure the loop itself. My <a href="https://huntlab.app/en/ros2-real-time-factor-vs-deadline-misses-measured/">deadline-miss measurement on Jazzy</a> shows one way to do that.</p>
+
+<h2>Memory locking made no visible difference</h2>
+
+<p>Real-time guides often add <code>--ulimit memlock=-1</code> next to <code>rtprio</code>. I ran <code>--cap-add SYS_NICE --ulimit memlock=-1</code>, where <code>ulimit -l</code> printed <code>unlimited</code>, and <code>--cap-add SYS_NICE</code> with <code>-p lock_memory:=false</code>. Both gave FIFO priority 50, the same as <code>SYS_NICE</code> alone. No line in any log mentioned memory locking, and <code>VmLck</code> was <code>0 kB</code> in every case on every distro, including the default memlock of 8192 KB. With these package versions the controller manager didn't lock its memory, so the memlock limit had no effect I could see.</p>
+
+<h2>The fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Worked as root</th><th>Worked as non-root</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td><code>--ulimit rtprio=99</code></td><td>Yes</td><td>Yes</td><td>Lets the container's processes use FIFO up to 99, no new capability</td></tr>
+<tr><td><code>--cap-add SYS_NICE</code></td><td>Yes</td><td>No</td><td>Root can also renice and set affinity of any process in the container</td></tr>
+<tr><td><code>--ulimit rtprio=N</code> plus <code>-p thread_priority:=N</code></td><td>Yes (N=40 tested)</td><td>Not tested</td><td>You pick the priority</td></tr>
+<tr><td><code>--privileged</code></td><td>Yes</td><td>Not tested</td><td>Removes most container isolation</td></tr>
+<tr><td><code>--cap-add SYS_ADMIN</code></td><td>No</td><td>Not tested</td><td>Broad capability that doesn't fix this</td></tr>
+<tr><td><code>--cpu-rt-runtime</code></td><td colspan="2">Container refused to start on cgroup v2</td><td>Needs RT group scheduling in the kernel</td></tr>
+<tr><td>Ignore the warning</td><td colspan="2">Controllers still ran at about 100 Hz</td><td>Update loop competes with every other thread on the normal scheduler</td></tr>
+</tbody>
+</table>
+
+<p>In Compose files the same settings are <code>cap_add: [SYS_NICE]</code> and an <code>rtprio</code> entry under <code>ulimits</code>. I tested the <code>docker run</code> flags, not Compose.</p>
+
+<p>For a bench robot or a dev container, <code>--ulimit rtprio=99</code> is the smallest change that worked for both root and non-root users. Add <code>--cap-add SYS_NICE</code> if you run as root and other processes also need to change priorities. If the warning only shows up in simulation with mock or Gazebo hardware and you don't care about timing, leaving it is also fine. Nothing else changed in my runs.</p>
+
+<h2>Version notes</h2>
+
+<p>The warning text was identical on Humble (controller_manager 2.54.3), Jazzy (4.48.1) and Lyrical (6.10.1), and so was the success line. All three printed the docs link for the <code>master</code> branch. All three accepted <code>thread_priority</code> and defaulted to 50. The table above came out the same on every distro. The visible differences were elsewhere in the log. Jazzy and Lyrical add <code>Using Steady (Monotonic) clock for triggering controller manager cycles.</code> and <code>Overruns handling is : enabled</code>, and they report overruns. Humble does neither. On Jazzy and Lyrical the controller manager subscribed to <code>/robot_description</code>. On Humble it subscribed to <code>~/robot_description</code>, so I remapped it in every run.</p>
+
+<h2>Not tested</h2>
+
+<p>A PREEMPT_RT kernel, a desktop install with <code>/etc/security/limits.conf</code> and the <code>realtime</code> group, cgroup v1 hosts, Podman, Kubernetes, Docker Compose files, loop jitter under CPU load, real hardware interfaces, <code>--cpu-rt-runtime</code> on a kernel that supports it, other values of <code>thread_priority</code>, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Is "Could not enable FIFO RT scheduling policy" an error?</h3>
+<p>No. The controller manager logs it as a warning and keeps running on the normal scheduler. In every run with this warning the spawner exited 0 and <code>/joint_states</code> came in at about 100 Hz.</p>
+
+<h3>Do I need a real-time kernel to fix it?</h3>
+<p>No. My test kernel was a stock kernel without PREEMPT_RT, and <code>SCHED_FIFO</code> priority 50 was set as soon as the container had <code>--cap-add SYS_NICE</code> (as root) or <code>--ulimit rtprio=99</code>. The warning is about permission, not the kernel type.</p>
+
+<h3>Why does it fail even though I am root in Docker?</h3>
+<p>Docker removes <code>CAP_SYS_NICE</code> from root, and the default <code>rtprio</code> limit is 0. Root in the default container had neither, so the request for priority 50 returned <code>EPERM</code>.</p>
+
+<h3>I added --cap-add SYS_NICE and still get the warning. Why?</h3>
+<p>Your process probably runs as a non-root user. With <code>--user 1000:1000</code> the effective capability mask was all zeros and the warning stayed. Use <code>--ulimit rtprio=99</code> instead. That worked for the non-root user.</p>
+
+<h3>What does thread_priority do?</h3>
+<p>It sets the FIFO priority the controller manager asks for (default 50). With <code>--ulimit rtprio=40</code> the default failed, and <code>-p thread_priority:=40</code> made it succeed at priority 40. Keep it at or below your <code>rtprio</code> limit.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Is Could not enable FIFO RT scheduling policy an error?", "acceptedAnswer": {"@type": "Answer", "text": "No. The controller manager logs it as a warning and keeps running on the normal scheduler. In every run with this warning the spawner exited 0 and /joint_states came in at about 100 Hz."}},
+{"@type": "Question", "name": "Do I need a real-time kernel to fix it?", "acceptedAnswer": {"@type": "Answer", "text": "No. My test kernel was a stock kernel without PREEMPT_RT, and SCHED_FIFO priority 50 was set as soon as the container had --cap-add SYS_NICE (as root) or --ulimit rtprio=99. The warning is about permission, not the kernel type."}},
+{"@type": "Question", "name": "Why does it fail even though I am root in Docker?", "acceptedAnswer": {"@type": "Answer", "text": "Docker removes CAP_SYS_NICE from root, and the default rtprio limit is 0. Root in the default container had neither, so the request for priority 50 returned EPERM."}},
+{"@type": "Question", "name": "I added --cap-add SYS_NICE and still get the warning. Why?", "acceptedAnswer": {"@type": "Answer", "text": "Your process probably runs as a non-root user. With --user 1000:1000 the effective capability mask was all zeros and the warning stayed. Use --ulimit rtprio=99 instead. That worked for the non-root user."}},
+{"@type": "Question", "name": "What does thread_priority do?", "acceptedAnswer": {"@type": "Answer", "text": "It sets the FIFO priority the controller manager asks for (default 50). With --ulimit rtprio=40 the default failed, and -p thread_priority:=40 made it succeed at priority 40. Keep it at or below your rtprio limit."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, controller_manager 2.54.3, realtime_tools 2.15.1, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, controller_manager 4.48.1, realtime_tools 3.13.0, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, controller_manager 6.10.1, realtime_tools 5.4.0, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9), default RMW (Fast DDS), Docker on cgroup v2, kernel 7.0.0-1009-aws. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-07-ros2-control-fifo-rt-scheduling/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/113578">controller manager - could not enable FIFO RT scheduling policy with error number &lt;1&gt;(Operation not permitted)</a>, <a href="https://github.com/AGH-CEAI/aegis_docker/issues/6">[Bug] Could not enable FIFO RT scheduling policy</a>, <a href="https://github.com/brukg/SO-100-arm/issues/10">Error ros2_control_node when running hardware.launch.py</a>, <a href="https://forums.developer.nvidia.com/t/unable-to-set-real-time-thread-priority-inside-docker-container-using-pthread-setschedparam-on-agx-orin/279881">Unable to set real-time thread priority inside Docker container</a>, <a href="https://github.com/ros-controls/ros2_control/pull/748">Opportunistically enable SCHED_FIFO</a>.</p>

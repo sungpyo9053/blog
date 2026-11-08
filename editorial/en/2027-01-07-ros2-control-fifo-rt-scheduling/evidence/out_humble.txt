@@ -1,0 +1,382 @@
+=== host ip-172-26-6-157 kernel 7.0.0-1009-aws date 2026-11-08T11:49:51+09:00
+host sched_rt_runtime_us=950000 cgroup=cgroup2fs realtime_flag=absent
+image ros:humble-ros-base ros@sha256:d9bcf2e6f72df127fdee07048c2e87b1b4b9a59a74af0592f4489fc2844aa855 created 2026-10-27T00:32:33.137490862Z
+apt exit 0
+Setting up ros-humble-ros2controlcli (2.54.3-1jammy.20261005.215818) ...
+Processing triggers for libc-bin (2.35-0ubuntu3.15) ...
+committed pk29-humble:inst
+
+##### CASE 1 default (root, no extra flags)
+docker flags: 
+load before: 0.91 0.28 0.28
+uid=0 ulimit_r(rtprio)=0 ulimit_l(memlock)=8192 CapEff=00000000a80425fb realtime_flag=absent
+ros-humble-controller-manager 2.54.3-1jammy.20261005.213325
+ros-humble-hardware-interface 2.54.3-1jammy.20261005.211947
+ros-humble-joint-state-broadcaster 2.54.1-1jammy.20261005.215610
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-realtime-tools 2.15.1-1jammy.20260907.224545
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+RMW=default
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=48 (policy/priority from chrt)
+  14 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.973
+--- WARN/ERROR lines in controller manager log after spawn
+      1 [WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+docker exit 0
+
+##### CASE 2 --cap-add SYS_NICE
+docker flags: --cap-add SYS_NICE
+load before: 0.85 0.32 0.29
+uid=0 ulimit_r(rtprio)=0 ulimit_l(memlock)=8192 CapEff=00000000a88425fb realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[INFO] [t] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=35 (policy/priority from chrt)
+  1 ros2_control_no current scheduling policy: SCHED_FIFO current scheduling priority: 50 
+  13 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.992
+--- WARN/ERROR lines in controller manager log after spawn
+docker exit 0
+
+##### CASE 3 --ulimit rtprio=99 (root, no capability)
+docker flags: --ulimit rtprio=99
+load before: 0.61 0.30 0.29
+uid=0 ulimit_r(rtprio)=99 ulimit_l(memlock)=8192 CapEff=00000000a80425fb realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[INFO] [t] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=36 (policy/priority from chrt)
+  1 ros2_control_no current scheduling policy: SCHED_FIFO current scheduling priority: 50 
+  13 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 100.035
+--- WARN/ERROR lines in controller manager log after spawn
+docker exit 0
+
+##### CASE 4 --cap-add SYS_ADMIN
+docker flags: --cap-add SYS_ADMIN
+load before: 0.44 0.28 0.28
+uid=0 ulimit_r(rtprio)=0 ulimit_l(memlock)=8192 CapEff=00000000a82425fb realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=36 (policy/priority from chrt)
+  14 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 100.004
+--- WARN/ERROR lines in controller manager log after spawn
+      1 [WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+docker exit 0
+
+##### CASE 5 --privileged
+docker flags: --privileged
+load before: 0.38 0.28 0.28
+uid=0 ulimit_r(rtprio)=0 ulimit_l(memlock)=8192 CapEff=000001ffffffffff realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[INFO] [t] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=36 (policy/priority from chrt)
+  1 ros2_control_no current scheduling policy: SCHED_FIFO current scheduling priority: 50 
+  13 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.999
+--- WARN/ERROR lines in controller manager log after spawn
+docker exit 0
+
+##### CASE 6 non-root --user 1000:1000
+docker flags: --user 1000:1000
+load before: 0.34 0.27 0.28
+uid=1000 ulimit_r(rtprio)=0 ulimit_l(memlock)=8192 CapEff=0000000000000000 realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=37 (policy/priority from chrt)
+  14 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 100.011
+--- WARN/ERROR lines in controller manager log after spawn
+      1 [WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+docker exit 0
+
+##### CASE 7 non-root + --ulimit rtprio=99
+docker flags: --user 1000:1000 --ulimit rtprio=99
+load before: 0.31 0.27 0.27
+uid=1000 ulimit_r(rtprio)=99 ulimit_l(memlock)=8192 CapEff=0000000000000000 realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[INFO] [t] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=36 (policy/priority from chrt)
+  1 ros2_control_no current scheduling policy: SCHED_FIFO current scheduling priority: 50 
+  13 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.994
+--- WARN/ERROR lines in controller manager log after spawn
+docker exit 0
+
+##### CASE 8 non-root + --cap-add SYS_NICE
+docker flags: --user 1000:1000 --cap-add SYS_NICE
+load before: 0.29 0.27 0.27
+uid=1000 ulimit_r(rtprio)=0 ulimit_l(memlock)=8192 CapEff=0000000000000000 realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=36 (policy/priority from chrt)
+  14 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 100.008
+--- WARN/ERROR lines in controller manager log after spawn
+      1 [WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+docker exit 0
+
+##### CASE 9 --ulimit rtprio=40, default priority
+docker flags: --ulimit rtprio=40
+load before: 0.27 0.27 0.27
+uid=0 ulimit_r(rtprio)=40 ulimit_l(memlock)=8192 CapEff=00000000a80425fb realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=37 (policy/priority from chrt)
+  14 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.988
+--- WARN/ERROR lines in controller manager log after spawn
+      1 [WARN] [t] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+docker exit 0
+
+##### CASE 10 --ulimit rtprio=40 + -p thread_priority:=40
+docker flags: --ulimit rtprio=40
+load before: 0.20 0.25 0.27
+uid=0 ulimit_r(rtprio)=40 ulimit_l(memlock)=8192 CapEff=00000000a80425fb realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 40
+[INFO] [t] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 40.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=37 (policy/priority from chrt)
+  1 ros2_control_no current scheduling policy: SCHED_FIFO current scheduling priority: 40 
+  13 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.995
+--- WARN/ERROR lines in controller manager log after spawn
+docker exit 0
+
+##### CASE 11 --cap-add SYS_NICE --ulimit memlock=-1
+docker flags: --cap-add SYS_NICE --ulimit memlock=-1
+load before: 0.34 0.28 0.28
+uid=0 ulimit_r(rtprio)=0 ulimit_l(memlock)=unlimited CapEff=00000000a88425fb realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[INFO] [t] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=35 (policy/priority from chrt)
+  1 ros2_control_no current scheduling policy: SCHED_FIFO current scheduling priority: 50 
+  13 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.975
+--- WARN/ERROR lines in controller manager log after spawn
+docker exit 0
+
+##### CASE 12 --cap-add SYS_NICE + -p lock_memory:=false
+docker flags: --cap-add SYS_NICE
+load before: 0.31 0.28 0.27
+uid=0 ulimit_r(rtprio)=0 ulimit_l(memlock)=8192 CapEff=00000000a88425fb realtime_flag=absent
+--- controller manager log (first 25 lines)
+[INFO] [t] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [t] [controller_manager]: update rate is 100 Hz
+[INFO] [t] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[INFO] [t] [controller_manager]: Successful set up FIFO RT scheduling policy with priority 50.
+[INFO] [t] [controller_manager]: Received robot description file.
+[INFO] [t] [resource_manager]: Loading hardware 'sys' 
+[INFO] [t] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [t] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [t] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [t] [resource_manager]: Successful 'activate' of hardware 'sys'
+--- threads of ros2_control_node pid=37 (policy/priority from chrt)
+  1 ros2_control_no current scheduling policy: SCHED_FIFO current scheduling priority: 50 
+  13 ros2_control_no current scheduling policy: SCHED_OTHER current scheduling priority: 0 
+VmLck: 0 kB
+--- spawner joint_state_broadcaster
+spawner exit 0
+[INFO] [t] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [t] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+joint_states echo exit 0 1 msg
+average rate: 99.992
+--- WARN/ERROR lines in controller manager log after spawn
+docker exit 0
+
+##### CASE 13 docker --cpu-rt-runtime=950000 (cgroup v2 host)
+docker: Error response from daemon: kernel does not support CPU real-time scheduler
+
+Run 'docker run --help' for more information
+docker exit 125
