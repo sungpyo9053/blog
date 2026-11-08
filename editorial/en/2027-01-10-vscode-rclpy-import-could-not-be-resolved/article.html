@@ -1,0 +1,164 @@
+<pre><code>node.py:1:8 - error: Import "rclpy" could not be resolved (reportMissingImports)
+node.py:3:6 - error: Import "std_msgs.msg" could not be resolved (reportMissingImports)
+node.py:6:6 - error: Import "my_interfaces.msg" could not be resolved (reportMissingImports)
+node.py:7:6 - error: Import "my_py_pkg.helpers" could not be resolved (reportMissingImports)</code></pre>
+
+<p>In VS Code the same text shows up as a yellow or red squiggle under the import, tagged <code>Pylance(reportMissingImports)</code>. The node still runs with <code>ros2 run</code>. Only the editor is confused.</p>
+
+<p>Short answer: Pylance can't see ROS 2 Python packages because they aren't in the interpreter's normal <code>site-packages</code>. Sourcing <code>setup.bash</code> puts them on <code>PYTHONPATH</code>, and the checker only finds them if it gets that <code>PYTHONPATH</code> or the same folders in <code>extraPaths</code>. The fix that worked on Humble, Jazzy and Lyrical in every case: source your workspace, print <code>PYTHONPATH</code>, and copy every entry into <code>python.analysis.extraPaths</code>. Don't type the paths by hand. On Humble, <code>rclpy</code> isn't in the folder most answers tell you to add.</p>
+
+<pre><code>source /opt/ros/humble/setup.bash
+source ~/ws/install/setup.bash
+python3 -c "import json,os; print(json.dumps({'python.analysis.extraPaths': [p for p in os.environ['PYTHONPATH'].split(':') if p]}, indent=2))"</code></pre>
+
+<p>The list it prints is the same <code>PYTHONPATH</code> list I put in <code>extraPaths</code> for the passing cases. Paste the output into <code>.vscode/settings.json</code>. For plain pyright, put the list under <code>"extraPaths"</code> in <code>pyrightconfig.json</code>. Starting <code>code .</code> from a terminal where you already sourced the workspace should also work, because the checker reads <code>PYTHONPATH</code> from its environment. I tested that with the pyright CLI, not with the VS Code app.</p>
+
+<p>A note on what I measured. Pylance is closed source, but its type checker is pyright. I ran the pyright 1.1.389 command line inside the official ROS 2 Docker images and gave it the same inputs Pylance gets: a Python file, an environment, and an <code>extraPaths</code> list. I did not run VS Code itself.</p>
+
+<h2>Find your case</h2>
+
+<p>Each row is a setup I ran. The test file imports seven modules: <code>rclpy</code>, <code>rclpy.node</code>, <code>std_msgs.msg</code>, <code>launch</code>, <code>launch_ros.actions</code>, a custom message package <code>my_interfaces.msg</code>, and <code>my_py_pkg.helpers</code> from my own ament_python package. The numbers are unresolved imports out of 7.</p>
+
+<table>
+<thead><tr><th>Setup</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th><th>What was missing</th></tr></thead>
+<tbody>
+<tr><td>Nothing sourced, no config (VS Code started from the desktop)</td><td>7</td><td>7</td><td>7</td><td>everything</td></tr>
+<tr><td>Only <code>/opt/ros/&lt;distro&gt;/setup.bash</code> sourced</td><td>2</td><td>2</td><td>2</td><td>your own two packages</td></tr>
+<tr><td>Workspace <code>install/setup.bash</code> sourced</td><td>0</td><td>0</td><td>0</td><td>nothing</td></tr>
+<tr><td>Same, workspace built with <code>--symlink-install</code></td><td>0</td><td>0</td><td>0</td><td>nothing</td></tr>
+<tr><td><code>extraPaths</code>: only <code>/opt/ros/&lt;distro&gt;/lib/python3.X/site-packages</code></td><td>5</td><td>2</td><td>2</td><td>Humble: <code>rclpy</code>, <code>rclpy.node</code>, <code>std_msgs.msg</code> and your packages</td></tr>
+<tr><td><code>extraPaths</code>: every <code>PYTHONPATH</code> entry</td><td>0</td><td>0</td><td>0</td><td>nothing</td></tr>
+<tr><td><code>extraPaths</code>: <code>PYTHONPATH</code> from a symlink build, minus the <code>build/</code> entry</td><td>1</td><td>1</td><td>1</td><td><code>my_py_pkg.helpers</code></td></tr>
+<tr><td><code>extraPaths</code>: paths for a different Python version</td><td>7</td><td>7</td><td>7</td><td>everything</td></tr>
+<tr><td><code>extraPaths</code>: guessed <code>install/&lt;pkg&gt;/lib/python3.X/site-packages</code></td><td>4</td><td>0</td><td>0</td><td>Humble: <code>rclpy</code>, <code>rclpy.node</code>, <code>std_msgs.msg</code>, <code>my_interfaces.msg</code></td></tr>
+<tr><td><code>extraPaths</code>: <code>/opt/ros</code> path plus <code>src/my_py_pkg</code></td><td>4</td><td>1</td><td>1</td><td><code>my_interfaces.msg</code> (plus the Humble <code>rclpy</code> rows)</td></tr>
+<tr><td>Workspace sourced and a config with only the <code>/opt/ros</code> path</td><td>0</td><td>0</td><td>0</td><td>nothing</td></tr>
+</tbody>
+</table>
+
+<p>Two patterns explain almost every row. On Humble, ROS 2 Python code is split across two folders. And your own packages land in different folders depending on the build type, the distro and <code>--symlink-install</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-08 I started one container per distro from <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code>. I downloaded Node.js 20.18.0 and installed pyright 1.1.389 from npm, then disconnected the container from the network before any test. In each container I built a small workspace twice, once with plain <code>colcon build</code> and once with <code>--symlink-install</code>. It had two packages:</p>
+
+<ul>
+<li><code>my_interfaces</code>, an ament_cmake package with one message, <code>msg/Point2.msg</code> (<code>float64 x</code>, <code>float64 y</code>), built by <code>rosidl_generate_interfaces</code>.</li>
+<li><code>my_py_pkg</code>, made with <code>ros2 pkg create --build-type ament_python</code>, with one module <code>my_py_pkg/helpers.py</code> that defines <code>add(a, b)</code>.</li>
+</ul>
+
+<p>The test file, <code>node.py</code>, sits outside the workspace and imports all seven modules. It creates a node, a <code>Point2</code> and a <code>String</code>. For each case I ran <code>pyright node.py</code> under <code>env -i</code>, so no stray variables leaked in. Then I either sourced a setup file or wrote a <code>pyrightconfig.json</code> with an <code>extraPaths</code> list. I also asked Python where each module came from. Each check took 1.0 to 2.7 seconds.</p>
+
+<h2>Cause 1: VS Code doesn't have your sourced environment</h2>
+
+<p>With nothing sourced, all seven imports failed on all three distros. That's what you get when VS Code starts from a desktop icon or a dock. It never ran <code>setup.bash</code>, so <code>PYTHONPATH</code> is empty, and <code>/usr/bin/python3</code> on its own knows nothing about <code>/opt/ros</code>.</p>
+
+<p>Sourcing only <code>/opt/ros/&lt;distro&gt;/setup.bash</code> fixed the five ROS imports and left two errors, <code>my_interfaces.msg</code> and <code>my_py_pkg.helpers</code>. Sourcing <code>install/setup.bash</code> from the workspace brought it to 0 errors on all three distros, for both plain and symlink builds. So the checker did use <code>PYTHONPATH</code> from its environment. That's why "launch <code>code</code> from a sourced terminal" works for some people and not for others. It depends on how VS Code was started, and whether a VS Code window was already running when you typed <code>code .</code>. I didn't test that last part.</p>
+
+<p>The sourced setup has two weak points. It breaks when you open the folder another way. It also breaks after you add a package and rebuild, because the new package is only on <code>PYTHONPATH</code> in shells that sourced the workspace after the build. A settings file doesn't depend on how the editor was started, so I'd use one.</p>
+
+<h2>Cause 2: on Humble, rclpy isn't in lib/python3.10/site-packages</h2>
+
+<p>Suppose you add just one folder to <code>python.analysis.extraPaths</code>: <code>/opt/ros/&lt;distro&gt;/lib/python3.X/site-packages</code>. On Jazzy and Lyrical that was enough for every ROS import. On Humble it left 5 of 7 imports broken. Python showed why:</p>
+
+<pre><code>rclpy /opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py
+std_msgs /opt/ros/humble/local/lib/python3.10/dist-packages/std_msgs/__init__.py
+launch /opt/ros/humble/lib/python3.10/site-packages/launch/__init__.py
+launch_ros /opt/ros/humble/lib/python3.10/site-packages/launch_ros/__init__.py</code></pre>
+
+<p>On Humble, packages built with CMake (<code>rclpy</code>, every message package) go to <code>local/lib/python3.10/dist-packages</code>. Pure Python packages built with setuptools (<code>launch</code>, <code>launch_ros</code>) go to <code>lib/python3.10/site-packages</code>. After sourcing, Humble's <code>PYTHONPATH</code> had both:</p>
+
+<pre><code>/opt/ros/humble/lib/python3.10/site-packages
+/opt/ros/humble/local/lib/python3.10/dist-packages</code></pre>
+
+<p>Jazzy and Lyrical had one folder each, <code>/opt/ros/jazzy/lib/python3.12/site-packages</code> and <code>/opt/ros/lyrical/lib/python3.14/site-packages</code>, and <code>rclpy</code>, <code>std_msgs</code> and <code>launch</code> were all in it. If you're on Humble and only <code>launch</code> resolves while <code>rclpy</code> stays underlined, this is why. Add the <code>local/.../dist-packages</code> folder too.</p>
+
+<h2>Cause 3: your own packages are in install/, under a path you have to look up</h2>
+
+<p>With only <code>/opt/ros</code> in the config, <code>my_interfaces.msg</code> and <code>my_py_pkg.helpers</code> failed on every distro. Each workspace package gets its own folder under <code>install/</code>, and the path differs by build type and distro. These are the files colcon produced:</p>
+
+<table>
+<thead><tr><th>File</th><th>Humble</th><th>Jazzy / Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Message module <code>_point2.py</code> (ament_cmake)</td><td><code>install/my_interfaces/local/lib/python3.10/dist-packages/</code></td><td><code>install/my_interfaces/lib/python3.12/site-packages/</code> (3.14 on Lyrical)</td></tr>
+<tr><td><code>helpers.py</code> (ament_python, plain build)</td><td><code>install/my_py_pkg/lib/python3.10/site-packages/</code></td><td><code>install/my_py_pkg/lib/python3.12/site-packages/</code> (3.14 on Lyrical)</td></tr>
+<tr><td>ament_python, <code>--symlink-install</code></td><td colspan="2">only <code>my-py-pkg.egg-link</code> in <code>install/my_py_pkg/lib/python3.X/site-packages/</code>, and the code is found through <code>build/my_py_pkg</code></td></tr>
+</tbody>
+</table>
+
+<p>Guessing <code>install/&lt;pkg&gt;/lib/python3.X/site-packages</code> for every package gave 0 errors on Jazzy and Lyrical. On Humble it gave 4: the three <code>rclpy</code>/<code>std_msgs</code> imports, because the guess left out <code>local/</code> under <code>/opt/ros</code> too, and <code>my_interfaces.msg</code>, because message packages also use <code>local/.../dist-packages</code> on Humble.</p>
+
+<p>Adding the source folder, <code>src/my_py_pkg</code>, made the ament_python import resolve. It can't work for message packages, because their Python code is generated at build time and doesn't exist under <code>src/</code>. <code>my_interfaces.msg</code> stayed unresolved on all three distros with that config. For custom messages you need the <code>install/</code> path, and you need to build first.</p>
+
+<h2>Cause 4: --symlink-install hides your code behind build/</h2>
+
+<p>With <code>--symlink-install</code>, colcon doesn't copy an ament_python package into <code>install/</code>. It writes a <code>my-py-pkg.egg-link</code> file there and puts <code>build/my_py_pkg</code> on <code>PYTHONPATH</code>. That folder holds symlinks back to <code>src/</code>. Python then loaded the package from:</p>
+
+<pre><code>my_py_pkg /ws_sym/build/my_py_pkg/my_py_pkg/__init__.py</code></pre>
+
+<p>The sourced symlink workspace and the full symlink <code>PYTHONPATH</code> in <code>extraPaths</code> both gave 0 errors. Removing just the <code>/ws_sym/build/my_py_pkg</code> entry left one error, <code>Import "my_py_pkg.helpers" could not be resolved</code>, on all three distros. The checker didn't follow the <code>.egg-link</code> in <code>install/</code>. If you filtered "build" paths out of your list because they looked temporary, put them back. If you switch between plain and symlink builds, regenerate the list. The two builds produce different <code>PYTHONPATH</code> entries.</p>
+
+<h2>Cause 5: paths for the wrong Python version</h2>
+
+<p>Each distro uses a different Python: 3.10 on Humble, 3.12 on Jazzy, 3.14 on Lyrical. A settings file copied from a Humble tutorial into a Jazzy setup points at <code>python3.10</code> folders that don't exist. I ran the same mismatch on each distro. Jazzy and Lyrical got <code>python3.10</code> paths and Humble got <code>python3.12</code> paths. All seven imports failed every time, with no warning that the folders were missing. If a config that "should work" gives you errors on every import, check the Python version in each path against <code>python3 --version</code>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Result (Humble / Jazzy / Lyrical)</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Copy every <code>PYTHONPATH</code> entry into <code>extraPaths</code></td><td>0 / 0 / 0</td><td>Works for plain and symlink builds. Regenerate after adding packages or changing build mode.</td></tr>
+<tr><td>Start VS Code from a terminal with the workspace sourced</td><td>0 / 0 / 0 (pyright CLI)</td><td>No file to maintain. Depends on how the editor is started. Not tested in the VS Code app.</td></tr>
+<tr><td>Add only <code>/opt/ros/&lt;distro&gt;/lib/python3.X/site-packages</code></td><td>5 / 2 / 2 left</td><td>Not enough on Humble, and never covers your own packages.</td></tr>
+<tr><td>Hand-written <code>install/&lt;pkg&gt;/lib/...</code> paths</td><td>4 / 0 / 0 left</td><td>Humble needs the <code>local/.../dist-packages</code> forms.</td></tr>
+<tr><td>Add <code>src/&lt;pkg&gt;</code> folders</td><td>own Python package resolves, messages don't</td><td>Generated message code only exists in <code>install/</code>.</td></tr>
+</tbody>
+</table>
+
+<p>One more result matters when you combine the two approaches. With the workspace sourced and a config listing only the <code>/opt/ros</code> folder, the result was 0 errors on all three distros. <code>extraPaths</code> added to the paths from <code>PYTHONPATH</code>. It didn't replace them. A short config doesn't break a sourced setup, but it won't save you when the editor starts without one.</p>
+
+<p>If the import resolves in the editor but <code>ros2 run</code> still fails with <code>No module named 'rclpy'</code>, that's a different problem with the interpreter. See <a href="https://huntlab.app/en/no-module-named-rclpy-rclpy-pybind11-ros-2/">No module named 'rclpy' or 'rclpy._rclpy_pybind11' in ROS 2</a>.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (Python 3.10, setuptools 59.6.0): two folders under <code>/opt/ros/humble</code>, and <code>local/lib/python3.10/dist-packages</code> for message packages in your workspace.</li>
+<li>Jazzy (Python 3.12, setuptools 68.1.2) and Lyrical (Python 3.14, setuptools 78.1.1): one <code>lib/python3.X/site-packages</code> folder for everything, in <code>/opt/ros</code> and in each <code>install/&lt;pkg&gt;</code>.</li>
+<li>All three wrote a <code>.egg-link</code> and put <code>build/&lt;pkg&gt;</code> on <code>PYTHONPATH</code> for ament_python packages built with <code>--symlink-install</code>. The results matched on every distro.</li>
+<li>Lyrical printed a CMake deprecation warning for <code>cmake_minimum_required(VERSION 3.8)</code> in the message package. It built anyway and made no difference to imports.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>The VS Code app and the Pylance extension itself (I used the pyright CLI that Pylance is built on), the Microsoft ROS extension for VS Code, Windows and WSL, Dev Containers and Remote SSH, conda or venv interpreters selected in VS Code, C++ IntelliSense and <code>compile_commands.json</code>, multi-root workspaces, <code>python.analysis.include</code> and <code>executionEnvironments</code>, pyright versions other than 1.1.389, and whether an already-running VS Code window picks up a new <code>PYTHONPATH</code>.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does VS Code say Import "rclpy" could not be resolved when my node runs fine?</h3>
+<p>The node runs in a shell that sourced <code>setup.bash</code>, so <code>rclpy</code> is on <code>PYTHONPATH</code>. The editor's checker usually doesn't have that environment. In my runs, with nothing sourced and no config, all seven ROS and workspace imports failed on Humble, Jazzy and Lyrical.</p>
+
+<h3>Which path do I add to python.analysis.extraPaths for rclpy?</h3>
+<p>On Jazzy it's <code>/opt/ros/jazzy/lib/python3.12/site-packages</code>, and on Lyrical <code>/opt/ros/lyrical/lib/python3.14/site-packages</code>. On Humble you need both <code>/opt/ros/humble/lib/python3.10/site-packages</code> and <code>/opt/ros/humble/local/lib/python3.10/dist-packages</code>, because <code>rclpy</code> and message packages are in the second one.</p>
+
+<h3>Why can't Pylance find my custom message package?</h3>
+<p>Its Python code is generated at build time and only exists in <code>install/</code>, at <code>install/&lt;pkg&gt;/lib/python3.X/site-packages</code> on Jazzy and Lyrical and <code>install/&lt;pkg&gt;/local/lib/python3.10/dist-packages</code> on Humble. Adding the <code>src/</code> folder doesn't help. Build, source the workspace, and copy the <code>PYTHONPATH</code> entries into <code>extraPaths</code>.</p>
+
+<h3>Does --symlink-install break Pylance imports?</h3>
+<p>Only if you leave out the <code>build/&lt;pkg&gt;</code> folder. With <code>--symlink-install</code> the ament_python package was found through <code>build/my_py_pkg</code>, not <code>install/</code>. Without that entry, <code>my_py_pkg.helpers</code> was unresolved on all three distros.</p>
+
+<h3>Does python.analysis.extraPaths replace PYTHONPATH?</h3>
+<p>Not in my test. With the workspace sourced and a config listing only the <code>/opt/ros</code> folder, pyright resolved all seven imports on all three distros. The two sources were added together.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does VS Code say Import rclpy could not be resolved when my node runs fine?", "acceptedAnswer": {"@type": "Answer", "text": "The node runs in a shell that sourced setup.bash, so rclpy is on PYTHONPATH. The editor's checker usually doesn't have that environment. In my runs, with nothing sourced and no config, all seven ROS and workspace imports failed on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Which path do I add to python.analysis.extraPaths for rclpy?", "acceptedAnswer": {"@type": "Answer", "text": "On Jazzy it's /opt/ros/jazzy/lib/python3.12/site-packages, and on Lyrical /opt/ros/lyrical/lib/python3.14/site-packages. On Humble you need both /opt/ros/humble/lib/python3.10/site-packages and /opt/ros/humble/local/lib/python3.10/dist-packages, because rclpy and message packages are in the second one."}},
+{"@type": "Question", "name": "Why can't Pylance find my custom message package?", "acceptedAnswer": {"@type": "Answer", "text": "Its Python code is generated at build time and only exists in install/, at install/PKG/lib/python3.X/site-packages on Jazzy and Lyrical and install/PKG/local/lib/python3.10/dist-packages on Humble. Adding the src/ folder doesn't help. Build, source the workspace, and copy the PYTHONPATH entries into extraPaths."}},
+{"@type": "Question", "name": "Does --symlink-install break Pylance imports?", "acceptedAnswer": {"@type": "Answer", "text": "Only if you leave out the build/PKG folder. With --symlink-install the ament_python package was found through build/my_py_pkg, not install/. Without that entry, my_py_pkg.helpers was unresolved on all three distros."}},
+{"@type": "Question", "name": "Does python.analysis.extraPaths replace PYTHONPATH?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my test. With the workspace sourced and a config listing only the /opt/ros folder, pyright resolved all seven imports on all three distros. The two sources were added together."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with pyright 1.1.389 on Node.js 20.18.0 inside <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Python 3.10, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Python 3.12, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Python 3.14, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-10-vscode-rclpy-import-could-not-be-resolved/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/113024">Import "rclpy" could not be resolved Pylance reportMissingImports</a>, <a href="https://robotics.stackexchange.com/questions/97707">How can I make VS Code recognize ros2 python packages?</a>, <a href="https://robotics.stackexchange.com/questions/95859">VSCode ROS2 setup</a>, <a href="https://robotics.stackexchange.com/questions/114128">ROS2.Jazzy Python Custom Messages</a>, <a href="https://robotics.stackexchange.com/questions/118249">Custom ROS 2 message builds and runs fine but not showing in VSCode autocomplete</a>, <a href="https://github.com/ms-iot/vscode-ros/issues/550">Python import could not be resolved for my own module</a>.</p>
