@@ -1,0 +1,160 @@
+<pre><code>[INFO] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1</code></pre>
+
+<p>Older launch files that call <code>ros2 control load_controller</code> print the same thing for <code>/controller_manager/load_controller</code>. Without <code>--controller-manager-timeout</code> the spawner prints the line as a <code>[WARN]</code> every 10 seconds and keeps waiting.</p>
+
+<p>Short answer: the spawner can't find the controller manager's services under the name it is using. Most of the time the manager is running, but it hasn't created those services yet, because it is still waiting for the robot description. On Humble that happens when <code>robot_state_publisher</code> publishes <code>/robot_description</code> but the manager listens on <code>/controller_manager/robot_description</code>. The setup that worked on Humble, Jazzy and Lyrical was <code>robot_state_publisher</code> plus this remap on the manager:</p>
+
+<pre><code>ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:="$(cat robot.urdf)"
+ros2 run controller_manager ros2_control_node --ros-args \
+  -r '~/robot_description:=robot_description' --params-file controllers.yaml
+ros2 run controller_manager spawner joint_state_broadcaster --controller-manager-timeout 30</code></pre>
+
+<p>I ran everything with <code>ros2 run</code>. In a Python launch file the same remap would be <code>remappings=[("~/robot_description", "robot_description")]</code> on the <code>ros2_control_node</code> Node, which I didn't test. If the manager runs in a namespace or under another name, pass the full name with <code>-c</code>. Then read the manager's own log, not the spawner's. The real error (a missing hardware plugin, an unreceived URDF) is printed there.</p>
+
+<h2>Find your error text</h2>
+
+<p>The "Could not contact" rows are the ones where the spawner gave up waiting for the service. The other rows are what you get when the spawner did reach the manager and something else failed. The rows that need it say which distro they apply to. The rest behaved the same on all three distros.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Spawner output</th><th>Controller manager log</th></tr></thead>
+<tbody>
+<tr><td>No controller manager running</td><td><code>Could not contact service /controller_manager/list_controllers</code></td><td>none</td></tr>
+<tr><td>Humble: manager not remapped, <code>robot_state_publisher</code> on <code>/robot_description</code></td><td><code>Could not contact service ...</code></td><td><code>Subscribing to '~/robot_description' topic for robot description file.</code> and nothing after it</td></tr>
+<tr><td>Jazzy, Lyrical: no robot description published</td><td><code>Could not contact service ...</code></td><td><code>Waiting for data on 'robot_description' topic to finish initialization</code></td></tr>
+<tr><td>Jazzy, Lyrical: URDF passed only as a <code>robot_description</code> parameter</td><td><code>Could not contact service ...</code></td><td>same <code>Waiting for data</code> line</td></tr>
+<tr><td>Hardware plugin name in the URDF doesn't exist</td><td><code>Could not contact service ...</code></td><td>Humble: <code>The published robot description file (urdf) seems not to be genuine.</code> Jazzy, Lyrical: <code>Caught exception of type : N9pluginlib20LibraryLoadExceptionE while loading hardware</code>. Both continue with <code>the class my_hw/DoesNotExist ... does not exist</code></td></tr>
+<tr><td>Manager in namespace <code>/abc</code>, spawner without <code>-c</code></td><td><code>Could not contact service /controller_manager/list_controllers</code></td><td>normal</td></tr>
+<tr><td>Manager renamed to <code>my_cm</code>, spawner without <code>-c</code></td><td>same</td><td>normal</td></tr>
+<tr><td>Spawner on <code>ROS_DOMAIN_ID</code> 89, manager on 88</td><td>same</td><td>normal</td></tr>
+<tr><td>Controller has no <code>type</code> in the YAML</td><td><code>Failed loading controller joint_state_broadcaster</code></td><td><code>The 'type' param was not defined for 'joint_state_broadcaster'.</code></td></tr>
+<tr><td>Humble: <code>use_sim_time:=true</code>, nothing publishes <code>/clock</code></td><td><code>Failed getting a result from calling /controller_manager/load_controller in 10.0. (Attempt 1 of 3.)</code>, then <code>RuntimeError: Could not successfully call service /controller_manager/load_controller after 3 attempts.</code></td><td>normal</td></tr>
+<tr><td>Jazzy, Lyrical: same <code>use_sim_time</code> case</td><td><code>Loaded joint_state_broadcaster</code>, then <code>Failed to activate controller : joint_state_broadcaster</code></td><td><code>Switch controller timed out after 5 seconds!</code></td></tr>
+</tbody>
+</table>
+
+<p>The spawner gives the same message for every "Could not contact" cause, so the spawner's output alone can't tell you which one you have. The manager's log usually can.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-08 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro at a time. In each container I installed <code>controller_manager</code>, <code>ros2controlcli</code>, <code>joint_state_broadcaster</code> and <code>robot_state_publisher</code> from apt. Then I ran the tests with no network and a private domain ID. There was no Gazebo. The robot is a one-joint URDF whose <code>&lt;ros2_control&gt;</code> tag uses <code>mock_components/GenericSystem</code>, and the controller is <code>joint_state_broadcaster</code>. For each case I started <code>robot_state_publisher</code> and <code>ros2_control_node</code> in the background, waited 4 seconds, ran the spawner and timed it. To see whether the manager's services existed, I restarted the ros2 daemon and ran <code>ros2 service list</code>. I restarted the daemon first because it kept services from a manager killed in the previous case.</p>
+
+<table>
+<thead><tr><th>Case</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>No manager, spawner default timeout</td><td>WARN every 10 s, still waiting at 35 s</td><td>same</td><td>same</td></tr>
+<tr><td>No manager, <code>--controller-manager-timeout 3</code></td><td>FATAL, exit 1, 3.76 s</td><td>exit 1, 3.73 s</td><td>exit 1, 3.83 s</td></tr>
+<tr><td>No manager, <code>ros2 control load_controller</code></td><td>waits on <code>/controller_manager/load_controller</code>, still waiting at 35 s</td><td><code>ServiceNotFoundError</code> for <code>list_controllers</code>, exit 1, 21.14 s</td><td>same as Jazzy, 21.14 s</td></tr>
+<tr><td>No manager, <code>ros2 control list_controllers</code></td><td>still retrying at 60 s</td><td>same</td><td>same</td></tr>
+<tr><td><code>robot_state_publisher</code> + manager, no remap</td><td>fails after 10.60 s</td><td>works, 1.08 s</td><td>works, 1.34 s</td></tr>
+<tr><td>Same with <code>-r ~/robot_description:=robot_description</code></td><td>works, 0.73 s</td><td>works, 1.11 s</td><td>works, 1.30 s</td></tr>
+<tr><td>URDF as a manager parameter, no <code>robot_state_publisher</code></td><td>works, with a <code>[Deprecated]</code> warning</td><td>fails after 10.74 s</td><td>fails after 10.89 s</td></tr>
+<tr><td>Manager with no robot description at all</td><td>fails after 10.58 s</td><td>fails after 10.76 s</td><td>fails after 10.89 s</td></tr>
+<tr><td>Manager in <code>/abc</code>, spawner without <code>-c</code></td><td>fails</td><td>fails</td><td>fails</td></tr>
+<tr><td>Same, <code>-c /abc/controller_manager</code></td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Same, spawner started with <code>--ros-args -r __ns:=/abc</code></td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Manager renamed <code>my_cm</code>, then <code>-c my_cm</code></td><td>fails, then works</td><td>fails, then works</td><td>fails, then works</td></tr>
+<tr><td>Spawner first, manager 5 s later, default timeout</td><td>works, 5.84 s</td><td>works, 7.67 s</td><td>works, 6.10 s</td></tr>
+<tr><td>Manager 15 s later, default timeout</td><td>works, 16.36 s</td><td>works, 16.27 s</td><td>works, 16.94 s</td></tr>
+<tr><td>Manager 15 s later, <code>--controller-manager-timeout 30</code></td><td>works, 15.77 s</td><td>works, 16.67 s</td><td>works, 16.20 s</td></tr>
+<tr><td>Hardware plugin that doesn't exist</td><td>fails</td><td>fails</td><td>fails</td></tr>
+<tr><td>Spawner on domain 89, manager on 88</td><td>fails</td><td>fails</td><td>fails</td></tr>
+<tr><td><code>use_sim_time:=true</code>, no <code>/clock</code></td><td>load call times out 3 times, exit 1, 30.58 s</td><td>loaded, not activated, exit 1, 8.45 s</td><td>loaded, not activated, exit 1, 6.65 s</td></tr>
+</tbody>
+</table>
+
+<p>"Fails" in this table means the <code>Could not contact service</code> line and exit code 1, after the timeout I passed (5 or 10 seconds).</p>
+
+<h2>The manager doesn't offer its services until it has a URDF</h2>
+
+<p>This explains most of the confusing cases. <code>ros2_control_node</code> starts, logs its update rate and spawns its real-time thread, but it creates <code>list_controllers</code>, <code>load_controller</code> and the other controller services only after it has a robot description and has loaded the hardware. Until then the node shows up in <code>ros2 node list</code>, but the services aren't there. With no robot description, <code>ros2 service list</code> showed 6 services on Humble and 9 on Jazzy and Lyrical, and none of them were <code>/controller_manager/list_controllers</code>. A direct <code>ros2 service call /controller_manager/list_controllers</code> printed <code>waiting for service to become available...</code> until I stopped it at 15 seconds on all three distros. So "Could not contact" doesn't mean the manager is dead. It often means the manager is alive and waiting for its URDF.</p>
+
+<p>The message itself comes from <code>controller_manager_services.py</code>. When you pass <code>--controller-manager-timeout</code>, it calls <code>wait_for_service(service_timeout)</code> once and raises <code>ServiceNotFoundError</code> on failure. Without the option it calls <code>wait_for_service(10.0)</code> in a loop and logs a warning each time. That is why the default spawner never exits. In my runs it was still waiting at 35 seconds on every distro. In a launch file that looks like a hang with one warning every 10 seconds.</p>
+
+<h2>Humble listens on ~/robot_description</h2>
+
+<p>On Humble (controller_manager 2.54.3) the manager logged <code>Subscribing to '~/robot_description' topic for robot description file.</code> The <code>~</code> makes that <code>/controller_manager/robot_description</code>. <code>robot_state_publisher</code> publishes <code>/robot_description</code>. With no remap, <code>ros2 topic list</code> showed both topics, the manager never logged <code>Received robot description file.</code>, and the spawner failed after its 10-second timeout. With <code>-r ~/robot_description:=robot_description</code> the manager received the URDF, loaded the mock hardware, and the spawner finished in 0.73 seconds.</p>
+
+<p>On Jazzy (4.48.1) and Lyrical (6.10.1) the manager logged <code>Subscribing to '/robot_description' topic for robot description.</code> and worked without the remap. The remap did no harm there, so the same launch file works on all three. I used the relative form (<code>robot_description</code>, not <code>/robot_description</code>) so it follows a namespace. In <code>/abc</code> the manager subscribed to <code>/abc/robot_description</code>, which is where a namespaced <code>robot_state_publisher</code> publishes.</p>
+
+<h2>The robot_description parameter only works on Humble</h2>
+
+<p>Many older tutorials pass the URDF to <code>ros2_control_node</code> as a parameter. On Humble that still worked, with this warning: <code>[Deprecated] Passing the robot description parameter directly to the control_manager node is deprecated. Use '~/robot_description' topic from 'robot_state_publisher' instead.</code> On Jazzy and Lyrical the manager didn't use the parameter. It kept logging <code>Waiting for data on 'robot_description' topic to finish initialization</code> and the spawner failed after 10.74 seconds (Jazzy) and 10.89 seconds (Lyrical). If you moved a Humble launch file to Jazzy and the spawner stopped working, check this first. Start <code>robot_state_publisher</code> with the URDF and let the manager read it from the topic.</p>
+
+<h2>A broken URDF looks the same from the spawner</h2>
+
+<p>I changed the hardware plugin to <code>my_hw/DoesNotExist</code>. The manager received the URDF and failed to load the plugin, and the spawner printed the usual <code>Could not contact service</code> line. The cause was only in the manager's log. On Humble it was <code>The published robot description file (urdf) seems not to be genuine. The following error was caught:According to the loaded plugin descriptions the class my_hw/DoesNotExist with base class type hardware_interface::SystemInterface does not exist.</code> On Jazzy and Lyrical it was <code>Caught exception of type : N9pluginlib20LibraryLoadExceptionE while loading hardware</code> with the same plugin text. Jazzy then added <code>Could not load and initialize hardware. Please check previous output for more details. After you have corrected your URDF, try to publish robot description again.</code> and went back to <code>Waiting for data on 'robot_description' topic</code>. My script kept only the first lines of the Lyrical manager log, so I can't say whether Lyrical prints the same follow-up. In a launch file these lines are mixed with the spawner's output, so search the log for <code>[controller_manager]</code> and <code>ERROR</code>.</p>
+
+<h2>Namespace, node name and domain</h2>
+
+<p>The spawner looks for <code>/controller_manager</code> unless you tell it otherwise. The namespace question in the list below is this case: the manager runs as <code>/abc/controller_manager</code>, and the spawner, started outside the namespace, still asked for <code>/controller_manager/list_controllers</code>. Three fixes worked on every distro: <code>-c /abc/controller_manager</code>, starting the spawner in the same namespace (<code>--ros-args -r __ns:=/abc</code>), and, for <code>ros2 control</code> commands, <code>-c /abc/controller_manager</code> too. A manager renamed with <code>-r __node:=my_cm</code> needed <code>-c my_cm</code>.</p>
+
+<p>A spawner on a different <code>ROS_DOMAIN_ID</code> failed the same way, and the same spawner on the manager's domain worked in 3.40 to 3.58 seconds. This can happen in Docker when the spawner and the manager run in different shells or containers with different settings. The same goes for <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code>, which I covered in <a href="https://huntlab.app/en/ros2-nodes-cant-see-each-other-ros-automatic-discovery-range/">ROS 2 nodes can't see each other</a>.</p>
+
+<h2>Start order and timeouts</h2>
+
+<p>Starting the spawner before the manager was fine. With the default timeout the spawner kept waiting and loaded the controller once the manager appeared: after 5.84 to 7.67 seconds when the manager started 5 seconds late, and after 16.27 to 16.94 seconds when it started 15 seconds late. On Humble, Jazzy and Lyrical the default spawner never gave up, so a late manager is a problem only if you set a short <code>--controller-manager-timeout</code>. With <code>--controller-manager-timeout 30</code> and a 15-second delay it worked on all three. I'd still set a timeout in launch files, long enough for your simulator to start, so a real failure ends with exit code 1 instead of a warning every 10 seconds forever.</p>
+
+<h2>use_sim_time without a clock: a different message</h2>
+
+<p>In Gazebo setups the manager often runs with <code>use_sim_time:=true</code>. I ran it that way with nothing publishing <code>/clock</code>, which is what you get when the simulator is paused, still starting, or its clock bridge is missing. The spawner reached the services, so there was no "Could not contact" line. On Humble each load call timed out: <code>Failed getting a result from calling /controller_manager/load_controller in 10.0. (Attempt 1 of 3.)</code>, three times, then <code>RuntimeError: Could not successfully call service /controller_manager/load_controller after 3 attempts.</code> after 30.58 seconds. <code>ros2 control list_controllers</code> failed the same way. On Jazzy and Lyrical the controller loaded but didn't activate. The spawner printed <code>Failed to activate controller : joint_state_broadcaster</code>, the manager printed <code>Switch controller timed out after 5 seconds!</code>, and <code>list_controllers</code> showed the controller as <code>inactive</code>. Jazzy and Lyrical also logged <code>Using ROS clock for triggering controller manager cycles.</code> instead of the usual <code>Steady (Monotonic) clock</code>. If you see these lines, check that <code>/clock</code> is being published.</p>
+
+<h2>The fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>robot_state_publisher</code> + <code>-r ~/robot_description:=robot_description</code> on the manager</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td><code>robot_state_publisher</code> only, no remap</td><td>fails</td><td>works</td><td>works</td></tr>
+<tr><td>URDF as a manager parameter</td><td>works, deprecated</td><td>fails</td><td>fails</td></tr>
+<tr><td><code>-c &lt;namespace&gt;/controller_manager</code></td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Spawner in the manager's namespace</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Longer <code>--controller-manager-timeout</code></td><td>helps only if the manager is late</td><td>same</td><td>same</td></tr>
+<tr><td>Controllers YAML in the manager's <code>--params-file</code></td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Manager-format YAML passed to the spawner's <code>--param-file</code> only</td><td><code>Failed loading controller</code></td><td>same</td><td>same</td></tr>
+<tr><td>Spawner <code>--param-file</code> with a file keyed by controller name (<code>jsb2: ros__parameters: type: ...</code>)</td><td>works</td><td>works</td><td>works</td></tr>
+<tr><td>Spawner <code>-t joint_state_broadcaster/JointStateBroadcaster</code></td><td>works</td><td><code>error: unrecognized arguments: -t</code></td><td>same as Jazzy</td></tr>
+</tbody>
+</table>
+
+<p>A longer timeout doesn't help when the manager is waiting for a URDF it will never receive. In those cases the spawner fails later instead of sooner. Fix the robot description first, and use the timeout only to cover a slow start.</p>
+
+<h2>Version notes</h2>
+
+<p>The spawner's message was the same on all three distros. <code>ros2 control load_controller</code> changed: on Humble it waited on <code>/controller_manager/load_controller</code> and was still waiting when I stopped it at 35 seconds, and on Jazzy and Lyrical it checked <code>list_controllers</code> first and stopped with <code>ServiceNotFoundError</code> after 21.14 seconds. The spawner's options changed too. Jazzy and Lyrical no longer have <code>-t</code> (controller type) or <code>--stopped</code>, and both added <code>--controller-ros-args</code> and <code>--switch-asap</code>. Lyrical also dropped <code>-n NAMESPACE</code>, so use <code>--ros-args -r __ns:=...</code> or <code>-c</code> there. On Lyrical, the manager in the <code>use_sim_time</code> case printed <code>terminate called after throwing an instance of 'std::runtime_error'</code> when I stopped it. I saw that once and didn't look into it.</p>
+
+<h2>Not tested</h2>
+
+<p>Gazebo Classic with <code>gazebo_ros2_control</code>, Gazebo (gz) with <code>gz_ros2_control</code>, real hardware, a controller manager inside a composable container, Cyclone DDS or Zenoh, two machines, robot_description published with QoS other than transient local, <code>ros2 control</code> verbs other than <code>load_controller</code> and <code>list_controllers</code>, and Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Could not contact service /controller_manager/list_controllers" mean?</h3>
+<p>The spawner waited for the controller manager's <code>list_controllers</code> service and didn't find it in time. Either no manager was running under that name, or the manager was running but hadn't created its services yet because it had no usable robot description. Look at the manager's log to see which.</p>
+
+<h3>The controller_manager node is running. Why can't the spawner contact it?</h3>
+<p>In my runs the manager created its controller services only after it had loaded the URDF and the hardware. Before that it appears in <code>ros2 node list</code>, but <code>/controller_manager/list_controllers</code> doesn't exist yet. On Humble remap <code>~/robot_description</code> to <code>robot_description</code>. On Jazzy and Lyrical make sure <code>robot_state_publisher</code> is publishing the URDF.</p>
+
+<h3>Why does my Humble launch file fail on Jazzy?</h3>
+<p>If it passes the URDF to <code>ros2_control_node</code> as the <code>robot_description</code> parameter, Jazzy and Lyrical ignore it and keep waiting for the topic. Publish the URDF with <code>robot_state_publisher</code> instead. If it uses the spawner's <code>-t</code> option, that option was removed too.</p>
+
+<h3>How do I use the spawner with a namespaced controller manager?</h3>
+<p>Pass <code>-c /your_ns/controller_manager</code>, or start the spawner in the same namespace. Both worked on Humble, Jazzy and Lyrical. A spawner outside the namespace looks for <code>/controller_manager</code> and fails.</p>
+
+<h3>Will increasing --controller-manager-timeout fix it?</h3>
+<p>Only if the manager starts late. A spawner started 15 seconds before the manager worked with a 30-second timeout. If the manager never gets a robot description, or the hardware plugin fails, a longer timeout only makes the spawner fail later.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Could not contact service /controller_manager/list_controllers mean?", "acceptedAnswer": {"@type": "Answer", "text": "The spawner waited for the controller manager's list_controllers service and didn't find it in time. Either no manager was running under that name, or the manager was running but hadn't created its services yet because it had no usable robot description. Look at the manager's log to see which."}},
+{"@type": "Question", "name": "The controller_manager node is running. Why can't the spawner contact it?", "acceptedAnswer": {"@type": "Answer", "text": "In my runs the manager created its controller services only after it had loaded the URDF and the hardware. Before that it appears in ros2 node list, but /controller_manager/list_controllers doesn't exist yet. On Humble remap ~/robot_description to robot_description. On Jazzy and Lyrical make sure robot_state_publisher is publishing the URDF."}},
+{"@type": "Question", "name": "Why does my Humble launch file fail on Jazzy?", "acceptedAnswer": {"@type": "Answer", "text": "If it passes the URDF to ros2_control_node as the robot_description parameter, Jazzy and Lyrical ignore it and keep waiting for the topic. Publish the URDF with robot_state_publisher instead. If it uses the spawner's -t option, that option was removed too."}},
+{"@type": "Question", "name": "How do I use the spawner with a namespaced controller manager?", "acceptedAnswer": {"@type": "Answer", "text": "Pass -c /your_ns/controller_manager, or start the spawner in the same namespace. Both worked on Humble, Jazzy and Lyrical. A spawner outside the namespace looks for /controller_manager and fails."}},
+{"@type": "Question", "name": "Will increasing --controller-manager-timeout fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Only if the manager starts late. A spawner started 15 seconds before the manager worked with a 30-second timeout. If the manager never gets a robot description, or the hardware plugin fails, a longer timeout only makes the spawner fail later."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, controller_manager and ros2controlcli 2.54.3, joint_state_broadcaster 2.54.1, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, controller_manager 4.48.1, joint_state_broadcaster 4.42.1, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, controller_manager 6.10.1, joint_state_broadcaster 6.9.0, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9), default RMW (Fast DDS), mock_components/GenericSystem hardware, no simulator. Full digests and versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-05-ros2-control-could-not-contact-controller-manager/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104129">Could not contact service /controller_manager/load_controller</a>, <a href="https://robotics.stackexchange.com/questions/115055">ROS2 Gazebo Controller Spawner: Could not contact service /controller_manager/list_controllers</a>, <a href="https://robotics.stackexchange.com/questions/112810">stuck at "Could not contact service /controller_manager/list_controllers"</a>, <a href="https://robotics.stackexchange.com/questions/113433">Issue with ROS2 Humble and GZ Harmonic: Controller not functioning properly</a>, <a href="https://robotics.stackexchange.com/questions/111191">Could not contact service /controller_manager/load_controller error</a>, <a href="https://robotics.stackexchange.com/questions/115563">Could not contact service /abc/controller_manager/list_controllers</a>.</p>

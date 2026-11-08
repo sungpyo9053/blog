@@ -1,0 +1,488 @@
+=== distro=humble ROS_DOMAIN_ID=88
+ros-humble-controller-manager 2.54.3-1jammy.20261005.213325
+ros-humble-hardware-interface 2.54.3-1jammy.20261005.211947
+ros-humble-joint-state-broadcaster 2.54.1-1jammy.20261005.215610
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-robot-state-publisher 3.0.3-2jammy.20260915.225247
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+ros-humble-ros2controlcli 2.54.3-1jammy.20261005.215818
+RMW=default
+The daemon has been started
+
+##### CASE 1 no controller manager running, spawner default timeout (killed after 35 s)
+[INFO] [1794099908.764886609] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794099918.781054673] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794099918.781672145] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794099928.797174199] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794099928.797770147] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794099938.813560803] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794099938.814125933] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+EXIT=124 ELAPSED=35.01s
+
+##### CASE 1b no controller manager, spawner --controller-manager-timeout 3
+[INFO] [1794099943.970542636] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794099946.976360303] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=3.76s
+
+##### CASE 1c no controller manager, ros2 control load_controller (killed after 35 s)
+[INFO] [1794099948.078875122] [_ros2cli_89]: waiting for service /controller_manager/load_controller to become available...
+[WARN] [1794099958.094382307] [_ros2cli_89]: Could not contact service /controller_manager/load_controller
+[INFO] [1794099958.094960309] [_ros2cli_89]: waiting for service /controller_manager/load_controller to become available...
+[WARN] [1794099968.114989213] [_ros2cli_89]: Could not contact service /controller_manager/load_controller
+[INFO] [1794099968.115549506] [_ros2cli_89]: waiting for service /controller_manager/load_controller to become available...
+[WARN] [1794099978.130633831] [_ros2cli_89]: Could not contact service /controller_manager/load_controller
+[INFO] [1794099978.131232989] [_ros2cli_89]: waiting for service /controller_manager/load_controller to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+EXIT=124 ELAPSED=35.37s
+
+##### CASE 1d no controller manager, ros2 control list_controllers
+[INFO] [1794099983.427121986] [_ros2cli_111]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794099993.443027024] [_ros2cli_111]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794099993.443585123] [_ros2cli_111]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794100003.459592949] [_ros2cli_111]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794100003.460223168] [_ros2cli_111]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794100013.476110477] [_ros2cli_111]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794100013.476701491] [_ros2cli_111]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794100023.492759208] [_ros2cli_111]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794100023.493417750] [_ros2cli_111]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794100033.509588230] [_ros2cli_111]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794100033.510250860] [_ros2cli_111]: waiting for service /controller_manager/list_controllers to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+EXIT=124 ELAPSED=60.36s
+
+##### CASE 2 robot_state_publisher + ros2_control_node + ctl.yaml, NO remap of ~/robot_description
+/controller_manager/robot_description
+/joint_states
+/parameter_events
+/robot_description
+/rosout
+/tf
+/tf_static
+EXIT=0 ELAPSED=1.65s
+[INFO] [1794100049.042602212] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794100059.058382672] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=10.60s
+/repro.sh: line 50:   132 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:   133 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100043.217235595] [robot_state_publisher]: got segment base
+[INFO] [1794100043.217412095] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100043.213587597] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100043.214667959] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100043.214712477] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100043.215108483] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+  [errors in this log:]
+[WARN] [1794100043.215108483] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 2b baseline: same with -r ~/robot_description:=robot_description
+[INFO] [1794100066.807821289] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100066.868078790] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=0.73s
+[92mjoint_state_broadcaster[0m joint_state_broadcaster/JointStateBroadcaster  [92mactive[0m
+EXIT=0 ELAPSED=1.00s
+/repro.sh: line 50:   227 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:   228 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100062.548772054] [robot_state_publisher]: got segment base
+[INFO] [1794100062.548907375] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100062.545042754] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100062.546177691] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100062.546221795] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100062.546620936] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100062.782238338] [controller_manager]: Received robot description file.
+[INFO] [1794100062.782388009] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100062.782894961] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100062.782944753] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [1794100062.782981522] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [1794100062.782993345] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [1794100062.782999620] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [1794100062.783006408] [resource_manager]: Successful 'activate' of hardware 'sys'
+[INFO] [1794100066.773596129] [controller_manager]: Loading controller 'joint_state_broadcaster'
+[INFO] [1794100066.809532025] [controller_manager]: Configuring controller 'joint_state_broadcaster'
+  [errors in this log:]
+[WARN] [1794100062.546620936] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 3 robot_description only as a controller_manager parameter, no robot_state_publisher
+/controller_manager/list_controllers
+/controller_manager/load_controller
+services_total=16
+EXIT=0 ELAPSED=5.66s
+[INFO] [1794100081.204365211] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794100084.811137545] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100084.870855495] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=4.24s
+/repro.sh: line 50:   323 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[WARN] [1794100071.284133606] [controller_manager]: [Deprecated] Passing the robot description parameter directly to the control_manager node is deprecated. Use '~/robot_description' topic from 'robot_state_publisher' instead.
+[INFO] [1794100071.284319556] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100071.284710855] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100071.284737016] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [1794100071.284767545] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [1794100071.284776146] [resource_manager]: Successful 'configure' of hardware 'sys'
+[INFO] [1794100071.284781574] [resource_manager]: 'activate' hardware 'sys' 
+[INFO] [1794100071.284787193] [resource_manager]: Successful 'activate' of hardware 'sys'
+[INFO] [1794100071.289351499] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100071.289402192] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+  [errors in this log:]
+[WARN] [1794100071.289515743] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 4 ros2_control_node without any robot_description (no rsp, no param)
+/controller_manager
+EXIT=0 ELAPSED=0.96s
+services_total=6
+EXIT=0 ELAPSED=5.51s
+[INFO] [1794100099.006046024] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794100109.023109053] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=10.58s
+/repro.sh: line 50:   408 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100088.253059351] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100088.253921938] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100088.253969599] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100088.254082035] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+  [errors in this log:]
+[WARN] [1794100088.254082035] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 5 controller manager in namespace /abc, spawner without -c
+/abc/controller_manager
+/abc/robot_state_publisher
+EXIT=0 ELAPSED=0.96s
+[INFO] [1794100117.985853465] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794100122.994191079] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=5.93s
+
+##### CASE 5b same, spawner with --ros-args -r __ns:=/abc (no -c)
+[INFO] [1794100123.583778286] [abc.spawner_joint_state_broadcaster]: waiting for service /abc/controller_manager/list_controllers to become available...
+[INFO] [1794100125.105596988] [abc.spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100125.165400835] [abc.spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=2.15s
+
+##### CASE 5c same, spawner -c /abc/controller_manager (second controller jsb2)
+[INFO] [1794100125.785527204] [spawner_jsb2]: [94mLoaded [1mjsb2[0m
+[INFO] [1794100125.925498796] [spawner_jsb2]: [92mConfigured and activated [1mjsb2[0m
+EXIT=0 ELAPSED=0.74s
+
+##### CASE 5d same, ros2 control list_controllers -c /abc/controller_manager
+[92mjoint_state_broadcaster[0m joint_state_broadcaster/JointStateBroadcaster  [92mactive[0m
+[92mjsb2                   [0m joint_state_broadcaster/JointStateBroadcaster  [92mactive[0m
+EXIT=0 ELAPSED=1.01s
+/repro.sh: line 50:   514 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:   515 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100112.504451344] [abc.robot_state_publisher]: got segment base
+[INFO] [1794100112.504556755] [abc.robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100112.501689207] [abc.controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100112.503616849] [abc.controller_manager]: update rate is 50 Hz
+[INFO] [1794100112.503668873] [abc.controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100112.503880042] [abc.controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to 
+[INFO] [1794100112.515580572] [abc.controller_manager]: Received robot description file.
+[INFO] [1794100112.515735191] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100112.516301322] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100112.516338888] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [1794100112.516375093] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [1794100112.516388836] [resource_manager]: Successful 'configure' of hardware 'sys'
+  [errors in this log:]
+[WARN] [1794100112.503880042] [abc.controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 6 controller manager renamed with -r __node:=my_cm
+[INFO] [1794100134.608369871] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794100139.616751440] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=5.59s
+
+##### CASE 6b same, spawner -c my_cm
+[INFO] [1794100140.271051086] [spawner_joint_state_broadcaster]: waiting for service /my_cm/list_controllers to become available...
+[INFO] [1794100140.552352286] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100140.692090065] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=1.05s
+/repro.sh: line 50:   681 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:   682 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100130.448794221] [robot_state_publisher]: got segment base
+[INFO] [1794100130.448996292] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100130.449152300] [my_cm]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100130.450214136] [my_cm]: update rate is 50 Hz
+[INFO] [1794100130.450250547] [my_cm]: Spawning my_cm RT thread with scheduler priority: 50
+[WARN] [1794100130.450384825] [my_cm]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime s
+[INFO] [1794100130.683976329] [my_cm]: Received robot description file.
+[INFO] [1794100130.684106130] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100130.684585219] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100130.684614967] [resource_manager]: Successful initialization of hardware 'sys'
+[INFO] [1794100130.684648334] [resource_manager]: 'configure' hardware 'sys' 
+[INFO] [1794100130.684657845] [resource_manager]: Successful 'configure' of hardware 'sys'
+  [errors in this log:]
+[WARN] [1794100130.450384825] [my_cm]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 7 spawner started first, controller manager starts 5 s later (default timeout)
+[INFO] [1794100144.423571481] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794100149.541154708] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100149.601060340] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=5.84s
+/repro.sh: line 50:   779 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:   780 Killed                  ( sleep 5; ros2 run controller_manager ros2_control_node --ros-args -r '~/robot_description:=robot_description' --params-file $T/ctl.yaml > $T/bg_late.log 2>&1 )
+--- bg_0.log
+[INFO] [1794100144.178999018] [robot_state_publisher]: got segment base
+[INFO] [1794100144.179180308] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_late.log
+[INFO] [1794100149.098323823] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100149.099224128] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100149.099263463] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100149.099405800] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100149.237788192] [controller_manager]: Received robot description file.
+[INFO] [1794100149.237968164] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100149.238477941] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100149.238509639] [resource_manager]: Successful initialization of hardware 'sys'
+  [errors in this log:]
+[WARN] [1794100149.099405800] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 7b controller manager starts 15 s later (default timeout)
+[INFO] [1794100153.329456961] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794100163.345632010] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[INFO] [1794100163.346224606] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794100168.960399578] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100169.020457758] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=16.36s
+/repro.sh: line 50:   855 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:   856 Killed                  ( sleep 15; ros2 run controller_manager ros2_control_node --ros-args -r '~/robot_description:=robot_description' --params-file $T/ctl.yaml > $T/bg_late.log 2>&1 )
+--- bg_0.log
+[INFO] [1794100153.087470565] [robot_state_publisher]: got segment base
+[INFO] [1794100153.087656923] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_late.log
+[INFO] [1794100168.337629752] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100168.338533796] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100168.338574515] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100168.338770452] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100168.349196739] [controller_manager]: Received robot description file.
+[INFO] [1794100168.349451900] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100168.349996759] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100168.350034757] [resource_manager]: Successful initialization of hardware 'sys'
+  [errors in this log:]
+[WARN] [1794100168.338770452] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 7c controller manager starts 15 s later, --controller-manager-timeout 30
+[INFO] [1794100172.749254642] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794100187.794719676] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100187.854777760] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=15.77s
+/repro.sh: line 50:   931 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:   932 Killed                  ( sleep 15; ros2 run controller_manager ros2_control_node --ros-args -r '~/robot_description:=robot_description' --params-file $T/ctl.yaml > $T/bg_late.log 2>&1 )
+--- bg_0.log
+[INFO] [1794100172.507083777] [robot_state_publisher]: got segment base
+[INFO] [1794100172.507262072] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_late.log
+[INFO] [1794100187.431449705] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100187.432408219] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100187.432448748] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100187.432908492] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100187.571051128] [controller_manager]: Received robot description file.
+[INFO] [1794100187.571191283] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100187.571672001] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100187.571702831] [resource_manager]: Successful initialization of hardware 'sys'
+  [errors in this log:]
+[WARN] [1794100187.432908492] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 8 hardware plugin that does not exist in the URDF
+/controller_manager
+/robot_state_publisher
+EXIT=0 ELAPSED=0.96s
+services_total=12
+EXIT=0 ELAPSED=5.91s
+[INFO] [1794100203.427332362] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794100208.435934517] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=5.59s
+/repro.sh: line 50:  1007 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:  1008 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100191.350608532] [robot_state_publisher]: got segment base
+[INFO] [1794100191.350788639] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100191.354798488] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100191.356072790] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100191.356110460] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100191.356303202] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100191.367170131] [controller_manager]: Received robot description file.
+[INFO] [1794100191.367306693] [resource_manager]: Loading hardware 'sys' 
+[ERROR] [1794100191.367370169] [controller_manager]: The published robot description file (urdf) seems not to be genuine. The following error was caught:According to the loaded plugin descriptions the class my_hw/DoesNotExist with base class type hardware_inte
+  [errors in this log:]
+[WARN] [1794100191.356303202] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[ERROR] [1794100191.367370169] [controller_manager]: The published robot description file (urdf) seems not to be genuine. The following error was caught:According to the loaded plugin descriptions the class my_hw/DoesNotExist with base class type hardware_interface::SystemInterface does not exist. Declared types are  fake_components/GenericSystem mock_components/GenericSystem test_hardware_compone
+
+##### CASE 9 spawner on another ROS_DOMAIN_ID (89) than the controller manager (88)
+[INFO] [1794100216.071513421] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794100221.079747588] [spawner_joint_state_broadcaster]: Could not contact service /controller_manager/list_controllers
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=5.57s
+
+##### CASE 9b same domain (88) again
+[INFO] [1794100221.984085107] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794100224.754177277] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100224.814099971] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=3.40s
+/repro.sh: line 50:  1133 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:  1134 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100211.913223763] [robot_state_publisher]: got segment base
+[INFO] [1794100211.913360401] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100212.250991820] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100212.252244373] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100212.252291149] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100212.252421238] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100212.262669745] [controller_manager]: Received robot description file.
+[INFO] [1794100212.262810090] [resource_manager]: Loading hardware 'sys' 
+  [errors in this log:]
+[WARN] [1794100212.252421238] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 10 controller type missing from the yaml
+[FATAL] [1794100232.468282255] [spawner_joint_state_broadcaster]: [91mFailed loading controller [1mjoint_state_broadcaster[0m
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=0.59s
+/repro.sh: line 50:  1232 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:  1233 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100228.304664609] [robot_state_publisher]: got segment base
+[INFO] [1794100228.304826964] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100228.301998092] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100228.303916197] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100228.303961950] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100228.304545070] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100228.305140489] [controller_manager]: Received robot description file.
+[INFO] [1794100228.305233330] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100228.305809814] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100228.305847942] [resource_manager]: Successful initialization of hardware 'sys'
+  [errors in this log:]
+[WARN] [1794100228.304545070] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[ERROR] [1794100232.446731177] [controller_manager]: The 'type' param was not defined for 'joint_state_broadcaster'.
+
+##### CASE 11 controllers yaml passed to the spawner with --param-file, not to the manager
+[FATAL] [1794100240.274306642] [spawner_joint_state_broadcaster]: [91mFailed loading controller [1mjoint_state_broadcaster[0m
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=0.74s
+
+##### CASE 11b same, plus -t joint_state_broadcaster/JointStateBroadcaster
+[INFO] [1794100240.877735803] [spawner_joint_state_broadcaster]: [96mSetting controller param "type" to "joint_state_broadcaster/JointStateBroadcaster" for [1mjoint_state_broadcaster[0m
+[INFO] [1794100240.896034003] [spawner_joint_state_broadcaster]: [94mLoaded [1mjoint_state_broadcaster[0m
+[INFO] [1794100240.925927040] [spawner_joint_state_broadcaster]: [92mConfigured and activated [1mjoint_state_broadcaster[0m
+EXIT=0 ELAPSED=0.63s
+
+##### CASE 11c spawner --param-file with a controller-keyed file (joint_state_broadcaster: ros__parameters: type: ...)
+[INFO] [1794100241.535304651] [spawner_jsb2]: [96mSetting controller param "params_file" to "['/t/ctl_ctrlkey.yaml']" for [1mjsb2[0m
+[INFO] [1794100241.538537496] [spawner_jsb2]: [96mSetting controller param "type" to "joint_state_broadcaster/JointStateBroadcaster" for [1mjsb2[0m
+[INFO] [1794100241.636095780] [spawner_jsb2]: [94mLoaded [1mjsb2[0m
+[INFO] [1794100241.746162313] [spawner_jsb2]: [92mConfigured and activated [1mjsb2[0m
+EXIT=0 ELAPSED=0.80s
+/repro.sh: line 50:  1305 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:  1306 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100236.307587681] [robot_state_publisher]: got segment base
+[INFO] [1794100236.307775407] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[WARN] [1794100235.962592892] [controller_manager]: 'update_rate' parameter not set, using default value.
+[INFO] [1794100235.962795638] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100235.963993527] [controller_manager]: update rate is 100 Hz
+[INFO] [1794100235.964037424] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100235.964488863] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100236.307987125] [controller_manager]: Received robot description file.
+[INFO] [1794100236.308108552] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100236.308702950] [resource_manager]: Initialize hardware 'sys' 
+  [errors in this log:]
+[WARN] [1794100235.964488863] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[ERROR] [1794100240.253147700] [controller_manager]: The 'type' param was not defined for 'joint_state_broadcaster'.
+
+##### CASE 12 use_sim_time:=true with no /clock publisher
+[WARN] [1794100259.395239460] [spawner_joint_state_broadcaster]: Failed getting a result from calling /controller_manager/load_controller in 10.0. (Attempt 1 of 3.)
+[WARN] [1794100269.396391559] [spawner_joint_state_broadcaster]: Failed getting a result from calling /controller_manager/load_controller in 10.0. (Attempt 2 of 3.)
+[WARN] [1794100279.397949219] [spawner_joint_state_broadcaster]: Failed getting a result from calling /controller_manager/load_controller in 10.0. (Attempt 3 of 3.)
+Traceback (most recent call last):
+RuntimeError: Could not successfully call service /controller_manager/load_controller after 3 attempts.
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=30.58s
+[INFO] [1794100280.468611118] [_ros2cli_1484]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794100291.971891983] [_ros2cli_1484]: Failed getting a result from calling /controller_manager/list_controllers in 10.0. (Attempt 1 of 3.)
+[WARN] [1794100301.973123432] [_ros2cli_1484]: Failed getting a result from calling /controller_manager/list_controllers in 10.0. (Attempt 2 of 3.)
+[WARN] [1794100311.974573619] [_ros2cli_1484]: Failed getting a result from calling /controller_manager/list_controllers in 10.0. (Attempt 3 of 3.)
+Could not successfully call service /controller_manager/list_controllers after 3 attempts.
+EXIT=1 ELAPSED=32.54s
+/repro.sh: line 50:  1428 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+/repro.sh: line 50:  1429 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100245.241052032] [robot_state_publisher]: got segment base
+[INFO] [1794100245.241189005] [robot_state_publisher]: got segment l1
+  [errors in this log:]
+--- bg_1.log
+[INFO] [1794100245.240835837] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100245.242080470] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100245.242119575] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100245.242924346] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+[INFO] [1794100245.253688626] [controller_manager]: Received robot description file.
+[INFO] [1794100245.253829337] [resource_manager]: Loading hardware 'sys' 
+[INFO] [1794100245.254352190] [resource_manager]: Initialize hardware 'sys' 
+[INFO] [1794100245.254389631] [resource_manager]: Successful initialization of hardware 'sys'
+  [errors in this log:]
+[WARN] [1794100245.242924346] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 12b list_controllers service called directly while the manager waits for robot_description
+waiting for service to become available...
+failed to check service availability: rcl node's context is invalid, at ./src/rcl/node.c:428
+EXIT=124 ELAPSED=15.26s
+/repro.sh: line 50:  1524 Killed                  "$@" > $T/bg_$((${#PIDS[@]})).log 2>&1
+--- bg_0.log
+[INFO] [1794100315.361128938] [controller_manager]: Subscribing to '~/robot_description' topic for robot description file.
+[INFO] [1794100315.361976802] [controller_manager]: update rate is 50 Hz
+[INFO] [1794100315.362010789] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1794100315.362131161] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enab
+  [errors in this log:]
+[WARN] [1794100315.362131161] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 13 where the spawner prints the message
+grep: /opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/__pycache__/controller_manager_services.cpython-310.pyc: binary file matches
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-130-        if service_timeout:
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-131-            if not cli.wait_for_service(service_timeout):
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-132-                raise ServiceNotFoundError(
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py:133:                    f"Could not contact service {fully_qualified_service_name}"
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-134-                )
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-135-        elif not cli.wait_for_service(10.0):
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py:136:            node.get_logger().warn(f"Could not contact service {fully_qualified_service_name}")
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-137-
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-138-    node.get_logger().debug(f"requester: making request: {request}\n")
+/opt/ros/humble/local/lib/python3.10/dist-packages/controller_manager/controller_manager_services.py-139-    future = None
+
+##### CASE 13b spawner help: options
+usage: spawner [-h] [-c CONTROLLER_MANAGER] [-p PARAM_FILE] [-n NAMESPACE]
+               [--load-only] [--stopped] [--inactive] [-t CONTROLLER_TYPE]
+               [-u] [--controller-manager-timeout CONTROLLER_MANAGER_TIMEOUT]
+               [--switch-timeout SWITCH_TIMEOUT]
+               [--service-call-timeout SERVICE_CALL_TIMEOUT]
+               [--activate-as-group]
+  -c CONTROLLER_MANAGER, --controller-manager CONTROLLER_MANAGER
+  -p PARAM_FILE, --param-file PARAM_FILE
+  --inactive            Load and configure the controller, however do not
+  -u, --unload-on-kill  Wait until this application is interrupted and unload
+  --controller-manager-timeout CONTROLLER_MANAGER_TIMEOUT
+  --switch-timeout SWITCH_TIMEOUT
+  --service-call-timeout SERVICE_CALL_TIMEOUT
+  --activate-as-group   Activates all the parsed controllers list together
+=== done humble
