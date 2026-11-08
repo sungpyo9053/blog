@@ -1,0 +1,190 @@
+<pre><code>Traceback (most recent call last):
+  ...
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/type_support.py", line 20, in check_for_type_support
+    ts = msg_or_srv_type.__class__._TYPE_SUPPORT
+AttributeError: type object 'type' has no attribute '_TYPE_SUPPORT' This might be a ROS 1 message type but it should be a ROS 2 message type. Make sure to source your ROS 2 workspace after your ROS 1 workspace.</code></pre>
+
+<p>Short answer: rclpy got something that isn't a generated ROS 2 interface class. The hint about ROS 1 is only one of the causes. In my runs the same error came from a node class with the same name as its service type, from <code>from PIL import Image</code> replacing <code>sensor_msgs.msg.Image</code>, from a type name passed as a string, from a module, and from a hand-written Python class used as an action type. The word in quotes tells you which. <code>'type'</code> means a plain Python class, <code>'module'</code> means a module and <code>'str'</code> means a string. Print the object you pass and its type, right before the failing call:</p>
+
+<pre><code class="language-python">print(Image, type(Image))
+# good:  &lt;class 'sensor_msgs.msg._image.Image'&gt; &lt;class '...Metaclass_Image'&gt;
+# bad:   &lt;module 'PIL.Image' from '/usr/lib/python3/dist-packages/PIL/Image.py'&gt; &lt;class 'module'&gt;</code></pre>
+
+<p>A real ROS 2 class has a metaclass named <code>Metaclass_&lt;Name&gt;</code>. Anything else fails. Fix the name (an import alias, or rename your own class), or fix the environment so the ROS 2 package is the one Python imports. All of these fixes worked on Humble, Jazzy and Lyrical.</p>
+
+<h2>Find your error text</h2>
+
+<p>Humble and Jazzy print the type of the object you passed. Lyrical prints the object itself, which is more useful. Every row below failed the moment the publisher, subscription, service or action was created, before any spinning. Every case, passing or failing, finished in under 100 ms.</p>
+
+<table>
+<thead><tr><th>What was passed</th><th>Humble and Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>ROS 1 style <code>std_msgs</code> first on <code>PYTHONPATH</code></td><td><code>type object 'type' has no attribute '_TYPE_SUPPORT'</code></td><td><code>type object 'String' has no attribute '_TYPE_SUPPORT'</code></td></tr>
+<tr><td>Node class named like the service (<code>class AddTwoInts(Node)</code>)</td><td><code>type object 'type' ...</code></td><td><code>type object 'AddTwoInts' ...</code></td></tr>
+<tr><td>Hand-written Python class as an action type</td><td><code>type object 'type' ...</code></td><td><code>type object 'MotorsGoal' ...</code></td></tr>
+<tr><td><code>from PIL import Image</code> after <code>from sensor_msgs.msg import Image</code></td><td><code>type object 'module' ...</code></td><td><code>module 'PIL.Image' has no attribute '_TYPE_SUPPORT'</code></td></tr>
+<tr><td>A module (<code>from std_msgs import msg</code>, then <code>msg</code>)</td><td><code>type object 'module' ...</code></td><td><code>module 'std_msgs.msg' has no attribute ...</code></td></tr>
+<tr><td>A string, <code>'std_msgs/msg/String'</code> (publisher or <code>ActionClient</code>)</td><td><code>type object 'str' ...</code></td><td><code>'str' object has no attribute '_TYPE_SUPPORT'</code></td></tr>
+<tr><td>An instance, <code>String()</code></td><td>no error at creation. <code>publish()</code> then fails with <code>TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union</code></td><td><code>'String' object has no attribute '_TYPE_SUPPORT'</code> at creation</td></tr>
+</tbody>
+</table>
+
+<p>Each message continues with the same sentence: "This might be a ROS 1 message type but it should be a ROS 2 message type. Make sure to source your ROS 2 workspace after your ROS 1 workspace." It is an <code>AttributeError</code> raised in <code>rclpy/type_support.py</code>, in <code>check_for_type_support</code>. That's line 20 on Humble and Jazzy and line 93 on Lyrical.</p>
+
+<p>Mixing up the kind of interface gives a different error, and that one names the class:</p>
+
+<table>
+<thead><tr><th>Call</th><th>Result on all three distros</th></tr></thead>
+<tbody>
+<tr><td><code>create_publisher(AddTwoInts, ...)</code> (a service)</td><td><code>RuntimeError: The message type provided is not valid (&lt;class 'example_interfaces.srv._add_two_ints.AddTwoInts'&gt;), this might be a service or action</code></td></tr>
+<tr><td><code>create_service(String, ...)</code> (a message)</td><td><code>RuntimeError: The service type provided is not valid (&lt;class 'std_msgs.msg._string.String'&gt;), this might be a message or action</code></td></tr>
+<tr><td><code>create_client(Fibonacci, ...)</code> (an action)</td><td>the same "service type provided is not valid" error, naming <code>Fibonacci</code></td></tr>
+<tr><td><code>ActionClient(node, String, 'fib')</code> (a message)</td><td>segmentation fault, exit code 139, no Python traceback</td></tr>
+<tr><td><code>create_publisher(AddTwoInts.Request, ...)</code></td><td>works. A request class is a message class.</td></tr>
+<tr><td><code>pub.publish(Int32(data=1))</code> on a <code>String</code> publisher</td><td><code>TypeError: Expected &lt;class 'std_msgs.msg._string.String'&gt;, got &lt;class 'std_msgs.msg._int32.Int32'&gt;</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-08 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images on a 2 vCPU Linux host, one distro at a time. The base images have neither <code>example_interfaces</code> (for <code>AddTwoInts</code> and <code>Fibonacci</code>) nor PIL, so the script installs <code>ros-&lt;distro&gt;-example-interfaces</code> and <code>python3-pil</code> first. DDS stayed on domain 88, localhost only.</p>
+
+<p>A Python file holds 18 small cases. Each case creates one node and then one publisher, subscription, service, client, action client or action server with a wrong "type". Each case runs in its own process, so a crash in one doesn't hide the others. The script prints the exception, the file and line that raised it, and the exit code. For the ROS 1 case I didn't install ROS 1. Noetic doesn't install on Ubuntu 22.04, 24.04 or 26.04. Instead I made a small stand-in. It's a <code>std_msgs</code> package whose <code>String</code> is a plain Python class, like a genpy message, and I put it first on <code>PYTHONPATH</code>. That gives rclpy what a sourced Noetic would give it: a class with the right name and no ROS 2 type support. A real Noetic install is in "Not tested".</p>
+
+<p>All three distros raised the same exception classes in the same cases. Only the wording changed, and so did one result, the instance case.</p>
+
+<h2>Cause 1: ROS 1 packages ahead of ROS 2 on PYTHONPATH</h2>
+
+<p>This is the cause the message has in mind. If you source a ROS 1 setup file after a ROS 2 one, ROS 1's Python folders go to the front of <code>PYTHONPATH</code>. Then <code>from std_msgs.msg import String</code> finds the ROS 1 package first. The import works and the name is right, but the class is a genpy class with no <code>Metaclass_String</code>. The first <code>create_publisher</code> or <code>create_subscription</code> with it fails.</p>
+
+<p>With my stand-in first on the path, Python reported <code>/tmp/fake_ros1/std_msgs/msg/__init__.py</code> as the source of <code>std_msgs.msg</code>. Both <code>create_subscription</code> and <code>create_publisher</code> failed with the error at the top of this page. The CLI failed too. <code>ros2 topic pub --once /chatter std_msgs/msg/String "{data: hi}"</code> and <code>ros2 topic echo /chatter std_msgs/msg/String</code> both printed only <code>The passed message type is invalid</code>, on all three distros.</p>
+
+<p>Two fixes worked. Moving the stand-in to the end of <code>PYTHONPATH</code> was enough, because Python takes the first match. Removing it from the path also worked. On a real machine that means:</p>
+
+<pre><code class="language-bash"># which std_msgs does Python import?
+python3 -c "import std_msgs.msg as m; print(m.__file__)"
+# should be under /opt/ros/&lt;ros2 distro&gt;/ or your ROS 2 install/, not /opt/ros/noetic/
+
+echo $PYTHONPATH | tr ':' '\n'      # ROS 2 folders must come before any ROS 1 folder</code></pre>
+
+<p>Then remove <code>source /opt/ros/noetic/setup.bash</code> from <code>~/.bashrc</code> and open a new terminal. Or source ROS 2 last in a shell that needs both. In the <a href="https://github.com/aniskoubaa/rosgpt/issues/8">rosgpt issue</a> the user had exactly this problem, with Noetic sourced in <code>.bashrc</code>. The fix there was to source Foxy instead. If you see <code>ROS_DISTRO was set to 'noetic' before</code> when you source a ROS 2 workspace, both distros are in that shell.</p>
+
+<p>Some messages have no ROS 2 version at all, for example a custom ROS 1 message from a catkin workspace. For those, the fix is a ROS 2 interface package with the same <code>.msg</code> file, built with colcon. Sourcing order can't fix it.</p>
+
+<h2>Cause 2: a name in your file replaced the message class</h2>
+
+<p>This cause has nothing to do with ROS 1. Python names are just variables, and the last import or class definition wins. Three versions of it failed in my runs.</p>
+
+<p><strong>An import with the same name.</strong> Image code often needs both <code>sensor_msgs.msg.Image</code> and PIL's <code>Image</code>. If both are imported as <code>Image</code>, the later import wins. With PIL imported second, <code>Image</code> was <code>&lt;module 'PIL.Image' ...&gt;</code> and <code>create_subscription(Image, ...)</code> failed with <code>type object 'module'</code>. Importing PIL with an alias fixed it on all three distros:</p>
+
+<pre><code class="language-python">from sensor_msgs.msg import Image
+from PIL import Image as PILImage    # not "from PIL import Image"</code></pre>
+
+<p><strong>Your own class with the same name.</strong> If you name the node class after its service, the class statement replaces the import:</p>
+
+<pre><code class="language-python">from example_interfaces.srv import AddTwoInts
+
+class AddTwoInts(Node):               # now AddTwoInts is the node class
+    def __init__(self):
+        super().__init__('adder')
+        self.create_service(AddTwoInts, 'add', self.cb)   # fails</code></pre>
+
+<p>This failed with <code>type object 'type'</code> on Humble and Jazzy and <code>type object 'AddTwoInts'</code> on Lyrical. The fix is to give the node class another name, such as <code>AdderNode</code>, or to import the service with an alias. In the <a href="https://robotics.stackexchange.com/questions/99353">WhereGo question</a> the node class and the <code>.srv</code> file were both named <code>WhereGo</code>, and renaming the service fixed it. That fits the same rule.</p>
+
+<p><strong>A module instead of a class.</strong> <code>from std_msgs import msg</code> followed by <code>create_publisher(msg, ...)</code> failed with <code>type object 'module'</code>. Import the class, <code>from std_msgs.msg import String</code>, and pass <code>String</code>.</p>
+
+<h2>Cause 3: a string or an instance instead of the class</h2>
+
+<p>rclpy takes the class object, not its name. <code>create_publisher('std_msgs/msg/String', 'chatter', 10)</code> failed with <code>type object 'str'</code>. So did <code>ActionClient(node, 'example_interfaces/action/Fibonacci', 'fibonacci')</code>, the mistake a commenter describes on the <a href="https://robotics.stackexchange.com/questions/99353">same question</a>. Import the class and pass it:</p>
+
+<pre><code class="language-python">from example_interfaces.action import Fibonacci
+client = ActionClient(node, Fibonacci, 'fibonacci')</code></pre>
+
+<p>If you only have the type name as a string, for example from a parameter, <code>rosidl_runtime_py.utilities.get_message('std_msgs/msg/String')</code> returns the class. I didn't time or test that helper in these runs.</p>
+
+<p>An instance (<code>String()</code> instead of <code>String</code>) behaved differently across versions. On Humble and Jazzy, <code>create_publisher(String(), ...)</code> worked and returned a publisher. The first <code>publish()</code> then failed with <code>TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union</code>, from <code>rclpy/publisher.py</code> line 69. On Lyrical the call failed right away with <code>'String' object has no attribute '_TYPE_SUPPORT'</code>. Either way, remove the parentheses.</p>
+
+<h2>Cause 4: a plain Python class as an action, service or message</h2>
+
+<p>ROS 2 types come from <code>.msg</code>, <code>.srv</code> and <code>.action</code> files, which <code>rosidl</code> turns into Python and C code at build time. A Python class with the same fields isn't enough. With <code>class MotorsGoal</code> holding one <code>target_pwm</code> field, <code>ActionServer(node, MotorsGoal, 'motors', cb)</code> failed with <code>type object 'type'</code> on Humble and Jazzy and <code>type object 'MotorsGoal'</code> on Lyrical. That is what happened in the <a href="https://robotics.stackexchange.com/questions/25150">simple action implementation question</a>.</p>
+
+<p>The fix is an interface package: an <code>ament_cmake</code> package with an <code>action/Motors.action</code> file and <code>rosidl_generate_interfaces</code>. Build it with colcon, source the install, then <code>from my_interfaces.action import Motors</code>. For a quick test, the existing <code>example_interfaces</code> types (<code>Fibonacci</code>, <code>AddTwoInts</code>) work.</p>
+
+<h2>The fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Fixes</th><th>Result in my runs</th></tr></thead>
+<tbody>
+<tr><td>ROS 2 path before the ROS 1 path, or ROS 1 path removed</td><td>Cause 1</td><td>worked on all three. <code>std_msgs.msg</code> then loaded from <code>/opt/ros/&lt;distro&gt;/</code></td></tr>
+<tr><td>Import alias (<code>from PIL import Image as PILImage</code>)</td><td>Cause 2, imports</td><td>worked on all three</td></tr>
+<tr><td>Rename your own class (<code>AdderNode</code>)</td><td>Cause 2, class names</td><td>follows from the failing case. The renamed version wasn't run</td></tr>
+<tr><td>Pass the imported class, not a string, module or instance</td><td>Causes 2 and 3</td><td>the control case with <code>String</code> worked on all three</td></tr>
+<tr><td>A generated interface package</td><td>Cause 4, ROS 1-only messages</td><td>shown with <code>example_interfaces</code>. No custom package was built</td></tr>
+<tr><td>Rebuilding or re-sourcing the workspace</td><td>none of the cases above</td><td>not a fix for name problems. Causes 2 to 4 failed with only the ROS 2 setup sourced</td></tr>
+</tbody>
+</table>
+
+<p>The check below separates the cases without reading any code. Run it on the object right before the failing call. A real class and an instance both have <code>_TYPE_SUPPORT</code> on their type, so check whether the object is a class too:</p>
+
+<pre><code class="language-python">t = Image                                      # whatever you pass to rclpy
+print(repr(t), type(t).__name__, hasattr(type(t), '_TYPE_SUPPORT'))
+# &lt;class 'sensor_msgs.msg._image.Image'&gt; Metaclass_Image True   -&gt; good
+# std_msgs.msg.String(data='') String True                      -&gt; instance: drop the ()
+# 'std_msgs/msg/String' str False                               -&gt; string: import the class</code></pre>
+
+<p>Those three lines are the measured output, the same on Humble, Jazzy and Lyrical.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (rclpy 3.3.22) and Jazzy (rclpy 7.1.12) run <code>msg_or_srv_type.__class__._TYPE_SUPPORT</code> at line 20 of <code>type_support.py</code>. Because the check looks at <code>__class__</code>, the message names the type of what you passed: <code>'type'</code>, <code>'module'</code> or <code>'str'</code>.</li>
+<li>Lyrical (rclpy 10.0.11) runs <code>msg_or_srv_type._TYPE_SUPPORT</code> at line 93. The message names the object itself (<code>'AddTwoInts'</code>, <code>'PIL.Image'</code>, <code>'str' object</code>). The extra frame <code>_create_publisher_handle</code> (or <code>_create_service_handle</code>) shows up in the traceback.</li>
+<li>Because of that change, Lyrical rejects a message instance at <code>create_publisher</code>. Humble and Jazzy accept it and fail at the first <code>publish()</code>.</li>
+<li>The text about ROS 1 is the same in all three, even though no supported ROS 1 distro installs next to Jazzy or Lyrical.</li>
+<li><code>ActionClient</code> with a message type crashed the process with a segmentation fault (exit code 139) on all three. Look for that if a Python node dies with no traceback.</li>
+<li><code>ros2 topic pub</code> and <code>ros2 topic echo</code> with the shadowed <code>std_msgs</code> printed <code>The passed message type is invalid</code> on ros2cli 0.18.20, 0.32.13 and 0.40.9.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>A real ROS 1 Noetic install next to ROS 2. I used a stand-in package with plain classes. The error text matched what users report from real Noetic setups, but I didn't run Noetic.</li>
+<li>Foxy, Iron, Kilted and Rolling.</li>
+<li>Spyder, Jupyter and IPython reloading modules. The <a href="https://github.com/Interbotix/interbotix_ros_manipulators/issues/93">Interbotix issue</a> reports this error from inside generated message code under Spyder 5.4.3. I didn't reproduce that.</li>
+<li>Custom interface packages built with colcon, venv Pythons, and <code>NoTypeSupportImportedException</code>.</li>
+<li>Renaming the node class, and <code>rosidl_runtime_py.utilities.get_message</code>, as fixes. Both follow from the cases I ran, but I didn't run them.</li>
+<li>rclcpp. C++ type mistakes fail at compile time, not with this error.</li>
+</ul>
+
+<p>If the type is fine but rclpy can't import <code>rclpy</code> or its C extension at all, the problem is the sourced environment, not your names. That's covered in <a href="https://huntlab.app/en/no-module-named-rclpy-rclpy-pybind11-ros-2/">No module named 'rclpy' or 'rclpy._rclpy_pybind11'</a>.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "has no attribute '_TYPE_SUPPORT'" mean in rclpy?</h3>
+<p>rclpy checks that the type you pass to <code>create_publisher</code>, <code>create_subscription</code>, <code>create_service</code>, <code>create_client</code> or an action class is a generated ROS 2 interface class. Anything else fails that check. In my runs that included ROS 1 style classes, modules, strings, hand-written classes and, on Lyrical, message instances.</p>
+
+<h3>I never installed ROS 1. Why does the error mention it?</h3>
+<p>The text is the same for every cause. Most often a name in your own file points to the wrong object. Examples are <code>from PIL import Image</code> after <code>sensor_msgs.msg.Image</code>, or a node class named like its service. Print the object and <code>type()</code> of it right before the call.</p>
+
+<h3>What does type object 'module' mean?</h3>
+<p>You passed a module. In my runs this happened with <code>from PIL import Image</code> replacing <code>sensor_msgs.msg.Image</code>, and with <code>from std_msgs import msg</code>. Import the message class, using an alias where names clash.</p>
+
+<h3>How do I check which std_msgs Python is using?</h3>
+<p>Run <code>python3 -c "import std_msgs.msg as m; print(m.__file__)"</code>. It should point into your ROS 2 install. If it points into a ROS 1 folder, take ROS 1 out of <code>~/.bashrc</code> or put the ROS 2 paths first on <code>PYTHONPATH</code>.</p>
+
+<h3>Can I define an action with plain Python classes?</h3>
+<p>No. A plain class failed in <code>ActionServer</code> on Humble, Jazzy and Lyrical. Write a <code>.action</code> file in an interface package, generate it with <code>rosidl_generate_interfaces</code>, build it with colcon and import the generated class.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does has no attribute _TYPE_SUPPORT mean in rclpy?", "acceptedAnswer": {"@type": "Answer", "text": "rclpy checks that the type you pass to create_publisher, create_subscription, create_service, create_client or an action class is a generated ROS 2 interface class. Anything else fails that check. In my runs that included ROS 1 style classes, modules, strings, hand-written classes and, on Lyrical, message instances."}},
+{"@type": "Question", "name": "I never installed ROS 1. Why does the error mention it?", "acceptedAnswer": {"@type": "Answer", "text": "The text is the same for every cause. Most often a name in your own file points to the wrong object. Examples are from PIL import Image after sensor_msgs.msg.Image, or a node class named like its service. Print the object and type() of it right before the call."}},
+{"@type": "Question", "name": "What does type object module mean?", "acceptedAnswer": {"@type": "Answer", "text": "You passed a module. In my runs this happened with from PIL import Image replacing sensor_msgs.msg.Image, and with from std_msgs import msg. Import the message class, using an alias where names clash."}},
+{"@type": "Question", "name": "How do I check which std_msgs Python is using?", "acceptedAnswer": {"@type": "Answer", "text": "Run python3 -c with import std_msgs.msg as m and print(m.__file__). It should point into your ROS 2 install. If it points into a ROS 1 folder, take ROS 1 out of ~/.bashrc or put the ROS 2 paths first on PYTHONPATH."}},
+{"@type": "Question", "name": "Can I define an action with plain Python classes?", "acceptedAnswer": {"@type": "Answer", "text": "No. A plain class failed in ActionServer on Humble, Jazzy and Lyrical. Write a .action file in an interface package, generate it with rosidl_generate_interfaces, build it with colcon and import the generated class."}}
+]}
+</script>
+
+<p>Measured on 2026-11-08 with <code>ros:humble-ros-base</code> (<code>sha256:d9bcf2e6f72d...</code>, Python 3.10.12, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, example_interfaces 0.9.3, PIL 9.0.1), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Python 3.12.3, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, example_interfaces 0.12.1, PIL 10.2.0) and <code>ros:lyrical-ros-base</code> (<code>sha256:3224ee150cb0...</code>, Python 3.14.4, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, example_interfaces 0.14.1, PIL 12.1.1), default RMW (<code>rmw_fastrtps_cpp</code>). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-09-rclpy-type-support-ros1-message-type/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104015">Make sure to source your ROS 2 workspace after your ROS 1 workspace</a>, <a href="https://robotics.stackexchange.com/questions/99353">Attribute error: type object 'type' has no attribute '_TYPE_SUPPORT'</a>, <a href="https://robotics.stackexchange.com/questions/93665">Error when execute ros2 topic echo with a ROS 1 message</a>, <a href="https://robotics.stackexchange.com/questions/25150">ROS 2 simple action implementation</a>, <a href="https://github.com/aniskoubaa/rosgpt/issues/8">rosgpt: type object 'type' has no attribute '_TYPE_SUPPORT'</a>, <a href="https://github.com/KazuyaOguma18/ROS2-Automato-Robot-Software/issues/2">type object 'module' has no attribute '_TYPE_SUPPORT'</a>.</p>
