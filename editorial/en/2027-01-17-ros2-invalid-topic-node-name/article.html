@@ -1,0 +1,204 @@
+<pre><code>terminate called after throwing an instance of 'rclcpp::exceptions::InvalidTopicNameError'
+  what():  Invalid topic name: topic name token must not start with a number:
+  'livox/192_168_0_155/imu'
+         ^
+
+[ros2run]: Aborted</code></pre>
+
+<p>The Python and node-name versions look like this:</p>
+
+<pre><code>rclpy.exceptions.InvalidTopicNameException: Invalid topic name: topic name must not contain characters other than alphanumerics, '_', '~', '{', or '}':
+  '/cmd-vel'
+       ^
+rclpy.exceptions.InvalidNodeNameException: Invalid node name: node name must not contain characters other than alphanumerics or '_':
+  'my-node'
+     ^</code></pre>
+
+<p>Short answer: ROS 2 checks every node name, namespace, topic and service name when you create it. The caret under the name points at the first character it rejected. Node names may only use letters, digits and <code>_</code>. Topic and service names may also use <code>/</code> between tokens, <code>~/</code> at the start and <code>{node}</code>-style substitutions. No token may start with a digit. Replace dashes, dots and spaces with <code>_</code>, put a letter before any token that starts with a digit, and remove doubled or trailing slashes. For names built at runtime from a hostname, an IP address or a serial number, clean them up first:</p>
+
+<pre><code class="language-python">import re
+
+def ros_token(s):
+    s = re.sub(r'[^A-Za-z0-9_]', '_', s)
+    return 'n' + s if (not s or s[0].isdigit()) else s
+
+def ros_topic(s):
+    toks = [ros_token(t) for t in s.split('/') if t]  # drops empty tokens from //, leading or trailing /
+    return '/'.join(toks) if toks else 'n'
+
+ros_token('ros-pc-01')                 # 'ros_pc_01'
+ros_topic('livox/192_168_0_155/imu')   # 'livox/n192_168_0_155/imu'</code></pre>
+
+<p>Both outputs passed rclpy's validators on Humble, Jazzy and Lyrical. Use any prefix you like instead of <code>n</code>. The only requirement is that the token starts with a letter or <code>_</code>.</p>
+
+<h2>Find your error text</h2>
+
+<p>The message after <code>Invalid topic name:</code>, <code>Invalid node name:</code> or <code>Invalid namespace:</code> names the rule that failed. Each row below behaved the same in rclpy and rclcpp on all three distros.</p>
+
+<table>
+<thead><tr><th>Name that failed</th><th>Message</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Topic <code>cmd-vel</code>, <code>cmd.vel</code>, <code>cmd vel</code>, <code>café</code></td><td><code>topic name must not contain characters other than alphanumerics, '_', '~', '{', or '}'</code></td><td><code>cmd_vel</code></td></tr>
+<tr><td>Topic <code>1cmd</code>, <code>/robot/1/imu</code>, <code>livox/192_168_0_155/imu</code></td><td><code>topic name token must not start with a number</code></td><td><code>robot_1/imu</code>, <code>livox/n192_168_0_155/imu</code></td></tr>
+<tr><td>Topic <code>/a//b</code></td><td><code>topic name must not contain repeated '/'</code></td><td><code>a/b</code></td></tr>
+<tr><td>Topic <code>imu/</code></td><td><code>topic name must not end with a forward slash</code></td><td><code>imu</code></td></tr>
+<tr><td>Topic <code>''</code> (empty)</td><td><code>topic name must not be empty string</code></td><td>Find where the name came from, usually a missing parameter</td></tr>
+<tr><td>Topic <code>~imu</code></td><td><code>topic name must not have a tilde '~' that is not followed by a forward slash '/'</code></td><td><code>~/imu</code></td></tr>
+<tr><td>Topic longer than 247 characters</td><td><code>topic length should not exceed '255U - 8U'</code></td><td>Shorten it</td></tr>
+<tr><td>Node <code>my-node</code>, <code>my.node</code>, <code>my node</code>, <code>ns/node</code>, <code>~node</code>, <code>café</code></td><td><code>node name must not contain characters other than alphanumerics or '_'</code></td><td><code>my_node</code>. Put a namespace in <code>namespace=</code>, not in the name</td></tr>
+<tr><td>Node <code>1node</code></td><td><code>node name must not start with a number</code></td><td><code>n1node</code></td></tr>
+<tr><td>Node <code>''</code></td><td><code>node name must not be empty</code></td><td>Give it a name</td></tr>
+<tr><td>Node name of 256+ characters</td><td><code>node name length should not exceed '255'</code></td><td>Shorten it</td></tr>
+<tr><td>Node name of 221 to 255 characters</td><td><code>Invalid service name: topic length should not exceed '255U - 8U'</code></td><td>Keep node names to 220 characters or fewer</td></tr>
+<tr><td>Namespace <code>/robot-1</code>, <code>/robot.1</code></td><td><code>namespace must not contain characters other than alphanumerics, '_', or '/'</code></td><td><code>/robot_1</code></td></tr>
+<tr><td>Namespace <code>/1robot</code></td><td><code>namespace must not have a token that starts with a number</code></td><td><code>/robot1</code></td></tr>
+<tr><td>Namespace <code>/robot1/</code></td><td><code>namespace must not end with a '/', unless only a '/'</code></td><td><code>/robot1</code></td></tr>
+<tr><td>Namespace <code>//robot1</code></td><td><code>namespace must not contain repeated '/'</code></td><td><code>/robot1</code></td></tr>
+<tr><td>Service <code>reset-odom</code>, <code>/1reset</code></td><td><code>Invalid service name:</code> followed by the topic messages above</td><td>Same rules as topics</td></tr>
+</tbody>
+</table>
+
+<p>The exception class tells you which kind of name failed. In rclpy they are <code>InvalidTopicNameException</code>, <code>InvalidServiceNameException</code>, <code>InvalidNodeNameException</code> and <code>InvalidNamespaceException</code>, all from <code>rclpy.exceptions</code>. In rclcpp they are <code>InvalidTopicNameError</code>, <code>InvalidServiceNameError</code>, <code>InvalidNodeNameError</code> and <code>InvalidNamespaceError</code> from <code>rclcpp::exceptions</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro after another. Each container ran with no network and the hostname <code>robot-pc-01</code>. The script wrote 81 test names to a file. A Python probe and a C++ probe each read the file and tried every name as a node name, a namespace, a publisher topic, a service name or a parameter name, inside try/except. Each probe printed the result or the exception class and message. After that the script ran:</p>
+
+<ul>
+<li>the same <code>livox/192_168_0_155/imu</code> publisher in C++ and Python with no try/except, to time the crash and record the exit code</li>
+<li>a C++ talker started with <code>ros2 run</code> and 10 different <code>-r</code> remaps</li>
+<li><code>ros2 topic pub</code>, <code>ros2 topic echo</code> and <code>ros2 service call</code> with invalid names</li>
+<li>five launch files that pass bad values to <code>name=</code>, <code>namespace=</code> and <code>remappings=</code></li>
+</ul>
+
+<p>The probe results matched on all three distros, apart from file paths and line numbers in the traces. A few of the names that passed are worth knowing:</p>
+
+<table>
+<thead><tr><th>Name</th><th>Kind</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>Cmd_Vel</code>, <code>Talker</code></td><td>topic, node</td><td>accepted, case kept</td></tr>
+<tr><td><code>_imu</code>, <code>imu_</code>, <code>a__b</code></td><td>topic</td><td>accepted</td></tr>
+<tr><td><code>_node</code>, <code>node_</code>, <code>a__b</code></td><td>node</td><td>accepted</td></tr>
+<tr><td><code>/r__1</code>, <code>/robot1/arm</code></td><td>namespace</td><td>accepted</td></tr>
+<tr><td><code>robot1</code> (no leading slash)</td><td>namespace in code</td><td>accepted, became <code>/robot1</code></td></tr>
+<tr><td><code>''</code> and <code>/</code></td><td>namespace</td><td>accepted, node at <code>/probe_ns</code></td></tr>
+<tr><td><code>~/imu</code></td><td>topic</td><td>accepted, became <code>/probe_base/imu</code></td></tr>
+<tr><td><code>{node}/status</code></td><td>topic</td><td>accepted, became <code>/probe_base/status</code></td></tr>
+<tr><td><code>robot_1/imu</code></td><td>topic</td><td>accepted, became <code>/robot_1/imu</code></td></tr>
+<tr><td>A topic of exactly 247 characters</td><td>topic</td><td>accepted. 248 failed</td></tr>
+</tbody>
+</table>
+
+<h2>Topic and service names</h2>
+
+<p>A topic name is split on <code>/</code> into tokens. Every token may only contain letters, digits and <code>_</code>, and it may not start with a digit. The token rule is what catches names built from data. In my run <code>/robot/1/imu</code> failed on the <code>1</code> token, and <code>livox/192_168_0_155/imu</code> failed on the <code>192_168_0_155</code> token. That second name is the one from the Livox driver issue below, where the topic held the lidar's IP address. Gazebo's joint controller topics hit the same rule with a numeric joint index as one of the tokens.</p>
+
+<p>An empty topic name gets its own message, and it usually means the name came from a parameter that was never set. That was the cause in the ZED wrapper issue, where a missing entry in the YAML file left the topic name empty. If you see <code>topic name must not be empty string</code>, print the parameter that holds the topic name before you look at anything else.</p>
+
+<p>A tilde is allowed only as <code>~/</code> at the very start. It expands to the node's own name, so <code>~/imu</code> on node <code>probe_base</code> became <code>/probe_base/imu</code>. ROS 1 style <code>~image_captured</code> without the slash failed, as it did in the MAVROS issue below. Curly braces only take substitutions that rcl knows. <code>{node}/status</code> worked and <code>{bad}/x</code> failed. In Python that last one raised a plain <code>ValueError: topic name '{bad}/x' is invalid: unknown substitution: {bad}</code>. In C++ it raised a <code>std::runtime_error</code> with the confusing text <code>topic name unexpectedly valid</code>.</p>
+
+<p>The length limit is 247 characters for the fully expanded name, including the leading slash and any namespace. The error prints the limit as the expression <code>'255U - 8U'</code> instead of a number. The 8 characters are kept back for the DDS prefix, and 255 minus 8 is 247. A topic of 247 characters was accepted and one of 248 failed on every distro.</p>
+
+<p>Service names follow the topic rules exactly. The message just starts with <code>Invalid service name:</code> and keeps the word "topic" in the rest. <code>reset-odom</code> and <code>/1reset</code> failed with the same texts as topics.</p>
+
+<h2>Node names and namespaces</h2>
+
+<p>Node names are stricter than topic names. Only letters, digits and <code>_</code> are allowed, with no slash and no tilde, and the name can't start with a digit. The usual way to hit this is a name built at runtime. The fkie multi-agent daemon in the list below names its node after the computer, and a hostname such as <code>robot-pc-01</code> contains dashes. In my container with that hostname, <code>socket.gethostname()</code> returned <code>robot-pc-01</code> and failed <code>validate_node_name</code>. The same cleanup turned <code>ros-pc-01</code> into <code>ros_pc_01</code>, which passed. A hostname that starts with a digit would also break the digit rule.</p>
+
+<p>If you want a node inside a namespace, don't put the slash in the name. <code>Node('ns/node')</code> failed. Passing <code>namespace='/robot1'</code> separately worked and gave <code>/robot1/probe_ns</code>.</p>
+
+<p>The node name length limit isn't 255 in practice. Every node creates parameter services named <code>/&lt;node&gt;/set_parameters_atomically</code> and similar, and those names also have to fit in 247 characters. A node name of 220 characters worked. Every length from 221 to 255 failed with an <code>Invalid service name</code> error, not a node name error. The C++ message printed the service that broke the limit, for example <code>.../set_parameters_atomically</code> at 221 characters and <code>.../get_parameters</code> at 255. Only 256 characters and above gave <code>node name length should not exceed '255'</code>. This applies to nodes at the root namespace. A namespace adds to the service name length, so the safe node name length in a namespace is shorter.</p>
+
+<p>Namespaces use the topic character rules without <code>~</code> and <code>{}</code>. <code>/robot-1</code>, <code>/robot.1</code>, <code>/1robot</code>, <code>/robot1/</code> and <code>//robot1</code> all failed.</p>
+
+<h2>Parameter names are not checked the same way</h2>
+
+<p>Parameter names don't go through these checks. <code>declare_parameter</code> accepted <code>max-speed</code>, <code>max.speed</code>, <code>1speed</code>, <code>max speed</code> and <code>a/b</code> in both rclpy and rclcpp on all three distros. Only an empty name failed, with <code>InvalidParameterException</code> in Python and <code>parameter name must not be empty</code> in C++. A dash in a parameter name won't cause this error. A dash in a topic name that you read from that parameter will.</p>
+
+<h2>What the failure looks like in each tool</h2>
+
+<table>
+<thead><tr><th>Where the bad name was</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td>C++ node, exception not caught</td><td><code>terminate called after throwing an instance of 'rclcpp::exceptions::InvalidTopicNameError'</code>, then <code>[ros2run]: Aborted</code>, exit code 250, after 0.33 s (Humble), 0.4 s (Jazzy) and 0.51 s (Lyrical)</td></tr>
+<tr><td>Python node, exception not caught</td><td>Traceback ending in <code>InvalidTopicNameException</code>, exit code 1, after 0.34 to 0.44 s</td></tr>
+<tr><td><code>ros2 topic pub --once /cmd-vel ...</code></td><td><code>InvalidTopicNameException</code> traceback, exit code 1</td></tr>
+<tr><td><code>ros2 service call /reset-odom ...</code></td><td><code>InvalidServiceNameException</code> traceback, exit code 1</td></tr>
+<tr><td><code>ros2 topic echo /cmd-vel std_msgs/msg/String</code></td><td>Humble: <code>ValueError: topic name '/cmd-vel' is invalid: topic name is invalid</code>, no reason given. Jazzy and Lyrical: the same line with the real rule. Exit code 1</td></tr>
+<tr><td>Launch <code>Node(name='my-talker')</code></td><td><code>[ERROR] [launch_ros.actions.node]: Error while expanding or validating node name or namespace for 'package=nameprobe, executable=talker, name=my-talker, namespace=None'</code>, then the node name message. The process never started, and launch exited with 1</td></tr>
+<tr><td>Launch <code>namespace='robot-1'</code> or <code>'1robot'</code></td><td>Same launch error with the namespace message. Not started, exit code 1</td></tr>
+<tr><td>Launch <code>remappings=[('chatter', 'chat-ter')]</code></td><td>The process started and died with <code>Couldn't parse remap rule: '-r chatter:=chat-ter'</code> and <code>process has died [pid ..., exit code -6 ...]</code>. <code>ros2 launch</code> itself exited with 0</td></tr>
+<tr><td><code>ros2 run ... --ros-args -r __node:=my-talker</code>, <code>-r __ns:=/robot-1</code>, <code>-r chatter:=chat-ter</code></td><td><code>[rcl]: Failed to parse global arguments</code> and <code>Couldn't parse remap rule</code>, exit code 250</td></tr>
+</tbody>
+</table>
+
+<p>The C++ abort shows up as exit code 250 under <code>ros2 run</code> and as -6 under <code>ros2 launch</code>. Launch catches bad <code>name=</code> and <code>namespace=</code> values before it starts the process. A bad remap target only fails inside the process, and launch still exits with 0. A CI job that checks only the launch exit code will miss it.</p>
+
+<p>Command-line remaps give a parser error, not the "Invalid topic name" text. In my run <code>-r __ns:=robot1</code> without the leading slash was also rejected, although <code>namespace='robot1'</code> in code was accepted. The parameter-file errors that start with the same <code>Failed to parse global arguments</code> line are covered in <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">"Failed to parse global arguments" and params YAML errors</a>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Result in my run</th><th>Use when</th></tr></thead>
+<tbody>
+<tr><td>Rename by hand (<code>cmd-vel</code> to <code>cmd_vel</code>)</td><td>Accepted everywhere</td><td>The name is a literal in your code, launch file or YAML</td></tr>
+<tr><td><code>ros_token()</code> and <code>ros_topic()</code> above</td><td>All 12 test inputs passed the validators after cleanup, including <code>ros-pc-01</code>, <code>café</code> and <code>/a//b</code></td><td>Names built from hostnames, IPs, serial numbers or user input</td></tr>
+<tr><td>Validate before creating, with <code>rclpy.validate_full_topic_name</code>, <code>validate_node_name</code> and <code>validate_namespace</code></td><td>Raised the same exceptions with the same messages, without creating anything</td><td>You want to reject a configured name early with a clear message</td></tr>
+<tr><td><code>rclpy.validate_topic_name</code></td><td>Said <code>/a//b</code> was valid. <code>validate_full_topic_name</code> and <code>create_publisher</code> both rejected it</td><td>Avoid it for a final check. Use the full variant on the expanded name</td></tr>
+<tr><td>try/except around <code>create_publisher</code> or <code>Node()</code></td><td>Caught every case in both languages. The C++ <code>{bad}</code> case came through as <code>std::runtime_error</code>, not <code>InvalidTopicNameError</code></td><td>Plugins or GUIs where a bad name shouldn't kill the process</td></tr>
+</tbody>
+</table>
+
+<p>Watch for collisions when you sanitize. <code>my-node</code> and <code>my.node</code> both became <code>my_node</code>. If two inputs can map to the same name, add something that keeps them apart.</p>
+
+<h2>Version notes</h2>
+
+<p>The rules, the exception classes, the 247-character topic limit and the 220-character practical node limit were the same on Humble (rcl 5.3.13, rclpy 3.3.22, rclcpp 16.0.21), Jazzy (rcl 9.2.11, rclpy 7.1.12, rclcpp 28.1.22) and Lyrical (rcl 10.4.5, rclpy 10.0.11, rclcpp 32.0.3). Four differences showed up:</p>
+
+<ul>
+<li><code>ros2 topic echo</code> with an invalid name: Humble printed only <code>topic name is invalid</code>. Jazzy and Lyrical printed the rule that failed.</li>
+<li>Jazzy and Lyrical printed <code>RuntimeWarning: Failed to fini rosout publisher: rcl node implementation is invalid</code> once, before the first <code>InvalidNodeNameException</code> in the Python probe. It doesn't change the error. Humble didn't print it.</li>
+<li>The empty parameter name: Humble's message was <code>('Invalid parameter name', '')</code>, while Jazzy and Lyrical printed <code>Invalid parameter name:</code>.</li>
+<li>Line numbers in <code>arguments.c</code> and <code>lexer_lookahead.c</code> changed between distros. The remap error text did not.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Other RMWs. Every run used the default Fast DDS. The 247-character limit comes from rmw and rcl, but I didn't check Cyclone DDS or Zenoh.</li>
+<li>Action names. I didn't create an action server or client with a bad name.</li>
+<li>Names given in a params YAML file and read by a real driver (ZED, Livox, MAVROS). I reproduced their error texts with my own nodes, not with their packages.</li>
+<li>Bridges such as <code>ros_gz_bridge</code> and <code>ros1_bridge</code>, and how they rename topics that break these rules.</li>
+<li>Rolling and Kilted.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Can I use a dash in a ROS 2 topic or node name?</h3>
+<p>No. A dash failed in topic names, service names, node names and namespaces on Humble, Jazzy and Lyrical, in both rclpy and rclcpp. Use an underscore. Dashes were accepted in parameter names, which aren't checked the same way.</p>
+
+<h3>Why does "topic name token must not start with a number" fire on /robot/1/imu?</h3>
+<p>The rule applies to every token between slashes, not only to the first character of the name. The <code>1</code> token broke it. Join the token to the one before it or put a letter first. <code>robot_1/imu</code> and the sanitizer's <code>robot/n1/imu</code> both passed.</p>
+
+<h3>What causes "topic name must not be empty string"?</h3>
+<p>The code passed an empty string as the topic. In driver bug reports this usually comes from a topic-name parameter missing from the YAML file. Print or log that parameter and give it a value.</p>
+
+<h3>What is the maximum length of a ROS 2 topic or node name?</h3>
+<p>The expanded topic name can be 247 characters, which is what the <code>'255U - 8U'</code> message means. A node name in the root namespace failed from 221 characters, because its parameter service names went past 247. 220 worked.</p>
+
+<h3>Does ros2 launch catch an invalid node name before starting the process?</h3>
+<p>For <code>name=</code> and <code>namespace=</code>, yes. Launch printed "Error while expanding or validating node name or namespace" and exited with 1. A bad remap target didn't get that check. The process started, died with exit code -6, and <code>ros2 launch</code> exited with 0.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Can I use a dash in a ROS 2 topic or node name?", "acceptedAnswer": {"@type": "Answer", "text": "No. A dash failed in topic names, service names, node names and namespaces on Humble, Jazzy and Lyrical, in both rclpy and rclcpp. Use an underscore. Dashes were accepted in parameter names, which aren't checked the same way."}},
+{"@type": "Question", "name": "Why does topic name token must not start with a number fire on /robot/1/imu?", "acceptedAnswer": {"@type": "Answer", "text": "The rule applies to every token between slashes, not only to the first character of the name. The 1 token broke it. Join the token to the one before it or put a letter first. robot_1/imu and the sanitizer output robot/n1/imu both passed."}},
+{"@type": "Question", "name": "What causes topic name must not be empty string?", "acceptedAnswer": {"@type": "Answer", "text": "The code passed an empty string as the topic. In driver bug reports this usually comes from a topic-name parameter missing from the YAML file. Print or log that parameter and give it a value."}},
+{"@type": "Question", "name": "What is the maximum length of a ROS 2 topic or node name?", "acceptedAnswer": {"@type": "Answer", "text": "The expanded topic name can be 247 characters, which is what the 255U - 8U message means. A node name in the root namespace failed from 221 characters, because its parameter service names went past 247. 220 worked."}},
+{"@type": "Question", "name": "Does ros2 launch catch an invalid node name before starting the process?", "acceptedAnswer": {"@type": "Answer", "text": "For name= and namespace=, yes. Launch printed Error while expanding or validating node name or namespace and exited with 1. A bad remap target didn't get that check. The process started, died with exit code -6, and ros2 launch exited with 0."}}
+]}
+</script>
+
+<p>Measured on 2026-11-14 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rcl 5.3.13, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, launch_ros 0.19.14, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rcl 9.2.11, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, launch_ros 0.26.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rcl 10.4.5, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, launch_ros 0.29.9, rmw 7.10.2), default RMW (Fast DDS), containers with no network. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-17-ros2-invalid-topic-node-name/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/Livox-SDK/livox_ros_driver2/issues/151">Invalid Topic name with multi_topic=1 (livox_ros_driver2)</a>, <a href="https://github.com/stereolabs/zed-ros2-wrapper/issues/282">Invalid topic name error when launching zed_camera.launch.py</a>, <a href="https://github.com/mavlink/mavros/issues/1683">Invalid topic names (mavros)</a>, <a href="https://github.com/fkie/fkie-multi-agent-suite/issues/3">Computer name contains dash which is not allowed in node names</a>, <a href="https://github.com/gazebosim/gz-sim/issues/447">JointPositionController topic name is not suitable for ROS2 topic name</a>, <a href="https://robotics.stackexchange.com/questions/101357/ros2-topic-name-validation">ROS2 topic name validation</a>.</p>
