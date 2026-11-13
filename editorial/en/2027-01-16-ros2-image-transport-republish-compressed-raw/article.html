@@ -1,0 +1,198 @@
+<pre><code>$ ros2 run image_transport republish --ros-args -p in_transport:=compressed -p out_transport:=raw -r in/compressed:=/cam/compressed -r out:=/image
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=&lt;in_base_topic&gt; [out_transport] out:=&lt;out_base_topic&gt;</code></pre>
+
+<p>On Jazzy and Lyrical the opposite mistake fails without any error. The old positional form starts, logs <code>The 'in_transport' parameter is set to: raw</code>, and publishes nothing on your output topic.</p>
+
+<p>Short answer: Humble's <code>republish</code> reads the transports from positional arguments and ignores the <code>in_transport</code> and <code>out_transport</code> parameters. Jazzy and Lyrical read only the parameters and ignore the positional words. So each distro needs its own command to turn <code>/cam/compressed</code> into a raw <code>/image</code>. Both commands below delivered decoded 640x480 images in my runs:</p>
+
+<pre><code># Humble
+ros2 run image_transport republish compressed raw --ros-args \
+  -r in/compressed:=/cam/compressed -r out:=/image
+
+# Jazzy and Lyrical
+ros2 run image_transport republish --ros-args \
+  -p in_transport:=compressed -p out_transport:=raw \
+  -r in/compressed:=/cam/compressed -r out:=/image</code></pre>
+
+<p>Remap <code>in/compressed</code>, not <code>in</code>. On Humble and Jazzy a remap of the base name <code>in</code> doesn't reach the <code>in/compressed</code> topic, and the node waits on a topic nobody publishes. The decoder also needs the plugin package: <code>sudo apt install ros-$ROS_DISTRO-compressed-image-transport</code>. Without it every distro aborts with <code>TransportLoadException</code>. For a launch file that works on all three, give the node both the positional <code>arguments</code> and the <code>parameters</code>. That layout worked on Humble, Jazzy and Lyrical.</p>
+
+<h2>Find your symptom</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Distro</th><th>Cause</th></tr></thead>
+<tbody>
+<tr><td><code>Usage: .../republish in_transport in:=&lt;in_base_topic&gt; [out_transport] out:=&lt;out_base_topic&gt;</code>, node exits at once (launch says <code>process has finished cleanly</code>)</td><td>Humble</td><td>No positional transport given. <code>-p in_transport:=...</code> doesn't count.</td></tr>
+<tr><td>Node runs, logs <code>The 'in_transport' parameter is set to: raw</code>, output topic stays empty</td><td>Jazzy, Lyrical</td><td>Positional <code>compressed raw</code> ignored. Set the parameters.</td></tr>
+<tr><td><code>terminate called after throwing an instance of 'image_transport::TransportLoadException'</code> ... <code>Unable to load plugin for transport 'image_transport/compressed_sub'</code></td><td>all three</td><td><code>compressed_image_transport</code> not installed</td></tr>
+<tr><td><code>found unknown ROS arguments: 'out/raw:=/image'</code>, <code>[ros2run]: Aborted</code></td><td>all three</td><td>A remap after <code>--ros-args</code> without <code>-r</code> in front</td></tr>
+<tr><td>Node runs, output topic stays empty, no error</td><td>Humble, Jazzy</td><td>Remapped <code>in:=/cam</code> while the input transport is compressed</td></tr>
+<tr><td>Compressed output appears on <code>/out/compressed</code> instead of next to your remapped topic</td><td>Humble, Jazzy</td><td><code>out:=</code> remap isn't applied to <code>out/compressed</code></td></tr>
+<tr><td><code>[ros2run]: Segmentation fault</code> on Ctrl+C, or <code>process has died [pid ..., exit code -11 ...]</code> in launch</td><td>Humble</td><td>Crash at shutdown after it worked. Harmless for the data.</td></tr>
+<tr><td><code>class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap!</code> on Ctrl+C</td><td>Jazzy, Lyrical</td><td>Shutdown noise after it worked</td></tr>
+<tr><td><code>Found remap rule 'in:=/cam'. This syntax is deprecated.</code></td><td>all three</td><td>Remaps written without <code>--ros-args -r</code>. A warning only.</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-13 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro at a time. Each container installed <code>ros-$ROS_DISTRO-image-transport</code> first and <code>ros-$ROS_DISTRO-compressed-image-transport</code> later in the run. DDS traffic stayed inside the container (domain 88, localhost-only discovery).</p>
+
+<p>A small rclpy node published a 640x480 <code>rgb8</code> test pattern on <code>/camera/image_raw</code> at 10 Hz. Python nodes publish plain <code>sensor_msgs/Image</code>, so there was no compressed topic until a <code>republish</code> made one. A second <code>republish</code> made <code>/cam/compressed</code> from it, and each test command then tried to turn <code>/cam/compressed</code> back into raw images on <code>/image</code>. A probe node counted the messages on <code>/image</code> for 5 seconds. Every command got SIGINT after about 12 seconds, so the shutdown messages are part of the output too.</p>
+
+<p>The results for compressed to raw, as messages received on <code>/image</code> in 5 seconds:</p>
+
+<table>
+<thead><tr><th>Command (after <code>ros2 run image_transport republish</code>)</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>compressed in/compressed:=/cam/compressed raw out:=/image</code></td><td>39</td><td>0</td><td>0</td></tr>
+<tr><td><code>compressed raw --ros-args -r in/compressed:=/cam/compressed -r out:=/image</code></td><td>38</td><td>0</td><td>0</td></tr>
+<tr><td><code>compressed in:=/cam raw out:=/image</code></td><td>0</td><td>35 (raw passed through, see below)</td><td>0</td></tr>
+<tr><td><code>compressed in:=/cam/compressed raw out:=/image</code></td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>--ros-args -p in_transport:=compressed -p out_transport:=raw -r in/compressed:=/cam/compressed -r out:=/image</code></td><td>0 (Usage)</td><td>35</td><td>31</td></tr>
+<tr><td><code>--ros-args -p in_transport:=compressed -p out_transport:=raw -r in:=/cam -r out:=/image</code></td><td>0 (Usage)</td><td>0</td><td>49</td></tr>
+<tr><td><code>--ros-args -p in_transport:=compressed -r in/compressed:=/cam/compressed -r out:=/image</code></td><td>0 (Usage)</td><td>51</td><td>49</td></tr>
+<tr><td><code>--ros-args -r in/compressed:=/cam/compressed -r out:=/image</code></td><td>0 (Usage)</td><td>0</td><td>0</td></tr>
+<tr><td><code>--ros-args -r in/compressed:=/cam/compressed out/raw:=/image</code></td><td>unknown ROS arguments</td><td>unknown ROS arguments</td><td>unknown ROS arguments</td></tr>
+</tbody>
+</table>
+
+<p>Every non-zero result delivered 640x480 <code>rgb8</code> images of 921,600 bytes, the same as the source.</p>
+
+<h2>Humble: transports are positional, parameters are ignored</h2>
+
+<p>Humble's <code>republish</code> (image_transport 3.1.13) takes the input transport as its first plain argument and the optional output transport as the second. If the first one is missing, it prints the Usage line and returns. It doesn't look at <code>in_transport</code> or <code>out_transport</code>, so the parameter form from newer docs gets the Usage line every time. That is the situation in two of the questions linked below. The askers had the right parameter names for a newer image_transport. They were running Humble's.</p>
+
+<p>The positional words can go before <code>--ros-args</code>, and the remaps after it with <code>-r</code>. That form gave 38 messages and no deprecation warnings. The older form with <code>in/compressed:=...</code> as a bare argument also worked (39 messages), but rcl printed <code>Found remap rule 'in/compressed:=/cam/compressed'. This syntax is deprecated.</code> for each remap.</p>
+
+<p>On Ctrl+C, every Humble run that had loaded the compressed subscriber ended with <code>[ros2run]: Segmentation fault</code>. Under launch it showed as <code>process has died [pid 4646, exit code -11, ...]</code>. This happened after the images had already been delivered, and a raw-to-raw republish shut down without it. If you see exit code -11 only when you stop the launch, this is the likely source.</p>
+
+<h2>Jazzy and Lyrical: parameters only, positional words ignored</h2>
+
+<p>On Jazzy (image_transport 5.1.8) and Lyrical (6.4.10) <code>republish</code> logs the two parameters at startup:</p>
+
+<pre><code>[INFO] [image_republisher]: The 'in_transport' parameter is set to: compressed
+[INFO] [image_republisher]: The 'out_transport' parameter is set to: raw</code></pre>
+
+<p>With the Humble command, those lines say <code>raw</code> and an empty string. The words <code>compressed raw</code> are dropped without a warning, and the node subscribes to raw images on <code>in</code>. Check those two log lines first. If <code>in_transport</code> says <code>raw</code> when you meant <code>compressed</code>, the node didn't get your setting.</p>
+
+<p>This produced one false success on Jazzy. <code>compressed in:=/cam raw out:=/image</code> delivered 35 images, because the source in that run also published raw images on <code>/cam</code>. The node just copied raw <code>/cam</code> to <code>/image</code>, and nothing was decompressed. On Lyrical, where the source published only the compressed topic, the same command gave 0.</p>
+
+<p>If <code>out_transport</code> is left empty, the node publishes every installed transport on the output. With <code>in_transport:=compressed</code> and no <code>out_transport</code>, <code>/image</code> still got raw images (51 on Jazzy, 49 on Lyrical). Set <code>out_transport:=raw</code> anyway if you only want the raw topic.</p>
+
+<p>On Ctrl+C both distros printed <code>Warning: class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap!</code> for the compressed cases. The process still exited cleanly, and launch reported <code>process has finished cleanly</code>.</p>
+
+<h2>Remap in/compressed, not in</h2>
+
+<p>image_transport builds the real topic name from a base name plus the transport. The compressed subscriber listens on <code>in/compressed</code>. On Humble and Jazzy a remap of <code>in</code> didn't change <code>in/compressed</code>. With <code>in:=/cam</code> and a compressed input, nothing arrived on either distro, and the node gave no error. Remapping <code>in:=/cam/compressed</code> with the compressed input (tested on Humble) also gave 0. The likely reason is that the transport suffix is added after the remap, so the node looks one level too deep. I didn't capture the subscribed topic name to confirm that.</p>
+
+<p>Lyrical behaves differently. There, <code>-r in:=/cam</code> with <code>in_transport:=compressed</code> delivered 49 images, so the base remap carried over to the transport topic. <code>-r in/compressed:=/cam/compressed</code> also worked on Lyrical (31). That makes the <code>in/compressed</code> remap the one form that worked on all three.</p>
+
+<h2>Missing plugin: TransportLoadException</h2>
+
+<p>Before the plugin package was installed, <code>ros2 run image_transport list_transports</code> listed only <code>image_transport/raw</code> on all three distros. Asking for the compressed input then aborted the node:</p>
+
+<pre><code>terminate called after throwing an instance of 'image_transport::TransportLoadException'
+  what():  Unable to load plugin for transport 'image_transport/compressed_sub', error string:
+According to the loaded plugin descriptions the class image_transport/compressed_sub with base class type image_transport::SubscriberPlugin does not exist. Declared types are  image_transport/raw_sub
+[ros2run]: Aborted</code></pre>
+
+<p>On Humble this came from the positional form. On Jazzy and Lyrical it came from <code>-p in_transport:=compressed</code>. The Humble command on Jazzy and Lyrical didn't abort, because the positional words were ignored and the node stayed on raw. Installing <code>ros-$ROS_DISTRO-compressed-image-transport</code> fixed it. <code>list_transports</code> then showed <code>image_transport/compressed</code> as well, with no rebuild or restart of anything else.</p>
+
+<h2>The other direction: raw to compressed, and where the topic lands</h2>
+
+<p>Making a compressed topic from raw images showed a second remap problem. With <code>out:=/cam</code> on Humble and Jazzy, the raw output went to <code>/cam</code> but the compressed output went to <code>/out/compressed</code>. Adding <code>-r out/compressed:=/cam/compressed</code> put it where expected on both. On Lyrical, <code>out:=/cam</code> alone gave <code>/cam/compressed</code>.</p>
+
+<p>The commands that produced <code>/cam/compressed</code>:</p>
+
+<pre><code># Humble (and it also works on Jazzy, where "raw compressed" is ignored and all transports are published)
+ros2 run image_transport republish raw compressed --ros-args \
+  -r in:=/camera/image_raw -r out:=/cam -r out/compressed:=/cam/compressed
+
+# Lyrical
+ros2 run image_transport republish --ros-args \
+  -p in_transport:=raw -p out_transport:=compressed -r in:=/camera/image_raw -r out:=/cam</code></pre>
+
+<p>My test pattern compressed from 921,600 bytes to about 20,200 bytes per frame as <code>format="rgb8; jpeg compressed bgr8"</code>. It is a smooth gradient, which JPEG handles well, so a real camera image will come out larger. Over 10 seconds the raw source and <code>/cam/compressed</code> were received at about the same rate: 79 and 81 messages on Humble, 99 and 101 on Jazzy, 101 and 95 on Lyrical. If you are compressing because of bandwidth, the numbers in <a href="https://huntlab.app/en/gazebo-high-resolution-camera-slow-ros-2-image-bandwidth/">this measurement of camera bandwidth in ROS 2</a> show how much raw images cost.</p>
+
+<h2>Turning off transports you don't want</h2>
+
+<p>A publisher made with image_transport advertises every installed transport. The <code>enable_pub_plugins</code> parameter limits that, but the name it is read under differed by distro. I set it on the raw-to-all <code>republish</code> with <code>-r out:=/cam</code>:</p>
+
+<table>
+<thead><tr><th>Parameter</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>out.enable_pub_plugins:=['image_transport/raw']</code></td><td>raw only</td><td>raw only</td><td>no effect, compressed still published</td></tr>
+<tr><td><code>out.enable_pub_plugins:=['image_transport/compressed']</code></td><td>compressed only (on <code>/out/compressed</code>)</td><td>compressed only (on <code>/out/compressed</code>)</td><td>no effect</td></tr>
+<tr><td><code>cam.enable_pub_plugins:=['image_transport/raw']</code></td><td>no effect</td><td>no effect</td><td>raw only</td></tr>
+</tbody>
+</table>
+
+<p>Humble and Jazzy read the parameter under the name in the code (<code>out</code>). Lyrical read it under the remapped topic name (<code>cam</code>). For your own node that publishes <code>camera/image_raw</code>, that would point to <code>camera.image_raw.enable_pub_plugins</code>, with the slash replaced by a dot. I only tested it on <code>republish</code>, so check the topic list after you set it.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Positional <code>compressed raw</code> plus <code>-r in/compressed:=...</code></td><td>works</td><td>silently stays on raw</td><td>silently stays on raw</td></tr>
+<tr><td><code>-p in_transport:=compressed -p out_transport:=raw</code> plus <code>-r in/compressed:=...</code></td><td>Usage line, exits</td><td>works</td><td>works</td></tr>
+<tr><td>Same parameters with <code>-r in:=/cam</code></td><td>Usage line, exits</td><td>empty output</td><td>works</td></tr>
+<tr><td>Launch file with <code>arguments=['compressed', 'raw']</code> only</td><td>works (39)</td><td>empty output</td><td>empty output</td></tr>
+<tr><td>Launch file with <code>parameters</code> only</td><td>Usage line, <code>process has finished cleanly</code></td><td>works (33)</td><td>works (47)</td></tr>
+<tr><td>Launch file with both</td><td>works (24)</td><td>works (34)</td><td>works (47)</td></tr>
+</tbody>
+</table>
+
+<p>The launch file that worked everywhere:</p>
+
+<pre><code class="language-python">from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([Node(
+        package='image_transport', executable='republish', name='decompress',
+        arguments=['compressed', 'raw'],                          # read by Humble
+        parameters=[{'in_transport': 'compressed',
+                     'out_transport': 'raw'}],                    # read by Jazzy and Lyrical
+        remappings=[('in/compressed', '/cam/compressed'), ('out', '/image')])])</code></pre>
+
+<p>Each distro ignored the half it doesn't use and didn't complain. Under launch, Humble passed the arguments as <code>republish compressed raw --ros-args -r __node:=decompress --params-file ...</code>. I didn't run that combined form directly with <code>ros2 run</code>.</p>
+
+<h2>Version notes</h2>
+
+<p>The split is between Humble and the newer two. Humble's image_transport 3.1.13 reads positional arguments only. Jazzy 5.1.8 and Lyrical 6.4.10 read the parameters only and log them at startup. Lyrical also applies a base-name remap to the transport topics (<code>in:=</code> and <code>out:=</code>). Humble and Jazzy don't, and they read <code>enable_pub_plugins</code> under the code name rather than the remapped one. The <code>TransportLoadException</code> text and the <code>found unknown ROS arguments</code> text were the same on all three. The shutdown crash with exit code -11 happened only on Humble. Jazzy and Lyrical printed the class_loader warning instead.</p>
+
+<h2>Not tested</h2>
+
+<p>The composable <code>image_transport::Republisher</code> component, <code>compressedDepth</code>, <code>theora</code>, <code>zstd</code> and FFmpeg transports, PNG and JPEG quality parameters, real camera drivers, rqt_image_view and RViz with compressed topics, decoding <code>CompressedImage</code> in Python with OpenCV, Iron, Kilted and Rolling, and the combined positional-plus-parameters form under <code>ros2 run</code>.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does republish print "Usage: republish in_transport in:=..." and exit?</h3>
+<p>You are on Humble and didn't pass the transports as positional words. Humble's <code>republish</code> ignores <code>-p in_transport</code> and <code>-p out_transport</code>. Run <code>ros2 run image_transport republish compressed raw --ros-args -r in/compressed:=/your/topic/compressed -r out:=/your/raw_topic</code>.</p>
+
+<h3>republish runs on Jazzy but my raw topic is empty. Why?</h3>
+<p>The positional <code>compressed raw</code> words are ignored on Jazzy and Lyrical. The startup log shows <code>The 'in_transport' parameter is set to: raw</code>. Pass <code>-p in_transport:=compressed -p out_transport:=raw</code> and remap <code>in/compressed</code>.</p>
+
+<h3>How do I decompress a compressed image topic to raw in ROS 2?</h3>
+<p>Install <code>ros-$ROS_DISTRO-compressed-image-transport</code>, then run <code>republish</code> with the input transport set to compressed and the output set to raw, using the form for your distro. Remap <code>in/compressed</code> to your compressed topic and <code>out</code> to the raw topic you want.</p>
+
+<h3>What does "Unable to load plugin for transport 'image_transport/compressed_sub'" mean?</h3>
+<p>The compressed plugin isn't installed, so only the raw transport exists. <code>ros2 run image_transport list_transports</code> shows which ones are available. Installing <code>ros-$ROS_DISTRO-compressed-image-transport</code> fixed it on Humble, Jazzy and Lyrical.</p>
+
+<h3>How do I write a republish launch file that works on Humble and Jazzy?</h3>
+<p>Give the <code>Node</code> both <code>arguments=['compressed', 'raw']</code> and <code>parameters=[{'in_transport': 'compressed', 'out_transport': 'raw'}]</code>, plus remappings for <code>in/compressed</code> and <code>out</code>. Humble used the arguments, Jazzy and Lyrical used the parameters, and all three delivered raw images.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does republish print Usage: republish in_transport in:= and exit?", "acceptedAnswer": {"@type": "Answer", "text": "You are on Humble and didn't pass the transports as positional words. Humble's republish ignores -p in_transport and -p out_transport. Run ros2 run image_transport republish compressed raw --ros-args -r in/compressed:=/your/topic/compressed -r out:=/your/raw_topic."}},
+{"@type": "Question", "name": "republish runs on Jazzy but my raw topic is empty. Why?", "acceptedAnswer": {"@type": "Answer", "text": "The positional compressed raw words are ignored on Jazzy and Lyrical. The startup log shows The 'in_transport' parameter is set to: raw. Pass -p in_transport:=compressed -p out_transport:=raw and remap in/compressed."}},
+{"@type": "Question", "name": "How do I decompress a compressed image topic to raw in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "Install ros-$ROS_DISTRO-compressed-image-transport, then run republish with the input transport set to compressed and the output set to raw, using the form for your distro. Remap in/compressed to your compressed topic and out to the raw topic you want."}},
+{"@type": "Question", "name": "What does Unable to load plugin for transport 'image_transport/compressed_sub' mean?", "acceptedAnswer": {"@type": "Answer", "text": "The compressed plugin isn't installed, so only the raw transport exists. ros2 run image_transport list_transports shows which ones are available. Installing ros-$ROS_DISTRO-compressed-image-transport fixed it on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "How do I write a republish launch file that works on Humble and Jazzy?", "acceptedAnswer": {"@type": "Answer", "text": "Give the Node both arguments=['compressed', 'raw'] and parameters=[{'in_transport': 'compressed', 'out_transport': 'raw'}], plus remappings for in/compressed and out. Humble used the arguments, Jazzy and Lyrical used the parameters, and all three delivered raw images."}}
+]}
+</script>
+
+<p>Measured on 2026-11-13 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, image_transport 3.1.13, compressed_image_transport 2.5.5, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, image_transport 5.1.8, compressed_image_transport 4.0.7, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, image_transport 6.4.10, compressed_image_transport 6.2.6, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-16-ros2-image-transport-republish-compressed-raw/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/110939">How do I remap compressed video to raw video in ROS2?</a>, <a href="https://robotics.stackexchange.com/questions/110962">Is this a bug in ros2 command line processing?</a>, <a href="https://robotics.stackexchange.com/questions/110941">How do I republish compressed video as raw from a launch file in ROS2?</a>, <a href="https://robotics.stackexchange.com/questions/99197">How to decompress compressed image topic?</a>, <a href="https://robotics.stackexchange.com/questions/105653">How to deactivate image_transport plugins in ros2?</a>.</p>

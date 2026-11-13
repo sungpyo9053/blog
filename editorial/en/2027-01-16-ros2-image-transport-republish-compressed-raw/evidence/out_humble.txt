@@ -1,0 +1,399 @@
+=== distro humble domain 88 localhost_only=1 range=
+apt image_transport exit=0
+dpkg-query: no packages found matching ros-humble-compressed-image-transport
+ros-humble-image-transport 3.1.13-1jammy.20260907.224758
+ros-humble-rclcpp 16.0.21-1jammy.20260907.213403
+ros-humble-rclpy 3.3.22-1jammy.20260907.213431
+ros-humble-rmw-fastrtps-cpp 6.2.10-1jammy.20260907.210327
+ros-humble-ros2cli 0.18.20-1jammy.20260907.215122
+PROBE /camera/image_raw (raw): 24 messages in 3 s, first: 640x480 rgb8 bytes=921600
+
+=== list_transports, compressed plugin NOT installed
+Declared transports:
+image_transport/raw
+
+Details:
+----------
+"image_transport/raw"
+ - Provided by package: image_transport
+ - Publisher: 
+      This is the default publisher. It publishes the Image as-is on the base topic.
+    
+ - Subscriber: 
+      This is the default pass-through subscriber for topics of type sensor_msgs/Image.
+    
+
+=== PHASE A: only image_transport installed
+
+### CASE A1-raw-in-positional
+$ ros2 run image_transport republish raw in:=/camera/image_raw raw out:=/image
+PROBE /image (raw): 40 messages in 5 s, first: 640x480 rgb8 bytes=921600
+topics: 
+still running after probe: yes
+--- output (first 8 lines)
+[WARN] [1794556474.078769447] [rcl]: Found remap rule 'in:=/camera/image_raw'. This syntax is deprecated. Use '--ros-args --remap in:=/camera/image_raw' instead.
+[WARN] [1794556474.078834022] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556486.086961029] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+--- last lines:
+[WARN] [1794556474.078769447] [rcl]: Found remap rule 'in:=/camera/image_raw'. This syntax is deprecated. Use '--ros-args --remap in:=/camera/image_raw' instead.
+[WARN] [1794556474.078834022] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556486.086961029] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+
+### CASE A2-compressed-in-no-plugin-positional
+$ ros2 run image_transport republish compressed in/compressed:=/cam/compressed raw out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: 
+still running after probe: no
+--- output (first 8 lines)
+[WARN] [1794556490.367646069] [rcl]: Found remap rule 'in/compressed:=/cam/compressed'. This syntax is deprecated. Use '--ros-args --remap in/compressed:=/cam/compressed' instead.
+[WARN] [1794556490.367705143] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+terminate called after throwing an instance of 'image_transport::TransportLoadException'
+  what():  Unable to load plugin for transport 'image_transport/compressed_sub', error string:
+According to the loaded plugin descriptions the class image_transport/compressed_sub with base class type image_transport::SubscriberPlugin does not exist. Declared types are  image_transport/raw_sub
+[ros2run]: Aborted
+--- last lines:
+  what():  Unable to load plugin for transport 'image_transport/compressed_sub', error string:
+According to the loaded plugin descriptions the class image_transport/compressed_sub with base class type image_transport::SubscriberPlugin does not exist. Declared types are  image_transport/raw_sub
+[ros2run]: Aborted
+
+### CASE A3-compressed-in-no-plugin-params
+$ ros2 run image_transport republish --ros-args -p in_transport:=compressed -p out_transport:=raw -r in/compressed:=/cam/compressed -r out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: 
+still running after probe: no
+--- output (first 8 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+--- last lines:
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### SOURCE A-src-raw-to-all-positional
+$ ros2 run image_transport republish raw in:=/camera/image_raw out:=/cam
+topics: /cam /camera/image_raw 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 14 messages in 3 s, first: 640x480 rgb8 bytes=921600
+still running: yes
+--- source output (first 5 lines)
+[WARN] [1794556522.128941742] [rcl]: Found remap rule 'in:=/camera/image_raw'. This syntax is deprecated. Use '--ros-args --remap in:=/camera/image_raw' instead.
+[WARN] [1794556522.129006989] [rcl]: Found remap rule 'out:=/cam'. This syntax is deprecated. Use '--ros-args --remap out:=/cam' instead.
+
+=== install compressed_image_transport
+apt compressed exit=0
+ros-humble-compressed-image-transport 2.5.5-1jammy.20260908.002726
+Declared transports:
+image_transport/compressed
+image_transport/raw
+
+Details:
+----------
+"image_transport/compressed"
+ - Provided by package: compressed_image_transport
+ - Publisher: 
+      This plugin publishes a CompressedImage using either JPEG or PNG compression.
+    
+ - Subscriber: 
+      This plugin decompresses a CompressedImage topic.
+    
+----------
+"image_transport/raw"
+ - Provided by package: image_transport
+ - Publisher: 
+      This is the default publisher. It publishes the Image as-is on the base topic.
+    
+ - Subscriber: 
+      This is the default pass-through subscriber for topics of type sensor_msgs/Image.
+    
+
+=== PHASE B: sources (raw -> compressed)
+
+### SOURCE B1-src-positional-all
+$ ros2 run image_transport republish raw in:=/camera/image_raw out:=/cam
+topics: /cam /camera/image_raw /out/compressed 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 13 messages in 3 s, first: format="rgb8; jpeg compressed bgr8" bytes=20165
+PROBE /cam (raw): 24 messages in 3 s, first: 640x480 rgb8 bytes=921600
+still running: yes
+--- source output (first 5 lines)
+[WARN] [1794556624.931253187] [rcl]: Found remap rule 'in:=/camera/image_raw'. This syntax is deprecated. Use '--ros-args --remap in:=/camera/image_raw' instead.
+[WARN] [1794556624.931316768] [rcl]: Found remap rule 'out:=/cam'. This syntax is deprecated. Use '--ros-args --remap out:=/cam' instead.
+
+### SOURCE B2-src-params-no-out-transport
+$ ros2 run image_transport republish --ros-args -p in_transport:=raw -r in:=/camera/image_raw -r out:=/cam
+topics: /camera/image_raw 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 0 messages in 3 s
+still running: no
+--- source output (first 5 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### SOURCE B3-src-positional-raw-compressed
+$ ros2 run image_transport republish raw compressed --ros-args -r in:=/camera/image_raw -r out:=/cam
+topics: /camera/image_raw /out/compressed 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 22 messages in 3 s, first: format="rgb8; jpeg compressed bgr8" bytes=20323
+PROBE /cam (raw): 0 messages in 3 s
+still running: yes
+--- source output (first 5 lines)
+
+### SOURCE B4-src-positional-plus-out-compressed-remap
+$ ros2 run image_transport republish raw compressed --ros-args -r in:=/camera/image_raw -r out:=/cam -r out/compressed:=/cam/compressed
+topics: 
+PROBE /cam/compressed (compressed): 33 messages in 4 s, first: format="rgb8; jpeg compressed bgr8" bytes=20328
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 0 messages in 3 s
+still running: yes
+--- source output (first 5 lines)
+
+### SOURCE B5-src-params-out-compressed
+$ ros2 run image_transport republish --ros-args -p in_transport:=raw -p out_transport:=compressed -r in:=/camera/image_raw -r out:=/cam
+topics: /camera/image_raw 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 0 messages in 3 s
+still running: no
+--- source output (first 5 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### SOURCE B6-src-positional-plus-remap-kept
+$ ros2 run image_transport republish raw compressed --ros-args -r in:=/camera/image_raw -r out:=/cam -r out/compressed:=/cam/compressed
+topics: /cam/compressed /camera/image_raw 
+PROBE /cam/compressed (compressed): 9 messages in 4 s, first: format="rgb8; jpeg compressed bgr8" bytes=20261
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 0 messages in 3 s
+still running: yes
+--- source output (first 5 lines)
+compressed source for phase C: SRC_OK=1
+
+=== PHASE C: compressed -> raw on /image, source publishing /cam/compressed
+
+### CASE C1-positional-in-compressed-remap
+$ ros2 run image_transport republish compressed in/compressed:=/cam/compressed raw out:=/image
+PROBE /image (raw): 39 messages in 5 s, first: 640x480 rgb8 bytes=921600
+topics: /cam/compressed /image 
+still running after probe: yes
+--- output (first 8 lines)
+[WARN] [1794556754.222916490] [rcl]: Found remap rule 'in/compressed:=/cam/compressed'. This syntax is deprecated. Use '--ros-args --remap in/compressed:=/cam/compressed' instead.
+[WARN] [1794556754.222977110] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556765.990767274] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+--- last lines:
+[WARN] [1794556754.222977110] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556765.990767274] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+
+### CASE C2-positional-in-base
+$ ros2 run image_transport republish compressed in:=/cam raw out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: /cam/compressed 
+still running after probe: yes
+--- output (first 8 lines)
+[WARN] [1794556770.270296550] [rcl]: Found remap rule 'in:=/cam'. This syntax is deprecated. Use '--ros-args --remap in:=/cam' instead.
+[WARN] [1794556770.270357063] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556781.893886752] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+--- last lines:
+[WARN] [1794556770.270357063] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556781.893886752] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+
+### CASE C3-positional-in-full-compressed-topic
+$ ros2 run image_transport republish compressed in:=/cam/compressed raw out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: 
+still running after probe: yes
+--- output (first 8 lines)
+[WARN] [1794556786.173358551] [rcl]: Found remap rule 'in:=/cam/compressed'. This syntax is deprecated. Use '--ros-args --remap in:=/cam/compressed' instead.
+[WARN] [1794556786.173416244] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556797.789209148] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+--- last lines:
+[WARN] [1794556786.173416244] [rcl]: Found remap rule 'out:=/image'. This syntax is deprecated. Use '--ros-args --remap out:=/image' instead.
+[INFO] [1794556797.789209148] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+
+### CASE C4-positional-transports-ros-args-remaps
+$ ros2 run image_transport republish compressed raw --ros-args -r in/compressed:=/cam/compressed -r out:=/image
+PROBE /image (raw): 38 messages in 5 s, first: 640x480 rgb8 bytes=921600
+topics: /cam/compressed /image 
+still running after probe: yes
+--- output (first 8 lines)
+[INFO] [1794556813.795941589] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+--- last lines:
+[INFO] [1794556813.795941589] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2run]: Segmentation fault
+
+### CASE C5-params-in-compressed-remap
+$ ros2 run image_transport republish --ros-args -p in_transport:=compressed -p out_transport:=raw -r in/compressed:=/cam/compressed -r out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: /cam/compressed 
+still running after probe: no
+--- output (first 8 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+--- last lines:
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### CASE C6-params-in-base
+$ ros2 run image_transport republish --ros-args -p in_transport:=compressed -p out_transport:=raw -r in:=/cam -r out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: /cam/compressed 
+still running after probe: no
+--- output (first 8 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+--- last lines:
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### CASE C7-remaps-only-no-transports
+$ ros2 run image_transport republish --ros-args -r in/compressed:=/cam/compressed -r out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: /cam/compressed 
+still running after probe: no
+--- output (first 8 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+--- last lines:
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### CASE C8-params-out-raw-unset
+$ ros2 run image_transport republish --ros-args -p in_transport:=compressed -r in/compressed:=/cam/compressed -r out:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: /cam/compressed 
+still running after probe: no
+--- output (first 8 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+--- last lines:
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### CASE C9-unknown-ros-arg
+$ ros2 run image_transport republish --ros-args -r in/compressed:=/cam/compressed out/raw:=/image
+PROBE /image (raw): 0 messages in 5 s
+topics: 
+still running after probe: no
+--- output (first 8 lines)
+terminate called after throwing an instance of 'rclcpp::exceptions::UnknownROSArgsError'
+  what():  found unknown ROS arguments: 'out/raw:=/image'
+[ros2run]: Aborted
+--- last lines:
+terminate called after throwing an instance of 'rclcpp::exceptions::UnknownROSArgsError'
+  what():  found unknown ROS arguments: 'out/raw:=/image'
+[ros2run]: Aborted
+
+=== PHASE D: launch files
+
+### CASE D1-launch-arguments
+$ ros2 launch /y/launch_args.py
+PROBE /image (raw): 39 messages in 5 s, first: 640x480 rgb8 bytes=921600
+topics: 
+still running after probe: yes
+--- output (first 8 lines)
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-13-08-01-39-819561-649b7bc3c042-4644
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [republish-1]: process started with pid [4646]
+[republish-1] [INFO] [1794556911.197943380] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ERROR] [republish-1]: process has died [pid 4646, exit code -11, cmd '/opt/ros/humble/lib/image_transport/republish compressed raw --ros-args -r __node:=decompress -r in/compressed:=/cam/compressed -r out:=/image'].
+--- last lines:
+[INFO] [republish-1]: process started with pid [4646]
+[republish-1] [INFO] [1794556911.197943380] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ERROR] [republish-1]: process has died [pid 4646, exit code -11, cmd '/opt/ros/humble/lib/image_transport/republish compressed raw --ros-args -r __node:=decompress -r in/compressed:=/cam/compressed -r out:=/image'].
+
+### CASE D2-launch-parameters
+$ ros2 launch /y/launch_params.py
+PROBE /image (raw): 0 messages in 5 s
+topics: /cam/compressed 
+still running after probe: no
+--- output (first 8 lines)
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-13-08-01-55-696253-649b7bc3c042-4694
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [republish-1]: process started with pid [4696]
+[INFO] [republish-1]: process has finished cleanly [pid 4696]
+--- last lines:
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [republish-1]: process started with pid [4696]
+[INFO] [republish-1]: process has finished cleanly [pid 4696]
+
+### CASE D3-launch-arguments-and-parameters
+$ ros2 launch /y/launch_both.py
+PROBE /image (raw): 24 messages in 5 s, first: 640x480 rgb8 bytes=921600
+topics: /cam/compressed /image 
+still running after probe: yes
+--- output (first 8 lines)
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-13-08-02-11-570678-649b7bc3c042-4734
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [republish-1]: process started with pid [4736]
+[republish-1] [INFO] [1794556943.008934001] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ERROR] [republish-1]: process has died [pid 4736, exit code -11, cmd '/opt/ros/humble/lib/image_transport/republish compressed raw --ros-args -r __node:=decompress --params-file /tmp/launch_params_vkfduhrf -r in/compressed:=/cam/compressed -r out:=/image'].
+--- last lines:
+[INFO] [republish-1]: process started with pid [4736]
+[republish-1] [INFO] [1794556943.008934001] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ERROR] [republish-1]: process has died [pid 4736, exit code -11, cmd '/opt/ros/humble/lib/image_transport/republish compressed raw --ros-args -r __node:=decompress --params-file /tmp/launch_params_vkfduhrf -r in/compressed:=/cam/compressed -r out:=/image'].
+
+=== PHASE E: rate and size with the phase C source still running
+PROBE /camera/image_raw (raw): 79 messages in 10 s, first: 640x480 rgb8 bytes=921600
+PROBE /cam/compressed (compressed): 81 messages in 10 s, first: format="rgb8; jpeg compressed bgr8" bytes=20315
+
+=== PHASE F: limiting published transports (raw -> all)
+
+### SOURCE F out.enable_pub_plugins:=['image_transport/raw']
+$ ros2 run image_transport republish --ros-args -p in_transport:=raw -r in:=/camera/image_raw -r out:=/cam -p out.enable_pub_plugins:=['image_transport/raw']
+topics: /camera/image_raw 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 0 messages in 3 s
+still running: no
+--- source output (first 5 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### SOURCE F-positional out.enable_pub_plugins:=['image_transport/raw']
+$ ros2 run image_transport republish raw in:=/camera/image_raw out:=/cam --ros-args -p out.enable_pub_plugins:=['image_transport/raw']
+topics: /cam /camera/image_raw 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 16 messages in 3 s, first: 640x480 rgb8 bytes=921600
+still running: yes
+--- source output (first 5 lines)
+[WARN] [1794556994.473095752] [rcl]: Found remap rule 'in:=/camera/image_raw'. This syntax is deprecated. Use '--ros-args --remap in:=/camera/image_raw' instead.
+[WARN] [1794556994.473152728] [rcl]: Found remap rule 'out:=/cam'. This syntax is deprecated. Use '--ros-args --remap out:=/cam' instead.
+
+### SOURCE F cam.enable_pub_plugins:=['image_transport/raw']
+$ ros2 run image_transport republish --ros-args -p in_transport:=raw -r in:=/camera/image_raw -r out:=/cam -p cam.enable_pub_plugins:=['image_transport/raw']
+topics: 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 0 messages in 3 s
+still running: no
+--- source output (first 5 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### SOURCE F-positional cam.enable_pub_plugins:=['image_transport/raw']
+$ ros2 run image_transport republish raw in:=/camera/image_raw out:=/cam --ros-args -p cam.enable_pub_plugins:=['image_transport/raw']
+topics: /camera/image_raw 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 24 messages in 3 s, first: format="rgb8; jpeg compressed bgr8" bytes=20233
+PROBE /cam (raw): 24 messages in 3 s, first: 640x480 rgb8 bytes=921600
+still running: yes
+--- source output (first 5 lines)
+[WARN] [1794557038.512141921] [rcl]: Found remap rule 'in:=/camera/image_raw'. This syntax is deprecated. Use '--ros-args --remap in:=/camera/image_raw' instead.
+[WARN] [1794557038.512199259] [rcl]: Found remap rule 'out:=/cam'. This syntax is deprecated. Use '--ros-args --remap out:=/cam' instead.
+
+### SOURCE F out.enable_pub_plugins:=['image_transport/compressed']
+$ ros2 run image_transport republish --ros-args -p in_transport:=raw -r in:=/camera/image_raw -r out:=/cam -p out.enable_pub_plugins:=['image_transport/compressed']
+topics: /camera/image_raw 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 0 messages in 3 s
+PROBE /cam (raw): 0 messages in 3 s
+still running: no
+--- source output (first 5 lines)
+Usage: /opt/ros/humble/lib/image_transport/republish in_transport in:=<in_base_topic> [out_transport] out:=<out_base_topic>
+
+### SOURCE F-positional out.enable_pub_plugins:=['image_transport/compressed']
+$ ros2 run image_transport republish raw in:=/camera/image_raw out:=/cam --ros-args -p out.enable_pub_plugins:=['image_transport/compressed']
+topics: /camera/image_raw /out/compressed 
+PROBE /cam/compressed (compressed): 0 messages in 4 s
+PROBE /out/compressed (compressed): 25 messages in 3 s, first: format="rgb8; jpeg compressed bgr8" bytes=20294
+PROBE /cam (raw): 0 messages in 3 s
+still running: yes
+--- source output (first 5 lines)
+[WARN] [1794557082.659906563] [rcl]: Found remap rule 'in:=/camera/image_raw'. This syntax is deprecated. Use '--ros-args --remap in:=/camera/image_raw' instead.
+[WARN] [1794557082.659964275] [rcl]: Found remap rule 'out:=/cam'. This syntax is deprecated. Use '--ros-args --remap out:=/cam' instead.
+=== core files: 0
+=== done 2026-11-13T08:05:06Z
