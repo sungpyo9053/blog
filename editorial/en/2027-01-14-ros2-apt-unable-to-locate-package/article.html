@@ -1,0 +1,201 @@
+<pre><code>$ apt-get install -s ros-humble-joint-state-publisher-gui
+Building dependency tree...
+Reading state information...
+E: Unable to locate package ros-humble-joint-state-publisher-gui</code></pre>
+
+<p>The same line shows up for any ROS 2 package: <code>ros-jazzy-desktop</code>, <code>ros-humble-joint-state-publisher-gui</code>, <code>ros-humble-gazebo-ros2-control</code> during <code>rosdep install</code>, <code>ros-kilted-ros-base</code> on a new Ubuntu. apt exits with code 100 and installs nothing.</p>
+
+<p>Short answer: apt only knows the names in the package lists it downloaded during the last <code>apt-get update</code>. "Unable to locate" means the name isn't in any of them. Check four things, in this order:</p>
+
+<pre><code># 1. Is the ROS 2 repository configured?
+ls /etc/apt/sources.list.d/        # look for ros2.sources (or ros2.list)
+
+# 2. Did you update after adding it?
+sudo apt-get update                # the output must contain a packages.ros.org line
+
+# 3. Does this Ubuntu release carry this ROS distro?
+. /etc/os-release; echo $VERSION_CODENAME   # jammy = Humble, noble = Jazzy/Kilted, resolute = Lyrical
+apt-cache pkgnames ros- | cut -d- -f2 | sort | uniq -c | sort -rn | head -5
+
+# 4. Is the name spelled the way apt spells it?
+apt-cache search --names-only joint.state.publisher</code></pre>
+
+<p>If all four look right, the package may simply not exist for your distro or your CPU. Gazebo Classic packages are gone from Jazzy and Lyrical, and they were never built for arm64 on Humble. I measured each of these causes in the official Humble, Jazzy and Lyrical Docker images and in a plain <code>ubuntu:22.04</code> container.</p>
+
+<h2>Find your cause</h2>
+
+<table>
+<thead><tr><th>Situation</th><th>What apt printed</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Fresh container or machine, no <code>apt-get update</code> yet (0 index files)</td><td><code>E: Unable to locate package ros-humble-joint-state-publisher-gui</code></td><td><code>sudo apt-get update</code></td></tr>
+<tr><td>Plain Ubuntu 22.04, ROS 2 repository never added</td><td><code>E: Unable to locate package ros-humble-ros-base</code></td><td>Install <code>ros2-apt-source</code>, then update</td></tr>
+<tr><td>Repository added, but no update since</td><td>Same error</td><td><code>sudo apt-get update</code></td></tr>
+<tr><td>Humble on Ubuntu 20.04 (focal)</td><td><code>E: Unable to locate package ros-humble-ros-base</code></td><td>Ubuntu 22.04 for Humble, or Docker</td></tr>
+<tr><td>Humble on Ubuntu 24.04 (noble) or 26.04</td><td><code>E: Unable to locate package ros-humble-desktop</code></td><td>Jazzy on 24.04, Lyrical on 26.04, or Docker</td></tr>
+<tr><td>Kilted or Jazzy on Ubuntu 26.04 (resolute)</td><td><code>ros-kilted-ros-base</code> and <code>ros-jazzy-ros-base</code> missing</td><td>Lyrical on 26.04, or Ubuntu 24.04</td></tr>
+<tr><td>Underscores in the name</td><td><code>E: Unable to locate package ros-humble-joint_state_publisher_gui</code></td><td>Dashes: <code>ros-humble-joint-state-publisher-gui</code></td></tr>
+<tr><td>One bad name in a multi-package command</td><td><code>E: Unable to locate package ros-humble-not-a-package</code>, and the two valid packages weren't installed either</td><td>Fix or remove that one name</td></tr>
+<tr><td>Gazebo Classic package on Jazzy or Lyrical</td><td><code>E: Unable to locate package ros-jazzy-gazebo-ros2-control</code></td><td><code>ros-jazzy-gz-ros2-control</code>, <code>ros-jazzy-ros-gz</code></td></tr>
+<tr><td><code>ros-jazzy-gazebo-ros-pkgs</code></td><td><code>E: Package 'ros-jazzy-gazebo-ros-pkgs' has no installation candidate</code></td><td>Same: use the <code>gz</code> packages</td></tr>
+<tr><td>Gazebo Classic package on Humble arm64 (Raspberry Pi, Jetson)</td><td>Not in the arm64 index at all</td><td><code>ros-humble-ros-gz</code>, or build from source</td></tr>
+<tr><td>32-bit Raspberry Pi OS or Ubuntu (armhf)</td><td>No ROS 2 packages in the jammy, noble or resolute armhf index</td><td>A 64-bit OS</td></tr>
+<tr><td><code>universe</code> disabled</td><td>Not "Unable to locate". <code>Depends: python3-pytest but it is not installable</code> and similar lines</td><td><code>sudo add-apt-repository universe</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-13 I used the official <code>ros:humble-ros-base</code> (Ubuntu 22.04), <code>ros:jazzy-ros-base</code> (24.04) and <code>ros:lyrical-ros-base</code> (26.04) images and <code>ubuntu:22.04</code>, all amd64. Every test used <code>apt-get install -s</code>, which resolves the full dependency set and prints the result without installing anything. "Inst lines" below counts the packages apt would have installed. On each distro I ran:</p>
+
+<ul>
+<li>A fresh container with no <code>apt-get update</code>, then one with it.</li>
+<li>The right name, the same name with underscores, and three names in one command where one doesn't exist.</li>
+<li><code>ros-&lt;X&gt;-ros-base</code> for Foxy, Humble, Iron, Jazzy, Kilted, Lyrical and Rolling, to see which distros each Ubuntu release carries.</li>
+<li>Gazebo Classic packages (<code>gazebo-ros-pkgs</code>, <code>gazebo-ros2-control</code>, <code>gazebo-ros</code>) and their replacements (<code>ros-gz</code>, <code>gz-ros2-control</code>).</li>
+</ul>
+
+<p>In <code>ubuntu:22.04</code> I tried installing with no ROS repository, added it with <code>ros2-apt-source</code> 1.3.0, switched the repository to the focal suite (what a 20.04 machine gets), and removed <code>universe</code>. I also downloaded the packages.ros.org ROS 2 index for focal, jammy, noble and resolute on amd64, arm64 and armhf, and counted the packages per distro. The containers had network access for apt but started no ROS nodes, and they ran with <code>ROS_DOMAIN_ID=88</code> and localhost-only discovery set anyway.</p>
+
+<table>
+<thead><tr><th>Check</th><th>Humble (22.04)</th><th>Jazzy (24.04)</th><th>Lyrical (26.04)</th></tr></thead>
+<tbody>
+<tr><td>Index files in a fresh image</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td><code>joint-state-publisher-gui</code> before update</td><td>Unable to locate</td><td>Unable to locate</td><td>Unable to locate</td></tr>
+<tr><td><code>apt-get update</code> time</td><td>7.3 s</td><td>5.9 s</td><td>6.7 s</td></tr>
+<tr><td>Same package after update</td><td>works, 154 Inst lines</td><td>works, 164</td><td>works, 201</td></tr>
+<tr><td>Underscore spelling</td><td>Unable to locate</td><td>Unable to locate</td><td>Unable to locate</td></tr>
+<tr><td>Other ROS distros in the index</td><td>Iron, Rolling</td><td>Kilted, Rolling</td><td>none</td></tr>
+<tr><td><code>gazebo-ros2-control</code></td><td>works, 690 Inst lines</td><td>Unable to locate</td><td>Unable to locate</td></tr>
+<tr><td><code>gazebo-ros-pkgs</code></td><td>works, 746 Inst lines</td><td>has no installation candidate</td><td>Unable to locate</td></tr>
+<tr><td><code>ros-gz</code>, <code>gz-ros2-control</code></td><td>available</td><td>available</td><td>available</td></tr>
+</tbody>
+</table>
+
+<h2>Cause 1: no apt-get update, or no ROS repository</h2>
+
+<p>The official ROS images ship with the ROS 2 repository configured (<code>/etc/apt/sources.list.d/ros2.sources</code>) but with no package lists. All three images had 0 index files under <code>/var/lib/apt/lists</code>. So in a fresh container even a correct name fails, and one <code>apt-get update</code> (under 8 seconds here) fixes it. This is the usual cause in Dockerfiles: put <code>apt-get update</code> in the same <code>RUN</code> line as the install.</p>
+
+<p>On plain Ubuntu the ROS repository isn't there at all. <code>ubuntu:22.04</code> after a normal <code>apt-get update</code> still said <code>Unable to locate package ros-humble-ros-base</code>, because Ubuntu's own archive has no <code>ros-humble-*</code> packages. The current install guides add the repository with the <code>ros2-apt-source</code> package. I fetched the latest release tag from GitHub, which was 1.3.0:</p>
+
+<pre><code>sudo apt-get update
+sudo apt-get install -y curl
+export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
+curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release &amp;&amp; echo $VERSION_CODENAME)_all.deb"
+sudo dpkg -i /tmp/ros2-apt-source.deb
+sudo apt-get update
+sudo apt-get install ros-humble-ros-base</code></pre>
+
+<p>Installing the .deb isn't enough by itself. Right after <code>dpkg -i</code>, before the update, I got the same <code>Unable to locate package ros-humble-ros-base</code>. After <code>apt-get update</code> printed <code>Get:1 http://packages.ros.org/ros2/ubuntu jammy InRelease</code>, the simulated install resolved 439 packages. That <code>packages.ros.org</code> line is what to look for. If your update output has no such line, or has an error on it, apt never got the ROS list, and every <code>ros-*</code> name will fail. One of the questions below (<a href="https://robotics.stackexchange.com/questions/116862">116862</a>) has exactly that: <code>The repository 'http://packages.ros.org/ros2/ubuntu noble InRelease' is not signed</code> before the "Unable to locate" error. That case is the expired signing key, which I measured separately in <a href="https://huntlab.app/en/ros-2-expkeysig-f42ed6fbab17c654-apt-update-fix-ros2-apt-source/">the EXPKEYSIG F42ED6FBAB17C654 fix</a>.</p>
+
+<h2>Cause 2: this Ubuntu release doesn't carry that ROS distro</h2>
+
+<p>Each ROS 2 distro is built for specific Ubuntu releases, and the repository keeps a separate index per release. The ROS 2 sources file uses your Ubuntu codename as the suite, so a 20.04 machine downloads the focal index, and the focal index has no Humble in it. These are the counts of <code>ros-&lt;distro&gt;-</code> packages I found in each amd64 index on 2026-11-13 (distros with more than 20 packages):</p>
+
+<table>
+<thead><tr><th>Ubuntu</th><th>Codename</th><th>ROS 2 distros in the index</th></tr></thead>
+<tbody>
+<tr><td>20.04</td><td>focal</td><td>Foxy 1777, Galactic 1588, Rolling 1148</td></tr>
+<tr><td>22.04</td><td>jammy</td><td>Humble 3786, Iron 2164, Rolling 1738</td></tr>
+<tr><td>24.04</td><td>noble</td><td>Jazzy 3961, Kilted 2861, Rolling 2150</td></tr>
+<tr><td>26.04</td><td>resolute</td><td>Lyrical 2684</td></tr>
+</tbody>
+</table>
+
+<p>I reproduced the 20.04 case by pointing the working jammy setup at the focal suite. The update succeeded (<code>Get:1 http://packages.ros.org/ros2/ubuntu focal InRelease</code>), and <code>ros-humble-ros-base</code> went straight back to "Unable to locate". Nothing in the update output warns you. In the Jazzy image, <code>ros-humble-desktop</code> failed the same way, and in the Lyrical image so did <code>ros-humble-desktop</code>, <code>ros-jazzy-ros-base</code> and <code>ros-kilted-ros-base</code>. That matches the Kilted on 26.04 question below. Of the four indexes I checked, Kilted was only in noble.</p>
+
+<p>The fix is to match the distro to the OS: Humble on 22.04, Jazzy or Kilted on 24.04, Lyrical on 26.04. If you need an older distro on a newer OS, run it in the matching <code>ros:&lt;distro&gt;</code> Docker image. Before you change anything, run this to see which distros your index actually has:</p>
+
+<pre><code>apt-cache pkgnames ros- | cut -d- -f2 | sort | uniq -c | sort -rn | head -5</code></pre>
+
+<p>On 22.04 this also lists a few names like <code>ros-desktop</code> and <code>ros-base</code> with no distro in them, and <code>apt-cache search</code> showed <code>joint-state-publisher-gui</code> without the <code>ros-humble-</code> prefix. They aren't Humble packages. Keep the full <code>ros-humble-</code> prefix.</p>
+
+<h2>Cause 3: the name is spelled the ROS way, not the apt way</h2>
+
+<p>ROS package names use underscores (<code>joint_state_publisher_gui</code>). Debian package names can't, so the apt name swaps every underscore for a dash and adds <code>ros-&lt;distro&gt;-</code> in front. <code>ros-humble-joint_state_publisher_gui</code> failed on all three distros, and the dashed name worked. If you're not sure of the name, search with a dot in place of the separator, since <code>apt-cache search</code> takes a regular expression:</p>
+
+<pre><code>$ apt-cache search --names-only joint.state.publisher
+ros-humble-joint-state-publisher - This package contains a tool for setting and publishing joint state values for a given URDF.
+ros-humble-joint-state-publisher-gui - This package contains a GUI tool for setting and publishing joint state values for a given URDF.
+...</code></pre>
+
+<p>One bad name blocks the whole command. <code>apt-get install -s ros-humble-joint-state-publisher-gui ros-humble-xacro ros-humble-not-a-package</code> exited with code 100 and 0 Inst lines, even though two of the three names were fine. The error names only the bad package. <code>rosdep install</code> passes the apt names to <code>apt-get install</code>, so one missing name there ends in <code>apt: command [...] failed</code>, as in the Raspberry Pi question below.</p>
+
+<h2>Cause 4: the package isn't built for your distro or your CPU</h2>
+
+<p>Here the repository, the update and the spelling can all be right. Gazebo Classic (<code>gazebo-ros-pkgs</code>, <code>gazebo-ros2-control</code>, <code>gazebo-ros</code>) was available for Humble on amd64 and missing everywhere else I looked. On Jazzy, <code>ros-jazzy-gazebo-ros2-control</code> and <code>ros-jazzy-gazebo-ros</code> gave "Unable to locate". <code>ros-jazzy-gazebo-ros-pkgs</code> gave a different message:</p>
+
+<pre><code>Package ros-jazzy-gazebo-ros-pkgs is not available, but is referred to by another package.
+This may mean that the package is missing, has been obsoleted, or
+is only available from another source
+E: Package 'ros-jazzy-gazebo-ros-pkgs' has no installation candidate</code></pre>
+
+<p>apt knows that name only because another package in the index still lists it as a dependency. <code>apt-cache showpkg</code> named <code>ros-jazzy-dolly-gazebo</code>. On Lyrical all three were "Unable to locate". The replacements, <code>ros-&lt;distro&gt;-ros-gz</code> and <code>ros-&lt;distro&gt;-gz-ros2-control</code>, were available on all three distros.</p>
+
+<p>The arm64 indexes are nearly as large as amd64 (jammy: 3679 Humble packages vs 3786), but they aren't identical. On jammy arm64, <code>ros-humble-gazebo-ros2-control</code> and <code>ros-humble-gazebo-ros-pkgs</code> are absent, while <code>ros-base</code>, <code>desktop</code>, <code>rviz2</code>, <code>ros-gz</code> and <code>joint-state-publisher-gui</code> are there. That explains the Raspberry Pi 4 <code>rosdep</code> failure below. A GUI package like <code>joint-state-publisher-gui</code> was present on arm64 for Humble, Jazzy, Kilted and Lyrical, so on a 64-bit Pi an "Unable to locate" for it points back to causes 1 to 3. The armhf indexes for jammy, noble and resolute had no ROS 2 packages at all. Focal armhf had only 23 Foxy packages. On a 32-bit OS, install a 64-bit one.</p>
+
+<p>To check a package for another architecture without that machine, download the index and search it. This is what my script did:</p>
+
+<pre><code>curl -s http://packages.ros.org/ros2/ubuntu/dists/jammy/main/binary-arm64/Packages.gz | gunzip | grep -c "^Package: ros-humble-gazebo-ros2-control$"</code></pre>
+
+<h2>Not this error: universe disabled</h2>
+
+<p>The install guides tell you to enable Ubuntu's <code>universe</code> component. With the ROS repository working and <code>universe</code> removed, <code>ros-humble-ros-base</code> was found, but apt couldn't resolve it:</p>
+
+<pre><code> ros-humble-ament-cmake-pytest : Depends: python3-pytest but it is not installable
+ ros-humble-ament-flake8 : Depends: python3-flake8 but it is not installable
+ ros-humble-class-loader : Depends: libconsole-bridge1.0 (&gt;= 1.0.1+dfsg2) but it is not installable</code></pre>
+
+<p>If you see "but it is not installable" for ordinary Ubuntu packages, the ROS side is fine. Run <code>sudo add-apt-repository universe</code> and update.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Fixes</th><th>Doesn't fix</th></tr></thead>
+<tbody>
+<tr><td><code>sudo apt-get update</code></td><td>Fresh Docker images (0 index files), a repository added but not updated</td><td>No ROS repository, wrong Ubuntu release, misspelled or unbuilt packages</td></tr>
+<tr><td>Install <code>ros2-apt-source</code>, then update</td><td>Plain Ubuntu with no ROS repository (439 packages resolved after)</td><td>A distro your Ubuntu release doesn't carry</td></tr>
+<tr><td>Match distro to Ubuntu, or use a <code>ros:&lt;distro&gt;</code> image</td><td>Humble on 20.04 or 24.04, Kilted or Jazzy on 26.04</td><td>Packages that weren't built for that distro</td></tr>
+<tr><td>Dashes and the <code>ros-&lt;distro&gt;-</code> prefix; <code>apt-cache search --names-only</code></td><td>Underscores, guessed names</td><td>Missing packages</td></tr>
+<tr><td>Switch to <code>ros-gz</code> / <code>gz-ros2-control</code></td><td>Gazebo Classic names on Jazzy, Lyrical and Humble arm64</td><td>Code that depends on the Classic plugins (needs porting)</td></tr>
+<tr><td>Build from source</td><td>Packages not released for your distro or arch</td><td>Packages whose dependencies don't exist there either (not tested)</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The message was the same on all three images: <code>E: Unable to locate package &lt;name&gt;</code> from <code>apt-get</code>, exit code 100. That held on apt 2.4.15 (Humble image), 2.8.3 (Jazzy) and 3.2.1 (Lyrical). The Kilted on 26.04 question below quotes <code>Error: Unable to locate package</code>, from the <code>apt</code> front end rather than <code>apt-get</code>. I only ran <code>apt-get</code>. The Ubuntu 24.04 and 26.04 images have an <code>/etc/apt/sources.list.d/ubuntu.sources</code> file next to <code>ros2.sources</code>, so on those releases check that file for <code>universe</code>. The Lyrical index on resolute had only Lyrical in it, with no Rolling packages, on the day I checked. The package counts are a snapshot of 2026-11-13 and change with every sync.</p>
+
+<h2>Not tested</h2>
+
+<p>The <code>apt</code> front end (I used <code>apt-get</code>), real arm64 hardware (I only read the arm64 indexes), the ROS 2 testing repository, snapshot repositories, mirrors and proxies, Debian, WSL, RHEL and other non-Ubuntu systems, building from source, and the <code>universe</code> test on 24.04 and 26.04.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does apt say "Unable to locate package ros-humble-desktop" on Ubuntu 20.04 or 24.04?</h3>
+<p>Humble packages are only in the Ubuntu 22.04 (jammy) index. The focal index had Foxy, Galactic and Rolling, and the noble index had Jazzy, Kilted and Rolling. On 20.04 or 24.04 the name doesn't exist. Use Jazzy on 24.04, or run Humble in the <code>ros:humble</code> Docker image.</p>
+
+<h3>I added the ROS 2 repository and still get Unable to locate package. Why?</h3>
+<p>Run <code>sudo apt-get update</code> after adding it, and check that the output has a <code>packages.ros.org</code> line without errors. Right after installing <code>ros2-apt-source</code> the install still failed. It worked only after the update downloaded the jammy index.</p>
+
+<h3>Why does apt-get install fail in a fresh ros:humble Docker container?</h3>
+<p>The official images have the repository configured but no package lists: 0 index files on Humble, Jazzy and Lyrical. Run <code>apt-get update</code> in the same <code>RUN</code> line as the install.</p>
+
+<h3>How do I install gazebo_ros2_control on Jazzy or on a Raspberry Pi?</h3>
+<p>You can't from apt. <code>ros-jazzy-gazebo-ros2-control</code> doesn't exist, and on Humble the arm64 index has no Gazebo Classic packages. Use <code>ros-&lt;distro&gt;-gz-ros2-control</code> and <code>ros-&lt;distro&gt;-ros-gz</code> with the new Gazebo. Both were available on amd64 for all three distros, and <code>ros-gz</code> was in every arm64 index I checked.</p>
+
+<h3>Do I use underscores or dashes in ROS 2 apt package names?</h3>
+<p>Dashes, with <code>ros-&lt;distro&gt;-</code> in front: <code>ros-humble-joint-state-publisher-gui</code>. The underscore version failed on all three distros. <code>apt-cache search --names-only joint.state.publisher</code> lists the real names.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does apt say Unable to locate package ros-humble-desktop on Ubuntu 20.04 or 24.04?", "acceptedAnswer": {"@type": "Answer", "text": "Humble packages are only in the Ubuntu 22.04 (jammy) index. The focal index had Foxy, Galactic and Rolling, and the noble index had Jazzy, Kilted and Rolling. On 20.04 or 24.04 the name doesn't exist. Use Jazzy on 24.04, or run Humble in the ros:humble Docker image."}},
+{"@type": "Question", "name": "I added the ROS 2 repository and still get Unable to locate package. Why?", "acceptedAnswer": {"@type": "Answer", "text": "Run sudo apt-get update after adding it, and check that the output has a packages.ros.org line without errors. Right after installing ros2-apt-source the install still failed. It worked only after the update downloaded the jammy index."}},
+{"@type": "Question", "name": "Why does apt-get install fail in a fresh ros:humble Docker container?", "acceptedAnswer": {"@type": "Answer", "text": "The official images have the repository configured but no package lists: 0 index files on Humble, Jazzy and Lyrical. Run apt-get update in the same RUN line as the install."}},
+{"@type": "Question", "name": "How do I install gazebo_ros2_control on Jazzy or on a Raspberry Pi?", "acceptedAnswer": {"@type": "Answer", "text": "You can't from apt. ros-jazzy-gazebo-ros2-control doesn't exist, and on Humble the arm64 index has no Gazebo Classic packages. Use the gz-ros2-control and ros-gz packages for your distro with the new Gazebo. Both were available on amd64 for all three distros, and ros-gz was in every arm64 index I checked."}},
+{"@type": "Question", "name": "Do I use underscores or dashes in ROS 2 apt package names?", "acceptedAnswer": {"@type": "Answer", "text": "Dashes, with ros-DISTRO- in front: ros-humble-joint-state-publisher-gui. The underscore version failed on all three distros. apt-cache search --names-only joint.state.publisher lists the real names."}}
+]}
+</script>
+
+<p>Measured on 2026-11-13 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, Ubuntu 22.04, apt 2.4.15, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, Ubuntu 24.04, apt 2.8.3, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4), <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, Ubuntu 26.04, apt 3.2.1, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2) and <code>ubuntu:22.04</code> (<code>sha256:5ec03bb3441e...</code>) with <code>ros2-apt-source</code> 1.3.0, on amd64. Package counts come from the packages.ros.org ROS 2 indexes on the same day. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-14-ros2-apt-unable-to-locate-package/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104460">unable to locate package ros-humble-desktop ubuntu 20.04</a>, <a href="https://robotics.stackexchange.com/questions/116862">E: Unable to locate package ros-jazzy-desktop</a>, <a href="https://robotics.stackexchange.com/questions/110534">E: Unable to locate package ros-humble-gazebo-ros2-control on a Raspberry Pi 4</a>, <a href="https://robotics.stackexchange.com/questions/110416">Unable to locate package ros-humble-joint-state-publisher-gui</a>, <a href="https://robotics.stackexchange.com/questions/118355">Cannot install Kilted on Ubuntu 26.04 LTS, Unable to locate package ros-kilted-ros-base</a>.</p>
