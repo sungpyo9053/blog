@@ -1,0 +1,185 @@
+<pre><code>rclpy.exceptions.ParameterUninitializedException: The parameter 'name' is not initialized
+
+terminate called after throwing an instance of 'rclcpp::exceptions::UninitializedStaticallyTypedParameterException'
+  what():  Statically typed parameter 'name' must be initialized.
+[ros2run]: Aborted</code></pre>
+
+<p>In Nav2 and other lifecycle nodes the same problem shows up during configure, wrapped in the lifecycle log:</p>
+
+<pre><code>[ERROR] [map_server]: Caught exception in callback for transition 10
+[ERROR] [map_server]: Original error: parameter 'yaml_filename' is not initialized
+[WARN] [map_server]: Callback returned ERROR during the transition: configure</code></pre>
+
+<p>Short answer: the node declared a parameter with a type but no default value, and nothing supplied a value at startup. ROS 2 lets you declare a parameter that way, but reading it, or in C++ even declaring it with the template form, throws until a value arrives. Give it a value that actually reaches this node:</p>
+
+<pre><code>ros2 run my_pkg my_node --ros-args -p name:=hello
+ros2 run my_pkg my_node --ros-args --params-file params.yaml   # top-level key must be this node's full name, or /**</code></pre>
+
+<p>If you passed a params file and still get the error, the file almost certainly didn't match the node. In my runs a wrong top-level key, a namespace the key didn't include, a node renamed with <code>__node</code>, and a <code>--params-file</code> placed without <code>--ros-args</code> all loaded silently and then produced exactly this exception. If the value is optional, declare it with a default instead (<code>declare_parameter('name', 'default')</code>), or read it with <code>get_parameter_or</code>.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every row below came from a run on Humble, Jazzy and Lyrical. The parameter is a string called <code>name</code>, and no override was given unless the row says so.</p>
+
+<table>
+<thead><tr><th>What the code did</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td>rclpy: <code>declare_parameter('name', Parameter.Type.STRING)</code>, then <code>get_parameter('name')</code></td><td>Declare succeeds. <code>get_parameter</code> raises <code>ParameterUninitializedException: The parameter 'name' is not initialized</code> (Jazzy and Lyrical append <code>: name</code>)</td></tr>
+<tr><td>rclpy: same, <code>get_parameters(['name'])</code></td><td>Same exception</td></tr>
+<tr><td>rclpy: same, <code>get_parameter_or('name', Parameter('name', value='fallback'))</code></td><td>Returns <code>'fallback'</code>, no exception</td></tr>
+<tr><td>rclcpp: <code>declare_parameter&lt;std::string&gt;("name")</code></td><td>The declare call throws <code>UninitializedStaticallyTypedParameterException: Statically typed parameter 'name' must be initialized.</code> Uncaught, the process aborts (<code>ros2 run</code> exit code 250)</td></tr>
+<tr><td>rclcpp: <code>declare_parameter("name", rclcpp::PARAMETER_STRING)</code></td><td>Declare succeeds and returns a "not set" value. <code>get_parameter("name")</code> then throws <code>ParameterUninitializedException: parameter 'name' is not initialized</code></td></tr>
+<tr><td>rclcpp: <code>get_parameter("name", out)</code> on the unset parameter</td><td>Returns <code>false</code>, leaves <code>out</code> unchanged, no exception</td></tr>
+<tr><td>rclcpp: <code>get_parameter_or&lt;std::string&gt;("name", out, "fallback")</code></td><td>Returns <code>false</code>, <code>out</code> is <code>fallback</code></td></tr>
+<tr><td>rclcpp: declared with <code>dynamic_typing = true</code> and an empty <code>ParameterValue{}</code>, then <code>.as_string()</code></td><td>No uninitialized error. <code>as_string()</code> throws <code>ParameterTypeException: expected [string] got [not set]</code></td></tr>
+<tr><td><code>nav2_map_server</code> configured with no <code>yaml_filename</code></td><td>Humble and Jazzy: <code>Original error: parameter 'yaml_filename' is not initialized</code>, <code>Transitioning failed</code>, node stays <code>unconfigured</code>. Lyrical: configure succeeds (see below)</td></tr>
+</tbody>
+</table>
+
+<p>One detail matters for C++. After <code>declare_parameter&lt;std::string&gt;("name")</code> threw and I caught the exception, <code>has_parameter("name")</code> still returned <code>true</code>, and <code>get_parameter("name")</code> threw the "is not initialized" exception. So catching the declare error and carrying on doesn't give you a usable parameter. It leaves a declared one with no value.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-13 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro after another, with <code>ROS_DOMAIN_ID=88</code> and localhost-only discovery. The script runs a small rclpy node and a small rclcpp node, both of which declare a string parameter <code>name</code> in different ways. It then tries each getter and prints the result or the exception class and message. I started the rclpy node 17 times and the rclcpp node 15 times, with different declare forms, overrides and params files. Then I checked what the <code>ros2 param</code> CLI shows for an unset parameter on a running node. Last, I installed <code>nav2_map_server</code> and asked it to configure with and without <code>yaml_filename</code>.</p>
+
+<p>The startup inputs and their results, the same on all three distros. Rows marked (py) ran only with the rclpy node. The rest gave the same result in both languages:</p>
+
+<table>
+<thead><tr><th>Startup input</th><th>Result for the typed, no-default parameter</th></tr></thead>
+<tbody>
+<tr><td>Nothing</td><td>not initialized</td></tr>
+<tr><td><code>--ros-args -p name:=hello</code></td><td>value <code>hello</code></td></tr>
+<tr><td>(py) <code>--ros-args -p "name:=''"</code></td><td>value is an empty string, no error</td></tr>
+<tr><td>YAML <code>/pnode:</code> (the node's name), <code>name: hello</code></td><td>value <code>hello</code></td></tr>
+<tr><td>YAML <code>name: ""</code> under <code>/**:</code></td><td>value is an empty string, no error</td></tr>
+<tr><td>YAML key <code>/my_node:</code> (not the node's name)</td><td>no error at load, then not initialized</td></tr>
+<tr><td>Node started in <code>/robot1</code> (<code>-r __ns:=/robot1</code>), YAML key <code>/pnode:</code></td><td>not initialized</td></tr>
+<tr><td>(py) Node renamed (<code>-r __node:=renamed</code>), YAML key <code>/pnode:</code></td><td>not initialized</td></tr>
+<tr><td>(py) <code>--params-file good.yaml</code> with no <code>--ros-args</code> before it</td><td>not initialized</td></tr>
+<tr><td>YAML <code>name: ~</code>, and (py) <code>name: null</code></td><td>no error. The value became the strings <code>~</code> and <code>null</code></td></tr>
+<tr><td><code>--ros-args -p name:=5</code></td><td><code>InvalidParameterTypeException</code> at declare, and the parameter was left undeclared</td></tr>
+</tbody>
+</table>
+
+<h2>Cause 1: nothing gave the parameter a value</h2>
+
+<p>This is the plain case. Code like this is common when a value has no sensible default, such as a map file, a serial port or a robot name:</p>
+
+<pre><code class="language-python">self.declare_parameter('name', Parameter.Type.STRING)   # type, no default
+value = self.get_parameter('name').value                 # raises if nothing set it</code></pre>
+
+<pre><code class="language-cpp">auto value = declare_parameter&lt;std::string&gt;("name");     // throws here if nothing set it</code></pre>
+
+<p>Since Galactic, parameters are statically typed by default. A typed parameter with no value is allowed to exist, but reading it is treated as an error rather than handing you <code>None</code> or an empty string. That is the point of the exception. The code author wanted the value supplied from outside and made a missing value fail loudly. The rclcpp docs say <code>UninitializedStaticallyTypedParameterException</code> is "Thrown if user attempts to create an uninitialized statically typed parameter" (<a href="https://docs.ros.org/en/humble/p/rclcpp/generated/classrclcpp_1_1exceptions_1_1UninitializedStaticallyTypedParameterException.html">API reference</a>). The <a href="https://docs.ros.org/en/humble/p/rclcpp/doc/notes_on_statically_typed_parameters.html">notes on statically typed parameters</a> cover the design.</p>
+
+<p>The two C++ forms behave differently, and that changes where you see the error. The template form, <code>declare_parameter&lt;std::string&gt;("name")</code>, throws inside the declare call, usually in a constructor. Uncaught, that aborts the process before it spins. The enum form, <code>declare_parameter("name", rclcpp::PARAMETER_STRING)</code>, declares without complaint. The error comes later, from whichever <code>get_parameter</code> call reads it first. Nav2's <code>map_server</code> reads in <code>on_configure</code>, which is why its message appears as "Original error" during the configure transition and not at startup. In rclpy only the read throws, and the declare call always succeeds.</p>
+
+<p>The fix is to supply the value. <code>-p name:=hello</code> after <code>--ros-args</code> worked in every run, and so did a params file whose key matched.</p>
+
+<h2>Cause 2: a params file that loaded but didn't match the node</h2>
+
+<p>This is the cause behind most reports, because people pass a file and assume it applied. rcl doesn't warn when a params file contains no entry for the node that loads it. In my runs, each of these loaded with no message and then hit the "is not initialized" error:</p>
+
+<ul>
+<li>The top-level key was a different name (<code>/my_node:</code> for a node called <code>pnode</code>).</li>
+<li>The node ran in a namespace (<code>/robot1</code>) and the key had only the bare name (<code>/pnode:</code>). Multi-robot launch files that push a namespace hit exactly this.</li>
+<li>The node was renamed at launch (<code>-r __node:=renamed</code>) and the key still had the original name.</li>
+<li>The <code>--params-file</code> came without <code>--ros-args</code> in front of it, so rcl never parsed it.</li>
+</ul>
+
+<p>The same happened with Nav2. A file with a <code>/map_server:</code> key configured the map server fine. The same file with the server started in <code>/robot1</code> gave <code>Original error: parameter 'yaml_filename' is not initialized</code> on Humble and Jazzy. The key has to be <code>/robot1/map_server:</code>, or <code>/**:</code> if you want it to match any name. The node name and wildcard rules are covered in my <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">params YAML errors post</a>.</p>
+
+<p>To see which name your node really has, run <code>ros2 node list</code> while it is up, and use that string as the YAML key.</p>
+
+<h2>Cause 3: a wrong type, which looks similar but isn't</h2>
+
+<p>With <code>-p name:=5</code> for a string parameter, the declare call itself failed with <code>InvalidParameterTypeException: Trying to set parameter 'name' to '5' of type 'INTEGER', expecting type 'STRING'</code> in rclpy. In rclcpp it said <code>Wrong parameter type, parameter {name} is of type {string}, setting it to {integer} is not allowed.</code> The parameter was then not declared at all: <code>has_parameter</code> returned false and later reads raised <code>ParameterNotDeclaredException</code>. If your log shows "not declared" or "invalid type" and not "not initialized", you're on this path. Quote the value in YAML (<code>name: "5"</code>) or fix the type in the code.</p>
+
+<h2>Empty strings, ~ and null</h2>
+
+<p>An empty string is a value. YAML <code>name: ""</code> initialized the parameter with no error in rclpy and rclcpp, and <code>-p "name:=''"</code> did the same in rclpy. You can use that if your node treats empty as "not configured". Nav2's map server does: with <code>yaml_filename:=''</code> it configured on all three distros and logged <code>yaml-filename parameter is empty, set map through 'load_map'-service</code>.</p>
+
+<p>You can't unset a typed string parameter from YAML. <code>name: ~</code> and <code>name: null</code> didn't leave it unset or empty. The rclpy node received the literal strings <code>~</code> and <code>null</code>, with no error, on all three distros. The rclcpp node got <code>~</code> as a string as well, also when it was declared with dynamic typing. If a launch file writes <code>null</code> to mean "nothing", your node gets four characters.</p>
+
+<h2>What the ros2 param CLI shows for an unset parameter</h2>
+
+<p>I left an rclpy node spinning with the unset string <code>name</code> plus a normal double <code>rate: 10.0</code>, and queried it:</p>
+
+<table>
+<thead><tr><th>Command</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 param list /pnode</code></td><td>lists <code>name</code></td><td>lists <code>name</code></td><td>lists <code>name</code></td></tr>
+<tr><td><code>ros2 param get /pnode name</code></td><td><code>Parameter not set</code>, exit 1</td><td><code>Parameter not set</code>, exit 1</td><td><code>Parameter(s) 'name' not available on node</code>, exit 1</td></tr>
+<tr><td><code>ros2 param describe /pnode name</code></td><td><code>Type: string</code></td><td><code>Type: string</code></td><td><code>Type: string</code></td></tr>
+<tr><td><code>ros2 param dump /pnode</code></td><td><code>name: '# Parameter not set'</code> plus the other parameters</td><td><code>ros__parameters: {}</code></td><td><code>ros__parameters: {}</code></td></tr>
+<tr><td><code>ros2 param set /pnode name hello</code>, then get</td><td><code>String value is: hello</code></td><td>same</td><td>same</td></tr>
+</tbody>
+</table>
+
+<p>The dump row is the trap. On Jazzy and Lyrical one unset parameter made the whole dump come back empty, so <code>rate</code> and <code>use_sim_time</code> disappeared from it too. Each failed query also made the node log <code>[WARN] ... Failed to get parameters: The parameter 'name' is not initialized</code>. If <code>ros2 param dump</code> returns <code>{}</code> for a node you know has parameters, check for an unset one with <code>ros2 param get</code>. For the C++ map server, <code>ros2 param get /map_server yaml_filename</code> printed <code>Parameter not set.</code> on Humble and <code>Parameter not set</code> on Jazzy.</p>
+
+<p><code>ros2 param set</code> on a running node fixed a plain node every time. A lifecycle node like the map server reads the value in configure, so set it before you trigger configure.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>What it does</th><th>When to use it</th></tr></thead>
+<tbody>
+<tr><td>Pass the value: <code>-p</code>, a matching params file, or <code>parameters=[...]</code> in launch</td><td>The parameter starts initialized. Worked in every run</td><td>The value is required, which is what the code author intended</td></tr>
+<tr><td>Fix the YAML key: full name with namespace, or <code>/**:</code></td><td>Makes an existing file apply to this node</td><td>You passed a file and still get the error</td></tr>
+<tr><td>Declare with a default: <code>declare_parameter('name', 'default')</code></td><td>Never uninitialized, and the type is fixed by the default</td><td>You own the code and a default makes sense</td></tr>
+<tr><td>Default of <code>''</code>, and treat empty as "not configured"</td><td>Same as above, with an explicit empty state</td><td>The value is optional and has no natural default</td></tr>
+<tr><td>Read with <code>get_parameter_or</code> (rclpy, rclcpp) or the bool <code>get_parameter(name, out)</code> (rclcpp)</td><td>Returned the fallback or <code>false</code>, no exception</td><td>Keep the typed declaration but handle a missing value yourself</td></tr>
+<tr><td><code>dynamic_typing=True</code> with no value</td><td>No uninitialized error. rclpy returned <code>None</code>, rclcpp's <code>as_string()</code> threw <code>ParameterTypeException</code></td><td>Rarely. You lose the type check and move the error somewhere else</td></tr>
+<tr><td>Catch the C++ declare exception and continue</td><td>The parameter stays declared with no value, and reads still throw</td><td>Only if you then exit or give a clear message</td></tr>
+</tbody>
+</table>
+
+<p>For Nav2, set <code>yaml_filename</code> in the map server's params. Don't patch the code. In launch files built on <code>nav2_bringup</code> that means passing the <code>map</code> argument, which ends up as <code>yaml_filename</code>. I didn't run the full bringup launch, only <code>map_server</code> on its own.</p>
+
+<h2>Version notes</h2>
+
+<p>The rclcpp behavior was identical on Humble, Jazzy and Lyrical. That covers the exception classes, the messages and exit code 250 for an uncaught declare. The differences were in rclpy, the CLI and Nav2:</p>
+
+<ul>
+<li>rclpy on Jazzy and Lyrical appends the name to the message: <code>The parameter 'name' is not initialized: name</code>. Humble stops after <code>initialized</code>. Search for the part before the colon.</li>
+<li><code>declare_parameter('name')</code> with no default and no type: on Humble and Jazzy it printed a <code>UserWarning</code> that this form "is deprecated" and declared a parameter whose <code>get_parameter('name').value</code> was <code>None</code>, with no exception. On Lyrical the same call raised <code>TypeError: ... declaring a parameter only providing its name is not allowed</code> and nothing was declared. <code>declare_parameter('name', None)</code> behaved the same way. Code that relied on this form breaks on Lyrical.</li>
+<li><code>ros2 param get</code> wording changed on Lyrical, and <code>ros2 param dump</code> drops everything on Jazzy and Lyrical (table above).</li>
+<li><code>nav2_map_server</code> 1.1.20 (Humble) and 1.3.13 (Jazzy) failed configure without <code>yaml_filename</code>. 1.5.2 (Lyrical) configured, logged <code>yaml-filename parameter is empty, set map through 'load_map'-service</code>, and <code>ros2 param get</code> showed an empty string. On Lyrical a missing map no longer stops the map server, so look for that line if the map never appears.</li>
+<li>On Jazzy the first <code>ros2 param list /pnode</code>, 6 seconds after the node started, printed <code>Node not found</code>. An immediate retry worked. That is discovery timing, not the parameter.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>The full Nav2 bringup launch, the collision monitor's <code>observation_sources</code>, other Nav2 servers, component containers, <code>generate_parameter_library</code>, <code>ros2 param load</code>, launch-file <code>parameters=[...]</code> dictionaries, array and byte-array types, timing of any kind, Foxy, Iron, Kilted and Rolling, and RMWs other than the default Fast DDS.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "The parameter is not initialized" mean in ROS 2?</h3>
+<p>The node declared the parameter with a type but no default, and no value was supplied at startup, so reading it raised <code>ParameterUninitializedException</code>. Supply it with <code>--ros-args -p name:=value</code> or a params file whose key matches the node's full name.</p>
+
+<h3>What is "Statically typed parameter must be initialized" in rclcpp?</h3>
+<p>It is <code>UninitializedStaticallyTypedParameterException</code>. <code>declare_parameter&lt;T&gt;("name")</code> throws it when no override exists. Uncaught, the node aborts and <code>ros2 run</code> exits with code 250. Pass a value or declare it with a default.</p>
+
+<h3>I passed a params file but still get "is not initialized". Why?</h3>
+<p>The file didn't match the node. A wrong top-level key, a missing namespace, a node renamed with <code>__node</code>, or a <code>--params-file</code> without <code>--ros-args</code> all loaded silently and then gave this error. Use the name from <code>ros2 node list</code>, or <code>/**</code>.</p>
+
+<h3>How do I fix "parameter 'yaml_filename' is not initialized" in Nav2 map_server?</h3>
+<p>Give the map server a <code>yaml_filename</code> under its exact node name, including any namespace. On Humble and Jazzy configure failed without it. On Lyrical configure succeeded with an empty value and a hint to use the <code>load_map</code> service.</p>
+
+<h3>Can I read an optional parameter without an exception?</h3>
+<p>Yes. <code>get_parameter_or</code> returned the fallback in rclpy and rclcpp, and rclcpp's <code>get_parameter(name, out)</code> returned <code>false</code>. Declaring with a default, even an empty string, avoids the problem.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does The parameter is not initialized mean in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "The node declared the parameter with a type but no default, and no value was supplied at startup, so reading it raised ParameterUninitializedException. Supply it with --ros-args -p name:=value or a params file whose key matches the node's full name."}},
+{"@type": "Question", "name": "What is Statically typed parameter must be initialized in rclcpp?", "acceptedAnswer": {"@type": "Answer", "text": "It is UninitializedStaticallyTypedParameterException. The template form of declare_parameter throws it when no override exists. Uncaught, the node aborts and ros2 run exits with code 250. Pass a value or declare it with a default."}},
+{"@type": "Question", "name": "I passed a params file but still get is not initialized. Why?", "acceptedAnswer": {"@type": "Answer", "text": "The file didn't match the node. A wrong top-level key, a missing namespace, a node renamed with __node, or a --params-file without --ros-args all loaded silently and then gave this error. Use the name from ros2 node list, or /**."}},
+{"@type": "Question", "name": "How do I fix parameter yaml_filename is not initialized in Nav2 map_server?", "acceptedAnswer": {"@type": "Answer", "text": "Give the map server a yaml_filename under its exact node name, including any namespace. On Humble and Jazzy configure failed without it. On Lyrical configure succeeded with an empty value and a hint to use the load_map service."}},
+{"@type": "Question", "name": "Can I read an optional parameter without an exception?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. get_parameter_or returned the fallback in rclpy and rclcpp, and the rclcpp get_parameter(name, out) form returned false. Declaring with a default, even an empty string, avoids the problem."}}
+]}
+</script>
+
+<p>Measured on 2026-11-13 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10, nav2_map_server 1.1.20), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4, nav2_map_server 1.3.13) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10, nav2_map_server 1.5.2), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-15-ros2-parameter-is-not-initialized/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/113938">Loading custom map with map_server</a>, <a href="https://robotics.stackexchange.com/questions/117120">Error when launching Nav2 Collision Monitor</a>, <a href="https://answers.ros.org/question/413967/">map_server: Original error: parameter 'yaml_filename' is not initialized</a>, <a href="https://forums.developer.nvidia.com/t/ros2-humble-need-help-on-7-multiple-robot-ros2-navigation-tutorial-provided-src-code-not-working/254841">Multiple Robot ROS2 Navigation tutorial: yaml_filename is not initialized</a>, <a href="https://github.com/PlanSys2/ros2_planning_system_examples/issues/45">Statically typed parameter 'waypoints' must be initialized</a>.</p>
