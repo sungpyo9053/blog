@@ -1,0 +1,273 @@
+ 13:11:46 up 107 days, 17:08,  1 user,  load average: 0.31, 0.22, 0.19
+  WARNING: The scripts activate-global-python-argcomplete and register-python-argcomplete are installed in '/opt/pipuser/bin' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+=== distro=lyrical  Ubuntu 26.04.1 LTS
+bash 5.3-2ubuntu1
+python3-argcomplete 3.6.3-1
+python3-colcon-argcomplete 0.3.3+upstream-1
+python3-colcon-core 0.21.3+upstream-1
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-ros2launch 0.29.9-1resolute.20260915.085616
+tmux 3.6a-2ubuntu0.2
+zsh 5.9-8ubuntu3
+pip argcomplete in /opt/pipuser: 3.7.2 /opt/pipuser/lib/python3.14/site-packages/argcomplete/__init__.py
+--- register scripts on PATH
+register-python-argcomplete: /usr/bin/register-python-argcomplete
+register-python-argcomplete3: missing
+activate-global-python-argcomplete: /usr/bin/activate-global-python-argcomplete
+--- colcon argcomplete hooks
+colcon-argcomplete.bash
+colcon-argcomplete.zsh
+--- ros2cli completion files
+ros2-argcomplete.bash
+ros2-argcomplete.fish
+ros2-argcomplete.zsh
+--- ros2-argcomplete.bash
+# Copyright 2017 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+if type register-python-argcomplete3 > /dev/null 2>&1; then
+  eval "$(register-python-argcomplete3 ros2)"
+elif type register-python-argcomplete > /dev/null 2>&1; then
+  eval "$(register-python-argcomplete ros2)"
+fi
+--- ros2-argcomplete.zsh
+# Copyright 2017-2018 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+if (( ! ${+_comps} )); then
+  autoload -U +X compinit && compinit
+fi
+autoload -U +X bashcompinit && bashcompinit
+
+# Get this scripts directory
+__ros2cli_completion_dir=${0:a:h}
+# Just source the bash version, it works in zsh too
+source "$__ros2cli_completion_dir/ros2-argcomplete.bash"
+# Cleanup
+unset __ros2cli_completion_dir
+
+# argcomplete's zsh completion function hands the candidates to _describe,
+# which quotes shell metacharacters when inserting a match into the command
+# line. A leading '~' is one of them, so `ros2 bag info ~/foo<TAB>` ends up as
+# `\~/foo`, which zsh no longer expands to the home directory.
+# See https://github.com/ros2/ros2cli/issues/1279 and
+# https://github.com/kislyuk/argcomplete/issues/503.
+#
+# This function does the same as argcomplete's, except that a leading '~' or
+# '~user' is moved out of the part being completed (the "ignored prefix"), so
+# it is left as typed while the rest of the path is still quoted as needed.
+_ros2_argcomplete() {
+  local IFS=$'\013'
+  local -a completions
+  completions=($(IFS="$IFS" \
+      COMP_LINE="$BUFFER" \
+      COMP_POINT="$CURSOR" \
+      _ARGCOMPLETE=1 \
+      _ARGCOMPLETE_SHELL="zsh" \
+      _ARGCOMPLETE_SUPPRESS_SPACE=1 \
+      __python_argcomplete_run ${words[1]}))
+  local -a nosort nospace
+  autoload -Uz is-at-least
+  if is-at-least 5.8; then
+    nosort=(-o nosort)
+  fi
+  # Do not append a space after a match ending in a continuation character.
+  if [[ "${completions-}" =~ ([^\\\\]): && "${match[1]}" =~ [=/:] ]]; then
+    nospace=(-S '')
+  fi
+  if [[ "$PREFIX" == '~'* ]]; then
+    local tilde="${PREFIX%%/*}"
+    local -a stripped
+    local completion
+    for completion in "${completions[@]}"; do
+      if [[ "${completion[1,${#tilde}]}" == "$tilde" ]]; then
+        stripped+=("${completion[${#tilde}+1,-1]}")
+      else
+        stripped+=("$completion")
+      fi
+    done
+    completions=("${stripped[@]}")
+    compset -P "${(b)tilde}"
+  fi
+  _describe "${words[1]}" completions "${nosort[@]}" "${nospace[@]}"
+}
+if (( ${+functions[__python_argcomplete_run]} )); then
+  compdef _ros2_argcomplete ros2
+fi
+=== tmux tests
+### case=bash_rc shell=bash typed='ros2 ru' tabs=1
+root@18c762703e60:/# ros2 run
+### case=bash_rc shell=bash typed='ros2 run tf2_r' tabs=2
+root@18c762703e60:/# ros2 run tf2_ros
+### case=bash_rc shell=bash typed='ros2 launch my_bringup ' tabs=2
+root@18c762703e60:/# ros2 launch my_bringup
+bringup_launch.xml  params.yaml         robot.launch.py     robot_launch.py     sim.launch.yaml     top.launch.py       view.launch.xml
+root@18c762703e60:/# ros2 launch my_bringup
+### case=bash_rc shell=bash typed='colcon bu' tabs=1
+root@18c762703e60:/# colcon bu
+### case=bash_none shell=bash typed='ros2 ver' tabs=1
+root@18c762703e60:/# ros2 ver
+### case=bash_none shell=bash typed='ros2 run tf2_r' tabs=2
+root@18c762703e60:/# ros2 run tf2_r
+### case=bash_pip shell=bash typed='ros2 ru' tabs=1
+root@18c762703e60:/# ros2 run
+### case=bash_pip shell=bash typed='ros2 run tf2_r' tabs=2
+root@18c762703e60:/# ros2 run tf2_ros
+### case=bash_colcon shell=bash typed='colcon bu' tabs=1
+root@18c762703e60:/# colcon build
+### case=zsh_only shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 run/
+### case=zsh_only shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_r
+### case=zsh_compinit_after shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 run/
+### case=zsh_compinit_after shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_r
+### case=zsh_compinit_before shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 run/
+### case=zsh_compinit_before shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_r
+### case=zsh_eval_only shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 run
+### case=zsh_eval_only shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_ros
+tf2_ros_py  tf2_ros  --
+### case=zsh_compdef shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 run
+### case=zsh_compdef shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_ros
+tf2_ros_py  tf2_ros  --
+### case=zsh_fix shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 run
+### case=zsh_fix shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_ros
+tf2_ros_py  tf2_ros  --
+### case=zsh_complete_line shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 ru_next_label:9: bad math expression: operator expected at `funcstack ...'
+_description:71: bad math expression: operator expected at `comp_ignor...'
+_describe:70: bad math expression: operator expected at `grp '
+_describe:compdescribe:122: invalid argument: -g[@]
+_describe:compdescribe:129: no parsed state
+n
+### case=zsh_complete_line shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_r_next_label:9: bad math expression: operator expected at `funcstack ...'
+_description:71: bad math expression: operator expected at `comp_ignor...'
+_describe:70: bad math expression: operator expected at `grp '
+_describe:compdescribe:122: invalid argument: -g[@]
+_describe:compdescribe:129: no parsed state
+_next_label:9: bad math expression: operator expected at `funcstack ...'
+_description:71: bad math expression: operator expected at `comp_ignor...'
+_describe:70: bad math expression: operator expected at `grp '
+_describe:compdescribe:122: invalid argument: -g[@]
+_describe:compdescribe:129: no parsed state
+### case=zsh_fix shell=zsh typed='ros2 launch my_bringup ' tabs=2
+18c762703e60# ros2 launch my_bringup bringup_launch.xml
+bringup_launch.xml  sim.launch.yaml  view.launch.xml  top.launch.py
+robot.launch.py     robot_launch.py  params.yaml                     --
+### case=zsh_fix shell=zsh typed='colcon bu' tabs=1
+18c762703e60# colcon bu
+### case=zsh_fix_colcon shell=zsh typed='colcon bu' tabs=1
+18c762703e60# colcon build
+### case=zsh_fix shell=zsh typed='ros2 ru' tabs=1
+18c762703e60# ros2 run
+### case=zsh_fix shell=zsh typed='ros2 run tf2_r' tabs=2
+18c762703e60# ros2 run tf2_ros
+tf2_ros_py  tf2_ros  --
+--- which completion files does each setup file source? (AMENT_TRACE_SETUP_FILES=1)
+zsh: AMENT_CURRENT_PREFIX="/opt/ros/lyrical" _ament_prefix_sh_source_script "/opt/ros/lyrical/share/ros2cli/environment/ros2-argcomplete.zsh"
+zsh: AMENT_CURRENT_PREFIX="/opt/ros/lyrical" _ament_prefix_sh_source_script "/opt/ros/lyrical/share/rosidl_cli/environment/rosidl-argcomplete.zsh"
+zsh: # . "/opt/ros/lyrical/share/ros2cli/environment/ros2-argcomplete.zsh"
+zsh: # . "/opt/ros/lyrical/share/rosidl_cli/environment/rosidl-argcomplete.zsh"
+bash: AMENT_CURRENT_PREFIX="/opt/ros/lyrical" _ament_prefix_sh_source_script "/opt/ros/lyrical/share/ros2cli/environment/ros2-argcomplete.bash"
+bash: AMENT_CURRENT_PREFIX="/opt/ros/lyrical" _ament_prefix_sh_source_script "/opt/ros/lyrical/share/rosidl_cli/environment/rosidl-argcomplete.bash"
+bash: # . "/opt/ros/lyrical/share/ros2cli/environment/ros2-argcomplete.bash"
+bash: # . "/opt/ros/lyrical/share/rosidl_cli/environment/rosidl-argcomplete.bash"
+--- zsh: after sourcing setup.zsh in an interactive zsh, which helper functions exist?
+_python_argcomplete: 1
+__python_argcomplete_run: 1
+_ros2_argcomplete: 1
+_bash_complete: 1
+compdef: 1
+complete: 1
+--- rosidl-argcomplete.zsh (sourced right after ros2-argcomplete.zsh)
+autoload -U +X compinit && compinit
+autoload -U +X bashcompinit && bashcompinit
+__rosidl_cli_completion_dir=${0:a:h}
+source "$__rosidl_cli_completion_dir/rosidl-argcomplete.bash"
+unset __rosidl_cli_completion_dir
+--- zsh: registrations right after sourcing only ros2-argcomplete.zsh, then after the full setup.zsh
+ros2-argcomplete.zsh alone: comps[ros2]=_ros2_argcomplete
+setup.zsh: comps[ros2]=<none> comps[rosidl]=_python_argcomplete
+--- ros2launch: which file names the launch completer accepts
+is_launch_file.extensions = ('launch.xml', 'launch.py', 'xml', 'yaml', 'launch.yaml', 'launch.yml', 'yml', 'launch')
+27:from launch.launch_description_sources import get_launch_description_from_any_launch_file
+81:    return path.endswith(is_launch_file.extensions) and os.path.isfile(path)
+132:        if count == 0 or argument.startswith(':=') or (count == 1 and argument.endswith(':=')):
+156:    if args and args.launch_prefix:
+157:        launch_file_arguments.append(f'launch-prefix:={args.launch_prefix}')
+159:    if args and args.launch_prefix_filter:
+160:        launch_file_arguments.append(f'launch-prefix-filter:={args.launch_prefix_filter}')
+176:            launch.launch_description_sources.AnyLaunchDescriptionSource(
+--- zsh: is ros2 registered after each .zshrc? (non-interactive check with zsh -i -c)
+zsh_only               comps[ros2]=<none>
+zsh_compinit_after     comps[ros2]=<none>
+zsh_compinit_before    comps[ros2]=<none>
+zsh_eval_only          comps[ros2]=_python_argcomplete
+zsh_compdef            comps[ros2]=_ros2_argcomplete
+zsh_fix                comps[ros2]=_python_argcomplete
+zsh_complete_line      comps[ros2]=_bash_complete -o nospace -o default -F _python_argcomplete
+=== argcomplete protocol: what ros2 returns and how long it takes
+'ros2 '                                       n=20     397 ms  action bag component daemon doctor extension_points extensions interface 
+'ros2 '                                       n=20     407 ms  action bag component daemon doctor extension_points extensions interface 
+'ros2 '                                       n=20     403 ms  action bag component daemon doctor extension_points extensions interface 
+'ros2 run '                                   n=195    263 ms  my_bringup ament_cmake_gmock ament_cmake_lint_cmake ros_workspace rosidl_generator_c rosidl_parser ament_cmake_export_dependencies rosidl_default_generators 
+'ros2 run '                                   n=195    262 ms  my_bringup ament_cmake_gmock ament_cmake_lint_cmake ros_workspace rosidl_generator_c rosidl_parser ament_cmake_export_dependencies rosidl_default_generators 
+'ros2 run '                                   n=195    259 ms  my_bringup ament_cmake_gmock ament_cmake_lint_cmake ros_workspace rosidl_generator_c rosidl_parser ament_cmake_export_dependencies rosidl_default_generators 
+'ros2 run tf2_ros '                           n=4      256 ms  buffer_server static_transform_publisher tf2_echo tf2_monitor
+'ros2 run tf2_ros '                           n=4      258 ms  buffer_server static_transform_publisher tf2_echo tf2_monitor
+'ros2 run tf2_ros '                           n=4      257 ms  buffer_server static_transform_publisher tf2_echo tf2_monitor
+'ros2 launch my_bringup '                     n=7      342 ms  top.launch.py bringup_launch.xml view.launch.xml sim.launch.yaml robot_launch.py params.yaml robot.launch.py
+'ros2 launch my_bringup r'                    n=2      341 ms  robot_launch.py robot.launch.py
+'ros2 interface show std_msgs/msg/Str'        n=1      316 ms  std_msgs/msg/String 
+--- message template completion (ros2 topic pub)
+'x: 0.0$
+y: 0.0$
+z: 0.0$
+'
+--- topic name completion: needs the daemon
+'ros2 topic echo /ch'                         n=1      910 ms  /chatter 
+'ros2 topic echo /ch'                         n=1      362 ms  /chatter 
+'ros2 topic echo /ch'                         n=1      357 ms  /chatter 
+'ros2 topic echo /ch'                         n=1      918 ms  /chatter 
+--- pip argcomplete (PYTHONUSERBASE=/opt/pipuser) with the apt shell glue
+'ros2 run '                                   n=195    264 ms  my_bringup ament_cmake_gmock ament_cmake_lint_cmake ros_workspace rosidl_generator_c rosidl_parser ament_cmake_export_dependencies rosidl_default_generators 
+'ros2 run tf2_r'                              n=2      260 ms  tf2_ros tf2_ros_py
+=== end lyrical
+RUN_FINISHED

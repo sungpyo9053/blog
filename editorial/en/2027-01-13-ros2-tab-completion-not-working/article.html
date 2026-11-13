@@ -1,0 +1,168 @@
+<pre><code>$ source /opt/ros/jazzy/setup.zsh
+$ ros2 ru&lt;TAB&gt;
+$ ros2 run/              # zsh completed a directory name, not the ros2 verb</code></pre>
+
+<p>If you copied a fix from an old thread, you may see this instead, on Jazzy and Lyrical:</p>
+
+<pre><code>ros2 ru_next_label:9: bad math expression: operator expected at `funcstack ...'
+_description:71: bad math expression: operator expected at `comp_ignor...'
+_describe:70: bad math expression: operator expected at `grp '
+_describe:compdescribe:122: invalid argument: -g[@]
+_describe:compdescribe:129: no parsed state</code></pre>
+
+<p>Short answer: in zsh, sourcing <code>setup.zsh</code> does not leave <code>ros2</code> registered for completion on Humble, Jazzy or Lyrical. ros2cli registers it, then the next completion file in the same setup, <code>rosidl-argcomplete.zsh</code>, runs <code>compinit</code> again and the registration is gone. Re-register it yourself after the source line. This worked on all three distros, with or without your own <code>compinit</code>:</p>
+
+<pre><code class="language-bash"># ~/.zshrc
+source /opt/ros/jazzy/setup.zsh
+autoload -Uz compinit &amp;&amp; compinit                     # optional, oh-my-zsh does this for you
+eval "$(register-python-argcomplete ros2)"             # Jazzy, Lyrical
+# eval "$(register-python-argcomplete3 ros2)"          # Humble: only the 3 name exists
+source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.zsh   # for colcon</code></pre>
+
+<p>In bash, completion worked as soon as <code>.bashrc</code> sourced <code>setup.bash</code>. It failed when the ROS environment came from a parent process and the shell itself never sourced anything. <code>colcon</code> needs its own hook in both shells.</p>
+
+<h2>Find your symptom</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my run</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>zsh: <code>ros2 ru&lt;TAB&gt;</code> completes a file or folder, or nothing happens</td><td><code>ros2</code> not registered after <code>setup.zsh</code> (rosidl's <code>compinit</code> wiped it)</td><td><code>eval "$(register-python-argcomplete ros2)"</code> after the source line</td></tr>
+<tr><td>zsh: moving <code>compinit</code> before or after the source line changes nothing</td><td>Same cause. Both orders failed on all three distros</td><td>Same fix</td></tr>
+<tr><td>zsh: <code>bad math expression: operator expected at `funcstack ...'</code></td><td><code>complete -o nospace -o default -F _python_argcomplete ros2</code> in <code>.zshrc</code> on Jazzy or Lyrical</td><td>Remove that line, use the <code>eval</code> line</td></tr>
+<tr><td>zsh: <code>no such file or directory: /usr/bin/register-python-argcomplete3</code> or <code>command not found</code></td><td>The <code>3</code> name exists only on Humble (Ubuntu 22.04)</td><td>Use <code>register-python-argcomplete</code> on Jazzy and Lyrical</td></tr>
+<tr><td>zsh on Humble: <code>_ros2_argcomplete:3: command not found: __python_argcomplete_run</code></td><td><code>compdef _ros2_argcomplete ros2</code>, which needs argcomplete 3</td><td>Use the <code>eval</code> line on Humble</td></tr>
+<tr><td>bash: <code>ros2</code> runs, but Tab does nothing</td><td>The shell inherited PATH and friends but never sourced <code>setup.bash</code> itself</td><td>Source <code>setup.bash</code> in this shell or in <code>~/.bashrc</code></td></tr>
+<tr><td><code>colcon bu&lt;TAB&gt;</code> does nothing</td><td><code>setup.bash</code> and <code>setup.zsh</code> don't load colcon's completion</td><td>Source <code>/usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash</code> (or <code>.zsh</code>)</td></tr>
+<tr><td><code>ros2 launch my_pkg &lt;TAB&gt;</code> does not show <code>robot.py</code></td><td>The completer only lists names ending in <code>launch.py</code>, <code>launch.xml</code>, <code>launch.yaml</code>, <code>xml</code>, <code>yaml</code> and similar</td><td>Rename to <code>robot.launch.py</code> or <code>robot_launch.py</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-13 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images. I added <code>tmux</code>, <code>zsh</code> and a pip copy of argcomplete in a separate user base, then ran every test in a <code>--network none</code> container with <code>ROS_DOMAIN_ID=88</code> and localhost-only discovery. Each case started a fresh interactive <code>bash -i</code> or <code>zsh -i</code> inside tmux with its own <code>HOME</code> and rc file. The script typed the text, pressed Tab once or twice and captured the screen. So these are real key presses, not a simulation. The working directory was <code>/</code>. That's why a failed zsh completion of <code>ros2 ru</code> turned into <code>ros2 run/</code>: zsh fell back to file names and found <code>/run</code>.</p>
+
+<p>I also checked <code>${_comps[ros2]}</code>, the table where zsh stores which function completes each command, after each <code>.zshrc</code>. And I called <code>ros2</code> through the argcomplete protocol directly to time the Python side. The tmux results were the same on all three distros, except for the two Humble-only rows noted below.</p>
+
+<table>
+<thead><tr><th>Shell setup</th><th><code>ros2 ru</code> Tab</th><th><code>ros2 run tf2_r</code> Tab Tab</th><th><code>_comps[ros2]</code></th></tr></thead>
+<tbody>
+<tr><td>bash, <code>.bashrc</code> sources <code>setup.bash</code></td><td><code>ros2 run</code></td><td><code>ros2 run tf2_ros</code></td><td>n/a</td></tr>
+<tr><td>bash, ROS env inherited, nothing sourced in this shell</td><td><code>ros2 ver</code> stayed as typed</td><td>stayed <code>tf2_r</code></td><td>n/a</td></tr>
+<tr><td>bash, <code>setup.bash</code> plus pip argcomplete 3.7.2</td><td><code>ros2 run</code></td><td><code>ros2 run tf2_ros</code></td><td>n/a</td></tr>
+<tr><td>zsh, <code>.zshrc</code> only sources <code>setup.zsh</code></td><td><code>ros2 run/</code> (file name)</td><td>stayed <code>tf2_r</code></td><td>none</td></tr>
+<tr><td>zsh, <code>setup.zsh</code>, then <code>compinit</code></td><td><code>ros2 run/</code></td><td>stayed <code>tf2_r</code></td><td>none</td></tr>
+<tr><td>zsh, <code>compinit</code>, then <code>setup.zsh</code></td><td><code>ros2 run/</code></td><td>stayed <code>tf2_r</code></td><td>none</td></tr>
+<tr><td>zsh, <code>setup.zsh</code>, then the <code>eval</code> line (no <code>compinit</code>)</td><td><code>ros2 run</code></td><td><code>tf2_ros</code>, menu <code>tf2_ros tf2_ros_py</code></td><td>registered</td></tr>
+<tr><td>zsh, <code>setup.zsh</code>, <code>compinit</code>, the <code>eval</code> line</td><td><code>ros2 run</code></td><td><code>tf2_ros</code>, menu <code>tf2_ros tf2_ros_py</code></td><td>registered</td></tr>
+<tr><td>zsh, the same plus pip argcomplete 3.7.2</td><td><code>ros2 run</code></td><td><code>tf2_ros</code>, menu</td><td>registered</td></tr>
+<tr><td>zsh, <code>setup.zsh</code>, then <code>compdef _ros2_argcomplete ros2</code></td><td>Jazzy, Lyrical: <code>ros2 run</code>. Humble: <code>command not found: __python_argcomplete_run</code></td><td>Jazzy, Lyrical: works. Humble: same error</td><td><code>_ros2_argcomplete</code></td></tr>
+<tr><td>zsh, <code>compinit</code>, then <code>complete -o nospace -o default -F _python_argcomplete ros2</code></td><td>Humble: <code>ros2 run</code>. Jazzy, Lyrical: <code>bad math expression</code> errors</td><td>Humble: works. Jazzy, Lyrical: the same errors</td><td>registered</td></tr>
+</tbody>
+</table>
+
+<h2>Why zsh loses the registration</h2>
+
+<p>With <code>AMENT_TRACE_SETUP_FILES=1</code>, <code>setup.zsh</code> showed that it sources two completion files in this order: <code>share/ros2cli/environment/ros2-argcomplete.zsh</code> and then <code>share/rosidl_cli/environment/rosidl-argcomplete.zsh</code>. I checked the table after each step:</p>
+
+<pre><code>ros2-argcomplete.zsh alone: comps[ros2]=_ros2_argcomplete
+setup.zsh: comps[ros2]=&lt;none&gt; comps[rosidl]=_python_argcomplete</code></pre>
+
+<p>That's the Jazzy output. Lyrical was identical, and Humble showed the same pattern with its older bash-style function. The rosidl file starts with these two lines on all three distros:</p>
+
+<pre><code>autoload -U +X compinit &amp;&amp; compinit
+autoload -U +X bashcompinit &amp;&amp; bashcompinit</code></pre>
+
+<p>Running <code>compinit</code> again rebuilds the completion table, so the <code>ros2</code> entry added a moment earlier is dropped. Then rosidl registers itself, so only <code>rosidl</code> survives. On Jazzy and Lyrical, ros2cli's own file already avoids this. It only runs <code>compinit</code> when <code>_comps</code> doesn't exist yet (<code>if (( ! ${+_comps} ))</code>), the change proposed in <a href="https://github.com/ros2/ros2cli/issues/534">ros2cli issue 534</a>. Humble's ros2cli file still calls <code>compinit</code> unconditionally. Either way, the rosidl file runs last and undoes it. That's why moving your own <code>compinit</code> line around never helped. Any line that registers <code>ros2</code> after <code>setup.zsh</code> fixes it, because nothing runs <code>compinit</code> after it. If oh-my-zsh or your own <code>.zshrc</code> runs <code>compinit</code> later, put the <code>eval</code> line after that.</p>
+
+<h2>bash: the shell has to source it</h2>
+
+<p>Completion in bash is a shell function plus a <code>complete</code> rule. Both live only in the shell that sourced <code>setup.bash</code>. Environment variables are passed to child processes, but functions and <code>complete</code> rules aren't. In my run, a <code>bash -i</code> that got <code>PATH</code>, <code>AMENT_PREFIX_PATH</code>, <code>PYTHONPATH</code> and the rest from a parent that sourced <code>setup.bash</code> could run <code>ros2</code>, but Tab did nothing. <code>ros2 ver</code> stayed <code>ros2 ver</code>. You get this setup with <code>docker exec -it container bash</code> into an image whose entrypoint sourced ROS, or with an IDE terminal started from a shell that sourced ROS. The fix is to source <code>setup.bash</code> in that shell, or in its <code>~/.bashrc</code>. Sourcing <code>local_setup.bash</code> instead of <code>setup.bash</code> is a different problem, covered in <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">local_setup.bash vs setup.bash</a>.</p>
+
+<h2>Which register command exists</h2>
+
+<p>The thread fixes say <code>register-python-argcomplete3</code>. That name only existed on Humble:</p>
+
+<table>
+<thead><tr><th>Distro (Ubuntu)</th><th>python3-argcomplete</th><th><code>register-python-argcomplete3</code></th><th><code>register-python-argcomplete</code></th></tr></thead>
+<tbody>
+<tr><td>Humble (22.04)</td><td>1.8.1</td><td>/usr/bin</td><td>missing</td></tr>
+<tr><td>Jazzy (24.04)</td><td>3.1.4</td><td>missing</td><td>/usr/bin</td></tr>
+<tr><td>Lyrical (26.04)</td><td>3.6.3</td><td>missing</td><td>/usr/bin</td></tr>
+</tbody>
+</table>
+
+<p>ros2cli's <code>ros2-argcomplete.bash</code> tries both names, so bash works either way. If one <code>.zshrc</code> has to work on several machines, the same test works there: <code>if (( $+commands[register-python-argcomplete3] )); then eval "$(register-python-argcomplete3 ros2)"; else eval "$(register-python-argcomplete ros2)"; fi</code>. I didn't run that exact line, only each branch on its own distro.</p>
+
+<p>The <code>complete -o nospace -o default -F _python_argcomplete ros2</code> line from the same issue worked on Humble. On Jazzy and Lyrical it printed the <code>bad math expression</code> errors at the top of this page. In those versions <code>_python_argcomplete</code> is a native zsh function, and zsh's <code>complete</code> wrapper calls it as if it were a bash one. <code>compdef _ros2_argcomplete ros2</code> worked on Jazzy and Lyrical. It uses ros2cli's own zsh function, which also keeps a leading <code>~</code> unquoted (<a href="https://github.com/ros2/ros2cli/issues/1279">ros2cli issue 1279</a>). On Humble it failed, because <code>__python_argcomplete_run</code> only exists in argcomplete 3.</p>
+
+<h2>pip argcomplete did not break it</h2>
+
+<p>Older reports blame a pip-installed argcomplete in <code>~/.local</code>. I installed argcomplete 3.7.2 with pip into a separate user base and set <code>PYTHONUSERBASE</code> to use it. The apt shell glue stayed in place. In bash, and in zsh with the <code>eval</code> line, completion still worked on all three distros, including Humble, where the apt version is 1.8.1. I didn't test the zsh 5.4 versions from Ubuntu 18.04 that the original issue was about.</p>
+
+<h2>colcon needs its own hook</h2>
+
+<p>After sourcing <code>setup.bash</code> or <code>setup.zsh</code>, <code>colcon bu&lt;TAB&gt;</code> stayed as typed. After adding <code>source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash</code> (or <code>.zsh</code> in zsh), it completed to <code>colcon build</code>. The hook files were at that path on Ubuntu 22.04, 24.04 and 26.04, from <code>python3-colcon-argcomplete</code> 0.3.3 in all three images. The path didn't change on 24.04.</p>
+
+<h2>Launch file names that don't complete</h2>
+
+<p>I made a fake installed package <code>my_bringup</code> with these files in <code>share/my_bringup/launch/</code>: <code>robot.launch.py</code>, <code>robot_launch.py</code>, <code>robot.py</code>, <code>view.launch.xml</code>, <code>sim.launch.yaml</code>, <code>bringup_launch.xml</code>, <code>params.yaml</code>, plus <code>top.launch.py</code> directly in <code>share/my_bringup/</code>. <code>ros2 launch my_bringup &lt;TAB&gt;&lt;TAB&gt;</code> listed seven of the eight files, in both shells, on all three distros. <code>robot.py</code> was missing. <code>params.yaml</code> was listed. The completer keeps files whose name ends with one of these suffixes (printed from <code>ros2launch.api.api.is_launch_file.extensions</code>):</p>
+
+<pre><code>('launch.py', 'launch.xml', 'yaml', 'xml', 'launch.yaml', 'launch', 'launch.yml', 'yml')</code></pre>
+
+<p>A Python launch file must end in <code>launch.py</code> to be offered, so <code>robot.launch.py</code> and <code>robot_launch.py</code> both work. Any YAML or XML file in the package's share folder is offered too, parameter files included. The completer only sees what's installed in <code>share/</code>, so a launch file that's still only in <code>src/</code> won't show up. Install it with <code>data_files</code> in <code>setup.py</code> or <code>install(DIRECTORY launch ...)</code> in CMake, rebuild, and source again.</p>
+
+<h2>How long a Tab takes</h2>
+
+<p>Every Tab starts a new Python process for <code>ros2</code>. I timed the protocol call directly. The first three rows ran three times each and show the median. The topic rows show each run:</p>
+
+<table>
+<thead><tr><th>Completing</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 </code> (20 verbs)</td><td>340 ms</td><td>399 ms</td><td>403 ms</td></tr>
+<tr><td><code>ros2 run </code> (package names)</td><td>136 ms (185 names)</td><td>182 ms (195 names)</td><td>262 ms (195 names)</td></tr>
+<tr><td><code>ros2 run tf2_ros </code> (4 executables)</td><td>135 ms</td><td>179 ms</td><td>257 ms</td></tr>
+<tr><td><code>ros2 topic echo /ch</code>, daemon running</td><td>290, 285 ms</td><td>351, 346 ms</td><td>362, 357 ms</td></tr>
+<tr><td><code>ros2 topic echo /ch</code>, daemon stopped</td><td>834, 840 ms</td><td>916, 920 ms</td><td>910, 918 ms</td></tr>
+</tbody>
+</table>
+
+<p>Topic names come from the ros2 daemon. When it wasn't running, the Tab started it and took about 0.5 s longer. On Humble and Lyrical that call still returned <code>/chatter</code>. On Jazzy, both cold calls returned nothing, and the next Tab found it. So on Jazzy, if the first Tab after boot shows no topics, press it again. The <code>ros2 run</code> list is every package in the ament index, not only packages with executables. My <code>my_bringup</code> package with no executables was offered too.</p>
+
+<h2>Version notes</h2>
+
+<p>The zsh failure and the eval fix behaved the same on Humble, Jazzy and Lyrical. The differences were the argcomplete version (1.8.1, 3.1.4, 3.6.3), the register command name, and two zsh lines from forum answers. <code>complete -F _python_argcomplete</code> worked only on Humble, and <code>compdef _ros2_argcomplete</code> worked only on Jazzy and Lyrical. Humble's <code>ros2-argcomplete.zsh</code> runs <code>compinit</code> unconditionally. Jazzy's and Lyrical's check <code>_comps</code> first. All three ros2cli zsh files already contain the <code>~</code> fix. The <code>rosidl-argcomplete.zsh</code> file was the same on all three. With the message template for <code>ros2 topic pub /p geometry_msgs/msg/Point </code>, Humble returned backslash-escaped lines (<code>x:\ 0.0\</code>), and Jazzy and Lyrical returned plain YAML inside quotes.</p>
+
+<h2>Not tested</h2>
+
+<p>oh-my-zsh, prezto and other frameworks (I used a plain <code>compinit</code> in their place), fish, PowerShell and cmd.exe, zsh older than 5.8, Foxy, Iron, Kilted and Rolling, workspace overlays with their own completion files, <code>ros2 bag</code> and <code>ros2 param</code> completers, and how slow completion gets with many more packages than the base images have.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 tab completion not work in zsh?</h3>
+<p>In my run, sourcing <code>setup.zsh</code> left <code>ros2</code> unregistered on Humble, Jazzy and Lyrical. ros2cli registers it, then <code>rosidl-argcomplete.zsh</code> runs <code>compinit</code> again and the entry is dropped. Add <code>eval "$(register-python-argcomplete ros2)"</code> after the source line, or the <code>register-python-argcomplete3</code> version on Humble.</p>
+
+<h3>Does the order of compinit and source setup.zsh matter?</h3>
+<p>No. Running <code>compinit</code> before or after <code>setup.zsh</code> both failed, because <code>setup.zsh</code> runs <code>compinit</code> itself after registering ros2. What matters is that something registers <code>ros2</code> after the last <code>compinit</code>.</p>
+
+<h3>register-python-argcomplete3: command not found. What do I use?</h3>
+<p>Use <code>register-python-argcomplete</code>. Only Humble's Ubuntu 22.04 package had the <code>3</code> name. Jazzy on 24.04 and Lyrical on 26.04 only had <code>register-python-argcomplete</code>.</p>
+
+<h3>Why does ros2 completion not work in docker exec bash?</h3>
+<p>The shell got the ROS environment variables from its parent but never sourced <code>setup.bash</code>. Completion functions aren't inherited, so <code>ros2</code> ran but Tab did nothing. Source <code>setup.bash</code> in that shell or in <code>~/.bashrc</code>.</p>
+
+<h3>Why are my launch files not shown by ros2 launch tab completion?</h3>
+<p>The completer only lists installed files whose names end in <code>launch.py</code>, <code>launch.xml</code>, <code>launch.yaml</code>, <code>launch.yml</code>, <code>launch</code>, <code>xml</code>, <code>yaml</code> or <code>yml</code>. <code>robot.py</code> was not listed. <code>robot.launch.py</code> and <code>robot_launch.py</code> were. The file also has to be installed into the package's share folder.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 tab completion not work in zsh?", "acceptedAnswer": {"@type": "Answer", "text": "In my run, sourcing setup.zsh left ros2 unregistered on Humble, Jazzy and Lyrical. ros2cli registers it, then rosidl-argcomplete.zsh runs compinit again and the entry is dropped. Add eval $(register-python-argcomplete ros2) after the source line, or the register-python-argcomplete3 version on Humble."}},
+{"@type": "Question", "name": "Does the order of compinit and source setup.zsh matter?", "acceptedAnswer": {"@type": "Answer", "text": "No. Running compinit before or after setup.zsh both failed, because setup.zsh runs compinit itself after registering ros2. What matters is that something registers ros2 after the last compinit."}},
+{"@type": "Question", "name": "register-python-argcomplete3: command not found. What do I use?", "acceptedAnswer": {"@type": "Answer", "text": "Use register-python-argcomplete. Only Humble's Ubuntu 22.04 package had the 3 name. Jazzy on 24.04 and Lyrical on 26.04 only had register-python-argcomplete."}},
+{"@type": "Question", "name": "Why does ros2 completion not work in docker exec bash?", "acceptedAnswer": {"@type": "Answer", "text": "The shell got the ROS environment variables from its parent but never sourced setup.bash. Completion functions aren't inherited, so ros2 ran but Tab did nothing. Source setup.bash in that shell or in ~/.bashrc."}},
+{"@type": "Question", "name": "Why are my launch files not shown by ros2 launch tab completion?", "acceptedAnswer": {"@type": "Answer", "text": "The completer only lists installed files whose names end in launch.py, launch.xml, launch.yaml, launch.yml, launch, xml, yaml or yml. robot.py was not listed. robot.launch.py and robot_launch.py were. The file also has to be installed into the package's share folder."}}
+]}
+</script>
+
+<p>Measured on 2026-11-13 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, ros2cli 0.18.20, ros2launch 0.19.14, rclpy 3.3.22, rclcpp 16.0.21, rmw 6.1.4, python3-argcomplete 1.8.1, zsh 5.8.1, bash 5.1), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, ros2cli 0.32.13, ros2launch 0.26.13, rclpy 7.1.12, rclcpp 28.1.22, rmw 7.3.4, python3-argcomplete 3.1.4, zsh 5.9, bash 5.2.21) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, ros2cli 0.40.9, ros2launch 0.29.9, rclpy 10.0.11, rclcpp 32.0.3, rmw 7.10.2, python3-argcomplete 3.6.3, zsh 5.9, bash 5.3), python3-colcon-argcomplete 0.3.3 and tmux on each, pip argcomplete 3.7.2 for the pip cases. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-13-ros2-tab-completion-not-working/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/100986">No completion for 'ros2 run' in zsh</a>, <a href="https://robotics.stackexchange.com/questions/111458">Why autocompletion with tab does not show name of the launch files in a ros 2 python bringup package?</a>, <a href="https://robotics.stackexchange.com/questions/113656">Has the install location of /usr/share/colcon_argcomplete/hook/ changed under Ubuntu 24.04?</a>, <a href="https://github.com/ros2/ros2cli/issues/534">Autocomplete fails while using zsh</a>, <a href="https://github.com/ros2/ros2cli/issues/714">Autocomplete doesn't work with Ubuntu 20.04</a>.</p>
