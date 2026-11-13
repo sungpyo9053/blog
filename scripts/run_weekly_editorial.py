@@ -160,6 +160,16 @@ def inventory_summary(inventory):
         'comparison_scope': 'Discovery summary only. Full bodies remain in private inventory and mandatory Publisher duplicate checks; not proof of independent semantic duplicate review.'}
 
 
+def fit_posts(posts, base, budget=340_000):
+    """Drop full-body posts from the end until base + posts fits the model budget.
+    11/01 and 11/08 runs failed model_input_too_large: 10 full bodies + metrics + inventory > 400KB."""
+    size = lambda value: len(json.dumps(clean(value), ensure_ascii=False).encode('utf-8'))
+    posts, base_size = list(posts), size(base)
+    while posts and base_size + size(posts) > budget:
+        posts.pop()
+    return posts
+
+
 def reader_signals(ga4, posts):
     """Measured (실측) posts vs other physical posts: engagement rate and 👍/👎 in the current window."""
     pages = {row['page']: row for row in ga4.get('periods', {}).get('current', {}).get('pages', [])}
@@ -301,7 +311,7 @@ def run(root=ROOT, *, now=None, apply=False, notify=False, client=None,
             result['assessment'] = 'DUE_SUFFICIENT_FOR_REVIEW' if due and sufficient else ('DEFERRED_INSUFFICIENT_DATA' if due else 'NOT_DUE')
             all_posts = eligible_posts(client, inventory)
             result['reader_signals'] = reader_signals(sources.get('ga4', {}), all_posts)
-            posts = all_posts[:10]
+            posts = fit_posts(all_posts[:10], {'metrics': metrics, 'inventory': inventory_summary(inventory)})
             result['eligible_published_count'] = len(all_posts)
             result['model_target_count'] = len(posts)
             writer_id, reviewer_id = 'weekly-writer-' + uuid.uuid4().hex, 'weekly-reviewer-' + uuid.uuid4().hex

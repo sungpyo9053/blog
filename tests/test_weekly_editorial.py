@@ -44,6 +44,13 @@ class WeeklyTests(unittest.TestCase):
         options.update(kwargs)
         return weekly.run(**options)
 
+    def test_fit_posts_drops_bodies_until_under_budget(self):
+        posts = [{'post_id': i, 'content': 'x' * 50_000} for i in range(10)]
+        fitted = weekly.fit_posts(posts, {'metrics': 'y' * 100_000})
+        self.assertEqual([p['post_id'] for p in fitted], [0, 1, 2, 3])
+        self.assertEqual(len(weekly.fit_posts(posts[:2], {})), 2)
+        self.assertEqual(weekly.fit_posts(posts, {'metrics': 'y' * 400_000}), [])
+
     def test_empty_inventory_still_plans_without_writes(self):
         result = self.run_week()
         self.assertFalse(result['failed'])
