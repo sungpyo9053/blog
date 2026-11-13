@@ -1,0 +1,198 @@
+<pre><code>terminate called after throwing an instance of 'rclcpp::exceptions::ParameterAlreadyDeclaredException'
+  what():  parameter 'speed' has already been declared
+[ros2run]: Aborted</code></pre>
+
+<p>In Python the same mistake ends in a traceback. On Jazzy and Lyrical the last line is <code>rclpy.exceptions.ParameterAlreadyDeclaredException: Parameter(s) already declared: ['speed']</code>. On Humble it reads <code>('Parameter(s) already declared', ['speed'])</code>.</p>
+
+<p>Short answer: something declared the same parameter name twice on the same node. A node can declare each name only once. The second <code>declare_parameter</code> call throws, and if nothing catches it, a C++ node aborts and a Python node exits with status 1. Find the second declaration. Then delete it, give it a different name, or guard it so it only runs when the name doesn't exist yet:</p>
+
+<pre><code class="language-python">if not self.has_parameter('speed'):
+    self.declare_parameter('speed', 1.0)
+speed = self.get_parameter('speed').value</code></pre>
+
+<pre><code class="language-cpp">if (!node-&gt;has_parameter("speed")) {
+  node-&gt;declare_parameter("speed", 1.0);
+}
+double speed = node-&gt;get_parameter("speed").as_double();</code></pre>
+
+<p>The guard worked in rclpy and rclcpp on Humble, Jazzy and Lyrical. The "second declaration" is often not in your own code. It comes from the node itself (<code>use_sim_time</code>), from a node option (<code>automatically_declare_parameters_from_overrides</code>), from a second plugin or helper object, or from a lifecycle <code>on_configure</code> that runs a second time. The table below maps each of these to what I saw.</p>
+
+<h2>Find your cause</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical, apart from the Python lifecycle row, covered in the version notes.</p>
+
+<table>
+<thead><tr><th>What declared the name a second time</th><th>rclpy</th><th>rclcpp</th></tr></thead>
+<tbody>
+<tr><td>Two <code>declare_parameter('speed', ...)</code> calls in your code</td><td>exception, exit 1</td><td>abort</td></tr>
+<tr><td>You declare <code>use_sim_time</code> (every node already declares it)</td><td>exception, exit 1</td><td>abort</td></tr>
+<tr><td>Same, with <code>-p use_sim_time:=true</code> on the command line</td><td>exception, exit 1</td><td>abort</td></tr>
+<tr><td><code>automatically_declare_parameters_from_overrides=True</code>, then <code>declare_parameter('speed')</code> with <code>-p speed:=3.0</code> given</td><td>exception, exit 1</td><td>abort</td></tr>
+<tr><td>Same option, but no override for <code>speed</code> given</td><td>no error, <code>speed=1.0</code></td><td>no error, <code>speed=1</code></td></tr>
+<tr><td>Two helper objects (think plugins) on one node, both declaring <code>enabled</code></td><td>Not tested</td><td>first one logs, second aborts</td></tr>
+<tr><td>Lifecycle node declaring in <code>on_configure</code>, then configure, cleanup, configure</td><td>second configure returns ERROR, node stays <code>unconfigured</code></td><td>logged as an error, node stays <code>unconfigured</code>, process keeps running</td></tr>
+<tr><td><code>declare_parameters('', [('speed', 1.0), ('speed', 2.0)])</code> in one call</td><td>no error, both entries return <code>2.0</code></td><td>Not tested</td></tr>
+</tbody>
+</table>
+
+<p>Under <code>ros2 launch</code>, the C++ abort shows up as <code>process has died [pid N, exit code -6, ...]</code>, with the <code>what():</code> line just above it. If you only see the "process has died" line, scroll up for that <code>what():</code> line. It names the parameter.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-13 (KST) I ran one script inside the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro after another, on a 2 vCPU Ubuntu host. Each container had <code>--network none</code> and <code>ROS_DOMAIN_ID=88</code>, so no DDS traffic left it. The script builds one ament_cmake package with two executables, a Python node and a C++ node. Each takes a mode name as its first argument, runs one case and exits. Every case ran as its own <code>ros2 run</code> process: 13 Python cases, 15 C++ cases (the two helper cases are C++ only), one extra Python case and one <code>ros2 launch</code> run. The script captured the last 12 lines and the exit status of each run.</p>
+
+<p>The C++ node uses <code>rclcpp::Node</code> and, for the lifecycle cases, <code>rclcpp_lifecycle::LifecycleNode</code>. The Python node uses <code>rclpy.node.Node</code> and <code>rclpy.lifecycle.Node</code>. The parameter is named <code>speed</code> with a default of <code>1.0</code> unless stated. Exit statuses below are what the shell saw from <code>ros2 run</code>: 1 for an uncaught Python exception, and 250 for the C++ abort, with <code>[ros2run]: Aborted</code> printed by <code>ros2 run</code>.</p>
+
+<h2>Cause 1: the same name declared twice in your code</h2>
+
+<p>This is the plain case. Two lines, same name, same node:</p>
+
+<pre><code class="language-python">n.declare_parameter('speed', 1.0)
+n.declare_parameter('speed', 1.0)</code></pre>
+
+<p>The second line threw on all three distros, even with the same default value. In rclpy the traceback ends inside <code>declare_parameters</code>, because <code>declare_parameter</code> is a thin wrapper around it. The last line of your own file in the traceback is the second declaration. That line is the one to fix.</p>
+
+<p>In C++, <code>terminate called after throwing an instance of 'rclcpp::exceptions::ParameterAlreadyDeclaredException'</code> gives no file or line. When the name alone doesn't point you to the code, grep for it in your package and in any library code that receives your node handle.</p>
+
+<p>The usual fix is to declare every parameter once, in the constructor, and read it with <code>get_parameter</code> everywhere else. Declaring is a setup step, not a way to read the value.</p>
+
+<h2>Cause 2: you declared use_sim_time</h2>
+
+<p>Every node declares <code>use_sim_time</code> for itself when it is created. Declaring it again in your constructor threw the same exception on all three distros, in both languages:</p>
+
+<pre><code>rclpy.exceptions.ParameterAlreadyDeclaredException: Parameter(s) already declared: ['use_sim_time']
+what():  parameter 'use_sim_time' has already been declared</code></pre>
+
+<p>Passing <code>-p use_sim_time:=true</code> didn't change this. The override sets the value of the existing parameter. It doesn't stop your second declaration from failing.</p>
+
+<p>The fix is to delete the declaration and read it:</p>
+
+<pre><code class="language-python">use_sim = self.get_parameter('use_sim_time').value</code></pre>
+
+<p>Set it from outside, with <code>-p use_sim_time:=true</code>, a params file, or <code>parameters=[{'use_sim_time': True}]</code> in a launch <code>Node</code> action. I didn't measure launch's <code>SetParameter</code> action here.</p>
+
+<h2>Cause 3: automatically_declare_parameters_from_overrides</h2>
+
+<p>With this node option set, the node declares every parameter it finds in its overrides (from <code>-p</code>, <code>--params-file</code> or launch) as soon as it is created. If your code then declares one of those names, it is the second declaration.</p>
+
+<pre><code class="language-python">n = Node('decl_node', automatically_declare_parameters_from_overrides=True)
+n.declare_parameter('speed', 1.0)   # throws if -p speed:=... was given</code></pre>
+
+<p>What I saw:</p>
+
+<table>
+<thead><tr><th>Run</th><th>rclpy</th><th>rclcpp</th></tr></thead>
+<tbody>
+<tr><td><code>--ros-args -p speed:=3.0</code>, then <code>declare_parameter('speed', 1.0)</code></td><td><code>ParameterAlreadyDeclaredException</code>, exit 1</td><td>abort, exit 250</td></tr>
+<tr><td>No override, then <code>declare_parameter('speed', 1.0)</code></td><td>works, <code>speed=1.0</code></td><td>works, <code>speed=1</code></td></tr>
+<tr><td><code>--ros-args -p speed:=3.0</code>, then <code>get_parameter_or('speed', 1.0)</code> without declaring</td><td>works, <code>speed=3.0</code>, <code>has_parameter</code> True</td><td>works, <code>speed=3</code>, <code>has_parameter</code> 1</td></tr>
+</tbody>
+</table>
+
+<p>That middle row is why this cause is confusing. The node runs fine in testing, then crashes the first time someone passes that parameter from a YAML file. A file you add later can break a node that used to work.</p>
+
+<p>Pick one approach per node. Either drop the option and declare everything yourself, or keep the option and read values with <code>get_parameter_or</code> (or a <code>has_parameter</code> guard before declaring). <a href="https://github.com/ros2/rclcpp/issues/2189">rclcpp issue #2189</a> discusses whether this option should be deprecated at all.</p>
+
+<h2>Cause 4: two plugins or helpers on the same node</h2>
+
+<p>Plugins, costmap layers, controller helpers and image_transport publishers often get your node handle and declare their own parameters on it. If two of them use the same short name, the second one fails. I reproduced this in C++ with a small helper class that declares <code>enabled</code> in its constructor, created twice on one node:</p>
+
+<pre><code>[INFO] [decl_node]: RESULT helper declared enabled=1
+terminate called after throwing an instance of 'rclcpp::exceptions::ParameterAlreadyDeclaredException'
+  what():  parameter 'enabled' has already been declared</code></pre>
+
+<p>Giving each instance a prefix fixed it. With <code>left.</code> and <code>right.</code> the same class declared <code>left.enabled</code> and <code>right.enabled</code>, and the node ran to the end on all three distros. This is the reason so many packages put a plugin name before every parameter, as in <code>voxel_layer.enabled</code>. If you see an already-declared error with a dotted name like that, check whether the same plugin name is loaded twice.</p>
+
+<h2>Cause 5: a lifecycle node declares in on_configure</h2>
+
+<p>Declaring parameters in <code>on_configure</code> works the first time. After <code>cleanup</code> the parameters are still declared, so the next <code>configure</code> declares them again. I ran configure, cleanup, configure on a lifecycle node that declares <code>rate</code> in <code>on_configure</code>.</p>
+
+<p>In rclcpp the lifecycle machinery caught the exception:</p>
+
+<pre><code>[ERROR] [lc_node]: Caught exception in callback for transition 10
+[ERROR] [lc_node]: Original error: parameter 'rate' has already been declared
+[WARN] [lc_node]: Callback returned ERROR during the transition: configure</code></pre>
+
+<p>The node stayed <code>unconfigured</code> and the process kept running with exit status 0. Nothing crashes, so the error is easy to miss in a busy log. In rclpy the second <code>trigger_configure()</code> returned <code>TransitionCallbackReturnType.ERROR</code> and the node also stayed <code>unconfigured</code>. Whether you see a traceback depends on the distro (see version notes).</p>
+
+<p>Two fixes work. Declare the parameters in the constructor and only read them in <code>on_configure</code>, or guard the declaration with <code>has_parameter</code>. With the guard, the second configure reached <code>inactive</code> in both languages on all three distros. <code>ros/diagnostics</code> made the same change in <a href="https://github.com/ros/diagnostics/pull/227">PR #227</a>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>rclpy</th><th>rclcpp</th><th>Use when</th></tr></thead>
+<tbody>
+<tr><td>Delete the second declaration</td><td>works</td><td>works</td><td>You own both declarations</td></tr>
+<tr><td><code>has_parameter</code> guard before declaring</td><td>works</td><td>works</td><td>Code can run more than once (lifecycle, reused helpers)</td></tr>
+<tr><td>Prefix the name per instance (<code>left.enabled</code>)</td><td>Not tested</td><td>works</td><td>Two plugins or helpers share a node</td></tr>
+<tr><td>Catch <code>ParameterAlreadyDeclaredException</code></td><td>works, first value kept (<code>1.0</code>)</td><td>works, first value kept (<code>1</code>)</td><td>You can't change the code that declares first</td></tr>
+<tr><td><code>undeclare_parameter</code> then declare again, static type</td><td>works, new value <code>2.0</code></td><td>fails: <code>cannot undeclare a statically typed parameter</code></td><td>Avoid</td></tr>
+<tr><td><code>undeclare_parameter</code> then declare again, <code>dynamic_typing=True</code></td><td>works, <code>2.0</code></td><td>works, <code>2</code></td><td>You really need to reset a parameter</td></tr>
+<tr><td><code>get_parameter_or</code> instead of declaring (with auto-declare)</td><td>works</td><td>works</td><td>The node uses <code>automatically_declare_parameters_from_overrides</code></td></tr>
+</tbody>
+</table>
+
+<p>Catching the exception keeps the first declaration's value. The default in your second call is ignored. In the test, the first call set <code>1.0</code> and the caught second call asked for <code>2.0</code>, and the parameter stayed <code>1.0</code>. If the two defaults differ, catching hides a real disagreement, so the guard or a rename is usually better.</p>
+
+<p>The undeclare route behaves differently in the two client libraries. In rclcpp, a parameter declared with a plain default is statically typed and can't be undeclared:</p>
+
+<pre><code>parameter 'speed' has invalid type: cannot undeclare a statically typed parameter</code></pre>
+
+<p>rclpy undeclared the same statically typed parameter without complaint and let me declare it again with a new default. Code that relies on that won't port to C++.</p>
+
+<p>The guard costs almost nothing. 100,000 <code>has_parameter</code> checks took 10.3 to 15.3 ms in rclpy and 7.8 to 11.3 ms in rclcpp across the three distros, one run each. That is in the range of 0.1 microseconds per check, so there's no reason to avoid it in a callback.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble</strong> (rclpy 3.3.22): the rclpy exception text prints as a tuple, <code>('Parameter(s) already declared', ['speed'])</code>. Searching your logs for <code>Parameter(s) already declared:</code> with a colon misses Humble.</li>
+<li><strong>Jazzy</strong> (rclpy 7.1.12) and <strong>Lyrical</strong> (rclpy 10.0.11): <code>Parameter(s) already declared: ['speed']</code>.</li>
+<li>rclcpp printed <code>parameter 'speed' has already been declared</code> on all three. The undeclare error on Humble reads <code>cannot undeclare an statically typed parameter</code> (sic); Jazzy and Lyrical say <code>a statically</code>.</li>
+<li>Python lifecycle on Humble and Jazzy: the failed second configure printed nothing. The only sign was the <code>ERROR</code> return and the node staying <code>unconfigured</code>. On Lyrical the same run printed the traceback ending in <code>ParameterAlreadyDeclaredException: Parameter(s) already declared: ['rate']</code> from <code>rclpy/lifecycle/node.py</code>. If a Python lifecycle node on Humble or Jazzy won't configure a second time and the log is empty, check for this.</li>
+<li>C++ lifecycle on Lyrical also logged <code>LifecycleNode is not shut down: Node still in state(1) in destructor</code> at exit, because my test didn't shut the node down. Humble and Jazzy didn't print that warning. It isn't related to the parameter error.</li>
+<li>The single-call Python <code>declare_parameters</code> with the same name twice gave no error on any distro. Both returned entries had the value <code>2.0</code>. The duplicate passes silently and the last default wins.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>The real packages from the linked questions (Nav2 costmap layers, robot_localization, gazebo_ros2_control, TurtleBot 4). I reproduced the patterns, not those packages.</li>
+<li>The helper-object case and per-instance prefixes in Python.</li>
+<li>Duplicate names in a single <code>declare_parameters</code> call in rclcpp.</li>
+<li>Component containers loading two components with the same node name in one process.</li>
+<li>Launch's <code>SetParameter</code> action and global <code>use_sim_time</code> from launch.</li>
+<li>RMW implementations other than the default Fast DDS. The exception is raised in the client library before any DDS traffic, so I don't expect a difference, but I didn't check.</li>
+</ul>
+
+<p>If your error is the opposite one, a parameter that isn't declared at all, or a params file that doesn't apply, the <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">params YAML and -p errors post</a> covers what happens when the file or <code>-p</code> rule is wrong.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "parameter has already been declared" mean in ROS 2?</h3>
+<p>The node tried to declare a parameter name it already has. Each name can be declared once per node. The second <code>declare_parameter</code> call throws <code>ParameterAlreadyDeclaredException</code>. Uncaught, it aborted the C++ node and exited the Python node with status 1.</p>
+
+<h3>Why does declaring use_sim_time throw this error?</h3>
+<p>Every node already declares <code>use_sim_time</code> when it is created. Don't declare it. Read it with <code>get_parameter('use_sim_time')</code> and set it from outside with <code>-p use_sim_time:=true</code> or launch parameters. Passing the override did not prevent the error.</p>
+
+<h3>Why does my node crash only when I pass a parameter from YAML?</h3>
+<p>The node probably uses <code>automatically_declare_parameters_from_overrides</code>. With that option, any parameter in the overrides is declared at startup, so your own <code>declare_parameter</code> becomes the second one. Without an override for that name, the same code ran fine. Use <code>get_parameter_or</code> or a <code>has_parameter</code> guard.</p>
+
+<h3>Why does my lifecycle node fail on the second configure?</h3>
+<p>Parameters declared in <code>on_configure</code> are still declared after <code>cleanup</code>. The next configure declares them again, the transition returns ERROR, and the node stays unconfigured. Declare in the constructor, or guard with <code>has_parameter</code>.</p>
+
+<h3>Can I undeclare a parameter and declare it again?</h3>
+<p>In rclcpp only if it was declared with <code>dynamic_typing</code> set to true. A statically typed parameter gave "cannot undeclare a statically typed parameter". rclpy allowed it either way in my runs.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does parameter has already been declared mean in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "The node tried to declare a parameter name it already has. Each name can be declared once per node. The second declare_parameter call throws ParameterAlreadyDeclaredException. Uncaught, it aborted the C++ node and exited the Python node with status 1."}},
+{"@type": "Question", "name": "Why does declaring use_sim_time throw this error?", "acceptedAnswer": {"@type": "Answer", "text": "Every node already declares use_sim_time when it is created. Do not declare it. Read it with get_parameter and set it from outside with -p use_sim_time:=true or launch parameters. Passing the override did not prevent the error."}},
+{"@type": "Question", "name": "Why does my node crash only when I pass a parameter from YAML?", "acceptedAnswer": {"@type": "Answer", "text": "The node probably uses automatically_declare_parameters_from_overrides. With that option, any parameter in the overrides is declared at startup, so your own declare_parameter becomes the second one. Without an override for that name, the same code ran fine. Use get_parameter_or or a has_parameter guard."}},
+{"@type": "Question", "name": "Why does my lifecycle node fail on the second configure?", "acceptedAnswer": {"@type": "Answer", "text": "Parameters declared in on_configure are still declared after cleanup. The next configure declares them again, the transition returns ERROR, and the node stays unconfigured. Declare in the constructor, or guard with has_parameter."}},
+{"@type": "Question", "name": "Can I undeclare a parameter and declare it again?", "acceptedAnswer": {"@type": "Answer", "text": "In rclcpp only if it was declared with dynamic_typing set to true. A statically typed parameter gave cannot undeclare a statically typed parameter. rclpy allowed it either way in my runs."}}
+]}
+</script>
+
+<p>Measured on 2026-11-13 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rclpy 3.3.22, rclcpp and rclcpp_lifecycle 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:8eed0a4669bb...</code>, rclpy 7.1.12, rclcpp and rclcpp_lifecycle 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp and rclcpp_lifecycle 32.0.3, ros2cli 0.40.9, rmw 7.10.2), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-12-ros2-parameter-already-declared/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/110301">Turtlebot4 problems when trying to simulate (position_proportional_gain has already been declared)</a>, <a href="https://robotics.stackexchange.com/questions/111106">Parameter 'hold_joints' has already been declared</a>, <a href="https://robotics.stackexchange.com/questions/96120">ROS2 voxel_layer.enabled already declared</a>, <a href="https://github.com/cra-ros-pkg/robot_localization/issues/772">robot_localization: parameter 'broadcast_utm_transform' has already been declared</a>, <a href="https://github.com/turtlebot/turtlebot4/issues/388">Error when trying to simulate the turtlebot4 in Gazebo</a>.</p>
