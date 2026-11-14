@@ -22,3 +22,22 @@ add_filter(
 
 // Publishing runs do_enclose(), which HEADs every link in the post; links to still-scheduled posts log 404s. No post here carries media enclosures.
 add_filter( 'enclosure_links', '__return_empty_array' );
+
+// Pre-written posts keep the write time as post_modified, so a scheduled post went live with
+// dateModified earlier than datePublished (128 published posts on 2026-11-14). Going live counts as the last edit.
+add_action(
+    'transition_post_status',
+    static function ( string $new, string $old, WP_Post $post ): void {
+        global $wpdb;
+        if ( 'publish' === $new && 'future' === $old && $post->post_modified < $post->post_date ) {
+            $wpdb->update(
+                $wpdb->posts,
+                array( 'post_modified' => $post->post_date, 'post_modified_gmt' => $post->post_date_gmt ),
+                array( 'ID' => $post->ID )
+            );
+            clean_post_cache( $post->ID );
+        }
+    },
+    10,
+    3
+);
