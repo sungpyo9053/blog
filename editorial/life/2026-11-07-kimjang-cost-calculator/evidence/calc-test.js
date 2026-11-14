@@ -14,14 +14,19 @@ global.window = {};
 global.document = { getElementById: () => null };
 eval(src);
 const calc = window.kimjangCalc;
-const DEF = [61280,9835,56932,11847,2090,6170,1538,2549,7251,5668,7365,12119,10466,6041];
-assert.strictEqual(DEF.reduce((a, b) => a + b, 0), 201151, 'aT 합계 201,151');
+const DEF = [54980,9195,59416,15571,2337,4364,1575,3069,5303,0,7396,13358,16034,6858];
+// aT 2026.11.10 붙임 13개 품목(미나리 index 9 = 조사 제외 0원) 합계
+assert.strictEqual(DEF.reduce((a, b) => a + b, 0), 199456, 'aT 2026 합계 199,456');
+assert.ok(Math.abs((199456 / 219071 - 1) * 100 - (-9.0)) < 0.05, '전년비 -9.0%');
+for (const [c, a, pct] of [[54980, 74800, -26.5], [15571, 12806, 21.6], [16034, 11440, 40.2]]) assert.ok(Math.abs((c / a - 1) * 100 - pct) < 0.05, 'item pct ' + c);
+assert.strictEqual([61280,9835,56932,11847,2090,6170,1538,2549,7251,5668,7365,12119,10466,6041].reduce((a, b) => a + b, 0), 201151, 'aT 2025 합계 201,151');
 const cases = [
-  ['aT 20포기 = 201,151원', { mode: 'raw', heads: 20, people: 4 }, { total: 201151, perHead: 10058, rawKg: 66.7, suggest: 23.4 }],
-  ['예시1 10포기 = 100,576원', { mode: 'raw', heads: 10 }, { total: 100576, rawKg: 33.3 }],
-  ['예시2 23.4포기 = 235,347원', { mode: 'raw', heads: 23.4 }, { total: 235347, perHead: 10058 }],
-  ['예시2 배추 56,580원 대입 = 229,848원', { mode: 'raw', heads: 23.4, prices: [56580].concat(DEF.slice(1)) }, { total: 229848 }],
-  ['예시3 절임 40kg, 8포기 표기 = 162,002원', { mode: 'salted', kg: 40, box: 29900, label: 8 }, { saltedCost: 59800, basket: 102202, total: 162002, heads: 16 }],
+  ['aT 2026 20포기 = 199,456원', { mode: 'raw', heads: 20, people: 4 }, { total: 199456, perHead: 9973, rawKg: 66.7, suggest: 23.4 }],
+  ['예시1 10포기 = 99,728원', { mode: 'raw', heads: 10 }, { total: 99728, rawKg: 33.3 }],
+  ['예시2 23.4포기 = 233,364원', { mode: 'raw', heads: 23.4 }, { total: 233364, perHead: 9973 }],
+  ['예시2 배추 56,580원 대입 = 235,236원', { mode: 'raw', heads: 23.4, prices: [56580].concat(DEF.slice(1)) }, { total: 235236 }],
+  ['예시3 절임 40kg, 8포기 표기 = 164,694원', { mode: 'salted', kg: 40, box: 29900, label: 8 }, { saltedCost: 59800, basket: 104894, total: 164694, heads: 16 }],
+  ['미나리 2025 단가 5,668원 입력 시 20포기 = 205,124원', { mode: 'raw', heads: 20, prices: DEF.slice(0, 9).concat([5668], DEF.slice(10)) }, { total: 205124 }],
   ['절임 20kg 표기 없음 = 절임값만', { mode: 'salted', kg: 20, box: 29900, label: 0 }, { saltedCost: 29900, basket: 0, total: 29900, heads: 0 }],
   ['0포기 = 0원', { mode: 'raw', heads: 0 }, { total: 0, perHead: 0 }],
 ];
@@ -40,10 +45,10 @@ console.log('PASS 농사로 배합 20kg/40kg', JSON.stringify(s40));
 const one = calc({ mode: 'raw', heads: 1 }).items.map(x => [x[0], Math.round(x[1] * 1000) / 1000]);
 console.log('1포기당', JSON.stringify(one));
 // 본문 표 검산
-for (const [n, won] of [[1, 58837], [2, 117673], [3, 176510], [4, 235347], [5, 294183]]) assert.strictEqual(calc({ mode: 'raw', heads: n * 23.4 / 4 }).total, won, 'people ' + n);
+for (const [n, won] of [[1, 58341], [2, 116682], [3, 175023], [4, 233364], [5, 291704]]) assert.strictEqual(calc({ mode: 'raw', heads: n * 23.4 / 4 }).total, won, 'people ' + n);
 console.log('PASS 가구원 수 표 5행');
 for (const [lab, per] of [[6, 4983], [8, 3738], [10, 2990]]) assert.strictEqual(Math.round(29900 / lab), per);
-assert.strictEqual(Math.round((61280 + 12119) / 20), 3670);
+assert.strictEqual(Math.round((54980 + 13358) / 20), 3417);
 console.log('PASS 생배추 vs 절임배추 표');
 // UI 기본값 렌더 — 최소 DOM 스텁
 const vals = { 'kj-mode': 'raw', 'kj-people': '4', 'kj-heads': '20', 'kj-kg': '20', 'kj-box': '29900', 'kj-label': '' };
@@ -54,7 +59,10 @@ const els = {}; ['kj-out', ...Object.keys(vals)].forEach(id => els[id] = el(id))
 global.document = { getElementById: id => els[id], createElement: () => ({ style: {} }) };
 eval(src);
 console.log('UI 기본값 출력:', outP.join(' | '));
-assert.ok(outP.join().includes('201,151원'));
+assert.ok(outP.join().includes('199,456원'));
+assert.ok(!outP.join().includes('미나리'), '미나리 0원 행은 출력하지 않음');
+for (const [i, d] of DEF.entries()) assert.ok(html.includes('id="kj-p' + i + '" type="number" min="0" value="' + d + '"'), 'input default p' + i);
+assert.ok(html.includes('자료 확인일: 2026년 11월 15일'));
 vals['kj-mode'] = 'salted'; ['kj-out', ...Object.keys(vals)].forEach(id => els[id] = el(id)); eval(src);
 console.log('UI 절임배추 출력:', outP.join(' | '));
 assert.ok(outP.join().includes('29,900원'));
