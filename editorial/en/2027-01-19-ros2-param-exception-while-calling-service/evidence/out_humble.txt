@@ -1,0 +1,241 @@
+===== distro humble  2026-11-14T02:29:08Z
+default rmw: rmw_fastrtps_cpp
+--- ros2 param list --help (timeout lines)
+--- ros2 param get --help (timeout lines)
+--- timeouts and error string in ros2param source (/opt/ros/humble/lib/python3.10/site-packages/ros2param)
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/api/__init__.py:168:    ready = client.wait_for_service(timeout_sec=5.0)
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/api/__init__.py:188:    ready = client.wait_for_service(timeout_sec=5.0)
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/api/__init__.py:207:    ready = client.wait_for_service(timeout_sec=5.0)
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/api/__init__.py:226:    ready = client.wait_for_service(timeout_sec=5.0)
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/verb/dump.py:124:                    'Exception while calling service of node '
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/verb/list.py:102:                rclpy.spin_once(node, timeout_sec=1.0)
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/verb/list.py:106:                rclpy.spin_until_future_complete(node, future, timeout_sec=1.0)
+/opt/ros/humble/lib/python3.10/site-packages/ros2param/verb/list.py:114:                        'Exception while calling service of node '
+The daemon has been started
+--- list.py call path
+78:            futures = {}
+89:                    n for n in clients.keys() if n not in futures
+97:                        future = client.call_async(request)
+98:                        futures[node_name] = future
+100:                if len(futures) == len(clients):
+102:                rclpy.spin_once(node, timeout_sec=1.0)
+105:            for future in futures.values():
+106:                rclpy.spin_until_future_complete(node, future, timeout_sec=1.0)
+109:            for node_name in sorted(futures.keys()):
+110:                future = futures[node_name]
+111:                if future.result() is None:
+112:                    e = future.exception()
+114:                        'Exception while calling service of node '
+117:                response = future.result()
+--- api call_list_parameters / call_get_parameters
+183:def call_get_parameters(*, node, node_name, parameter_names):
+184-    # create client
+185-    client = node.create_client(GetParameters, f'{node_name}/get_parameters')
+186-
+187-    # call as soon as ready
+188-    ready = client.wait_for_service(timeout_sec=5.0)
+189-    if not ready:
+190-        raise RuntimeError('Wait for service timed out')
+191-
+192-    request = GetParameters.Request()
+193-    request.names = parameter_names
+194-    future = client.call_async(request)
+195-    rclpy.spin_until_future_complete(node, future)
+196-
+197-    # handle response
+--
+221:def call_list_parameters(*, node, node_name, prefix=None):
+222-    # create client
+223-    client = node.create_client(ListParameters, f'{node_name}/list_parameters')
+224-
+225-    # call as soon as ready
+226-    ready = client.wait_for_service(timeout_sec=5.0)
+227-    if not ready:
+228-        raise RuntimeError('Wait for service timed out')
+229-
+230-    request = ListParameters.Request()
+231-    future = client.call_async(request)
+232-    rclpy.spin_until_future_complete(node, future)
+233-
+234-    # handle response
+235-    response = future.result()
+
+########## CASE healthy (healthy.py)
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.32s]
+$ ros2 param list /healthy
+  speed
+  use_sim_time
+[exit=0 elapsed=0.98s]
+$ ros2 param get /healthy speed
+Double value is: 0.5
+[exit=0 elapsed=1.73s]
+/healthy/describe_parameters /healthy/get_parameter_types /healthy/get_parameters /healthy/list_parameters /healthy/set_parameters /healthy/set_parameters_atomically 
+node log:
+Traceback (most recent call last):
+  File "/w/n/healthy.py", line 5, in <module>
+    rclpy.spin(n)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+
+########## CASE nospin (nospin.py)
+$ ros2 node list
+/nospin
+[exit=0 elapsed=0.31s]
+$ ros2 param list /nospin
+Exception while calling service of node '/nospin': None
+[exit=0 elapsed=1.99s]
+$ ros2 param get /nospin speed
+[exit=124 elapsed=30.19s]
+/nospin/describe_parameters /nospin/get_parameter_types /nospin/get_parameters /nospin/list_parameters /nospin/set_parameters /nospin/set_parameters_atomically 
+node log:
+
+########## CASE nospin, Ctrl+C
+$ ros2 param list /nospin (Ctrl+C after 10 s)
+Exception while calling service of node '/nospin': None
+[finished by itself, exit=0 elapsed=1.99s]
+$ ros2 param get /nospin speed (Ctrl+C after 10 s)
+[Ctrl+C sent at 10s, exit=2 elapsed=10.17s]
+$ ros2 param list (Ctrl+C after 10 s)
+Exception while calling service of node '/nospin': None
+[finished by itself, exit=0 elapsed=1.98s]
+
+########## CASE nospin_fixed (nospin_fixed.py)
+$ ros2 node list
+/nospin_fixed
+[exit=0 elapsed=0.31s]
+$ ros2 param list /nospin_fixed
+  speed
+  use_sim_time
+[exit=0 elapsed=0.98s]
+$ ros2 param get /nospin_fixed speed
+Double value is: 0.5
+[exit=0 elapsed=1.09s]
+/nospin_fixed/describe_parameters /nospin_fixed/get_parameter_types /nospin_fixed/get_parameters /nospin_fixed/list_parameters /nospin_fixed/set_parameters /nospin_fixed/set_parameters_atomically 
+node log:
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.10/threading.py", line 953, in run
+
+########## CASE blocked (blocked.py)
+$ ros2 node list
+/blocked
+[exit=0 elapsed=0.31s]
+$ ros2 param list /blocked
+Exception while calling service of node '/blocked': None
+[exit=0 elapsed=3.99s]
+$ ros2 param get /blocked speed
+Double value is: 0.5
+[exit=0 elapsed=16.68s]
+/blocked/describe_parameters /blocked/get_parameter_types /blocked/get_parameters /blocked/list_parameters /blocked/set_parameters /blocked/set_parameters_atomically 
+node log:
+/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/service.py:76: RuntimeWarning: failed to send response (timeout): client will not receive response, at ./src/rmw_response.cpp:154, at ./src/rcl/service.c:314
+  self.__service.service_send_response(response, header.request_id)
+
+########## CASE blocked_fixed (blocked_fixed.py)
+$ ros2 node list
+/blocked_fixed
+[exit=0 elapsed=0.30s]
+$ ros2 param list /blocked_fixed
+  speed
+  use_sim_time
+[exit=0 elapsed=0.98s]
+$ ros2 param get /blocked_fixed speed
+Double value is: 0.5
+[exit=0 elapsed=0.98s]
+/blocked_fixed/describe_parameters /blocked_fixed/get_parameter_types /blocked_fixed/get_parameters /blocked_fixed/list_parameters /blocked_fixed/set_parameters /blocked_fixed/set_parameters_atomically 
+node log:
+
+########## CASE subnode
+$ ros2 node list
+/inner
+/outer
+[exit=0 elapsed=0.30s]
+$ ros2 param list /inner
+Exception while calling service of node '/inner': None
+[exit=0 elapsed=1.99s]
+$ ros2 param list /outer
+  use_sim_time
+[exit=0 elapsed=0.98s]
+$ ros2 param get /inner speed
+[exit=124 elapsed=30.17s]
+
+########## CASE subnode_fixed
+$ ros2 param list /inner_f
+  speed
+  use_sim_time
+[exit=0 elapsed=1.32s]
+$ ros2 param get /inner_f speed
+Double value is: 0.5
+[exit=0 elapsed=1.73s]
+
+########## CASE noservices (noservices.py)
+$ ros2 node list
+/noservices
+[exit=0 elapsed=0.31s]
+$ ros2 param list /noservices
+[exit=0 elapsed=0.97s]
+$ ros2 param get /noservices speed
+Wait for service timed out
+[exit=1 elapsed=5.98s]
+
+node log:
+Traceback (most recent call last):
+  File "/w/n/noservices.py", line 5, in <module>
+    rclpy.spin(n)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+    executor.spin_once()
+
+########## CASE param list with no node name, nospin + healthy running
+$ ros2 param list
+/healthy:
+  speed
+  use_sim_time
+Exception while calling service of node '/nospin': None
+[exit=0 elapsed=4.98s]
+
+########## CASE killed node, daemon still running
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.30s]
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.30s]
+$ ros2 param list /healthy
+[exit=124 elapsed=30.16s]
+$ ros2 param list --no-daemon /healthy
+Node not found
+[exit=1 elapsed=0.97s]
+
+########## CASE rmw mismatch: node on cyclonedds, CLI on default
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.30s]
+$ ros2 param list /healthy
+Exception while calling service of node '/healthy': None
+[exit=0 elapsed=4.98s]
+$ ros2 param get /healthy speed
+Wait for service timed out
+[exit=1 elapsed=5.98s]
+$ ros2 param list /healthy (Ctrl+C after 10 s)
+Exception while calling service of node '/healthy': None
+[finished by itself, exit=0 elapsed=9.98s]
+-- CLI with RMW_IMPLEMENTATION=rmw_cyclonedds_cpp (daemon restarted with it)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 param list /healthy
+1794623637.873500 [88]       ros2: selected interface "lo" is not multicast-capable: disabling multicast
+  speed
+  use_sim_time
+[exit=0 elapsed=1.07s]
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 param get /healthy speed
+1794623638.939370 [88]       ros2: selected interface "lo" is not multicast-capable: disabling multicast
+Double value is: 0.5
+[exit=0 elapsed=1.07s]
+1794623607.622054 [88]    python3: selected interface "lo" is not multicast-capable: disabling multicast
+Traceback (most recent call last):
+  File "/w/n/healthy.py", line 5, in <module>
+    rclpy.spin(n)
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 229, in spin
+===== done 2026-11-14T02:34:05Z

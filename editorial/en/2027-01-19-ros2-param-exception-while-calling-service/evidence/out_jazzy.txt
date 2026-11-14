@@ -1,0 +1,249 @@
+===== distro jazzy  2026-11-14T02:34:06Z
+default rmw: rmw_fastrtps_cpp
+--- ros2 param list --help (timeout lines)
+--- ros2 param get --help (timeout lines)
+                      [--include-hidden-nodes] [--hide-type] [--timeout N]
+                      node_name parameter_name
+--
+  --timeout N           Wait for N seconds until node becomes available
+                        (default 1 sec)
+--- timeouts and error string in ros2param source (/opt/ros/jazzy/lib/python3.12/site-packages/ros2param)
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:37:    ready = client.wait_for_services(timeout_sec=5.0)
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:63:    ready = client.wait_for_services(timeout_sec=5.0)
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:71:        raise RuntimeError('Exception while calling service of node '
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:78:    ready = client.wait_for_services(timeout_sec=5.0)
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:86:        raise RuntimeError('Exception while calling service of node '
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:93:    ready = client.wait_for_services(timeout_sec=5.0)
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:101:        raise RuntimeError('Exception while calling service of node '
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/api/__init__.py:108:    ready = client.wait_for_services(timeout_sec=5.0)
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/dump.py:46:            '--timeout', metavar='N', type=int, default=1,
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/dump.py:62:                                 args.include_hidden_nodes, args.timeout):
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/dump.py:80:                    'Exception while calling list_parameters service of node '
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/dump.py:92:                    'Exception while calling get_parameters service of node '
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/delete.py:47:            '--timeout', metavar='N', type=int, default=1,
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/delete.py:53:            if not wait_for_node(node, node_name, args.include_hidden_nodes, args.timeout):
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/describe.py:42:            '--timeout', metavar='N', type=int, default=1,
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/describe.py:49:            if not wait_for_node(node, node_name, args.include_hidden_nodes, args.timeout):
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/load.py:43:            '--timeout', metavar='N', type=int, default=1,
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/load.py:49:            if not wait_for_node(node, node_name, args.include_hidden_nodes, args.timeout):
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/get.py:46:            '--timeout', metavar='N', type=int, default=1,
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/get.py:52:            if not wait_for_node(node, node_name, args.include_hidden_nodes, args.timeout):
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/set.py:49:            '--timeout', metavar='N', type=int, default=1,
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/set.py:55:            if not wait_for_node(node, node_name, args.include_hidden_nodes, args.timeout):
+/opt/ros/jazzy/lib/python3.12/site-packages/ros2param/verb/list.py:87:                        'Exception while calling service of node '
+The daemon has been started
+--- list.py call path
+25:from ros2param.api import call_list_parameters
+74:                response = call_list_parameters(
+87:                        'Exception while calling service of node '
+--- api call_list_parameters / call_get_parameters
+76:def call_get_parameters(*, node, node_name, parameter_names):
+77-    client = AsyncParameterClient(node, node_name)
+78-    ready = client.wait_for_services(timeout_sec=5.0)
+79-    if not ready:
+80-        raise RuntimeError('Wait for service timed out waiting for '
+81-                           f'parameter services for node {node_name}')
+82-    future = client.get_parameters(parameter_names)
+83-    rclpy.spin_until_future_complete(node, future)
+84-    response = future.result()
+85-    if response is None:
+86-        raise RuntimeError('Exception while calling service of node '
+87-                           f'{node_name}: {future.exception()}')
+88-    return response
+89-
+90-
+--
+106:def call_list_parameters(*, node, node_name, prefixes=None):
+107-    client = AsyncParameterClient(node, node_name)
+108-    ready = client.wait_for_services(timeout_sec=5.0)
+109-    if not ready:
+110-        return None
+111-    future = client.list_parameters(prefixes=prefixes)
+112-    rclpy.spin_until_future_complete(node, future)
+113-    return future
+114-
+115-
+116-def get_parameter_type_string(parameter_type):
+117-    mapping = {
+118-        ParameterType.PARAMETER_BOOL: 'boolean',
+119-        ParameterType.PARAMETER_INTEGER: 'integer',
+120-        ParameterType.PARAMETER_DOUBLE: 'double',
+
+########## CASE healthy (healthy.py)
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.40s]
+$ ros2 param list /healthy
+  speed
+  start_type_description_service
+  use_sim_time
+[exit=0 elapsed=3.06s]
+$ ros2 param get /healthy speed
+Double value is: 0.5
+[exit=0 elapsed=2.81s]
+/healthy/describe_parameters /healthy/get_parameter_types /healthy/get_parameters /healthy/get_type_description /healthy/list_parameters /healthy/set_parameters /healthy/set_parameters_atomically 
+node log:
+Traceback (most recent call last):
+  File "/w/n/healthy.py", line 5, in <module>
+    rclpy.spin(n)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+
+########## CASE nospin (nospin.py)
+$ ros2 node list
+/nospin
+[exit=0 elapsed=0.39s]
+$ ros2 param list /nospin
+[exit=124 elapsed=30.19s]
+$ ros2 param get /nospin speed
+[exit=124 elapsed=30.26s]
+/nospin/describe_parameters /nospin/get_parameter_types /nospin/get_parameters /nospin/get_type_description /nospin/list_parameters /nospin/set_parameters /nospin/set_parameters_atomically 
+node log:
+
+########## CASE nospin, Ctrl+C
+$ ros2 param list /nospin (Ctrl+C after 10 s)
+[Ctrl+C sent at 10s, exit=2 elapsed=10.18s]
+$ ros2 param get /nospin speed (Ctrl+C after 10 s)
+[Ctrl+C sent at 10s, exit=2 elapsed=10.44s]
+$ ros2 param list (Ctrl+C after 10 s)
+[Ctrl+C sent at 10s, exit=2 elapsed=10.18s]
+
+########## CASE nospin_fixed (nospin_fixed.py)
+$ ros2 node list
+/nospin_fixed
+[exit=0 elapsed=0.39s]
+$ ros2 param list /nospin_fixed
+  speed
+  start_type_description_service
+  use_sim_time
+[exit=0 elapsed=2.81s]
+$ ros2 param get /nospin_fixed speed
+Double value is: 0.5
+[exit=0 elapsed=1.07s]
+/nospin_fixed/describe_parameters /nospin_fixed/get_parameter_types /nospin_fixed/get_parameters /nospin_fixed/get_type_description /nospin_fixed/list_parameters /nospin_fixed/set_parameters /nospin_fixed/set_parameters_atomically 
+node log:
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+
+########## CASE blocked (blocked.py)
+$ ros2 node list
+/blocked
+[exit=0 elapsed=0.39s]
+$ ros2 param list /blocked
+  speed
+  start_type_description_service
+  use_sim_time
+[exit=0 elapsed=12.53s]
+$ ros2 param get /blocked speed
+Double value is: 0.5
+[exit=0 elapsed=16.00s]
+/blocked/describe_parameters /blocked/get_parameter_types /blocked/get_parameters /blocked/get_type_description /blocked/list_parameters /blocked/set_parameters /blocked/set_parameters_atomically 
+node log:
+
+########## CASE blocked_fixed (blocked_fixed.py)
+$ ros2 node list
+/blocked_fixed
+[exit=0 elapsed=0.40s]
+$ ros2 param list /blocked_fixed
+  speed
+  start_type_description_service
+  use_sim_time
+[exit=0 elapsed=2.81s]
+$ ros2 param get /blocked_fixed speed
+Double value is: 0.5
+[exit=0 elapsed=3.06s]
+/blocked_fixed/describe_parameters /blocked_fixed/get_parameter_types /blocked_fixed/get_parameters /blocked_fixed/get_type_description /blocked_fixed/list_parameters /blocked_fixed/set_parameters /blocked_fixed/set_parameters_atomically 
+node log:
+
+########## CASE subnode
+$ ros2 node list
+/inner
+/outer
+[exit=0 elapsed=0.40s]
+$ ros2 param list /inner
+[exit=124 elapsed=30.18s]
+$ ros2 param list /outer
+  start_type_description_service
+  use_sim_time
+[exit=0 elapsed=1.07s]
+$ ros2 param get /inner speed
+[exit=124 elapsed=30.18s]
+
+########## CASE subnode_fixed
+$ ros2 param list /inner_f
+  speed
+  start_type_description_service
+  use_sim_time
+[exit=0 elapsed=3.06s]
+$ ros2 param get /inner_f speed
+Double value is: 0.5
+[exit=0 elapsed=1.07s]
+
+########## CASE noservices (noservices.py)
+$ ros2 node list
+/noservices
+[exit=0 elapsed=0.39s]
+$ ros2 param list /noservices
+Wait for service timed out waiting for parameter services for node NodeName(name='noservices', namespace='/', full_name='/noservices')
+[exit=0 elapsed=6.06s]
+$ ros2 param get /noservices speed
+Wait for service timed out waiting for parameter services for node /noservices
+[exit=1 elapsed=6.10s]
+/noservices/get_type_description 
+node log:
+Traceback (most recent call last):
+  File "/w/n/noservices.py", line 5, in <module>
+    rclpy.spin(n)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+
+########## CASE param list with no node name, nospin + healthy running
+$ ros2 param list
+/healthy:
+  speed
+  start_type_description_service
+  use_sim_time
+[exit=124 elapsed=30.18s]
+
+########## CASE killed node, daemon still running
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.39s]
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.38s]
+$ ros2 param list /healthy
+Wait for service timed out waiting for parameter services for node NodeName(name='healthy', namespace='/', full_name='/healthy')
+[exit=0 elapsed=6.21s]
+$ ros2 param list --no-daemon /healthy
+Node not found
+[exit=1 elapsed=1.09s]
+
+########## CASE rmw mismatch: node on cyclonedds, CLI on default
+$ ros2 node list
+/healthy
+[exit=0 elapsed=0.38s]
+$ ros2 param list /healthy
+[exit=124 elapsed=30.20s]
+$ ros2 param get /healthy speed
+[exit=124 elapsed=30.18s]
+$ ros2 param list /healthy (Ctrl+C after 10 s)
+[Ctrl+C sent at 10s, exit=2 elapsed=10.19s]
+-- CLI with RMW_IMPLEMENTATION=rmw_cyclonedds_cpp (daemon restarted with it)
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 param list /healthy
+  speed
+  start_type_description_service
+  use_sim_time
+[exit=0 elapsed=1.16s]
+$ env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 param get /healthy speed
+Double value is: 0.5
+[exit=0 elapsed=1.14s]
+Traceback (most recent call last):
+  File "/w/n/healthy.py", line 5, in <module>
+    rclpy.spin(n)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+===== done 2026-11-14T02:41:34Z

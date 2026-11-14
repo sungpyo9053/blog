@@ -1,0 +1,187 @@
+<pre><code>$ ros2 param list /nospin
+Exception while calling service of node '/nospin': None</code></pre>
+
+<p>That is Humble. On Lyrical the same node gives a different line, and on Jazzy you get no line at all, because the command just waits:</p>
+
+<pre><code>Timed out waiting for list_parameters response from node NodeName(name='nospin', namespace='/', full_name='/nospin') (timeout: 5.0s)</code></pre>
+
+<p>Short answer: the node is in the graph and its parameter services exist, but nothing in that process is answering them. A ROS 2 node only answers <code>list_parameters</code> and <code>get_parameters</code> while an executor is spinning it. The <code>None</code> isn't a hidden exception. On Humble, <code>ros2 param list</code> waits about one second for each node's reply, and if no reply arrives it prints the future's exception, which is empty. In my runs four things caused it: a node that never spins, a callback that blocks the only executor thread, a second node that was never added to an executor, and a CLI on a different RMW than the node. The fix for the first one, the <code>teleop_twist_keyboard</code> pattern of a loop that never spins, is to spin in a thread:</p>
+
+<pre><code class="language-python">import threading, time, rclpy
+from rclpy.node import Node
+
+rclpy.init()
+node = Node('nospin_fixed')
+node.declare_parameter('speed', 0.5)
+threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
+while True:          # your own loop keeps running
+    time.sleep(0.1)</code></pre>
+
+<p>With that one line, <code>ros2 param list /nospin_fixed</code> printed <code>speed</code> and <code>use_sim_time</code> in 0.98 s on Humble and 2.81 s on Jazzy and Lyrical. <code>ros2 param get</code> returned <code>Double value is: 0.5</code> in about 1.1 s on all three.</p>
+
+<h2>Find your error</h2>
+
+<p>Each row is one Python node, started 4 seconds before the command, with the ros2 daemon running. "Hung" means the command printed nothing and was still running when I stopped it at 30 s.</p>
+
+<table>
+<thead><tr><th>Cause</th><th>Humble <code>param list</code></th><th>Jazzy <code>param list</code></th><th>Lyrical <code>param list</code></th><th><code>param get</code> (all three)</th></tr></thead>
+<tbody>
+<tr><td>Node never spins (a <code>while</code> loop with <code>time.sleep</code>)</td><td><code>Exception while calling service of node '/nospin': None</code>, 1.99 s</td><td>hung</td><td><code>Timed out waiting for list_parameters response ...</code>, 6.06 s</td><td>hung</td></tr>
+<tr><td>Timer callback blocks for 8 s, single-threaded executor</td><td><code>Exception ... '/blocked': None</code>, 3.99 s</td><td>listed after 12.53 s</td><td><code>Timed out ...</code>, 6.07 s</td><td>answered after 16.68 s, 16.00 s, 14.54 s</td></tr>
+<tr><td>Second node created but never added to an executor</td><td><code>Exception ... '/inner': None</code>, 1.99 s</td><td>hung</td><td><code>Timed out ...</code>, 6.08 s</td><td>hung</td></tr>
+<tr><td>Node on <code>rmw_cyclonedds_cpp</code>, CLI on the default <code>rmw_fastrtps_cpp</code></td><td><code>Exception ... '/healthy': None</code>, 4.98 s</td><td>hung</td><td><code>Timed out ...</code>, 6.13 s</td><td>Humble: <code>Wait for service timed out</code>, 5.98 s. Jazzy, Lyrical: hung</td></tr>
+<tr><td><code>Node(..., start_parameter_services=False)</code></td><td>prints nothing, exit 0, 0.97 s</td><td><code>Wait for service timed out waiting for parameter services for node NodeName(...)</code>, 6.07 s</td><td>same text, 6.10 s</td><td><code>Wait for service timed out ...</code>, about 6 s</td></tr>
+<tr><td>Node killed with <code>kill -9</code>, daemon still lists it</td><td>hung</td><td><code>Wait for service timed out ...</code>, 6.21 s</td><td>same, 6.06 s</td><td>Not tested</td></tr>
+</tbody>
+</table>
+
+<p>In every row, <code>ros2 node list</code> showed the node right away, even the dead one. For the non-spinning and the blocked node, <code>ros2 service list</code> also showed all of their services (six on Humble, seven on Jazzy and Lyrical). That is what makes this error confusing: the node and its services look fine from the outside. Only the reply is missing.</p>
+
+<p>A healthy node, for comparison, listed its parameters in 0.98 s on Humble, 3.06 s on Jazzy and 1.07 s on Lyrical.</p>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images on a 2 vCPU Linux host, one distro at a time. I installed <code>rmw_cyclonedds_cpp</code> in each container, then disconnected the container from the network and used <code>ROS_DOMAIN_ID=88</code> with localhost-only discovery. Every node was a short rclpy script that declares one parameter, <code>speed = 0.5</code>. For each case the script started the node, waited 4 s, then ran <code>ros2 node list</code>, <code>ros2 param list /name</code> and <code>ros2 param get /name speed</code>, each timed and capped at 30 s. Between cases it stopped the node and restarted the daemon, so no case saw a leftover node from the one before.</p>
+
+<p>For the rows where the command never returned, I also ran it under a small wrapper that sends Ctrl+C (SIGINT) after 10 s, to see whether the interrupt prints the error. It didn't. On Humble <code>ros2 param get</code>, and on Jazzy both <code>list</code> and <code>get</code>, exited with code 2 and printed nothing. So in these versions the <code>None</code> message doesn't come from pressing Ctrl+C. It comes from Humble's own one-second wait.</p>
+
+<h2>Why the message says None</h2>
+
+<p>The source of each version explains it. In Humble (ros2param 0.18.20), <code>verb/list.py</code> sends a request to every node, then calls <code>rclpy.spin_until_future_complete(node, future, timeout_sec=1.0)</code> for each one. If the future isn't done after that second, <code>future.result()</code> is <code>None</code>, and the code prints <code>'Exception while calling service of node ' ... {e}</code> with <code>e = future.exception()</code>. There was no exception, so you see <code>None</code>.</p>
+
+<p>Jazzy (ros2param 0.32.13) still has that message in <code>list.py</code>, but it calls <code>spin_until_future_complete</code> with no timeout. A node that never answers keeps the command waiting forever, with no output. Lyrical (ros2param 0.40.9) adds <code>--service-timeout N</code> to <code>list</code> (default 5.0) and to <code>get</code> (default "waits indefinitely"), and the message for a missed reply is now <code>Timed out waiting for list_parameters response from node ... (timeout: 5.0s)</code>.</p>
+
+<p>The first wait is separate. <code>get</code> on all three versions, and <code>list</code> on Jazzy and Lyrical, first wait up to 5 s for the parameter services to appear (<code>wait_for_service(timeout_sec=5.0)</code> in Humble, <code>wait_for_services(timeout_sec=5.0)</code> in Jazzy and Lyrical). When the services don't exist, you get <code>Wait for service timed out</code> at about 6 s instead. Humble's <code>list</code> skips that wait, which is why it printed nothing for a node without parameter services. So the text tells you which half failed:</p>
+
+<ul>
+<li><code>Wait for service timed out</code>: the services aren't there. The node turned them off, died, or is on a different discovery path.</li>
+<li><code>Exception while calling service ...: None</code>, <code>Timed out waiting for list_parameters response</code>, or a silent hang: the services are there, but no reply came back.</li>
+</ul>
+
+<h2>The node never spins</h2>
+
+<p>This is the pattern behind the <a href="https://robotics.stackexchange.com/questions/105422">teleop_twist_keyboard question</a>, where the node runs its own key-reading loop. I didn't install teleop_twist_keyboard. My <code>nospin.py</code> copies the pattern: a publisher and a <code>while True: time.sleep(0.1)</code> loop that never spins. The node showed up in <code>ros2 node list</code> in 0.31 s on Humble, and its services were all listed, but neither <code>list</code> nor <code>get</code> ever got a reply.</p>
+
+<p><code>ros2 param get</code> is worse than <code>list</code> here. It doesn't time out on any of the three distros by default, so it just sits there. When <code>timeout</code> stopped it with SIGTERM after 30 s, Lyrical printed <code>!rclpy.ok()</code>. Humble and Jazzy printed nothing.</p>
+
+<p>The fix is to spin the node somewhere. The thread in the short answer worked on all three distros. If you control the loop, you can also call <code>rclpy.spin_once(node, timeout_sec=0)</code> in it, or move the loop body into a timer and call <code>rclpy.spin(node)</code>. I measured only the thread version. Rate-based loops have a related trap: <code>rate.sleep()</code> in rclpy needs a spinning executor too, which I covered in <a href="https://huntlab.app/en/ros-2-rclpy-rate-sleep-blocks-forever-fix/">rclpy rate.sleep() blocks forever</a>.</p>
+
+<h2>A callback blocks the executor</h2>
+
+<p><code>blocked.py</code> spins normally, but its 0.5 s timer callback sleeps for 8 s. With the default single-threaded executor, parameter requests have to wait until that callback returns. Each distro handled the wait differently:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>ros2 param list /blocked</code></td><td><code>Exception ... None</code> at 3.99 s</td><td>listed at 12.53 s</td><td><code>Timed out ...</code> at 6.07 s</td></tr>
+<tr><td><code>ros2 param get /blocked speed</code></td><td>0.5 at 16.68 s</td><td>0.5 at 16.00 s</td><td>0.5 at 14.54 s</td></tr>
+<tr><td>Node log</td><td><code>RuntimeWarning: failed to send response (timeout): client will not receive response</code></td><td>nothing</td><td>same warning as Humble</td></tr>
+</tbody>
+</table>
+
+<p>The warning in the node's own output is a useful clue. On Humble and Lyrical the node did answer, but after the CLI had given up, and the reply had nowhere to go. If your node log shows <code>failed to send response (timeout)</code> next to this error, look for a slow callback.</p>
+
+<p>The fix is to give the slow work its own callback group and use a multi-threaded executor, so the parameter services, which stay in the node's default group, have a free thread:</p>
+
+<pre><code class="language-python">from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+
+node.create_timer(0.5, slow_callback, callback_group=MutuallyExclusiveCallbackGroup())
+ex = MultiThreadedExecutor()
+ex.add_node(node)
+ex.spin()</code></pre>
+
+<p>With the same 8 s callback, <code>list</code> answered in 0.98 s on Humble, 2.81 s on Jazzy and 2.82 s on Lyrical, and <code>get</code> in 0.98 s, 3.06 s and 1.07 s. Moving the work out of the callback also fixes it, but I didn't measure that.</p>
+
+<h2>A second node nobody spins</h2>
+
+<p>This is the shape of an <a href="https://robotics.stackexchange.com/questions/92348">older question about a node created inside another node</a>. <code>subnode.py</code> creates <code>outer</code> and <code>inner</code>, declares the parameter on <code>inner</code>, and calls <code>rclpy.spin(outer)</code>. Both names showed up in <code>ros2 node list</code>. <code>ros2 param list /outer</code> worked on all three distros. <code>/inner</code> failed the same way as the node that never spins: <code>None</code> on Humble at 1.99 s, a hang on Jazzy, <code>Timed out</code> on Lyrical at 6.08 s, and <code>get</code> hung everywhere.</p>
+
+<p><code>rclpy.spin(node)</code> spins one node. To serve both, add both to one executor:</p>
+
+<pre><code class="language-python">ex = SingleThreadedExecutor()
+ex.add_node(outer)
+ex.add_node(inner)
+ex.spin()</code></pre>
+
+<p>Then <code>list /inner_f</code> answered in 1.32 s, 3.06 s and 1.10 s, and <code>get</code> in 1.73 s, 1.07 s and 2.25 s (Humble, Jazzy, Lyrical).</p>
+
+<h2>The CLI and the node use different RMWs</h2>
+
+<p>The <a href="https://github.com/ros2/ros2cli/issues/586">ros2cli issue on multiple RMW implementations</a> reports this error with a Cyclone DDS talker and a Fast DDS <code>ros2 param list</code>. All three images default to <code>rmw_fastrtps_cpp</code>. I started the node with <code>RMW_IMPLEMENTATION=rmw_cyclonedds_cpp</code> and ran the CLI without it. Discovery works across the two, so <code>ros2 node list</code> showed <code>/healthy</code> on every distro. The service calls didn't work:</p>
+
+<ul>
+<li>Humble: <code>list</code> printed <code>Exception while calling service of node '/healthy': None</code> after 4.98 s (9.98 s on a second try). <code>get</code> printed <code>Wait for service timed out</code> after 5.98 s.</li>
+<li>Jazzy: <code>list</code> and <code>get</code> both hung.</li>
+<li>Lyrical: <code>list</code> printed <code>Timed out ...</code> after 6.13 s, and <code>get</code> hung.</li>
+</ul>
+
+<p>Setting the same RMW on the CLI side, and restarting the daemon with it, fixed it on Humble (1.07 s) and Jazzy (1.16 s). On Lyrical, the first attempt with both sides on Cyclone still timed out, and <code>get</code> hung. I reran it in a fresh shell, with no Fast DDS process in the container at all. Then <code>list</code> answered in 1.15 s, <code>get</code> in 1.17 s, and a direct <code>ros2 service call /healthy/list_parameters</code> returned the names in 0.65 s. I don't know why the first Lyrical attempt failed, so take that row as "worked after a clean restart". In practice: export one <code>RMW_IMPLEMENTATION</code> in every shell, run <code>ros2 daemon stop</code>, and try again.</p>
+
+<h2>Parameter services turned off, or a dead node</h2>
+
+<p>These two cases end in <code>Wait for service timed out</code> instead, because the services aren't there to call. A node created with <code>start_parameter_services=False</code> had only <code>/noservices/get_type_description</code> left on Jazzy and Lyrical. On Humble, <code>ros2 param list /noservices</code> printed nothing at all and exited with 0, which is easy to read as "no parameters". <code>ros2 param get</code> reported <code>Wait for service timed out</code> on all three.</p>
+
+<p>When I killed a node with <code>kill -9</code>, the daemon kept listing it one second later. <code>ros2 param list /healthy</code> then hung on Humble and gave <code>Wait for service timed out</code> on Jazzy and Lyrical. With <code>--no-daemon</code>, all three said <code>Node not found</code> in about 1 s. If a node appears in the list but every call to it fails, check that it's still running.</p>
+
+<h2>One bad node and plain ros2 param list</h2>
+
+<p>Without a node name, <code>ros2 param list</code> asks every node. With a healthy node and a non-spinning node both running, Humble printed the healthy node's parameters and then the <code>None</code> line for <code>/nospin</code> (4.98 s). Lyrical did the same with its <code>Timed out</code> line (6.11 s). Jazzy printed the healthy node's parameters and then hung on the other one. On Jazzy, query nodes one at a time to find the one that isn't answering.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Cause it fixes</th><th><code>param list</code> after the fix (Humble / Jazzy / Lyrical)</th></tr></thead>
+<tbody>
+<tr><td>Spin the node in a thread</td><td>Node never spins</td><td>0.98 s / 2.81 s / 2.81 s</td></tr>
+<tr><td><code>MultiThreadedExecutor</code> plus its own callback group for the slow callback</td><td>Blocked callback</td><td>0.98 s / 2.81 s / 2.82 s</td></tr>
+<tr><td>Add every node to the executor</td><td>Unspun second node</td><td>1.32 s / 3.06 s / 1.10 s</td></tr>
+<tr><td>Same <code>RMW_IMPLEMENTATION</code> in the CLI shell, daemon restarted</td><td>RMW mismatch</td><td>1.07 s / 1.16 s / 1.15 s (Lyrical in a clean rerun)</td></tr>
+<tr><td><code>--no-daemon</code></td><td>Diagnosis only: shows a dead node as <code>Node not found</code></td><td>0.97 s / 1.09 s / 1.05 s</td></tr>
+</tbody>
+</table>
+
+<p>On Lyrical, raising <code>--service-timeout</code> can only help with a slow callback. I measured only the 5.0 s default. When I stopped the thread-spin node, its spin thread printed a traceback (<code>Exception in thread Thread-1 (spin)</code>) on all three distros. That happened at shutdown, after every answer had come back.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble, ros2cli/ros2param 0.18.20: <code>list</code> waits 1 s per node, then prints <code>Exception while calling service of node '...': None</code>. <code>get</code> has no timeout option and waits without a limit for the reply. <code>ros2 param get --help</code> showed no timeout flag.</li>
+<li>Jazzy, 0.32.13: <code>list</code> waits for the reply without a limit, so an unanswered node hangs it silently. <code>get</code> has <code>--timeout N</code>, but that is "Wait for N seconds until node becomes available (default 1 sec)", not a reply timeout.</li>
+<li>Lyrical, 0.40.9: <code>list</code> has <code>--service-timeout N</code> (default 5.0) and prints <code>Timed out waiting for list_parameters response from node NodeName(...) (timeout: 5.0s)</code>. <code>get</code> has both <code>--timeout</code> and <code>--service-timeout</code>, and the second one defaults to waiting indefinitely.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>C++ (rclcpp) nodes, lifecycle nodes, Nav2 and rqt (the setups in several of the linked questions), <code>rmw_zenoh_cpp</code>, nodes on another machine, <code>--service-timeout</code> values other than the default, <code>ros2 param set</code>, <code>dump</code> and <code>describe</code>, <code>get</code> on a dead node, and Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Exception while calling service of node ... : None" mean?</h3>
+<p>On Humble, <code>ros2 param list</code> sent a <code>list_parameters</code> request and got no reply within about one second. <code>None</code> means no exception was set. The node exists, but nothing in it processed the request. Usually it isn't spinning, or a callback is blocking its only executor thread.</p>
+
+<h3>Why does ros2 param list hang on Jazzy instead of printing the error?</h3>
+<p>Jazzy's <code>ros2 param list</code> waits for the reply without a time limit. The same non-spinning node that gives the <code>None</code> message on Humble in 2 s left Jazzy printing nothing for 30 s. Lyrical added <code>--service-timeout</code>, with a 5 s default for <code>list</code>.</p>
+
+<h3>Why can I see the node in ros2 node list but not its parameters?</h3>
+<p>Node discovery and service replies are separate. <code>ros2 node list</code> showed every failing node, and <code>ros2 service list</code> showed the services of the non-spinning and blocked ones. Only a spinning executor sends the reply. A different RMW on the CLI side caused the same symptom.</p>
+
+<h3>How do I list the parameters of teleop_twist_keyboard?</h3>
+<p>If the version you run reads keys in a loop that never spins, it can't answer parameter requests. I didn't test teleop_twist_keyboard itself, but my test node built that way never answered on any distro. The fix is in the node's code: spin it in a background thread.</p>
+
+<h3>Does pressing Ctrl+C cause the None message?</h3>
+<p>Not in my runs. Ctrl+C on a waiting <code>ros2 param get</code> (Humble) or <code>ros2 param list</code> (Jazzy) exited with code 2 and printed nothing. The message came from Humble's one-second wait.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Exception while calling service of node ... : None mean?", "acceptedAnswer": {"@type": "Answer", "text": "On Humble, ros2 param list sent a list_parameters request and got no reply within about one second. None means no exception was set. The node exists, but nothing in it processed the request. Usually it isn't spinning, or a callback is blocking its only executor thread."}},
+{"@type": "Question", "name": "Why does ros2 param list hang on Jazzy instead of printing the error?", "acceptedAnswer": {"@type": "Answer", "text": "Jazzy's ros2 param list waits for the reply without a time limit. The same non-spinning node that gives the None message on Humble in 2 s left Jazzy printing nothing for 30 s. Lyrical added --service-timeout, with a 5 s default for list."}},
+{"@type": "Question", "name": "Why can I see the node in ros2 node list but not its parameters?", "acceptedAnswer": {"@type": "Answer", "text": "Node discovery and service replies are separate. ros2 node list showed every failing node, and ros2 service list showed the services of the non-spinning and blocked ones. Only a spinning executor sends the reply. A different RMW on the CLI side caused the same symptom."}},
+{"@type": "Question", "name": "How do I list the parameters of teleop_twist_keyboard?", "acceptedAnswer": {"@type": "Answer", "text": "If the version you run reads keys in a loop that never spins, it can't answer parameter requests. I didn't test teleop_twist_keyboard itself, but my test node built that way never answered on any distro. The fix is in the node's code: spin it in a background thread."}},
+{"@type": "Question", "name": "Does pressing Ctrl+C cause the None message?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my runs. Ctrl+C on a waiting ros2 param get (Humble) or ros2 param list (Jazzy) exited with code 2 and printed nothing. The message came from Humble's one-second wait."}}
+]}
+</script>
+
+<p>Measured on 2026-11-14 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10, rmw_cyclonedds_cpp 1.3.5), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4, rmw_cyclonedds_cpp 2.2.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10, rmw_cyclonedds_cpp 4.1.5), on a 2 vCPU host, one distro at a time.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-19-ros2-param-exception-while-calling-service/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105422">How to list parameters for teleop_twist_keyboard node in ROS 2?</a>, <a href="https://robotics.stackexchange.com/questions/115496">How can I show the exception which happens in ros2 param list?</a>, <a href="https://robotics.stackexchange.com/questions/99988">How to get ros2 param list to work with simple custom node?</a>, <a href="https://answers.ros.org/question/395435/">Exception while calling service of node '&lt;my_node&gt;' : None</a>, <a href="https://github.com/ros2/ros2cli/issues/764">'ros2 param list' fails when a node isn't spinning</a>, <a href="https://github.com/ros2/ros2cli/issues/586">ros2 param list does not work with multiple rmw implementation</a>, <a href="https://github.com/ros2/ros2cli/issues/1089">ros2 param list hang in ROS 2 Kilted</a>.</p>
