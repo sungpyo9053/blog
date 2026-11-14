@@ -1,0 +1,251 @@
+<pre><code>3: Code style divergence in file 'src/talker.cpp':
+3:
+3: --- src/talker.cpp
+3: +++ src/talker.cpp.uncrustify
+3: @@ -8,3 +8,5 @@
+3: -Talker::Talker() : Node("talker"), count_(0) {
+...
+3: 2 files with code style divergence
+3/4 Test #3: uncrustify .......................***Failed    0.18 sec
+
+The following tests FAILED:
+	  3 - uncrustify (Failed)
+	  4 - xmllint (Failed)</code></pre>
+
+<p>Short answer: "Code style divergence" is not a compile error. It's the <code>uncrustify</code> test that <code>ament_lint_auto</code> adds to every <code>ament_cmake</code> package made with <code>ros2 pkg create</code>. The diff shows how ROS 2's uncrustify config wants the file laid out. Let the tool apply it, from the package folder:</p>
+
+<pre><code>source /opt/ros/humble/setup.bash
+cd ~/ws/src/my_pkg
+ament_uncrustify --reformat src include
+ament_uncrustify src include      # should end with: No problems found</code></pre>
+
+<p>That fixed every uncrustify failure in my run, on Humble, Jazzy and Lyrical, in about 0.1 seconds. Two catches. Code reformatted on Jazzy or Lyrical still failed uncrustify on Humble, so if you test on Humble, format on Humble. And if <code>xmllint</code> fails next to it with <code>failed to load external entity "http://download.ros.org/schema/package_format3.xsd"</code>, your code is fine. The test machine can't reach download.ros.org.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical unless the row says otherwise.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>Test</th><th>Cause in my run</th><th>Fix that worked</th></tr></thead>
+<tbody>
+<tr><td><code>Code style divergence in file '...'</code>, then a diff</td><td>uncrustify</td><td>Brace placement, 4-space indent, <code>if(</code>, lines over 100 characters</td><td><code>ament_uncrustify --reformat src include</code></td></tr>
+<tr><td>Same message, but only on Humble CI, for code that passes locally on Jazzy</td><td>uncrustify</td><td>Humble ships uncrustify 0.72.0, Jazzy and Lyrical ship 0.78.1</td><td>Run <code>--reformat</code> on Humble</td></tr>
+<tr><td><code>No copyright message found.  You should have a line: "Copyright [year] &lt;Copyright Owner&gt;"  [legal/copyright] [5]</code></td><td>cpplint</td><td>No copyright line at the top of the file. This includes the <code>my_node.cpp</code> that <code>ros2 pkg create</code> writes</td><td>Add a license header to every C++ file</td></tr>
+<tr><td><code>Lines should be &lt;= 100 characters long  [whitespace/line_length] [2]</code></td><td>cpplint</td><td>A 132-character <code>RCLCPP_INFO</code> line</td><td><code>--reformat</code> wrapped it; <code>// NOLINT</code> also works</td></tr>
+<tr><td><code>WXS schema http://download.ros.org/schema/package_format3.xsd failed to compile</code></td><td>xmllint</td><td>No network. The schema in <code>package.xml</code> is a URL</td><td>Run with network, or exclude the test offline</td></tr>
+<tr><td><code>cppcheck 2.7 has known performance issues and therefore will not be used</code></td><td>cppcheck</td><td>Not a failure. The test passes with every file skipped</td><td>Nothing to fix</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>One container per distro on a 2 vCPU Linux runner, run one after another: <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code>. In each container I installed <code>ros-&lt;distro&gt;-ament-lint-auto</code>, <code>ros-&lt;distro&gt;-ament-lint-common</code> and git, then disconnected the network. If your build stops at <code>find_package(ament_lint_auto REQUIRED)</code> instead, that is a missing package, which is a <a href="https://huntlab.app/en/ros2-colcon-could-not-find-a-package-configuration-file-provided-by/">"Could not find a package configuration file" problem</a>, not a style problem.</p>
+
+<p>The steps, all in <code>repro.sh</code>:</p>
+
+<ol>
+<li><code>ros2 pkg create --build-type ament_cmake --dependencies rclcpp std_msgs --node-name my_node lintpkg</code>, then <code>colcon build</code> and <code>colcon test</code> with nothing changed.</li>
+<li>Add a normal talker node: a header with <code>#pragma once</code> and a <code>.cpp</code> in 4-space, brace-on-the-same-line style, with one long <code>RCLCPP_INFO</code> line. It built on all three distros.</li>
+<li>Turn cpplint on, outside and inside a git repo.</li>
+<li><code>ament_uncrustify --reformat</code>, then fix the cpplint errors by hand.</li>
+<li>Check each distro's reformatted files with the other distros' uncrustify.</li>
+<li>Try the ways to skip a linter, and run xmllint again with the network connected.</li>
+</ol>
+
+<p>Before step 2, the untouched template passed cppcheck, lint_cmake and uncrustify on all three distros. Two linters never run on it. The template's <code>CMakeLists.txt</code> sets <code>ament_cmake_copyright_FOUND</code> and <code>ament_cmake_cpplint_FOUND</code> to <code>TRUE</code>, which tells <code>ament_lint_auto</code> to skip them:</p>
+
+<pre><code>if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()</code></pre>
+
+<p>So a fresh package runs four tests: cppcheck, lint_cmake, uncrustify and xmllint. After adding the talker, uncrustify failed on all three distros. lint_cmake still passed.</p>
+
+<h2>uncrustify: reading the diff, then --reformat</h2>
+
+<p>Lines starting with <code>-</code> are your file. Lines starting with <code>+</code> are what the ROS 2 config wants. On Humble the diff for my two files had 51 changed lines. On Jazzy and Lyrical it had 47. The changes fell into four groups:</p>
+
+<ul>
+<li>Function bodies open on their own line: <code>void Talker::timer_callback()</code>, then <code>{</code>.</li>
+<li>The constructor's initializer list moves to its own line, starting with <code>: Node("talker"), count_(0)</code>.</li>
+<li>Indent is 2 spaces, not 4.</li>
+<li>Lines over 100 characters are wrapped. The <code>RCLCPP_INFO</code> call was split over three lines.</li>
+</ul>
+
+<p><code>ament_uncrustify --reformat src include</code> rewrote both files in place. It took 103 ms on Humble, 126 ms on Jazzy and 135 ms on Lyrical. It exits with code 1 even when it works, because it still reports what it found:</p>
+
+<pre><code>2 files with code style divergence
+Code style divergence in file 'include/lintpkg/talker.hpp': reformatted file
+No code style divergence in file 'src/my_node.cpp'
+Code style divergence in file 'src/talker.cpp': reformatted file</code></pre>
+
+<p>A second run without <code>--reformat</code> printed <code>No problems found</code> and exited 0. In <code>colcon test</code> the uncrustify test then passed on all three distros. One <code>--reformat</code> pass was enough every time.</p>
+
+<p>The tool only changes layout. It never touched <code>#pragma once</code>, the include order or the <code>using namespace std::chrono_literals;</code> line. It also has no idea about cpplint. More on that below.</p>
+
+<h2>Code formatted on Jazzy or Lyrical fails on Humble</h2>
+
+<p>This is the trap for anyone who develops on Jazzy and tests on Humble, or who supports both in one branch. Humble ships uncrustify 0.72.0 (<code>uncrustify_vendor</code> 2.0.2). Jazzy and Lyrical ship 0.78.1 (<code>uncrustify_vendor</code> 3.0.1 and 3.2.0). The configs do not agree.</p>
+
+<p>I took the files that each distro's <code>--reformat</code> produced and checked them with the other distros' uncrustify:</p>
+
+<table>
+<thead><tr><th>Formatted on</th><th>Checked on Humble</th><th>Checked on Jazzy</th><th>Checked on Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>pass</td><td>pass</td><td>pass</td></tr>
+<tr><td>Jazzy</td><td>fail, 2 files</td><td>pass</td><td>pass</td></tr>
+<tr><td>Lyrical</td><td>fail, 2 files</td><td>Not tested</td><td>pass</td></tr>
+</tbody>
+</table>
+
+<p>Jazzy's and Lyrical's reformatted <code>talker.cpp</code> were identical. Humble rejected three things in them:</p>
+
+<pre><code>-class Talker : public rclcpp::Node {
++class Talker : public rclcpp::Node
++{
+-  RCLCPP_INFO(this->get_logger(),
++  RCLCPP_INFO(
++    this->get_logger(),
+-  if(count_ > 10) {
++  if (count_ > 10) {</code></pre>
+
+<p>Jazzy left <code>if(count_ &gt; 10)</code> without a space and kept the class brace on the same line. Humble wants a space after <code>if</code> and the brace on its own line. The newer config accepts both forms, so Humble's output passes everywhere. If one branch has to pass on Humble and newer distros, run <code>--reformat</code> in a Humble container. The <a href="https://github.com/open-rmf/rmf_ros2/pull/362">open-rmf pull request</a> that turned uncrustify off by default ran into this between Jammy and Noble.</p>
+
+<h2>cpplint: off by default, and what it flagged</h2>
+
+<p>The template comment says cpplint "only works in a git repo". I commented out the <code>set(ament_cmake_cpplint_FOUND TRUE)</code> line and ran <code>ament_cpplint src include</code> twice: once in a plain folder and once after <code>git init</code> at the workspace root. The output was byte-for-byte the same on all three distros. <code>ament_cpplint</code> passed its own <code>--root</code> for each folder:</p>
+
+<pre><code>Using '--root=/ws/src/lintpkg/include' argument</code></pre>
+
+<p>So git made no difference in my run. The copyright part of the comment is what matters. Before the reformat, cpplint found 4 errors in 3 files:</p>
+
+<pre><code>/ws/src/lintpkg/include/lintpkg/talker.hpp:0:  No copyright message found.  You should have a line: "Copyright [year] &lt;Copyright Owner&gt;"  [legal/copyright] [5]
+/ws/src/lintpkg/src/my_node.cpp:0:  No copyright message found.  You should have a line: "Copyright [year] &lt;Copyright Owner&gt;"  [legal/copyright] [5]
+/ws/src/lintpkg/src/talker.cpp:0:  No copyright message found.  You should have a line: "Copyright [year] &lt;Copyright Owner&gt;"  [legal/copyright] [5]
+/ws/src/lintpkg/src/talker.cpp:16:  Lines should be &lt;= 100 characters long  [whitespace/line_length] [2]
+Category 'legal/copyright' errors found: 3
+Category 'whitespace/line_length' errors found: 1
+Total errors found: 4</code></pre>
+
+<p>On Lyrical the same errors came out with prefixes: <code>INFO: Total errors found: 4</code> for the summary and <code>DEBUG:</code> on the <code>--root</code> line.</p>
+
+<p>Note what it did not flag. <code>#pragma once</code> instead of an include guard, the project header included before <code>&lt;chrono&gt;</code>, <code>std::bind</code> without <code>&lt;functional&gt;</code> and <code>using namespace std::chrono_literals;</code> gave no errors. All three distros report the same bundled cpplint version, 1.5.5.</p>
+
+<p>After <code>--reformat</code>, the line length error was gone, because uncrustify had wrapped the line. The 3 copyright errors stayed. After I added an Apache license header to <code>talker.hpp</code> and <code>talker.cpp</code>, one error was left, in the file I never wrote:</p>
+
+<pre><code>/ws/src/lintpkg/src/my_node.cpp:0:  No copyright message found.  You should have a line: "Copyright [year] &lt;Copyright Owner&gt;"  [legal/copyright] [5]
+Total errors found: 1</code></pre>
+
+<p>The <code>my_node.cpp</code> that <code>ros2 pkg create --node-name</code> generates has no copyright line. Enabling cpplint on a generated package fails until you add a header to it too, or delete it.</p>
+
+<p>This cpplint check is separate from the <code>copyright</code> test that the template also skips. I left that one skipped. I didn't test it here.</p>
+
+<h2>xmllint fails without network</h2>
+
+<p>The unchanged template failed one test from the start: xmllint. My containers had no network, and <code>package.xml</code> points at a schema on the internet:</p>
+
+<pre><code>&lt;?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?&gt;</code></pre>
+
+<p>On Humble and Jazzy the failure read:</p>
+
+<pre><code>File 'package.xml' is invalid:
+error : Resource temporarily unavailable
+warning: failed to load external entity "http://download.ros.org/schema/package_format3.xsd"
+Schemas parser error : Failed to locate the main schema resource at 'http://download.ros.org/schema/package_format3.xsd'.
+WXS schema http://download.ros.org/schema/package_format3.xsd failed to compile
+
+1 files are invalid</code></pre>
+
+<p>Lyrical tried to download the schema itself first and printed one more line before the same failure:</p>
+
+<pre><code>Warning: failed to download schema from 'http://download.ros.org/schema/package_format3.xsd': &lt;urlopen error [Errno -3] Temporary failure in name resolution&gt;</code></pre>
+
+<p>It failed fast, in 0.16 to 0.24 seconds. When I connected the same containers to the network, the same file passed with <code>File 'package.xml' is valid</code>. <code>ament_xmllint</code> took 655 ms on Humble, 490 ms on Jazzy and 530 ms on Lyrical, and the xmllint test took 0.55 to 0.59 seconds. So if xmllint fails in an offline CI job, a Docker build with <code>--network none</code> or behind a proxy, check the network before you edit <code>package.xml</code>. I didn't test a slow or partly reachable server. An <a href="https://github.com/autowarefoundation/autoware/pull/7362">Autoware pull request</a> reports that case ending in the 60-second CTest timeout.</p>
+
+<h2>cppcheck is skipped on all three</h2>
+
+<p>cppcheck "passed" on every distro, but it checked nothing. Each file was marked skipped in <code>cppcheck.xunit.xml</code>:</p>
+
+<pre><code>cppcheck 2.7 has known performance issues and therefore will not be used, set the AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS environment variable to override this.</code></pre>
+
+<p>Jazzy printed the same with cppcheck 2.13.0, and Lyrical with 2.19.0. If you see this line, nothing failed. I didn't run cppcheck with <code>AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS</code> set.</p>
+
+<h2>Fix options compared</h2>
+
+<p>I ran each option on the unformatted files with cpplint turned on. Results were the same on all three distros.</p>
+
+<table>
+<thead><tr><th>Option</th><th>What happened</th><th>Use when</th></tr></thead>
+<tbody>
+<tr><td><code>ament_uncrustify --reformat src include</code></td><td>uncrustify passed after one pass. Fixed the cpplint line length error too. Copyright errors stayed</td><td>Almost always. Run it on the oldest distro you test on</td></tr>
+<tr><td><code>list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_uncrustify ament_cmake_cpplint)</code> before <code>ament_lint_auto_find_test_dependencies()</code></td><td>The uncrustify and cpplint tests were not created. 3 tests ran: cppcheck, lint_cmake, xmllint</td><td>You use another formatter, such as clang-format</td></tr>
+<tr><td><code>set(AMENT_LINT_AUTO_FILE_EXCLUDE src/talker.cpp include/lintpkg/talker.hpp)</code></td><td>All 5 tests still ran. uncrustify passed, because only <code>my_node.cpp</code> was left to check. cpplint still failed</td><td>Generated or third-party files</td></tr>
+<tr><td><code>colcon test --ctest-args -E "uncrustify|cpplint"</code></td><td>3 tests ran, the same 3 as above. <code>CMakeLists.txt</code> unchanged</td><td>A one-off local run</td></tr>
+<tr><td><code>colcon build --cmake-args -DBUILD_TESTING=OFF</code>, then <code>colcon test</code></td><td>No tests were registered. <code>colcon test-result</code> said <code>Summary: 0 tests, 0 errors, 0 failures, 0 skipped</code></td><td>Release builds. Not a fix: it hides every test</td></tr>
+<tr><td><code>// NOLINT</code> at the end of a long line</td><td>cpplint skipped that line and still reported the same line without the comment. uncrustify ignored the comment and rewrapped the line</td><td>One line cpplint gets wrong</td></tr>
+<tr><td><code>/* *INDENT-OFF* */</code> ... <code>/* *INDENT-ON* */</code></td><td>uncrustify left the function between the markers alone. The same one-line function after the markers was changed to <code>int h() {return 3;}</code></td><td>A block you laid out by hand, like a table</td></tr>
+</tbody>
+</table>
+
+<p>In both the <code>-E</code> run and the <code>BUILD_TESTING=OFF</code> run, <code>colcon test</code> exited with 0. Check <code>colcon test-result</code>, not the exit code of <code>colcon test</code>.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble: ament_lint 0.12.15, uncrustify 0.72.0, cppcheck 2.7, cpplint 1.5.5.</li>
+<li>Jazzy: ament_lint 0.17.5, uncrustify 0.78.1, cppcheck 2.13.0, cpplint 1.5.5.</li>
+<li>Lyrical: ament_lint 0.20.6, uncrustify 0.78.1, cppcheck 2.19.0, cpplint 1.5.5.</li>
+<li>The <code>ros2 pkg create</code> template's test block was the same on all three, including both skip lines.</li>
+<li>Lyrical: the template itself built, but my first talker target used <code>ament_target_dependencies</code> and failed with <code>Unknown CMake command "ament_target_dependencies"</code>. I switched the talker to <code>target_link_libraries(talker rclcpp::rclcpp ${std_msgs_TARGETS})</code> on all three distros for the runs above.</li>
+<li>Lyrical's cpplint adds <code>INFO:</code> and <code>DEBUG:</code> prefixes, and Lyrical's xmllint prints a download warning before the schema error.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Lyrical-formatted files checked on Jazzy. Jazzy ran before Lyrical existed in my run, though Jazzy's and Lyrical's reformatted files were identical.</li>
+<li>The <code>copyright</code> test (<code>ament_copyright</code>). It stayed skipped by the template line.</li>
+<li><code>ament_clang_format</code>, <code>ament_clang_tidy</code> and a custom uncrustify config file.</li>
+<li>cppcheck with <code>AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS</code> set.</li>
+<li>A lint_cmake failure. lint_cmake passed on the template and on my <code>CMakeLists.txt</code>.</li>
+<li>xmllint with a slow or blocked download.ros.org, and with a proxy.</li>
+<li>ament_python packages, Rolling, Windows and macOS.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I fix "Code style divergence in file" in colcon test?</h3>
+<p>Run <code>ament_uncrustify --reformat src include</code> in the package folder, then <code>ament_uncrustify src include</code> to confirm. It should end with <code>No problems found</code>. One pass fixed every case in my run on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why does uncrustify pass on Jazzy but fail on Humble?</h3>
+<p>Humble ships uncrustify 0.72.0 and Jazzy ships 0.78.1, with different configs. In my run, Jazzy accepted <code>if(</code> and a class brace on the same line, and Humble rejected both. Code reformatted on Humble passed on Jazzy and Lyrical, so format on Humble if you test on both.</p>
+
+<h3>Is there an automatic fix for cpplint errors?</h3>
+<p>Not in ament_cpplint. In my run, <code>ament_uncrustify --reformat</code> fixed the only layout error cpplint reported, a line over 100 characters. The copyright errors needed a license header in each file, including the <code>my_node.cpp</code> that <code>ros2 pkg create</code> generates.</p>
+
+<h3>Why does xmllint fail on a package.xml I didn't change?</h3>
+<p>The schema in <code>package.xml</code> is a URL on download.ros.org. Without network, xmllint printed <code>failed to load external entity</code> and <code>failed to compile</code>, then <code>1 files are invalid</code>. The same file passed once the container had network.</p>
+
+<h3>How do I skip uncrustify or cpplint in ROS 2?</h3>
+<p>Add <code>list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_uncrustify ament_cmake_cpplint)</code> before <code>ament_lint_auto_find_test_dependencies()</code>. To skip only some files, use <code>set(AMENT_LINT_AUTO_FILE_EXCLUDE ...)</code>. For one local run, use <code>colcon test --ctest-args -E "uncrustify|cpplint"</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I fix Code style divergence in file in colcon test?", "acceptedAnswer": {"@type": "Answer", "text": "Run ament_uncrustify --reformat src include in the package folder, then ament_uncrustify src include to confirm. It should end with No problems found. One pass fixed every case in my run on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why does uncrustify pass on Jazzy but fail on Humble?", "acceptedAnswer": {"@type": "Answer", "text": "Humble ships uncrustify 0.72.0 and Jazzy ships 0.78.1, with different configs. In my run, Jazzy accepted if( and a class brace on the same line, and Humble rejected both. Code reformatted on Humble passed on Jazzy and Lyrical, so format on Humble if you test on both."}},
+{"@type": "Question", "name": "Is there an automatic fix for cpplint errors?", "acceptedAnswer": {"@type": "Answer", "text": "Not in ament_cpplint. In my run, ament_uncrustify --reformat fixed the only layout error cpplint reported, a line over 100 characters. The copyright errors needed a license header in each file, including the my_node.cpp that ros2 pkg create generates."}},
+{"@type": "Question", "name": "Why does xmllint fail on a package.xml I did not change?", "acceptedAnswer": {"@type": "Answer", "text": "The schema in package.xml is a URL on download.ros.org. Without network, xmllint printed failed to load external entity and failed to compile, then 1 files are invalid. The same file passed once the container had network."}},
+{"@type": "Question", "name": "How do I skip uncrustify or cpplint in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "Add list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_uncrustify ament_cmake_cpplint) before ament_lint_auto_find_test_dependencies(). To skip only some files, use set(AMENT_LINT_AUTO_FILE_EXCLUDE ...). For one local run, use colcon test --ctest-args -E with uncrustify and cpplint in the pattern."}}
+]}
+</script>
+
+<p>Measured on 2026-11-14 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, ament_lint 0.12.15, uncrustify 0.72.0, cppcheck 2.7, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, ament_lint 0.17.5, uncrustify 0.78.1, cppcheck 2.13.0, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, ament_lint 0.20.6, uncrustify 0.78.1, cppcheck 2.19.0, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-18-ros2-ament-uncrustify-cpplint-colcon-test/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/24000">How do you automate fixing formatting errors found by ament_cpplint?</a>, <a href="https://robotics.stackexchange.com/questions/24694">ROS 2 tutorial test: Failing System generated tests?</a>, <a href="https://robotics.stackexchange.com/questions/98111">How to use ament_lint to validate ROS2 package</a>, <a href="https://github.com/open-rmf/rmf_ros2/pull/362">disable uncrustify tests by default (Jammy and Noble)</a>, <a href="https://github.com/autowarefoundation/autoware/pull/7362">validate package.xml against local ROS schemas</a>.</p>
