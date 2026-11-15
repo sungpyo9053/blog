@@ -1,0 +1,570 @@
+### versions
+liburdfdom-model4.0 4.0.0-0ubuntu1
+liburdfdom-tools 4.0.0-0ubuntu1
+ros-jazzy-robot-state-publisher 3.3.4-1noble.20260915.184559
+ros-jazzy-urdf 2.10.1-2noble.20260911.051219
+ros-jazzy-urdfdom 4.0.2-1noble.20260603.151654
+ros-jazzy-xacro 2.1.1-1noble.20260519.011123
+Python 3.12.3
+
+### xacro expansions
+xacro macro_not_called rc=0 links=0
+xacro good rc=0 links=2
+xacro bad_include rc=2 bytes=0
+error: No such file or directory: /opt/ros/jazzy/share/robot_state_publisher/urdf/missing.xacro [Errno 2] No such file or directory: '/opt/ros/jazzy/share/robot_state_publisher/urdf/missing.xacro'
+when processing file: bad_include.xacro
+xacro nofile rc=1
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/xacro/__init__.py", line 1026, in parse
+    inp = f = open(os.path.join(root_dir, filename))
+
+### CASE params-file valid
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file valid.yaml
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6149
+
+### CASE params-file empty
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file empty.yaml
+[robot_state_publisher]: robot_description parameter must not be empty
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  robot_description parameter must not be empty
+[ros2run]: Aborted
+rc=250 elapsed_ms=402
+
+### CASE params-file macro_not_called
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file macro_not_called.yaml
+Error:   No link elements found in urdf file
+         at line 207 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=404
+
+### CASE params-file no_name
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file no_name.yaml
+Error:   No name given for the robot.
+         at line 119 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=407
+
+### CASE params-file limit_children
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file limit_children.yaml
+Error:   joint limit: no effort
+         at line 136 in ./urdf_parser/src/joint.cpp
+Error:   Could not parse limit element for joint [wheel_joint]
+         at line 454 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=403
+
+### CASE params-file revolute_no_limit
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file revolute_no_limit.yaml
+Error:   Joint [wheel_joint] is of type REVOLUTE but it does not specify limits
+         at line 461 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=410
+
+### CASE params-file limit_no_effort
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file limit_no_effort.yaml
+Error:   joint limit: no effort
+         at line 136 in ./urdf_parser/src/joint.cpp
+Error:   Could not parse limit element for joint [wheel_joint]
+         at line 454 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=420
+
+### CASE params-file limit_no_velocity
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file limit_no_velocity.yaml
+Error:   joint limit: no velocity
+         at line 152 in ./urdf_parser/src/joint.cpp
+Error:   Could not parse limit element for joint [wheel_joint]
+         at line 454 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=413
+
+### CASE params-file unclosed
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file unclosed.yaml
+Error:   Error=XML_ERROR_PARSING ErrorID=15 (0xf) Line number=2
+         at line 101 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=411
+
+### CASE params-file two_roots
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file two_roots.yaml
+Error:   Failed to find root link: Two root links found: [base_link] and [orphan]
+         at line 265 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=404
+
+### CASE params-file missing_child
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file missing_child.yaml
+Error:   Failed to build tree: child link [lidar] of joint [laser_joint] not found
+         at line 253 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=401
+
+### CASE params-file dup_link
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file dup_link.yaml
+Error:   link 'laser' is not unique.
+         at line 179 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=400
+
+### CASE params-file bad_joint_type
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file bad_joint_type.yaml
+Error:   Joint [wheel_joint] has no known type [spinning]
+         at line 420 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=405
+
+### CASE params-file good
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file good.yaml
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6148
+
+### CASE params-file bad_include
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file bad_include.yaml
+[robot_state_publisher]: robot_description parameter must not be empty
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  robot_description parameter must not be empty
+[ros2run]: Aborted
+rc=250 elapsed_ms=403
+
+### CASE params-file raw xacro (not expanded)
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file raw_xacro.yaml
+Error:   No link elements found in urdf file
+         at line 207 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=405
+
+### CASE params-file robot_description = path string
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file path.yaml
+Error:   Error=XML_ERROR_PARSING_TEXT ErrorID=8 (0x8) Line number=1
+         at line 101 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Unable to initialize urdf::model from robot description
+[ros2run]: Aborted
+rc=250 elapsed_ms=416
+
+### CASE no robot_description at all
+$ ros2 run robot_state_publisher robot_state_publisher
+[robot_state_publisher]: robot_description parameter must not be empty
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  robot_description parameter must not be empty
+[ros2run]: Aborted
+rc=250 elapsed_ms=406
+
+### CASE positional urdf file argument
+$ ros2 run robot_state_publisher robot_state_publisher /w/n_jazzy/valid.urdf
+[robot_state_publisher]: No robot_description parameter, but command-line argument available.  Assuming argument is name of URDF file.  This backwards compatibility fallback will be removed in the future.
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6146
+
+### CASE -p robot_description:=$(xacro good.xacro)
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:=<?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from good.xacro                     | -->
+<!-- |    EDITING THIS FILE BY HAND IS NOT RECOMMENDED                                 | -->
+<!-- =================================================================================== -->
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser"/>
+    <origin rpy="0 0 0" xyz="0.1 0 0.2"/>
+  </joint>
+</robot>
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6150
+
+### CASE -p robot_description:=$(cat valid.urdf)
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:=<?xml version="1.0"?>
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"/>
+  <link name="wheel"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/><child link="laser"/>
+    <origin xyz="0.1 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <joint name="wheel_joint" type="revolute">
+    <parent link="base_link"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="10"/>
+  </joint>
+</robot>
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6146
+
+### CASE -p robot_description:=<one-line urdf>
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:=<?xml version="1.0"?><robot name="bot"> <link name="base_link"/> <link name="laser"/> <link name="wheel"/> <join
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6145
+
+### CASE params-file colon_comment
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file colon_comment.yaml
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6148
+
+### CASE -p robot_description:=$(cat colon_comment.urdf)
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:=<?xml version="1.0"?>
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"/>
+  <!-- note: wheel radius is 0.05 -->
+  <link name="wheel"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/><child link="laser"/>
+    <origin xyz="0.1 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <joint name="wheel_joint" type="revolute">
+    <parent link="base_link"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="10"/>
+  </joint>
+</robot>
+[rcl]: Failed to parse global arguments
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'
+  what():  failed to initialize rcl: Couldn't parse parameter override rule: '-p robot_description:=<?xml version="1.0"?>
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"/>
+  <!-- note: wheel radius is 0.05 -->
+  <link name="wheel"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/><child link="laser"/>
+    <origin xyz="0.1 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <joint name="wheel_joint" type="revolute">
+    <parent link="base_link"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="10"/>
+  </joint>
+</robot>'. Error: Error parsing an event, at ./src/parse.c:927, at ./src/rcl/arguments.c:352
+[ros2run]: Aborted
+rc=250 elapsed_ms=385
+
+### CASE -p robot_description:='$(cat colon_comment.urdf)' (single quotes inside)
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:='<?xml version="1.0"?>
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"/>
+  <!-- note: wheel radius is 0.05 -->
+  <link name="wheel"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/><child link="laser"/>
+    <origin xyz="0.1 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <joint name="wheel_joint" type="revolute">
+    <parent link="base_link"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="10"/>
+  </joint>
+</robot>'
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6147
+
+### CASE params-file colon_attr
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args --params-file colon_attr.yaml
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6146
+
+### CASE -p robot_description:=$(cat colon_attr.urdf)
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:=<?xml version="1.0"?>
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"><visual><geometry><mesh filename="package://bot/meshes/laser.stl"/></geometry></visual></link>
+  <link name="wheel"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/><child link="laser"/>
+    <origin xyz="0.1 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <joint name="wheel_joint" type="revolute">
+    <parent link="base_link"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="10"/>
+  </joint>
+</robot>
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6149
+
+### CASE -p robot_description:='$(cat colon_attr.urdf)' (single quotes inside)
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:='<?xml version="1.0"?>
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"><visual><geometry><mesh filename="package://bot/meshes/laser.stl"/></geometry></visual></link>
+  <link name="wheel"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/><child link="laser"/>
+    <origin xyz="0.1 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <joint name="wheel_joint" type="revolute">
+    <parent link="base_link"/><child link="wheel"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="10"/>
+  </joint>
+</robot>'
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6146
+
+### CASE -p robot_description:='<xacro output in single quotes>'
+$ ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:='<?xml version="1.0" ?>
+<!-- =================================================================================== -->
+<!-- |    This document was autogenerated by xacro from good.xacro                     | -->
+<!-- |    EDITING THIS FILE BY HAND IS NOT RECOMMENDED                                 | -->
+<!-- =================================================================================== -->
+<robot name="bot">
+  <link name="base_link"/>
+  <link name="laser"/>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser"/>
+    <origin rpy="0 0 0" xyz="0.1 0 0.2"/>
+  </joint>
+</robot>'
+[robot_state_publisher]: Robot initialized
+[rclcpp]: signal_handler(SIGINT/SIGTERM)
+rc=124 elapsed_ms=6146
+
+### check_urdf
+-- check_urdf valid
+robot name is: bot
+---------- Successfully Parsed XML ---------------
+root Link: base_link has 2 child(ren)
+    child(1):  laser
+    child(2):  wheel
+rc=0
+-- check_urdf empty
+Error:   Error=XML_ERROR_EMPTY_DOCUMENT ErrorID=13 (0xd) Line number=0
+         at line 101 in ./urdf_parser/src/model.cpp
+ERROR: Model Parsing the xml failed
+rc=255
+-- check_urdf macro_not_called
+Error:   No link elements found in urdf file
+         at line 207 in ./urdf_parser/src/model.cpp
+ERROR: Model Parsing the xml failed
+rc=255
+-- check_urdf no_name
+Error:   No name given for the robot.
+         at line 119 in ./urdf_parser/src/model.cpp
+ERROR: Model Parsing the xml failed
+rc=255
+-- check_urdf limit_children
+Error:   joint limit: no effort
+         at line 136 in ./urdf_parser/src/joint.cpp
+Error:   Could not parse limit element for joint [wheel_joint]
+         at line 454 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+rc=255
+-- check_urdf revolute_no_limit
+Error:   Joint [wheel_joint] is of type REVOLUTE but it does not specify limits
+         at line 461 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+ERROR: Model Parsing the xml failed
+rc=255
+-- check_urdf limit_no_effort
+Error:   joint limit: no effort
+         at line 136 in ./urdf_parser/src/joint.cpp
+Error:   Could not parse limit element for joint [wheel_joint]
+         at line 454 in ./urdf_parser/src/joint.cpp
+Error:   joint xml is not initialized correctly
+         at line 234 in ./urdf_parser/src/model.cpp
+rc=141
+-- check_urdf two_roots
+Error:   Failed to find root link: Two root links found: [base_link] and [orphan]
+         at line 265 in ./urdf_parser/src/model.cpp
+ERROR: Model Parsing the xml failed
+rc=255
+-- check_urdf missing_child
+Error:   Failed to build tree: child link [lidar] of joint [laser_joint] not found
+         at line 253 in ./urdf_parser/src/model.cpp
+ERROR: Model Parsing the xml failed
+rc=255
+-- check_urdf good.xacro (raw)
+Error:   No link elements found in urdf file
+         at line 207 in ./urdf_parser/src/model.cpp
+ERROR: Model Parsing the xml failed
+rc=255
+
+### CASE launch command
+$ ros2 launch /w/n_jazzy/l_command.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-15-00-17-50-871820-035ffc2bc4bb-1052
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1056]
+[robot_state_publisher-1] [INFO] [1794701871.158168140] [robot_state_publisher]: Robot initialized
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1794701876.383486476] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1794701876.385792515] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1056]
+rc=124 elapsed_ms=6167
+
+### CASE launch read
+$ ros2 launch /w/n_jazzy/l_read.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-15-00-17-56-837114-035ffc2bc4bb-1077
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1080]
+[robot_state_publisher-1] [INFO] [1794701876.917236070] [robot_state_publisher]: Robot initialized
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1794701882.555952458] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1794701882.557627429] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1080]
+rc=124 elapsed_ms=6284
+
+### CASE launch path
+$ ros2 launch /w/n_jazzy/l_path.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-15-00-18-03-235387-035ffc2bc4bb-1101
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1104]
+[robot_state_publisher-1] Error:   Error=XML_ERROR_PARSING_TEXT ErrorID=8 (0x8) Line number=1
+[robot_state_publisher-1]          at line 101 in ./urdf_parser/src/model.cpp
+[robot_state_publisher-1] Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+[robot_state_publisher-1] terminate called after throwing an instance of 'std::runtime_error'
+[robot_state_publisher-1]   what():  Unable to initialize urdf::model from robot description
+[ERROR] [robot_state_publisher-1]: process has died [pid 1104, exit code -6, cmd '/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args --params-file /tmp/launch_params__pwgvrr8'].
+rc=0 elapsed_ms=709
+
+### CASE launch args
+$ ros2 launch /w/n_jazzy/l_args.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-15-00-18-03-840705-035ffc2bc4bb-1125
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1128]
+[robot_state_publisher-1] [WARN] [1794701883.914191687] [robot_state_publisher]: No robot_description parameter, but command-line argument available.  Assuming argument is name of URDF file.  This backwards compatibility fallback will be removed in the future.
+[robot_state_publisher-1] [INFO] [1794701883.918149432] [robot_state_publisher]: Robot initialized
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1794701889.555946907] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1794701889.558934609] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1128]
+rc=124 elapsed_ms=6173
+
+### CASE launch badinc
+$ ros2 launch /w/n_jazzy/l_badinc.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-15-00-18-10-023406-035ffc2bc4bb-1149
+[INFO] [launch]: Default logging verbosity is set to INFO
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executed command failed. Command: xacro /w/n_jazzy/bad_include.xacro
+Captured stderr output: error: No such file or directory: /opt/ros/jazzy/share/robot_state_publisher/urdf/missing.xacro [Errno 2] No such file or directory: '/opt/ros/jazzy/share/robot_state_publisher/urdf/missing.xacro'
+when processing file: /w/n_jazzy/bad_include.xacro
+
+rc=1 elapsed_ms=502
+
+### CASE launch macro
+$ ros2 launch /w/n_jazzy/l_macro.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-15-00-18-10-525233-035ffc2bc4bb-1160
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1164]
+[robot_state_publisher-1] Error:   No link elements found in urdf file
+[robot_state_publisher-1]          at line 207 in ./urdf_parser/src/model.cpp
+[robot_state_publisher-1] Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+[robot_state_publisher-1] terminate called after throwing an instance of 'std::runtime_error'
+[robot_state_publisher-1]   what():  Unable to initialize urdf::model from robot description
+[ERROR] [robot_state_publisher-1]: process has died [pid 1164, exit code -6, cmd '/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args --params-file /tmp/launch_params_01wj2m_o'].
+rc=0 elapsed_ms=690
+
+### CASE launch colon
+$ ros2 launch /w/n_jazzy/l_colon.launch.py
+[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-15-00-18-11-219252-035ffc2bc4bb-1185
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1188]
+[robot_state_publisher-1] [INFO] [1794701891.300718090] [robot_state_publisher]: Robot initialized
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[robot_state_publisher-1] [INFO] [1794701896.933115567] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1794701896.935377092] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 1188]
+rc=124 elapsed_ms=6167
+
+### working node outputs (valid.urdf via params file)
+-- /tf_static (transient_local)
+    frame_id: base_link
+  child_frame_id: laser
+      x: 0.1
+      z: 0.2
+      x: 0.0
+      z: 0.0
+-- /robot_description first lines
+data: "<?xml version=\"1.0\"?>\n<robot name=\"bot\">\n  <link name=\"base_link\"/>\n  <link name=\"laser\"/>\n  <link na
+---
+-- /tf messages in 5 s without /joint_states
+0
+-- /tf after one /joint_states message, header=''
+echo rc=124
+-- /tf after one /joint_states message, header='header: {stamp: now}, '
+  child_frame_id: wheel
+      z: 0.0
+      z: 0.2474039592545229
+      w: 0.968912421710645
+echo rc=0
+-- set robot_description at runtime to a URDF with no links
+Setting parameter failed: Unable to initialize urdf::model from robot description
+-- node alive after bad runtime set: yes
+-- set it back to valid
+Set parameter successful
+-- rsp log
+[robot_state_publisher]: Robot initialized
+Error:   No link elements found in urdf file
+         at line 207 in ./urdf_parser/src/model.cpp
+Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+[robot_state_publisher]: Unable to initialize urdf::model from robot description
+[robot_state_publisher]: Robot initialized
+[ros2run]: Killed
+### done

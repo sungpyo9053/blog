@@ -1,0 +1,207 @@
+<pre><code>[robot_state_publisher-1] Error:   No link elements found in urdf file
+[robot_state_publisher-1]          at line 207 in ./urdf_parser/src/model.cpp
+[robot_state_publisher-1] Failed to parse robot description using: urdf_xml_parser/URDFXMLParser
+[robot_state_publisher-1] terminate called after throwing an instance of 'std::runtime_error'
+[robot_state_publisher-1]   what():  Unable to initialize urdf::model from robot description
+[ERROR] [robot_state_publisher-1]: process has died [pid 1164, exit code -6, cmd '...']</code></pre>
+
+<p>That's Jazzy. Humble prints the same lines with <code>line 206</code>. Lyrical logs the middle line as a warning from the <code>[urdf]</code> logger. Run it with <code>ros2 run</code> instead of a launch file and the last line reads <code>[ros2run]: Aborted</code>.</p>
+
+<p>Short answer: <code>robot_state_publisher</code> got a string it couldn't build a robot from, and it exits right away. The first <code>Error:</code> line names the real problem. <code>Failed to parse robot description</code> and <code>Unable to initialize urdf::model</code> come after it every time, so they don't tell you anything. "No link elements found" almost always means the parser never saw a <code>&lt;link&gt;</code>. Either the xacro file was passed in without running <code>xacro</code>, or the links sit inside a macro that is never called. This launch setup worked on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-python">from launch import LaunchDescription
+from launch.substitutions import Command
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+
+def generate_launch_description():
+    desc = ParameterValue(Command(['xacro ', '/path/to/robot.urdf.xacro']), value_type=str)
+    return LaunchDescription([Node(
+        package='robot_state_publisher', executable='robot_state_publisher',
+        parameters=[{'robot_description': desc}], output='screen')])</code></pre>
+
+<p>Before you change anything, run <code>xacro robot.urdf.xacro &gt; /tmp/out.urdf</code> and then <code>check_urdf /tmp/out.urdf</code>. In my runs <code>check_urdf</code> printed the same <code>Error:</code> line as <code>robot_state_publisher</code> for each of the seven broken models I gave it. An empty file was the exception: <code>robot_state_publisher</code> checks for an empty string before it parses.</p>
+
+<h2>Find your error</h2>
+
+<p>Match the first <code>Error:</code> line (or the <code>what():</code> line if there is no <code>Error:</code>). Each row below was measured with <code>ros2 run</code> on all three distros. Where a distro printed different text, the row says so.</p>
+
+<table>
+<thead><tr><th>First error line</th><th>What was wrong</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>No link elements found in urdf file</code></td><td>Raw <code>.xacro</code> text passed in, or links only inside a <code>xacro:macro</code> that is never called</td><td>Run <code>xacro</code>. Call the macro (<code>&lt;xacro:body/&gt;</code>)</td></tr>
+<tr><td>Humble: <code>Error document empty.</code><br>Jazzy, Lyrical: <code>Error=XML_ERROR_PARSING_TEXT ErrorID=8 (0x8) Line number=1</code></td><td><code>robot_description</code> set to a file path, not the file's contents</td><td>Pass the contents: <code>open(path).read()</code> or <code>Command(['xacro ', path])</code></td></tr>
+<tr><td><code>robot_description parameter must not be empty</code></td><td>Parameter not set, set to <code>''</code>, or filled from a xacro run that failed. On Lyrical also: URDF path given as a plain argument</td><td>Set the parameter. Check that <code>xacro</code> exits with 0</td></tr>
+<tr><td>Humble, Jazzy: <code>joint limit: no effort</code><br>Lyrical: <code>joint [wheel_joint]: limit has no effort</code></td><td><code>&lt;limit&gt;</code> written with child elements, or without the <code>effort</code> attribute</td><td><code>&lt;limit lower="..." upper="..." effort="100" velocity="10"/&gt;</code></td></tr>
+<tr><td><code>joint limit: no velocity</code> (Lyrical: <code>limit has no velocity</code>)</td><td><code>velocity</code> attribute missing</td><td>Add <code>velocity="..."</code></td></tr>
+<tr><td><code>Joint [wheel_joint] is of type REVOLUTE but it does not specify limits</code></td><td>Revolute joint with no <code>&lt;limit&gt;</code></td><td>Add a limit, or use <code>continuous</code> for a wheel</td></tr>
+<tr><td><code>No name given for the robot.</code></td><td><code>&lt;robot&gt;</code> with no <code>name</code></td><td><code>&lt;robot name="bot"&gt;</code></td></tr>
+<tr><td><code>Failed to find root link: Two root links found: [base_link] and [orphan]</code></td><td>A link that no joint connects</td><td>Add a joint, or remove the link</td></tr>
+<tr><td><code>Failed to build tree: child link [lidar] of joint [laser_joint] not found</code></td><td>Joint names a link that doesn't exist (a typo)</td><td>Fix the name</td></tr>
+<tr><td><code>link 'laser' is not unique.</code></td><td>Same link defined twice</td><td>Rename or delete one</td></tr>
+<tr><td><code>Joint [wheel_joint] has no known type [spinning]</code></td><td>Bad joint <code>type</code></td><td>Use <code>fixed</code>, <code>revolute</code>, <code>continuous</code>, <code>prismatic</code>, <code>floating</code> or <code>planar</code></td></tr>
+<tr><td>Humble: <code>Error reading end tag.</code><br>Jazzy, Lyrical: <code>Error=XML_ERROR_PARSING ErrorID=15 (0xf) Line number=2</code></td><td>XML not well formed (I removed <code>&lt;/robot&gt;</code>)</td><td>Close the tag</td></tr>
+<tr><td><code>[rcl]: Failed to parse global arguments</code>, then <code>Couldn't parse parameter override rule: '-p robot_description:=...'. Error: Error parsing an event</code></td><td><code>-p robot_description:="$(cat file)"</code> where an XML comment contains a colon and a space</td><td>Wrap the value in single quotes inside the rule, or use a params file or launch</td></tr>
+<tr><td><code>executed command failed. Command: xacro ...</code> (from <code>ros2 launch</code>)</td><td><code>xacro</code> itself failed, here on a missing include</td><td>Fix the xacro error. The node never starts</td></tr>
+</tbody>
+</table>
+
+<p>Every parse failure ended the same way with <code>ros2 run</code>: <code>terminate called after throwing an instance of 'std::runtime_error'</code>, <code>[ros2run]: Aborted</code> and exit status 250. Under <code>ros2 launch</code> it showed up as <code>process has died [..., exit code -6, ...]</code>. The node never stays up with a bad description, so there is nothing to retry. It died within 315 to 969 ms on Humble, 385 to 420 ms on Jazzy and 502 to 521 ms on Lyrical.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-15 I used <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> on a 2 vCPU Linux host, one distro at a time. In each container I installed <code>robot_state_publisher</code>, <code>xacro</code> and <code>liburdfdom-tools</code> (for <code>check_urdf</code>) from apt. I started from one valid URDF with three links (<code>base_link</code>, <code>laser</code>, <code>wheel</code>), a fixed joint and a revolute joint. Then I broke it one way at a time.</p>
+
+<p>Each of 36 cases per distro ran <code>robot_state_publisher</code> for up to 6 seconds. Most passed the URDF through a params file written with <code>yaml.safe_dump</code>, so YAML quoting couldn't interfere. Others used <code>-p</code>, a positional argument, or one of seven launch files. I also ran <code>check_urdf</code> on ten files. For the valid URDF I also checked what the node publishes: <code>/tf_static</code>, <code>/robot_description</code> and <code>/tf</code> after a <code>/joint_states</code> message. Finally I changed <code>robot_description</code> while the node was running.</p>
+
+<h2>No link elements found: xacro was not run, or the macro was not called</h2>
+
+<p>I got this error from three inputs, on all three distros:</p>
+
+<ul>
+<li>The raw <code>.xacro</code> file text passed as <code>robot_description</code>. The links in my file sat inside a <code>xacro:macro</code>. To the URDF parser a macro body is just an unknown element, so it found no top-level <code>&lt;link&gt;</code>.</li>
+<li>A xacro file where the links are inside a macro that is never called. <code>xacro</code> exited with 0 and wrote a <code>&lt;robot&gt;</code> with zero <code>&lt;link&gt;</code> lines. Then <code>robot_state_publisher</code> failed. Running <code>xacro</code> didn't help here, because the output really has no links.</li>
+<li>The same file through <code>Command(['xacro ', path])</code> in a launch file. xacro succeeded, and the node died with exit code -6.</li>
+</ul>
+
+<p><code>check_urdf</code> on the raw <code>.xacro</code> file also printed <code>No link elements found in urdf file</code>, which is the confusing case in <a href="https://robotics.stackexchange.com/questions/96157">check_urdf fails stating no link elements found</a>. <code>check_urdf</code> doesn't expand xacro, so run <code>xacro</code> first and check its output. A quick test: <code>xacro robot.urdf.xacro | grep -c '&lt;link'</code>. In my runs that printed 0 for the uncalled macro and 2 once the macro was called.</p>
+
+<h2>Error document empty: you passed a path, not the URDF</h2>
+
+<p>Setting <code>robot_description</code> to a file path is a common mistake, either <code>'/w/n_humble/valid.urdf'</code> in a params file or <code>{'robot_description': path}</code> in a launch file. The parser tries to read the path itself as XML. Humble printed <code>Error document empty.</code>. Jazzy and Lyrical printed <code>Error=XML_ERROR_PARSING_TEXT ErrorID=8 (0x8) Line number=1</code>. Both then printed <code>Unable to initialize urdf::model from robot description</code>.</p>
+
+<p>Pass the contents instead. Both of these launch files started the node and logged <code>Robot initialized</code> (on Humble, <code>got segment base_link</code> and so on) on every distro:</p>
+
+<pre><code class="language-python"># plain URDF
+desc = open('/path/to/robot.urdf').read()
+# xacro
+desc = ParameterValue(Command(['xacro ', '/path/to/robot.urdf.xacro']), value_type=str)
+...
+parameters=[{'robot_description': desc}]</code></pre>
+
+<p>Humble and Jazzy have an older way to do this. If <code>robot_description</code> isn't set, <code>robot_state_publisher</code> treats its first plain argument as a file name. <code>ros2 run robot_state_publisher robot_state_publisher valid.urdf</code> and <code>arguments=[path]</code> in a launch file both worked there. Both printed <code>No robot_description parameter, but command-line argument available. Assuming argument is name of URDF file. This backwards compatibility fallback will be removed in the future.</code></p>
+
+<p>On Lyrical that fallback is gone. The same command died with <code>robot_description parameter must not be empty</code>, and so did the launch file with <code>arguments=[path]</code>.</p>
+
+<h2>robot_description parameter must not be empty</h2>
+
+<p>Four inputs gave this message:</p>
+
+<ul>
+<li>no parameter at all (<code>ros2 run robot_state_publisher robot_state_publisher</code>)</li>
+<li><code>robot_description: ''</code></li>
+<li>the output of a <code>xacro</code> run that failed. I wrote <code>xacro bad_include.xacro &gt; out.urdf</code>, the include was missing, xacro exited with code 2 and left a 0-byte file.</li>
+<li>on Lyrical only, the positional file argument described above</li>
+</ul>
+
+<p>Humble and Jazzy printed the message twice, once as a log line and once in <code>what():</code>. Lyrical printed only the <code>what():</code> line.</p>
+
+<p>In a launch file a failing xacro never gets that far. With <code>Command(['xacro ', path])</code> and the missing include, <code>ros2 launch</code> stopped before starting any process with <code>Caught exception in launch (see debug for traceback): executed command failed. Command: xacro /w/n_humble/bad_include.xacro</code>. The next line was the xacro error: <code>No such file or directory: /opt/ros/humble/share/robot_state_publisher/urdf/missing.xacro</code>. It exited with 1. In a shell script, check xacro's exit code yourself. A redirect hides the failure and leaves an empty file.</p>
+
+<h2>Joint and link errors</h2>
+
+<p>When the XML parses but the model is wrong, urdfdom names the joint or link. It also prints <code>joint xml is not initialized correctly</code>, which you can skip. The case from <a href="https://robotics.stackexchange.com/questions/110645">robot_state_publisher Error: joint limit: no effort</a> reproduced exactly. With <code>&lt;limit&gt;&lt;lower&gt;...&lt;/lower&gt;&lt;effort&gt;100&lt;/effort&gt;...&lt;/limit&gt;</code> I got <code>joint limit: no effort</code> on Humble and Jazzy, and <code>joint [wheel_joint]: limit has no effort</code> on Lyrical. In my run the child elements were ignored. urdfdom wants <code>lower</code>, <code>upper</code>, <code>effort</code> and <code>velocity</code> as attributes.</p>
+
+<p>A revolute joint with no <code>&lt;limit&gt;</code> at all gave a different message: <code>Joint [wheel_joint] is of type REVOLUTE but it does not specify limits</code>. Missing <code>velocity</code> gave <code>joint limit: no velocity</code>. The other model errors are in the table above, and their text matched on all three distros.</p>
+
+<h2>Failed to parse global arguments with -p robot_description</h2>
+
+<p>Passing the URDF on the command line usually worked. These four all started the node on every distro:</p>
+
+<pre><code>ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:="$(xacro good.xacro)"
+ros2 run robot_state_publisher robot_state_publisher --ros-args -p robot_description:="$(cat valid.urdf)"
+# the same URDF joined into one line
+# and a URDF with package://bot/meshes/laser.stl in a mesh filename</code></pre>
+
+<p>A colon followed by a space in an XML comment broke it. I added <code>&lt;!-- note: wheel radius is 0.05 --&gt;</code> to the valid URDF. With <code>"$(cat colon_comment.urdf)"</code> the node didn't start on any distro:</p>
+
+<pre><code>[rcl]: Failed to parse global arguments
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'
+  what():  failed to initialize rcl: Couldn't parse parameter override rule: '-p robot_description:=&lt;?xml version="1.0"?&gt;
+...
+&lt;/robot&gt;'. Error: Error parsing an event, at ./src/parse.c:914, at ./src/rcl/arguments.c:343</code></pre>
+
+<p>That's the Humble output. Lyrical showed <code>parse.c:1240</code> and <code>arguments.c:352</code>. The value after <code>:=</code> is read as YAML, and <code>note: wheel</code> looks like a YAML mapping. <code>package://</code> has no space after its colon, and that file worked. This matches the answer on <a href="https://robotics.stackexchange.com/questions/102227">Unable to parse URDF using command line but can do it in launch file</a>. Two fixes worked on all three distros. One is single quotes inside the rule, <code>-p "robot_description:='$(cat colon_comment.urdf)'"</code>, which makes YAML read the value as a string. The other is a params file or a launch file, and both loaded the same URDF without complaint. I didn't test a URDF that contains a single quote itself. For other <code>-p</code> and params-file parse errors, see <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">Failed to parse global arguments and params YAML errors</a>.</p>
+
+<h2>It starts, but /tf stays empty</h2>
+
+<p>With the valid URDF, the node published the fixed joint on <code>/tf_static</code> right away (<code>base_link</code> to <code>laser</code>, x 0.1, z 0.2). It also published the whole URDF on <code>/robot_description</code>. Both use transient local durability, so <code>ros2 topic echo</code> needed <code>--qos-durability transient_local</code> to see them.</p>
+
+<p>The revolute <code>wheel</code> frame comes only from <code>/joint_states</code>. In 5 seconds with no joint states, <code>/tf</code> carried 0 messages. Then I published one <code>JointState</code> for <code>wheel_joint</code> at 0.5 rad:</p>
+
+<ul>
+<li>With the header stamp left at zero (<code>ros2 topic pub</code> without a <code>header</code>), nothing reached <code>/tf</code> within 12 seconds, on all three distros.</li>
+<li>With <code>header: {stamp: now}</code> the transform arrived at once: <code>child_frame_id: wheel</code>, rotation z 0.2474, w 0.9689.</li>
+</ul>
+
+<p>If you test with <code>ros2 topic pub</code> or your own publisher, give the message a real stamp.</p>
+
+<h2>Changing robot_description while it runs</h2>
+
+<p><code>robot_description</code> can be set at runtime. <code>ros2 param set /robot_state_publisher robot_description "&lt;robot name='x'&gt;&lt;/robot&gt;"</code> returned <code>Setting parameter failed: Unable to initialize urdf::model from robot description</code>. The node logged <code>No link elements found in urdf file</code> and kept running on the old model. Setting it back to the valid URDF returned <code>Set parameter successful</code>. A bad runtime update gets rejected. A bad description at startup kills the node.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>How the URDF reaches the node</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Launch, <code>ParameterValue(Command(['xacro ', path]), value_type=str)</code></td><td>works</td><td>works</td><td>works</td><td>xacro errors stop the launch with the xacro message</td></tr>
+<tr><td>Launch, <code>open(path).read()</code></td><td>works</td><td>works</td><td>works</td><td>plain URDF only, no xacro</td></tr>
+<tr><td>Params file with the URDF as a string</td><td>works</td><td>works</td><td>works</td><td>let a YAML library write it</td></tr>
+<tr><td><code>-p robot_description:="$(xacro file)"</code></td><td>works</td><td>works</td><td>works</td><td>fails if a comment has a colon and a space</td></tr>
+<tr><td><code>-p "robot_description:='$(xacro file)'"</code></td><td>works</td><td>works</td><td>works</td><td>also works with the colon comment</td></tr>
+<tr><td>Path as the parameter value</td><td>fails</td><td>fails</td><td>fails</td><td><code>Error document empty.</code> or <code>XML_ERROR_PARSING_TEXT</code></td></tr>
+<tr><td>Path as a plain argument</td><td>works, with a deprecation warning</td><td>works, with a deprecation warning</td><td>fails</td><td>Lyrical: <code>must not be empty</code></td></tr>
+<tr><td>Raw <code>.xacro</code> text</td><td>fails</td><td>fails</td><td>fails</td><td><code>No link elements found</code> when the links are in macros</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble</strong> (robot_state_publisher 3.0.3, urdfdom 3.0.2): XML errors read like <code>Error document empty.</code> and <code>Error reading end tag.</code> On startup it logs <code>got segment base_link</code> for each link instead of <code>Robot initialized</code>.</li>
+<li><strong>Jazzy</strong> (3.3.4, urdfdom 4.0.2): XML errors use TinyXML2 codes, such as <code>XML_ERROR_PARSING_TEXT ErrorID=8</code> and <code>XML_ERROR_PARSING ErrorID=15</code>. The path fallback still works.</li>
+<li><strong>Lyrical</strong> (3.5.6, urdfdom 6.0.0): the limit messages name the joint (<code>joint [wheel_joint]: limit has no effort</code>). <code>Failed to parse robot description</code> is logged as a warning from the <code>[urdf]</code> logger. The positional URDF file fallback was removed.</li>
+<li>The <code>urdf_parser</code> source line numbers in the messages differ between distros (206, 207, 216 for the same check). Search for the message text, not the line number.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>URDFs with real meshes, Gazebo tags or <code>ros2_control</code> tags. <code>robot_state_publisher</code> doesn't load meshes, so I only checked that a <code>package://</code> filename didn't affect parsing.</li>
+<li><code>joint_state_publisher</code>, <code>joint_state_publisher_gui</code>, RViz and MoveIt.</li>
+<li>Reading the description from a topic instead of the parameter, which newer docs mention.</li>
+<li>A URDF that contains a single quote, passed with the single-quote <code>-p</code> fix.</li>
+<li>RMW implementations other than the default Fast DDS, and non-amd64 hosts.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does No link elements found in urdf file mean?</h3>
+<p>The parser didn't find a single top-level <code>&lt;link&gt;</code>. In my runs that happened when raw <code>.xacro</code> text was passed in without running <code>xacro</code>, and when the links were inside a <code>xacro:macro</code> that was never called. Check with <code>xacro file.urdf.xacro | grep -c '&lt;link'</code>.</p>
+
+<h3>Why does robot_state_publisher say Error document empty when my file is not empty?</h3>
+<p>On Humble that is what you get when <code>robot_description</code> holds a file path instead of the URDF text. Jazzy and Lyrical print <code>XML_ERROR_PARSING_TEXT</code> for the same mistake. Read the file in the launch file, or use <code>Command(['xacro ', path])</code> with <code>ParameterValue(..., value_type=str)</code>.</p>
+
+<h3>How do I fix joint limit: no effort?</h3>
+<p>Write the limit as attributes: <code>&lt;limit lower="-3.14" upper="3.14" effort="100" velocity="10"/&gt;</code>. Child elements like <code>&lt;effort&gt;100&lt;/effort&gt;</code> are ignored, and the joint then has no effort. Lyrical words it as <code>joint [name]: limit has no effort</code>.</p>
+
+<h3>Why does -p robot_description:="$(xacro ...)" fail with Failed to parse global arguments?</h3>
+<p>The value is parsed as YAML. In my test, a colon followed by a space inside an XML comment broke it on Humble, Jazzy and Lyrical, while the same URDF without that comment worked. Put single quotes inside the rule, or pass the URDF through a params file or a launch file.</p>
+
+<h3>Does ros2 run robot_state_publisher robot_state_publisher my.urdf still work?</h3>
+<p>On Humble and Jazzy yes, with a warning that the fallback will be removed. On Lyrical no. It died with <code>robot_description parameter must not be empty</code>. Set the <code>robot_description</code> parameter instead.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does No link elements found in urdf file mean?", "acceptedAnswer": {"@type": "Answer", "text": "The parser didn't find a single top-level link element. In my runs that happened when raw .xacro text was passed in without running xacro, and when the links were inside a xacro:macro that was never called. Check by running xacro on the file and counting the link lines in the output."}},
+{"@type": "Question", "name": "Why does robot_state_publisher say Error document empty when my file is not empty?", "acceptedAnswer": {"@type": "Answer", "text": "On Humble that is what you get when robot_description holds a file path instead of the URDF text. Jazzy and Lyrical print XML_ERROR_PARSING_TEXT for the same mistake. Read the file in the launch file, or use Command(['xacro ', path]) with ParameterValue and value_type=str."}},
+{"@type": "Question", "name": "How do I fix joint limit: no effort?", "acceptedAnswer": {"@type": "Answer", "text": "Write the limit as attributes: lower, upper, effort and velocity on the limit tag itself. Child elements such as an effort element are ignored, and the joint then has no effort. Lyrical words it as joint [name]: limit has no effort."}},
+{"@type": "Question", "name": "Why does -p robot_description with xacro output fail with Failed to parse global arguments?", "acceptedAnswer": {"@type": "Answer", "text": "The value is parsed as YAML. In my test, a colon followed by a space inside an XML comment broke it on Humble, Jazzy and Lyrical, while the same URDF without that comment worked. Put single quotes inside the rule, or pass the URDF through a params file or a launch file."}},
+{"@type": "Question", "name": "Does ros2 run robot_state_publisher robot_state_publisher my.urdf still work?", "acceptedAnswer": {"@type": "Answer", "text": "On Humble and Jazzy yes, with a warning that the fallback will be removed. On Lyrical no. It died with robot_description parameter must not be empty. Set the robot_description parameter instead."}}
+]}
+</script>
+
+<p>Measured on 2026-11-15 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, robot_state_publisher 3.0.3, urdfdom 3.0.2, xacro 2.1.1, rclcpp 16.0.21, rclpy 3.3.22, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, robot_state_publisher 3.3.4, urdfdom 4.0.2, xacro 2.1.1, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, robot_state_publisher 3.5.6, urdfdom 6.0.0, xacro 2.1.1, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw 7.10.2), default RMW (Fast DDS). Full digests and versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-20-ros2-robot-state-publisher-urdf-errors/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/102227">Unable to parse URDF using command line but can do it in launch file</a>, <a href="https://robotics.stackexchange.com/questions/111904">URDF File is not parsed, robot state publisher sees the robot description empty</a>, <a href="https://robotics.stackexchange.com/questions/96082">Failed to build tree: child link of joint not found</a>, <a href="https://robotics.stackexchange.com/questions/110645">robot_state_publisher-1 Error: joint limit: no effort</a>, <a href="https://robotics.stackexchange.com/questions/96157">check_urdf fails stating no link elements found in urdf file</a>, <a href="https://robotics.stackexchange.com/questions/94933">No link elements found in urdf file</a>.</p>
