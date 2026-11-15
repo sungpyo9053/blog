@@ -1,0 +1,174 @@
+<pre><code># rclcpp node started with names: [] in a params file (or -p 'names:=[]')
+rclcpp::exceptions::InvalidParameterValueException: parameter_value_from failed for parameter 'names': No parameter value set
+
+# rclpy node, same file, after declare_parameter('names', ['a', 'b'])
+rclpy.exceptions.ParameterUninitializedException: The parameter 'names' is not initialized</code></pre>
+
+<p>On Lyrical the C++ text after the colon is <code>Invalid parameter value: rcl parameter structureContains no value</code> (the missing space is in the original). On Jazzy and Lyrical the Python message ends with <code>: names</code>.</p>
+
+<p>Short answer: an empty list has no element type, and ROS 2 parameters are typed. A params file or <code>-p</code> rule with <code>[]</code> reaches the node as a value with no type. rclcpp throws inside the <code>Node</code> constructor, before your code declares anything. rclpy doesn't throw at startup. It drops your default, and the first <code>get_parameter()</code> raises "is not initialized". The fix that worked on Humble, Jazzy and Lyrical is to keep <code>[]</code> out of params files, launch dictionaries and the command line, and to create the empty list in code with an explicit type:</p>
+
+<pre><code class="language-python"># rclpy
+from rclpy.parameter import Parameter
+from rclpy.exceptions import ParameterUninitializedException
+
+self.declare_parameter('names', Parameter.Type.STRING_ARRAY)   # no default value
+try:
+    names = list(self.get_parameter('names').value)
+except ParameterUninitializedException:
+    self.set_parameters([Parameter('names', Parameter.Type.STRING_ARRAY, [])])
+    names = []</code></pre>
+
+<pre><code class="language-cpp">// rclcpp: the template type is what makes {} a string array
+auto names = node->declare_parameter&lt;std::vector&lt;std::string&gt;&gt;("names", std::vector&lt;std::string&gt;{});</code></pre>
+
+<p>If the list should be empty, leave the key out of the YAML file. If a file really must say "empty", <code>names: [""]</code> parsed on every distro, and your code then has to drop the empty string.</p>
+
+<h2>Find your error</h2>
+
+<table>
+<thead><tr><th>What you did</th><th>What happened (all three distros unless noted)</th></tr></thead>
+<tbody>
+<tr><td><code>names: []</code> in a params file, rclcpp node</td><td><code>InvalidParameterValueException: parameter_value_from failed for parameter 'names': No parameter value set</code> from the <code>Node</code> constructor</td></tr>
+<tr><td><code>--ros-args -p 'names:=[]'</code>, rclcpp node</td><td>Same exception</td></tr>
+<tr><td><code>names: []</code> or <code>-p 'names:=[]'</code>, rclpy node with any typed declaration</td><td>No error at declare time. <code>get_parameter('names')</code> raises <code>ParameterUninitializedException: The parameter 'names' is not initialized</code>, even when the default was <code>['a', 'b']</code></td></tr>
+<tr><td><code>declare_parameter('names', [])</code> in rclpy</td><td>Declared as <code>BYTE_ARRAY</code>. Later <code>['x', 'y']</code> fails with <code>Wrong parameter type, expected 'Type.BYTE_ARRAY' got 'Type.STRING_ARRAY'</code></td></tr>
+<tr><td>Same, plus a params file with <code>names: [a, b]</code></td><td><code>InvalidParameterTypeException: Trying to set parameter 'names' to '['a', 'b']' of type 'STRING_ARRAY', expecting type 'BYTE_ARRAY'</code></td></tr>
+<tr><td><code>ros2 param set /node names '[]'</code></td><td>rclpy: <code>Setting parameter failed: Wrong parameter type, expected 'Type.STRING_ARRAY' got 'Type.BOOL_ARRAY'</code>. rclcpp: <code>... is of type {string_array}, setting it to {bool_array} is not allowed.</code> Exit code 0</td></tr>
+<tr><td><code>ros2 param load</code> with a file holding <code>names: []</code></td><td><code>Set parameter names failed: Wrong parameter type ...</code>, the same bool array message. Exit code 0</td></tr>
+<tr><td><code>Node(parameters=[{'names': []}])</code> in a launch file</td><td><code>Caught exception in launch (see debug for traceback): Expected 'value' to be one of [&lt;class 'float'&gt;, &lt;class 'int'&gt;, &lt;class 'str'&gt;, &lt;class 'bool'&gt;, &lt;class 'bytes'&gt;], but got '()' of type '&lt;class 'tuple'&gt;'</code>. Exit code 1, no node started</td></tr>
+<tr><td><code>names: null</code> in a params file, list default</td><td><code>Trying to set parameter 'names' to 'null' of type 'STRING', expecting type 'STRING_ARRAY'</code></td></tr>
+</tbody>
+</table>
+
+<p>On Lyrical, rclpy prints type numbers instead of names: <code>expected '9' got '6'</code>. In <code>rcl_interfaces/msg/ParameterType</code>, 5 is <code>BYTE_ARRAY</code>, 6 is <code>BOOL_ARRAY</code> and 9 is <code>STRING_ARRAY</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-15 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host, one distro at a time. Each container ran with <code>--network none</code>, <code>ROS_DOMAIN_ID=88</code> and a 1.5 CPU limit. One <code>ament_cmake</code> package held two nodes. <code>pnode.py</code> (rclpy) declares a parameter <code>names</code> in one of seven ways. <code>cnode</code> (rclcpp) declares it in one of three ways. Each node prints the declared type and value, tries a few <code>set_parameters</code> calls and exits.</p>
+
+<p>Every rclpy declaration ran against six inputs: no override, <code>names: []</code>, <code>names: [ ]</code>, <code>-p 'names:=[]'</code>, <code>names: [""]</code> and <code>names: [a, b]</code>. The rclcpp declarations ran against the same inputs except <code>[ ]</code>. That was 42 rclpy runs and 15 rclcpp runs per distro. Then I started nodes that kept spinning and ran <code>ros2 param get</code>, <code>set</code>, <code>describe</code>, <code>dump</code> and <code>load</code> against them. Last, a launch file passed <code>[]</code>, <code>['']</code>, <code>['a', 'b']</code> and a params file to both nodes. The package built in 5.4 s on Humble, 5.6 s on Jazzy and 7.0 s on Lyrical, and each full run took under two minutes.</p>
+
+<p>Humble and Jazzy behaved the same in every case. Lyrical behaved the same too, and only its messages were different. The results below hold for all three unless I name a distro.</p>
+
+<h2>[] in a params file or -p has no type</h2>
+
+<p>YAML gives <code>[]</code> no element type. The rcl parser passes it on as a value with nothing set. The two client libraries handle that differently.</p>
+
+<p><strong>rclcpp throws before your code runs.</strong> The exception came from the <code>Node</code> constructor in all 6 runs with <code>[]</code> or <code>-p 'names:=[]'</code>. It didn't matter how the node declared <code>names</code>: template with <code>{}</code>, template with <code>{"a", "b"}</code>, or <code>rclcpp::PARAMETER_STRING_ARRAY</code>. The overrides are converted inside the constructor, so my declaration lines never ran. I caught the exception to print it. My node then exited with code 3. With a <code>/**:</code> key, every node that reads the file gets the same override.</p>
+
+<p><strong>rclpy loses your default.</strong> For a node that declared <code>names</code> with <code>['a', 'b']</code>, <code>['']</code>, or <code>Parameter.Type.STRING_ARRAY</code>, the empty override didn't raise anything at declare time. The parameter ended up uninitialized, and <code>get_parameter('names')</code> raised <code>ParameterUninitializedException</code>. So <code>names: []</code> in a file doesn't give you an empty list. It replaces your default with "no value". This is the same exception as a parameter declared with only a type and never given a value. The <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">params YAML errors post</a> covers the parser errors that happen before this point. Here the file parses fine.</p>
+
+<p>In rclpy, writing <code>[ ]</code> with a space changed nothing. <code>names: null</code> isn't a way out either. The parser read it as the string <code>null</code>, and a node with a list default rejected it with <code>InvalidParameterTypeException</code>.</p>
+
+<h2>declare_parameter('names', []) is a byte array in rclpy</h2>
+
+<p>rclpy picks the type from the default value. An empty Python list came out as <code>BYTE_ARRAY</code> on all three distros, and <code>ros2 param describe</code> printed <code>Type: byte array</code>. After that, only byte arrays fit. Setting <code>['x', 'y']</code> from code returned <code>(False, "Wrong parameter type, expected 'Type.BYTE_ARRAY' got 'Type.STRING_ARRAY'")</code>. <code>ros2 param set /pnode names "['c']"</code> failed with the same text. A params file with <code>names: [a, b]</code> made <code>declare_parameter</code> itself raise <code>InvalidParameterTypeException</code>. After that the parameter wasn't declared at all, and every later call raised <code>ParameterNotDeclaredException</code>.</p>
+
+<p>Adding <code>ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY)</code> didn't help. It's the case in <a href="https://github.com/ros2/rclpy/issues/912">rclpy issue 912</a>. In my runs the descriptor's type was ignored with no warning. The parameter was still <code>BYTE_ARRAY</code>, and every result matched the plain <code>[]</code> case.</p>
+
+<p>The same inference also affects setting an empty list later. With a <code>STRING_ARRAY</code> parameter, <code>Parameter('names', value=[])</code> failed with <code>expected 'Type.STRING_ARRAY' got 'Type.BYTE_ARRAY'</code>. <code>Parameter('names', Parameter.Type.STRING_ARRAY, [])</code> succeeded. Pass the type whenever the list can be empty.</p>
+
+<p>rclcpp doesn't have this problem in code. <code>declare_parameter&lt;std::vector&lt;std::string&gt;&gt;("names", std::vector&lt;std::string&gt;{})</code> gave <code>string_array</code> with size 0. <code>set_parameter(rclcpp::Parameter("names", std::vector&lt;std::string&gt;{}))</code> returned success on a string array that held <code>[a, b]</code>. The C++ type carries the element type, even when the vector is empty. That's the point made in <a href="https://github.com/ros2/rclcpp/issues/1955">rclcpp issue 1955</a>: the API works, and files and the command line don't.</p>
+
+<h2>ros2 param set and ros2 param load turn [] into a bool array</h2>
+
+<p>The CLI has the same problem as YAML. It also guesses the type from the value, and an empty list became <code>BOOL_ARRAY</code>. Against a running rclpy node with <code>names</code> set to <code>['a', 'b']</code>:</p>
+
+<pre><code>$ ros2 param set /pnode names '[]'
+Setting parameter failed: Wrong parameter type, expected 'Type.STRING_ARRAY' got 'Type.BOOL_ARRAY'
+$ ros2 param get /pnode names
+String values are: ['a', 'b']</code></pre>
+
+<p>Against the rclcpp node the message was <code>Wrong parameter type, parameter {names} is of type {string_array}, setting it to {bool_array} is not allowed.</code> <code>ros2 param load</code> with a file holding <code>names: []</code> failed the same way, per parameter: <code>Set parameter names failed: ...</code>. Both commands exited with code 0. A script that checks <code>$?</code> will think the change worked.</p>
+
+<p>A non-empty list set from the CLI worked: <code>ros2 param set /pnode names "['c']"</code> printed <code>Set parameter successful</code>. I found no CLI form that set an empty string array. If you need to empty a list at runtime, do it from inside the node, or expose a service that does it.</p>
+
+<h2>ros2 param dump writes a file you can't load back</h2>
+
+<p>Older <code>ros2 param dump</code> versions had trouble with empty lists (<a href="https://github.com/ros2/ros2/issues/1517">ros2 issue 1517</a>, fixed by <a href="https://github.com/ros2/ros2cli/pull/881">ros2cli PR 881</a>). With the current packages, dump worked on all three distros. For both nodes it wrote:</p>
+
+<pre><code>/pnode:
+  ros__parameters:
+    names: []</code></pre>
+
+<p>That output has the problem from the first section. I started the nodes again with the dumped file as <code>--params-file</code>. The rclcpp node threw <code>InvalidParameterValueException</code> from its constructor. The rclpy node, declared with <code>Parameter.Type.STRING_ARRAY</code>, came up with <code>names</code> uninitialized. <code>ros2 param load</code> of a file with the same <code>names: []</code> line into the running nodes failed with the bool array message. If you save parameters with <code>dump</code> to reuse them, delete or edit the <code>[]</code> lines first.</p>
+
+<h2>Launch files: a Python [] stops the launch</h2>
+
+<p><code>Node(parameters=[{'names': []}])</code> never started a process. The message shows that <code>launch_ros</code> had turned the list into an empty tuple, and it rejected that with <code>Expected 'value' to be one of [...], but got '()' of type '&lt;class 'tuple'&gt;'</code>. <code>ros2 launch</code> exited with code 1. That happened for all four node setups I tried (rclpy with a list default and with a typed declaration, rclcpp with <code>{"a", "b"}</code> and with <code>{}</code>), on all three distros. It fails while launch evaluates the parameters, before any node runs.</p>
+
+<p>Passing a params file from launch (<code>parameters=['/y/empty.yaml']</code>) got past launch and failed in the node, exactly as in the first section. The rclpy node started with <code>names</code> uninitialized. The rclcpp node died, and launch printed <code>process has died [pid ..., exit code 3, ...]</code>. <code>ros2 launch</code> itself still exited with code 0. <code>parameters=[{'names': ['']}]</code> and <code>[{'names': ['a', 'b']}]</code> both worked.</p>
+
+<h2>[""] works, but C++ prints it as []</h2>
+
+<p>A one-element list holding an empty string is a real string array, so every path accepted it. <code>names: [""]</code> in a file, <code>['']</code> in a launch dictionary and <code>declare_parameter('names', [''])</code> all gave <code>STRING_ARRAY</code> with one element in rclpy and <code>string_array</code> with size 1 in rclcpp. Your code has to treat <code>['']</code> as empty, for example with <code>[n for n in names if n]</code>.</p>
+
+<p>One trap with this workaround: <code>rclcpp::Parameter::value_to_string()</code> printed that one-element array as <code>[]</code>. In my log the line was <code>string_array [] size=1</code>. Without the size I couldn't tell <code>[""]</code> from a real empty list. If you log parameters in C++, log the size as well.</p>
+
+<h2>dynamic_typing in rclpy</h2>
+
+<p>With <code>ParameterDescriptor(dynamic_typing=True)</code> and a default of <code>[]</code>, rclpy declared a <code>BYTE_ARRAY</code>, but later string lists were accepted. With <code>names: []</code> or <code>-p 'names:=[]'</code>, it came up as <code>NOT_SET</code> with value <code>None</code>, and nothing raised. That makes "empty" easy to detect (<code>value is None</code>), but the parameter no longer has a fixed type, so nothing checks what a file puts in it. I would use it only when the parameter must stay dynamic anyway.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Default empty</th><th>File / -p sets a list</th><th>File / -p says <code>[]</code></th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td>rclcpp template, <code>declare_parameter&lt;std::vector&lt;std::string&gt;&gt;("names", std::vector&lt;std::string&gt;{})</code></td><td>works (size 0)</td><td>works</td><td>constructor throws</td><td>keep <code>[]</code> out of files</td></tr>
+<tr><td>rclpy, declare with <code>Parameter.Type.STRING_ARRAY</code>, set an empty typed list when uninitialized</td><td>works</td><td>works</td><td>uninitialized, the fallback sets <code>[]</code></td><td>a few lines per parameter</td></tr>
+<tr><td>rclpy, <code>declare_parameter('names', [])</code></td><td>works, as <code>BYTE_ARRAY</code></td><td><code>InvalidParameterTypeException</code></td><td>uninitialized</td><td>don't use it</td></tr>
+<tr><td>Leave the key out of the file</td><td>default kept</td><td>n/a</td><td>n/a</td><td>none</td></tr>
+<tr><td><code>[""]</code> as the "empty" value</td><td>works</td><td>works</td><td>n/a</td><td>filter empty strings in code</td></tr>
+<tr><td>rclpy <code>dynamic_typing=True</code></td><td><code>BYTE_ARRAY</code></td><td>works</td><td><code>None</code>, no error</td><td>no type checks</td></tr>
+<tr><td><code>ros2 param set names '[]'</code></td><td colspan="3">fails as <code>BOOL_ARRAY</code>, exit code 0</td><td>set it from code instead</td></tr>
+</tbody>
+</table>
+
+<p>Each step of the rclpy fallback at the top was measured on its own. The typed declaration took <code>['a', 'b']</code> from a file and was uninitialized without one. The typed empty <code>set_parameters</code> call returned success. I didn't run the combined snippet as one program.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Behavior was the same on Humble (rclpy 3.3.22, rclcpp 16.0.21), Jazzy (rclpy 7.1.12, rclcpp 28.1.22) and Lyrical (rclpy 10.0.11, rclcpp 32.0.3). None of them accepted <code>[]</code> from a file, <code>-p</code>, the CLI or a launch dictionary.</li>
+<li>rclcpp message: Humble and Jazzy say <code>No parameter value set</code>. Lyrical says <code>Invalid parameter value: rcl parameter structureContains no value</code>. Search for <code>parameter_value_from failed for parameter</code> to match both.</li>
+<li>rclpy messages: Humble prints <code>('Invalid access to undeclared parameter(s)', 'names')</code> as a tuple. Jazzy and Lyrical print <code>Invalid access to undeclared parameter(s): names</code> and add <code>: names</code> to the other exceptions.</li>
+<li>rclpy on Lyrical prints type numbers in <code>Wrong parameter type</code>: <code>expected '5' got '9'</code> where Humble and Jazzy print <code>expected 'Type.BYTE_ARRAY' got 'Type.STRING_ARRAY'</code>.</li>
+<li><code>ros2 param dump</code> also writes <code>start_type_description_service: true</code> on Jazzy and Lyrical. The <code>names: []</code> line was the same on all three.</li>
+<li>When my script stopped the spinning rclpy node with <code>kill</code> (SIGTERM), <code>rclpy.spin</code> raised <code>ExternalShutdownException</code>. One Lyrical run raised <code>RCLError</code> instead. That had nothing to do with parameters, but it may show up in your logs.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Integer, double and bool arrays (all tests used strings), XML and YAML launch files, composable nodes and component containers, <code>generate_parameter_library</code>, Nav2 or ros2_control parameter files, <code>allow_undeclared_parameters</code>, RMWs other than Fast DDS, Foxy, Iron, Kilted and Rolling. I also didn't measure timing, since none of these failures depends on it.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Can a ROS 2 parameter be an empty list?</h3>
+<p>Yes, from code. rclcpp declared and set an empty <code>std::vector&lt;std::string&gt;</code> without errors, and rclpy accepted an empty list when the type was passed (<code>Parameter('names', Parameter.Type.STRING_ARRAY, [])</code>). No params file, <code>-p</code> rule, <code>ros2 param set</code> or launch dictionary with <code>[]</code> worked on Humble, Jazzy or Lyrical.</p>
+
+<h3>What does "parameter_value_from failed for parameter: No parameter value set" mean?</h3>
+<p>An override for that parameter had no type, which is what <code>[]</code> in a params file or <code>-p</code> turns into. rclcpp throws it from the <code>Node</code> constructor, before your declarations run. Remove the <code>[]</code> line, or use <code>[""]</code> and filter it in code. On Lyrical the text is <code>rcl parameter structureContains no value</code>.</p>
+
+<h3>Why is my rclpy parameter a byte array?</h3>
+<p><code>declare_parameter('names', [])</code> can't see an element type, and rclpy made it <code>BYTE_ARRAY</code> on all three distros, even with a <code>ParameterDescriptor</code> that said <code>PARAMETER_STRING_ARRAY</code>. Declare it with <code>Parameter.Type.STRING_ARRAY</code> instead.</p>
+
+<h3>Why does ros2 param set with [] say BOOL_ARRAY?</h3>
+<p>The CLI reads <code>[]</code> as a bool array. A string array parameter then rejects it, in rclpy and rclcpp. The command still exits with code 0. Set the empty list from inside the node.</p>
+
+<h3>Can I load the file that ros2 param dump wrote?</h3>
+<p>Not if it has <code>names: []</code> in it. At startup the rclcpp node threw and the rclpy node came up with the parameter uninitialized. <code>ros2 param load</code> into a running node failed with the bool array message. Delete or edit those lines before you reuse the file.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Can a ROS 2 parameter be an empty list?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, from code. rclcpp declared and set an empty std::vector of strings without errors, and rclpy accepted an empty list when the type was passed (Parameter.Type.STRING_ARRAY). No params file, -p rule, ros2 param set or launch dictionary with [] worked on Humble, Jazzy or Lyrical."}},
+{"@type": "Question", "name": "What does parameter_value_from failed for parameter: No parameter value set mean?", "acceptedAnswer": {"@type": "Answer", "text": "An override for that parameter had no type, which is what [] in a params file or -p turns into. rclcpp throws it from the Node constructor, before your declarations run. Remove the [] line, or use an empty string in the list and filter it in code. On Lyrical the text is rcl parameter structureContains no value."}},
+{"@type": "Question", "name": "Why is my rclpy parameter a byte array?", "acceptedAnswer": {"@type": "Answer", "text": "declare_parameter with [] as the default can't see an element type, and rclpy made it BYTE_ARRAY on all three distros, even with a ParameterDescriptor that said PARAMETER_STRING_ARRAY. Declare it with Parameter.Type.STRING_ARRAY instead."}},
+{"@type": "Question", "name": "Why does ros2 param set with [] say BOOL_ARRAY?", "acceptedAnswer": {"@type": "Answer", "text": "The CLI reads [] as a bool array. A string array parameter then rejects it, in rclpy and rclcpp. The command still exits with code 0. Set the empty list from inside the node."}},
+{"@type": "Question", "name": "Can I load the file that ros2 param dump wrote?", "acceptedAnswer": {"@type": "Answer", "text": "Not if it has names: [] in it. At startup the rclcpp node threw and the rclpy node came up with the parameter uninitialized. ros2 param load into a running node failed with the bool array message. Delete or edit those lines before you reuse the file."}}
+]}
+</script>
+
+<p>Measured on 2026-11-15 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw_fastrtps_cpp 6.2.10), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw_fastrtps_cpp 8.4.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw_fastrtps_cpp 9.4.10), default RMW (Fast DDS). Full digests and the rcl, launch_ros and ros2param versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-24-ros2-empty-list-parameter/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/rclcpp/issues/1955">rclcpp issue 1955: Make it possible to use empty lists/arrays as parameter values everywhere</a>, <a href="https://github.com/ros2/rclpy/issues/912">rclpy issue 912: Empty list not allowed as default value for PARAMETER_STRING_ARRAY</a>, <a href="https://answers.ros.org/question/396556/">What is best practice for parameters which are empty lists in ros2</a>, <a href="https://github.com/ros2/ros2/issues/1517">ros2 issue 1517: ros2 param dump spells out # Parameter not set</a>, <a href="https://github.com/ros2/ros2cli/pull/881">ros2cli PR 881: ros2 param dump should handle empty list as exception</a>.</p>
