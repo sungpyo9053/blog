@@ -1,0 +1,402 @@
+=== distro=lyrical ROS_DOMAIN_ID=88
+ros-lyrical-controller-manager 6.10.1-1resolute.20260924.145522
+ros-lyrical-forward-command-controller 6.9.0-1resolute.20260924.145722
+ros-lyrical-hardware-interface 6.10.1-1resolute.20260924.144106
+ros-lyrical-joint-state-broadcaster 6.9.0-1resolute.20260924.145837
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-ros2controlcli 6.10.1-1resolute.20260924.162825
+diff_drive_controller installed packages: 0
+[cm started with ctl.yaml; cm log lines: 27]
+[WARN] [1794720809.917425736] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+
+##### CASE 1 baseline: spawner joint_state_broadcaster (type in yaml)
+[INFO] [1794720815.091072525] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794720816.620075172] [spawner_joint_state_broadcaster]: Loaded joint_state_broadcaster
+[INFO] [1794720816.680120681] [spawner_joint_state_broadcaster]: Configured and activated joint_state_broadcaster
+EXIT=0 ELAPSED=2.56s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[controller_manager]: Loading controller 'joint_state_broadcaster'
+[controller_manager]: Configuring controller: 'joint_state_broadcaster'
+[joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. Will try to publish all available state interfaces of the URDF joints.
+[controller_manager]: Activating controllers: [ joint_state_broadcaster ]
+[controller_manager]: Requested controller switch from non-realtime loop
+[controller_manager]: Successfully switched controllers!
+
+##### CASE 1b baseline: spawner fwd (forward_command_controller, joints [j1])
+[INFO] [1794720818.114558729] [spawner_fwd]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720818.389403333] [spawner_fwd]: Failed loading controller fwd
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.15s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'fwd' of type 'forward_command_controller/ForwardCommandController'
+[controller_manager]: Loading controller 'fwd'
+Exception thrown during init stage with message: parameter 'joints' is not initialized 
+[fwd]: Calling shutdown transition of controller node 'fwd' due to init failure.
+[controller_manager]: Could not initialize the controller named 'fwd'
+
+##### CASE 2 spawner name typo: joint_state_broadcastr (not in yaml)
+[INFO] [1794720819.824511515] [spawner_joint_state_broadcastr]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720822.595067730] [spawner_joint_state_broadcastr]: Failed loading controller joint_state_broadcastr
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=3.65s
+  [controller manager log, new lines:]
+[controller_manager]: The 'type' param was not defined for 'joint_state_broadcastr'.
+
+##### CASE 3 type only under the controller's own section (jsb_owntype: ros__parameters: type:)
+[INFO] [1794720824.026903427] [spawner_jsb_owntype]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720824.283841454] [spawner_jsb_owntype]: Failed loading controller jsb_owntype
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.14s
+  [controller manager log, new lines:]
+[controller_manager]: The 'type' param was not defined for 'jsb_owntype'.
+
+##### CASE 4 type string typo: joint_state_broadcaster/JointStateBroadcast
+[INFO] [1794720825.734944878] [spawner_typo_ctrl]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720826.071443266] [spawner_typo_ctrl]: Failed loading controller typo_ctrl
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.24s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'typo_ctrl' of type 'joint_state_broadcaster/JointStateBroadcast'
+[controller_manager]: Loading controller 'typo_ctrl'
+[controller_manager]: Loader for controller 'typo_ctrl' (type 'joint_state_broadcaster/JointStateBroadcast') not found.
+[controller_manager]: Available classes:
+[controller_manager]:   forward_command_controller/ForwardCommandController
+[controller_manager]:   forward_command_controller/MultiInterfaceForwardCommandController
+[controller_manager]:   joint_state_broadcaster/JointStateBroadcaster
+
+##### CASE 5 type from a package that is not installed: diff_drive_controller/DiffDriveController
+[INFO] [1794720827.535323601] [spawner_ddc]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720827.871726832] [spawner_ddc]: Failed loading controller ddc
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.22s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'ddc' of type 'diff_drive_controller/DiffDriveController'
+[controller_manager]: Loading controller 'ddc'
+[controller_manager]: Loader for controller 'ddc' (type 'diff_drive_controller/DiffDriveController') not found.
+[controller_manager]: Available classes:
+[controller_manager]:   forward_command_controller/ForwardCommandController
+[controller_manager]:   forward_command_controller/MultiInterfaceForwardCommandController
+
+##### CASE 5b ros2 control load_controller ddc
+[INFO] [1794720829.633573547] [_ros2cli_1027]: waiting for service /controller_manager/list_controllers to become available...
+Failed loading controller ddc check controller_manager logs
+EXIT=1 ELAPSED=3.25s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'ddc' of type 'diff_drive_controller/DiffDriveController'
+[controller_manager]: Loading controller 'ddc'
+[controller_manager]: Loader for controller 'ddc' (type 'diff_drive_controller/DiffDriveController') not found.
+[controller_manager]: Available classes:
+
+##### CASE 5c ros2 control list_controller_types
+[INFO] [1794720833.455981030] [_ros2cli_1062]: waiting for service /controller_manager/list_controller_types to become available...
+forward_command_controller/ForwardCommandController                    controller_interface::ControllerInterface
+forward_command_controller/MultiInterfaceForwardCommandController      controller_interface::ControllerInterface
+joint_state_broadcaster/JointStateBroadcaster                          controller_interface::ControllerInterface
+types_total=3
+EXIT=0 ELAPSED=3.58s
+  [controller manager log, new lines:]
+
+##### CASE 6 forward_command_controller with no joints parameter
+[INFO] [1794720837.244321398] [spawner_fwd_nojoints]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720837.520730040] [spawner_fwd_nojoints]: Failed loading controller fwd_nojoints
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.16s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'fwd_nojoints' of type 'forward_command_controller/ForwardCommandController'
+[controller_manager]: Loading controller 'fwd_nojoints'
+Exception thrown during init stage with message: parameter 'joints' is not initialized 
+[fwd_nojoints]: Calling shutdown transition of controller node 'fwd_nojoints' due to init failure.
+[controller_manager]: Could not initialize the controller named 'fwd_nojoints'
+
+##### CASE 7 forward_command_controller with joint j9 that is not in the URDF
+[INFO] [1794720838.960391656] [spawner_fwd_badjoint]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720840.984568657] [spawner_fwd_badjoint]: Failed loading controller fwd_badjoint
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=2.95s
+  [controller manager log, new lines:]
+[controller_manager]: Overrun detected! The controller manager missed its desired rate of 50 Hz. The loop took 43.536163 ms (missed cycles : 3).
+[controller_manager]: Loading controller : 'fwd_badjoint' of type 'forward_command_controller/ForwardCommandController'
+[controller_manager]: Loading controller 'fwd_badjoint'
+Exception thrown during init stage with message: parameter 'joints' is not initialized 
+[fwd_badjoint]: Calling shutdown transition of controller node 'fwd_badjoint' due to init failure.
+[controller_manager]: Could not initialize the controller named 'fwd_badjoint'
+
+##### CASE 8 spawner joint_state_broadcaster again (already loaded and active)
+[INFO] [1794720842.642717704] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[WARN] [1794720843.646416770] [spawner_joint_state_broadcaster]: Controller already loaded, skipping load_controller
+[ERROR] [1794720843.650311054] [spawner_joint_state_broadcaster]: Failed to activate controller : joint_state_broadcaster
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=2.02s
+  [controller manager log, new lines:]
+[controller_manager]: Activating controllers: [ joint_state_broadcaster ]
+[controller_manager]: Controller with name 'joint_state_broadcaster' is already active.
+[controller_manager]: Controller with name 'joint_state_broadcaster' is already active.
+[controller_manager]: Could not activate controller with name 'joint_state_broadcaster'. Check above warnings for more details. Check the state of the controllers and their required interfaces using `ros2 control list_controllers -v` CLI to get more information.
+[controller_manager]: Aborting, no controller is switched! (::STRICT switch)
+
+##### CASE 8b ros2 control list_controllers
+joint_state_broadcaster joint_state_broadcaster/JointStateBroadcaster  active
+EXIT=0 ELAPSED=1.49s
+  [controller manager log, new lines:]
+
+##### CASE 9 fix: spawner -t with a name not in the yaml (jsb_new -t joint_state_broadcaster/JointStateBroadcaster)
+usage: spawner [-h] [-c CONTROLLER_MANAGER] [-p PARAM_FILE] [--load-only]
+               [--inactive] [--reconfigure] [-u]
+               [--controller-manager-timeout CONTROLLER_MANAGER_TIMEOUT]
+               [--switch-timeout SWITCH_TIMEOUT]
+               [--service-call-timeout SERVICE_CALL_TIMEOUT]
+               [--activate-as-group] [--switch-asap | --no-switch-asap]
+               [--controller-ros-args CONTROLLER_ROS_ARGS]
+               [--controller [CONTROLLER ...]]
+               controller_names [controller_names ...]
+spawner: error: unrecognized arguments: -t joint_state_broadcaster/JointStateBroadcaster
+[ros2run]: Process exited with failure 2
+EXIT=2 ELAPSED=0.77s
+  [controller manager log, new lines:]
+
+##### CASE 9b fix: spawner --param-file with the type in a controller-keyed file (jsb_pf)
+[INFO] [1794720848.471483369] [spawner_jsb_pf]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794720848.727945235] [spawner_jsb_pf]: Setting controller param "params_file" to "['/t/spawner_pf.yaml']" for jsb_pf
+[INFO] [1794720848.730005494] [spawner_jsb_pf]: Setting controller param "type" to "joint_state_broadcaster/JointStateBroadcaster" for jsb_pf
+[INFO] [1794720848.840124223] [spawner_jsb_pf]: Loaded jsb_pf
+[INFO] [1794720848.900362374] [spawner_jsb_pf]: Configured and activated jsb_pf
+EXIT=0 ELAPSED=1.31s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'jsb_pf' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[controller_manager]: Loading controller 'jsb_pf'
+[controller_manager]: Controller 'jsb_pf' node arguments: '--ros-args --params-file /t/spawner_pf.yaml'
+[controller_manager]: Configuring controller: 'jsb_pf'
+[jsb_pf]: 'joints' or 'interfaces' parameter is empty. Will try to publish all available state interfaces of the URDF joints.
+[controller_manager]: Activating controllers: [ jsb_pf ]
+[controller_manager]: Requested controller switch from non-realtime loop
+[controller_manager]: Successfully switched controllers!
+
+##### CASE 9c ros2 control list_controllers after the fixes
+[INFO] [1794720850.669652566] [_ros2cli_1324]: waiting for service /controller_manager/list_controllers to become available...
+jsb_pf                  joint_state_broadcaster/JointStateBroadcaster  active
+joint_state_broadcaster joint_state_broadcaster/JointStateBroadcaster  active
+EXIT=0 ELAPSED=3.17s
+  [controller manager log, new lines:]
+
+##### CASE 10 manager yaml top key typo (/controller_manger:)
+[cm started with ctl_topkey_typo.yaml; cm log lines: 27]
+[WARN] [1794720857.068401753] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [1794720862.450785720] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720862.708246696] [spawner_joint_state_broadcaster]: Failed loading controller joint_state_broadcaster
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.47s
+  [controller manager log, new lines:]
+[controller_manager]: The 'type' param was not defined for 'joint_state_broadcaster'.
+
+##### CASE 10b manager yaml top key without leading slash (controller_manager:)
+[cm started with ctl_noslash.yaml; cm log lines: 27]
+[WARN] [1794720867.170074571] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [1794720872.184889697] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794720874.052413534] [spawner_joint_state_broadcaster]: Loaded joint_state_broadcaster
+[INFO] [1794720874.192757789] [spawner_joint_state_broadcaster]: Configured and activated joint_state_broadcaster
+EXIT=0 ELAPSED=2.88s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[controller_manager]: Loading controller 'joint_state_broadcaster'
+[controller_manager]: Configuring controller: 'joint_state_broadcaster'
+[joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. Will try to publish all available state interfaces of the URDF joints.
+[controller_manager]: Activating controllers: [ joint_state_broadcaster ]
+[controller_manager]: Requested controller switch from non-realtime loop
+[controller_manager]: Successfully switched controllers!
+
+##### CASE 11 manager started without any params file
+[cm started with none; cm log lines: 27]
+[WARN] [1794720878.641454843] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [1794720883.704353944] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720883.961025424] [spawner_joint_state_broadcaster]: Failed loading controller joint_state_broadcaster
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.16s
+  [controller manager log, new lines:]
+[controller_manager]: The 'type' param was not defined for 'joint_state_broadcaster'.
+
+##### CASE 11b same manager, spawner --param-file ctl.yaml (the manager-keyed file) 
+[INFO] [1794720885.419881025] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720885.678626770] [spawner_joint_state_broadcaster]: Failed loading controller joint_state_broadcaster
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.16s
+  [controller manager log, new lines:]
+[controller_manager]: The 'type' param was not defined for 'joint_state_broadcaster'.
+
+##### CASE 12 controller params_file set to an empty string
+[cm started with ctl_emptypf.yaml; cm log lines: 27]
+[WARN] [1794720890.140243977] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [1794720895.521302137] [spawner_jsb_emptypf]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720895.780443605] [spawner_jsb_emptypf]: Failed loading controller jsb_emptypf
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.48s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'jsb_emptypf' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[controller_manager]: Loading controller 'jsb_emptypf'
+[controller_manager]: Controller 'jsb_emptypf' node arguments: '--ros-args --params-file '
+[controller_manager]: Caught exception of type : N6rclcpp10exceptions22RCLInvalidROSArgsErrorE while initializing controller 'jsb_emptypf': failed to parse arguments: Couldn't parse params file: '--params-file '. Error: Error opening YAML file, at ./src/parser.c:271, at ./src/rcl/arguments.c:415
+
+##### CASE 12b controller params_file set to a path that does not exist
+[cm started with ctl_badpf.yaml; cm log lines: 27]
+[WARN] [1794720900.317148136] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [1794720905.610367142] [spawner_jsb_badpf]: waiting for service /controller_manager/list_controllers to become available...
+[FATAL] [1794720907.199885822] [spawner_jsb_badpf]: Failed loading controller jsb_badpf
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=2.81s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'jsb_badpf' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[controller_manager]: Loading controller 'jsb_badpf'
+[controller_manager]: Controller 'jsb_badpf' node arguments: '--ros-args --params-file /nonexistent/ctl.yaml'
+[controller_manager]: Caught exception of type : N6rclcpp10exceptions22RCLInvalidROSArgsErrorE while initializing controller 'jsb_badpf': failed to parse arguments: Couldn't parse params file: '--params-file /nonexistent/ctl.yaml'. Error: Error opening YAML file, at ./src/parser.c:271, at ./src/rcl/arguments.c:415
+
+##### CASE 13 spawner help: options
+usage: spawner [-h] [-c CONTROLLER_MANAGER] [-p PARAM_FILE] [--load-only]
+               [--inactive] [--reconfigure] [-u]
+  -p, --param-file PARAM_FILE
+  --load-only           Only load the controller and leave unconfigured.
+  --inactive            Load and configure the controller, however do not
+
+##### CASE 13b where the spawner prints Failed loading controller
+grep: /opt/ros/lyrical/lib/python3.14/site-packages/controller_manager/__pycache__/spawner.cpython-314.pyc: binary file matches
+/opt/ros/lyrical/lib/python3.14/site-packages/controller_manager/spawner.py-511-                )
+/opt/ros/lyrical/lib/python3.14/site-packages/controller_manager/spawner.py-512-                if not ret.ok:
+/opt/ros/lyrical/lib/python3.14/site-packages/controller_manager/spawner.py-513-                    logger.fatal(
+/opt/ros/lyrical/lib/python3.14/site-packages/controller_manager/spawner.py-514-                        bcolors.FAIL
+/opt/ros/lyrical/lib/python3.14/site-packages/controller_manager/spawner.py:515:                        + "Failed loading controller "
+=== done lyrical
+
+######## SECOND PASS (repro.sh run2) ########
+=== distro=lyrical ROS_DOMAIN_ID=88
+ros-lyrical-controller-manager 6.10.1-1resolute.20260924.145522
+ros-lyrical-forward-command-controller 6.9.0-1resolute.20260924.145722
+ros-lyrical-hardware-interface 6.10.1-1resolute.20260924.144106
+ros-lyrical-joint-state-broadcaster 6.9.0-1resolute.20260924.145837
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-ros2controlcli 6.10.1-1resolute.20260924.162825
+diff_drive_controller installed packages: 0
+
+##### CASE 20 manager startup log with ctl.yaml (full)
+[cm started with ctl.yaml; cm log lines: 27]
+[WARN] [1794721091.224923245] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[controller_manager]: Using Steady (Monotonic) clock for triggering controller manager cycles.
+[controller_manager]: Subscribing to '/robot_description' topic for robot description.
+[controller_manager]: update rate is 50 Hz
+[controller_manager]: Overruns handling is : enabled
+[controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[controller_manager]: Received robot description from topic.
+[controller_manager]: Enforcing command limits is enabled...
+[controller_manager]: Using JointLimiter for joint 'j1' in hardware 'sys' : '  has position limits: true [-1, 1]
+  has velocity limits: true [1]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [1]
+  angle wraparound: false'
+[controller_manager]: Creating JointSaturationLimiter for joint 'j1' in hardware 'sys'
+[controller_manager]: Loading hardware 'sys' 
+[controller_manager]: Loaded hardware 'sys' from plugin 'mock_components/GenericSystem'
+[controller_manager]: Initialize hardware 'sys' 
+[controller_manager]: Successful initialization of hardware 'sys'
+[controller_manager]: Activating component 'sys'.
+[resource_manager]: 'configure' hardware 'sys' 
+[resource_manager]: Successful 'configure' of hardware 'sys'
+[resource_manager]: 'activate' hardware 'sys' 
+[resource_manager]: Successful 'activate' of hardware 'sys'
+[controller_manager]: Registering statistics for : sys
+[controller_manager]: Resource Manager has been successfully initialized. Starting Controller Manager services...
+
+##### CASE 21 spawner fwd --param-file ctl.yaml
+[INFO] [1794721096.340463485] [spawner_fwd]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794721097.930004339] [spawner_fwd]: Setting controller param "params_file" to "['/t/ctl.yaml']" for fwd
+[INFO] [1794721097.967237122] [spawner_fwd]: Loaded fwd
+[INFO] [1794721098.027426347] [spawner_fwd]: Configured and activated fwd
+EXIT=0 ELAPSED=2.69s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'fwd' of type 'forward_command_controller/ForwardCommandController'
+[controller_manager]: Loading controller 'fwd'
+[controller_manager]: Controller 'fwd' node arguments: '--ros-args --params-file /t/ctl.yaml'
+[controller_manager]: Configuring controller: 'fwd'
+[fwd]: configure successful
+[controller_manager]: Activating controllers: [ fwd ]
+[controller_manager]: Requested controller switch from non-realtime loop
+[fwd]: activate successful
+[controller_manager]: Successfully switched controllers!
+
+##### CASE 22 spawner fwd_badjoint --param-file ctl.yaml
+[INFO] [1794721099.469086996] [spawner_fwd_badjoint]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794721100.977954820] [spawner_fwd_badjoint]: Setting controller param "params_file" to "['/t/ctl.yaml']" for fwd_badjoint
+[INFO] [1794721101.007723900] [spawner_fwd_badjoint]: Loaded fwd_badjoint
+[ERROR] [1794721101.109883218] [spawner_fwd_badjoint]: Failed to activate controller : fwd_badjoint
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=2.53s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'fwd_badjoint' of type 'forward_command_controller/ForwardCommandController'
+[controller_manager]: Loading controller 'fwd_badjoint'
+[controller_manager]: Controller 'fwd_badjoint' node arguments: '--ros-args --params-file /t/ctl.yaml'
+[controller_manager]: Configuring controller: 'fwd_badjoint'
+[fwd_badjoint]: configure successful
+[controller_manager]: Activating controllers: [ fwd_badjoint ]
+[controller_manager]: Unable to activate controller 'fwd_badjoint' since the command interface 'j9/position' is not available.
+
+##### CASE 23 spawner fwd_nojoints --param-file ctl.yaml
+[INFO] [1794721102.890360835] [spawner_fwd_nojoints]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794721103.149340910] [spawner_fwd_nojoints]: Setting controller param "params_file" to "['/t/ctl.yaml']" for fwd_nojoints
+[FATAL] [1794721103.180271612] [spawner_fwd_nojoints]: Failed loading controller fwd_nojoints
+[ros2run]: Process exited with failure 1
+EXIT=1 ELAPSED=1.50s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'fwd_nojoints' of type 'forward_command_controller/ForwardCommandController'
+[controller_manager]: Loading controller 'fwd_nojoints'
+[controller_manager]: Controller 'fwd_nojoints' node arguments: '--ros-args --params-file /t/ctl.yaml'
+Exception thrown during init stage with message: parameter 'joints' is not initialized 
+[fwd_nojoints]: Calling shutdown transition of controller node 'fwd_nojoints' due to init failure.
+[controller_manager]: Could not initialize the controller named 'fwd_nojoints'
+
+##### CASE 24 spawner joint_state_broadcaster --param-file ctl.yaml
+[INFO] [1794721104.613198550] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [1794721104.967557443] [spawner_joint_state_broadcaster]: Loaded joint_state_broadcaster
+[INFO] [1794721105.027458246] [spawner_joint_state_broadcaster]: Configured and activated joint_state_broadcaster
+EXIT=0 ELAPSED=1.29s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[controller_manager]: Loading controller 'joint_state_broadcaster'
+[controller_manager]: Configuring controller: 'joint_state_broadcaster'
+[joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. Will try to publish all available state interfaces of the URDF joints.
+[controller_manager]: Activating controllers: [ joint_state_broadcaster ]
+[controller_manager]: Requested controller switch from non-realtime loop
+[controller_manager]: Successfully switched controllers!
+
+##### CASE 25 list_controllers
+[INFO] [1794721106.991512436] [_ros2cli_955]: waiting for service /controller_manager/list_controllers to become available...
+joint_state_broadcaster joint_state_broadcaster/JointStateBroadcaster        active  
+fwd_badjoint            forward_command_controller/ForwardCommandController  inactive
+fwd                     forward_command_controller/ForwardCommandController  active  
+EXIT=0 ELAPSED=1.63s
+  [controller manager log, new lines:]
+
+##### CASE 26 manager without params file, spawner fwd --param-file with a controller-keyed file holding type + joints
+[cm started with none; cm log lines: 27]
+[WARN] [1794721111.682708478] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [1794721117.059283415] [spawner_fwd]: Setting controller param "params_file" to "['/t/fwd_only.yaml']" for fwd
+[INFO] [1794721117.061991415] [spawner_fwd]: Setting controller param "type" to "forward_command_controller/ForwardCommandController" for fwd
+[INFO] [1794721117.085225662] [spawner_fwd]: Loaded fwd
+[INFO] [1794721117.195072066] [spawner_fwd]: Configured and activated fwd
+EXIT=0 ELAPSED=1.38s
+  [controller manager log, new lines:]
+[controller_manager]: Loading controller : 'fwd' of type 'forward_command_controller/ForwardCommandController'
+[controller_manager]: Loading controller 'fwd'
+[controller_manager]: Controller 'fwd' node arguments: '--ros-args --params-file /t/fwd_only.yaml'
+[controller_manager]: Configuring controller: 'fwd'
+[fwd]: configure successful
+[controller_manager]: Activating controllers: [ fwd ]
+[controller_manager]: Requested controller switch from non-realtime loop
+[fwd]: activate successful
+[controller_manager]: Successfully switched controllers!
+=== done run2 lyrical

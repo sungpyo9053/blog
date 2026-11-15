@@ -1,0 +1,197 @@
+<pre><code>[FATAL] [spawner_joint_state_broadcaster]: Failed loading controller joint_state_broadcaster
+[ros2run]: Process exited with failure 1</code></pre>
+
+<p>From <code>ros2 control load_controller</code> the same failure reads <code>Error loading controller, check controller_manager logs</code> on Humble and <code>Failed loading controller ddc check controller_manager logs</code> on Jazzy and Lyrical. Both exit with code 1.</p>
+
+<p>Short answer: the spawner never says why. It asked the controller manager to load the controller, got "no" back, and printed that one line. The reason is in the controller manager's output, usually one line above or below the spawner's. In my runs it was almost always one of these two:</p>
+
+<pre><code>[controller_manager]: The 'type' param was not defined for 'joint_state_broadcaster'.
+[controller_manager]: Loader for controller 'ddc' (type 'diff_drive_controller/DiffDriveController') not found.</code></pre>
+
+<p>The first means the manager has no <code>type</code> for that controller name. Put the controller under the manager's node name, next to <code>update_rate</code>, and pass that file to <code>ros2_control_node</code>:</p>
+
+<pre><code class="language-yaml">controller_manager:            # the manager's node name; /controller_manager also works
+  ros__parameters:
+    update_rate: 50
+    joint_state_broadcaster:     # must match the name you give the spawner
+      type: joint_state_broadcaster/JointStateBroadcaster
+    fwd:
+      type: forward_command_controller/ForwardCommandController
+
+fwd:                           # the controller's own parameters
+  ros__parameters:
+    joints: [j1]
+    interface_name: position</code></pre>
+
+<pre><code>ros2 run controller_manager ros2_control_node --ros-args --params-file ctl.yaml
+ros2 run controller_manager spawner fwd --param-file ctl.yaml</code></pre>
+
+<p>The second means the type string is misspelled or the package that provides it isn't installed. The manager prints the list of types it can load right after the error, so compare against that list. Passing the same file to the spawner with <code>--param-file</code> worked on all three distros, and on Lyrical it's required. Lyrical didn't hand the manager's file to the controllers, so <code>fwd</code> failed to load there without it.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row ended with <code>Failed loading controller &lt;name&gt;</code> from the spawner and exit code 1, unless the row says otherwise. The middle column is what the controller manager printed.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Controller manager log</th><th>Distros</th></tr></thead>
+<tbody>
+<tr><td>Spawner name misspelled (<code>joint_state_broadcastr</code>)</td><td><code>The 'type' param was not defined for 'joint_state_broadcastr'.</code></td><td>all three</td></tr>
+<tr><td><code>type</code> placed under the controller's own <code>ros__parameters</code></td><td><code>The 'type' param was not defined for 'jsb_owntype'.</code></td><td>all three</td></tr>
+<tr><td>Top-level key misspelled (<code>/controller_manger:</code>)</td><td><code>The 'type' param was not defined for ...</code></td><td>all three</td></tr>
+<tr><td><code>ros2_control_node</code> started without <code>--params-file</code></td><td><code>The 'type' param was not defined for ...</code></td><td>all three</td></tr>
+<tr><td>Type misspelled (<code>JointStateBroadcast</code>)</td><td><code>Loader for controller 'typo_ctrl' (type 'joint_state_broadcaster/JointStateBroadcast') not found.</code>, then <code>Available classes:</code></td><td>all three</td></tr>
+<tr><td>Controller package not installed (<code>diff_drive_controller</code>)</td><td><code>Loader for controller 'ddc' (type 'diff_drive_controller/DiffDriveController') not found.</code></td><td>all three</td></tr>
+<tr><td>Controller's <code>params_file</code> is an empty string</td><td>Jazzy, Lyrical: <code>Caught exception of type : N6rclcpp10exceptions22RCLInvalidROSArgsErrorE ... Couldn't parse params file: '--params-file '</code>. Humble: the manager crashed with <code>terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'</code></td><td>see below</td></tr>
+<tr><td>Controller's <code>params_file</code> points to a missing file</td><td>same, with the path after <code>--params-file</code></td><td>see below</td></tr>
+<tr><td>Lyrical: <code>forward_command_controller</code> whose <code>joints</code> are only in the manager's file</td><td><code>Exception thrown during init stage with message: parameter 'joints' is not initialized</code>, then <code>Could not initialize the controller named 'fwd'</code></td><td>Lyrical only</td></tr>
+</tbody>
+</table>
+
+<p>Three related failures print a different spawner line, because the load worked and a later step failed:</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>Spawner</th><th>Controller manager log</th></tr></thead>
+<tbody>
+<tr><td>Humble, Jazzy: <code>joints</code> parameter missing</td><td><code>Loaded fwd_nojoints</code>, then <code>Failed to configure controller</code></td><td><code>'joints' parameter was empty</code></td></tr>
+<tr><td>Joint <code>j9</code> not in the URDF</td><td><code>Loaded fwd_badjoint</code>, then <code>Failed to activate controller : fwd_badjoint</code></td><td>Jazzy, Lyrical: <code>Unable to activate controller 'fwd_badjoint' since the command interface 'j9/position' is not available.</code> Humble: <code>Not acceptable command interfaces combination</code> with <code>Not existing: j9/position</code></td></tr>
+<tr><td>Same controller spawned twice</td><td><code>Controller already loaded, skipping load_controller</code>, then <code>Failed to configure controller</code> (Humble, Jazzy) or <code>Failed to activate controller</code> (Lyrical)</td><td><code>can not be configured from 'active' state</code> (Humble, Jazzy), <code>is already active</code> (Lyrical)</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-15 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro at a time. In each container I installed <code>controller_manager</code>, <code>ros2controlcli</code>, <code>joint_state_broadcaster</code>, <code>forward_command_controller</code> and <code>robot_state_publisher</code> from apt. I did not install <code>diff_drive_controller</code>, so I could test a type whose package is missing. There was no Gazebo. The robot is a one-joint URDF whose <code>&lt;ros2_control&gt;</code> tag uses <code>mock_components/GenericSystem</code>.</p>
+
+<p>For each group of cases I started <code>robot_state_publisher</code> and <code>ros2_control_node</code> with a params file, waited 5 seconds, then ran the spawner. I timed each spawner run and saved the lines the manager printed during it. The manager file declared six controllers: two good ones, one with a misspelled type, one <code>diff_drive_controller</code>, one with no <code>joints</code>, and one with a joint that isn't in the URDF. A second pass checked whether giving the same file to the spawner with <code>--param-file</code> fixes things.</p>
+
+<p>Every failed load ended quickly. With the manager running, the spawner gave up after 0.58 to 2.82 s on Humble, 0.99 to 2.99 s on Jazzy and 1.14 to 3.65 s on Lyrical. The one exception is the Humble crash in the <code>params_file</code> case, below.</p>
+
+<h2>"The 'type' param was not defined": the manager can't find the type</h2>
+
+<p>The controller manager reads the controller's type from its own parameter <code>&lt;controller_name&gt;.type</code>. If that parameter doesn't exist, it logs this line and refuses the load. Five different mistakes led to it, on all three distros:</p>
+
+<ul>
+<li><strong>Name mismatch.</strong> The spawner asked for <code>joint_state_broadcastr</code>, and the YAML said <code>joint_state_broadcaster</code>. The name you pass to the spawner has to match the key under <code>controller_manager: ros__parameters:</code>. The match is exact.</li>
+<li><strong>Type in the wrong section.</strong> I put <code>type</code> under <code>jsb_owntype: ros__parameters:</code>, the controller's own section. The manager doesn't read that section. The type belongs under the manager.</li>
+<li><strong>Wrong top-level key.</strong> With <code>/controller_manger:</code> as the top key, the manager started normally and printed no warning. It just had no controllers. If you rename the manager with <code>-r __node:=</code> or put it in a namespace, the top key has to follow. A key without the leading slash (<code>controller_manager:</code>) worked on all three.</li>
+<li><strong>No params file at all.</strong> A manager started without <code>--params-file</code> runs fine and loads nothing.</li>
+<li><strong>Manager file given only to the spawner.</strong> With the manager started bare, <code>spawner joint_state_broadcaster --param-file ctl.yaml</code> still failed. The spawner looks for the type under the controller's name in that file, not under <code>controller_manager</code>.</li>
+</ul>
+
+<h2>"Loader for controller ... not found": the plugin isn't there</h2>
+
+<p>Here the manager has a type, but pluginlib can't find a plugin with that exact name. A misspelled type and an uninstalled package gave the same line. Right after it the manager prints <code>Available classes:</code> and the full list:</p>
+
+<pre><code>[controller_manager]: Loader for controller 'typo_ctrl' (type 'joint_state_broadcaster/JointStateBroadcast') not found.
+[controller_manager]: Available classes:
+[controller_manager]:   forward_command_controller/ForwardCommandController
+[controller_manager]:   forward_command_controller/MultiInterfaceForwardCommandController
+[controller_manager]:   joint_state_broadcaster/JointStateBroadcaster</code></pre>
+
+<p>That's the Jazzy and Lyrical list. On Humble the list had 8 entries, because <code>controller_manager</code> 2.54.3 also registers four <code>controller_manager/test_controller...</code> classes. <code>ros2 control list_controller_types</code> printed the same list (8 types on Humble, 3 on Jazzy and Lyrical). If your type isn't in it, either fix the spelling or install the package, for example <code>sudo apt install ros-$ROS_DISTRO-diff-drive-controller</code>. Then restart the controller manager. I did not test whether a running manager picks up a package installed after it started.</p>
+
+<p>The manager names a type as <code>package/ClassName</code>. Copy it from the list rather than typing it.</p>
+
+<h2>params_file empty or wrong: the "--params-file --param" error</h2>
+
+<p>On Jazzy and Lyrical the manager starts each controller node with the arguments in the controller's <code>params_file</code> parameter, and logs them. The spawner's <code>--param-file</code> sets that parameter. In the linked issues, the Gazebo plugin set it too. If the value is an empty string, the argument list ends in a bare <code>--params-file</code>:</p>
+
+<pre><code>[controller_manager]: Controller 'jsb_emptypf' node arguments: --ros-args --params-file /t/ctl_emptypf.yaml --params-file
+[controller_manager]: Caught exception of type : N6rclcpp10exceptions22RCLInvalidROSArgsErrorE while initializing controller 'jsb_emptypf': failed to parse arguments: Couldn't parse params file: '--params-file '. Error: Error opening YAML file, at ./src/parser.c:271, at ./src/rcl/arguments.c:415</code></pre>
+
+<p>That's Jazzy. Lyrical printed the same exception with the arguments in quotes. A path to a file that doesn't exist gave the same error with the path in place of the empty string. In both cases the manager stayed up and the spawner failed in 0.99 to 2.81 s.</p>
+
+<p>Humble behaved differently. The same YAML crashed the whole controller manager with <code>terminate called after throwing an instance of 'rclcpp::exceptions::RCLInvalidROSArgsError'</code> and a stack trace. The spawner never got an answer. It printed <code>Failed getting a result from calling /controller_manager/load_controller in 10.0. (Attempt 1 of 3.)</code> three times and ended with <code>RuntimeError: Could not successfully call service /controller_manager/load_controller after 3 attempts.</code> after 30.59 s (30.67 s for the missing-file case). So on Humble this cause doesn't show up as "Failed loading controller" at all.</p>
+
+<p>The fix is to find what sets the empty path. In the gz_ros2_control issue linked below, users traced it to the <code>&lt;parameters&gt;</code> tag of the Gazebo plugin in the URDF, where the path came out empty. Their log shows <code>--params-file --param use_sim_time:=true</code>. Look at the <code>node arguments:</code> line and check that every <code>--params-file</code> is followed by a real file. The text after <code>Error:</code> comes from the same rcl params parser that <code>ros2 run</code> uses, so the messages in <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">this guide to ROS 2 params YAML errors</a> apply here too.</p>
+
+<h2>Lyrical: the manager's file doesn't reach the controller</h2>
+
+<p>This one surprised me. On Jazzy, the manager added its own params file to each controller's arguments: <code>node arguments: --ros-args --params-file /t/ctl.yaml</code>. On Humble, controller nodes picked up the manager's <code>--params-file</code> without it showing in the log. Either way, the <code>fwd: ros__parameters: joints: [j1]</code> section reached the controller and <code>spawner fwd</code> worked.</p>
+
+<p>On Lyrical (<code>controller_manager</code> 6.10.1) the manager passed nothing. The same <code>spawner fwd</code> failed:</p>
+
+<pre><code>[controller_manager]: Loading controller 'fwd'
+Exception thrown during init stage with message: parameter 'joints' is not initialized
+[fwd]: Calling shutdown transition of controller node 'fwd' due to init failure.
+[controller_manager]: Could not initialize the controller named 'fwd'
+[FATAL] [spawner_fwd]: Failed loading controller fwd</code></pre>
+
+<p><code>joint_state_broadcaster</code> still loaded on Lyrical, because it has no required parameters. That makes the cause easy to miss. The broadcaster works, and the first controller that needs <code>joints</code> fails.</p>
+
+<p>Adding <code>--param-file ctl.yaml</code> to the spawner fixed it on Lyrical. The log showed <code>node arguments: '--ros-args --params-file /t/ctl.yaml'</code>, then <code>Configured and activated fwd</code>. The same flag also worked on Humble and Jazzy. On Jazzy the file then appeared twice in the arguments, which did no harm. If you write launch files for more than one distro, pass the file to every spawner.</p>
+
+<h2>Loaded, then failed to configure or activate</h2>
+
+<p>These print a different message, but people often search for them under "failed loading".</p>
+
+<p><strong>Missing required parameter.</strong> <code>forward_command_controller</code> needs <code>joints</code>. On Humble and Jazzy the load worked. Configure failed with <code>'joints' parameter was empty</code> in the manager log and <code>Failed to configure controller</code> from the spawner, and the controller stayed listed as <code>unconfigured</code>. On Lyrical the check happens at init, so it's a load failure with <code>parameter 'joints' is not initialized</code>, even with <code>--param-file</code>. On Lyrical the controller then didn't appear in <code>ros2 control list_controllers</code> at all.</p>
+
+<p><strong>Joint not in the URDF.</strong> With <code>joints: [j9]</code> the controller loaded and configured. Activation failed with <code>Failed to activate controller : fwd_badjoint</code>, and the controller stayed <code>inactive</code>. Jazzy and Lyrical named the problem directly: <code>the command interface 'j9/position' is not available</code>. Humble printed a <code>Not acceptable command interfaces combination</code> block with <code>j9/position</code> under <code>Not existing:</code>. The fix is in the URDF's <code>&lt;ros2_control&gt;</code> tag or in the joint names, not in the spawner.</p>
+
+<p><strong>Spawning the same controller twice.</strong> A second <code>spawner joint_state_broadcaster</code> printed <code>Controller already loaded, skipping load_controller</code> and then failed with exit code 1. Humble and Jazzy tried to configure an active controller. Lyrical tried to activate it and logged <code>Aborting, no controller is switched! (::STRICT switch)</code>. The first copy kept running in every case. If a launch file restarts only part of the system, this is what you see.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Type under <code>controller_manager: ros__parameters:</code>, file passed to <code>ros2_control_node</code></td><td>loaded</td><td>loaded</td><td>loaded; controllers that need their own parameters failed</td></tr>
+<tr><td>Same file also passed to the spawner with <code>--param-file</code></td><td>loaded</td><td>loaded (file listed twice)</td><td>loaded</td></tr>
+<tr><td>Manager without a file; spawner <code>--param-file</code> with <code>fwd: ros__parameters: type: ... joints: [j1]</code></td><td>loaded</td><td>loaded</td><td>loaded</td></tr>
+<tr><td>Spawner <code>-t joint_state_broadcaster/JointStateBroadcaster</code></td><td>loaded</td><td><code>unrecognized arguments: -t</code>, exit 2</td><td><code>unrecognized arguments: -t</code>, exit 2</td></tr>
+<tr><td>Type copied from <code>ros2 control list_controller_types</code></td><td>fixes "Loader ... not found" for typos</td><td>same</td><td>same</td></tr>
+</tbody>
+</table>
+
+<p>For a file keyed by the controller's name, the spawner read <code>type</code> from the file and logged <code>Setting controller param "type" to ...</code> before loading. That layout keeps each controller's type and parameters in one place and worked everywhere I tested. The <code>-t</code> flag exists only on Humble. Don't use it in launch files you plan to move to Jazzy.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble</strong> (<code>controller_manager</code> 2.54.3): controllers got the manager's params file without it being logged. An empty or missing <code>params_file</code> crashed the manager, and the spawner timed out after about 30 s with a <code>RuntimeError</code>. The spawner has <code>-t</code>. The available-classes list includes four test controllers.</li>
+<li><strong>Jazzy</strong> (4.48.1): the manager logs <code>Loading controller : 'x' of type 'y'</code> and a <code>node arguments:</code> line, and adds its own params file to them. A bad <code>params_file</code> is caught and logged, and the manager stays up. No <code>-t</code>.</li>
+<li><strong>Lyrical</strong> (6.10.1): the manager doesn't pass its own file to controllers. Use <code>--param-file</code>. Required-parameter errors happen at init, so they show up as "Failed loading controller", and the controller isn't listed afterwards. The spawner gains <code>--reconfigure</code> and has no <code>-n</code>.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Gazebo, <code>gz_ros2_control</code> and <code>gazebo_ros2_control</code>. I reproduced the empty <code>params_file</code> by writing it into the YAML, not through the plugin's <code>&lt;parameters&gt;</code> tag. I didn't test the theory from one issue that a package named <code>robot_description</code> causes it.</li>
+<li>Custom controller plugins (missing <code>pluginlib_export_plugin_description_file</code>, wrong base class).</li>
+<li>Launch files. Everything ran through <code>ros2 run</code>.</li>
+<li>Namespaced or renamed controller managers, <code>use_sim_time</code>, and other RMWs than Fast DDS.</li>
+<li>Several controllers in one spawner call, and <code>--controller-ros-args</code>.</li>
+<li>Installing a controller package while the manager is running.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Failed loading controller" mean in ros2_control?</h3>
+<p>The controller manager refused the spawner's load request. The spawner doesn't say why. Look at the controller manager's log. In my runs it said either <code>The 'type' param was not defined</code> or <code>Loader for controller ... not found</code>.</p>
+
+<h3>How do I fix "The 'type' param was not defined"?</h3>
+<p>Add <code>&lt;name&gt;: type: package/ClassName</code> under <code>controller_manager: ros__parameters:</code>, with the same name you give the spawner. Pass that file to <code>ros2_control_node</code>. A misspelled name, a misspelled top key, a type in the controller's own section, or a missing params file all gave this error.</p>
+
+<h3>Why does it say "Loader for controller not found" when the package is installed?</h3>
+<p>The type string has to match a registered class exactly. A typo gave the same error as a missing package. Copy the type from <code>ros2 control list_controller_types</code>.</p>
+
+<h3>joint_state_broadcaster loads on Lyrical, but my other controllers fail. Why?</h3>
+<p>On Lyrical the controller manager didn't pass its own params file to controllers, so <code>joints</code> and other parameters never arrived. Add <code>--param-file</code> with your controllers YAML to each spawner. That worked on Humble, Jazzy and Lyrical.</p>
+
+<h3>What causes "Couldn't parse params file: '--params-file '"?</h3>
+<p>The controller's <code>params_file</code> was empty, so the manager passed <code>--params-file</code> with no path. On Jazzy and Lyrical this showed up as "Failed loading controller". On Humble it crashed the controller manager, and the spawner timed out after about 30 seconds.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Failed loading controller mean in ros2_control?", "acceptedAnswer": {"@type": "Answer", "text": "The controller manager refused the spawner's load request. The spawner doesn't say why. Look at the controller manager's log. In my runs it said either The 'type' param was not defined or Loader for controller ... not found."}},
+{"@type": "Question", "name": "How do I fix The 'type' param was not defined?", "acceptedAnswer": {"@type": "Answer", "text": "Add the controller name with type: package/ClassName under controller_manager: ros__parameters:, using the same name you give the spawner, and pass that file to ros2_control_node. A misspelled name, a misspelled top key, a type in the controller's own section, or a missing params file all gave this error."}},
+{"@type": "Question", "name": "Why does it say Loader for controller not found when the package is installed?", "acceptedAnswer": {"@type": "Answer", "text": "The type string has to match a registered class exactly. A typo gave the same error as a missing package. Copy the type from ros2 control list_controller_types."}},
+{"@type": "Question", "name": "joint_state_broadcaster loads on Lyrical, but my other controllers fail. Why?", "acceptedAnswer": {"@type": "Answer", "text": "On Lyrical the controller manager didn't pass its own params file to controllers, so joints and other parameters never arrived. Add --param-file with your controllers YAML to each spawner. That worked on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "What causes Couldn't parse params file: '--params-file '?", "acceptedAnswer": {"@type": "Answer", "text": "The controller's params_file was empty, so the manager passed --params-file with no path. On Jazzy and Lyrical this showed up as Failed loading controller. On Humble it crashed the controller manager, and the spawner timed out after about 30 seconds."}}
+]}
+</script>
+
+<p>Measured on 2026-11-15 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, <code>controller_manager</code> 2.54.3, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, <code>controller_manager</code> 4.48.1, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, <code>controller_manager</code> 6.10.1, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9), default RMW (<code>rmw_fastrtps_cpp</code> 6.2.10, 8.4.4 and 9.4.10). Full digests and package versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-23-ros2-control-failed-loading-controller/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103737/how-to-fix-failed-loading-controller-in-controller-manager">how to fix failed loading controller in controller manager</a>, <a href="https://robotics.stackexchange.com/questions/115202/failed-to-load-controller-joint-state-broadcaster-params-file-param-error">Failed to load controller: joint_state_broadcaster + --params-file --param error</a>, <a href="https://robotics.stackexchange.com/questions/110949/failed-loading-controller">Failed loading controller</a>, <a href="https://robotics.stackexchange.com/questions/108174/error-loader-for-controller-asc-not-found">Error: Loader for controller 'asc' not found</a>, <a href="https://github.com/ros-controls/ros2_control/issues/2309">ros2_control #2309: joint_state_broadcaster fails to load with trailing --params-file</a>, <a href="https://github.com/ros-controls/gz_ros2_control/issues/512">gz_ros2_control #512: Failing to load the controller.yaml</a>.</p>
