@@ -1,0 +1,143 @@
+
+##### versions
+Python 3.12.3
+colcon-core 0.21.3
+
+##### A. colcon build my_interfaces (fresh shell, only /opt/ros sourced), timed
+Finished <<< my_interfaces [14.1s]
+
+Summary: 1 package finished [14.2s]
+build_seconds my_interfaces: 14.5
+
+##### A2. import with only /opt/ros sourced (never sourced the workspace)
+rc=1 ModuleNotFoundError: No module named 'my_interfaces'
+
+##### A3. ros2 interface show with only /opt/ros sourced
+Unknown package 'my_interfaces'
+
+##### A4. generated module location
+install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/_num.py
+
+##### A5. after source install/setup.bash
+OK: my_interfaces.msg.Num(num=3)
+PYTHONPATH entries with my_interfaces:
+install/my_interfaces/lib/python3.12/site-packages
+
+##### A6. import timing (fresh interpreter, 5 runs, ms)
+19.3 19.4 19.4 19.4 19.3 
+int64 num
+
+##### B. wrong import forms (workspace sourced)
+[from my_interfaces import Num]
+rc=1 ImportError: cannot import name 'Num' from 'my_interfaces' (/w/ws_jazzy/install/my_interfaces/lib/python3.12/site-packages/my_interfaces/__init__.py)
+[from my_interfaces.msg import num]
+rc=1 ImportError: cannot import name 'num' from 'my_interfaces.msg' (/w/ws_jazzy/install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/__init__.py). Did you mean: 'Num'?
+[from my_interfaces.msg import NUM]
+rc=1 ImportError: cannot import name 'NUM' from 'my_interfaces.msg' (/w/ws_jazzy/install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/__init__.py). Did you mean: 'Num'?
+[import my_interfaces.msg.Num]
+rc=1 ModuleNotFoundError: No module named 'my_interfaces.msg.Num'
+[from my_interfaces.msg import AddTwoInts]
+rc=1 ImportError: cannot import name 'AddTwoInts' from 'my_interfaces.msg' (/w/ws_jazzy/install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/__init__.py)
+[from my_interfaces.srv import AddTwoInts; print(AddTwoInts.Request(a=1,b=2))]
+OK: my_interfaces.srv.AddTwoInts_Request(a=1, b=2)
+[from my_interfaces.msg import Extra]
+rc=1 ImportError: cannot import name 'Extra' from 'my_interfaces.msg' (/w/ws_jazzy/install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/__init__.py)
+[from my_interface.msg import Num]
+rc=1 ModuleNotFoundError: No module named 'my_interface'
+[import my_interfaces.msg as m; print(m.Num)]
+OK: <class 'my_interfaces.msg._num.Num'>
+
+##### C. Extra.msg in msg/ but not listed: build ok? then list it and rebuild
+
+Summary: 1 package finished [14.3s]
+same shell, not re-sourced:
+OK: my_interfaces.msg.Extra(note='hi')
+
+##### D. sourced BEFORE the interface package existed (new terminal order problem)
+
+Summary: 1 package finished [1.58s]
+
+Summary: 1 package finished [16.9s]
+same shell after building my_interfaces:
+rc=1 ModuleNotFoundError: No module named 'my_interfaces'
+ros2 run consumer node:
+ModuleNotFoundError: No module named 'my_interfaces'
+[ros2run]: Process exited with failure 1
+ros2 interface show:
+Unknown package 'my_interfaces'
+after re-sourcing install/setup.bash:
+OK: 
+ros2 run consumer node:
+[INFO] [1794706151.881478238] [consumer]: built Num num=42
+
+##### D2. same order with --merge-install
+
+Summary: 1 package finished [1.37s]
+
+Summary: 1 package finished [16.2s]
+same shell after building my_interfaces:
+OK: 
+after re-sourcing:
+OK: 
+
+##### D3. only the package's own local_setup.bash sourced
+OK: 
+
+##### E. consumer with no <depend>my_interfaces</depend>, ros2 run in the same workspace
+
+Summary: 1 package finished [1.38s]
+[INFO] [1794706173.125993902] [consumer]: built Num num=42
+
+##### F. ament_python package with a msg/ folder
+Finished <<< py_msgs [1.22s]
+
+Summary: 1 package finished [1.37s]
+files named *point2* in install/py_msgs: 0
+rc=1 ModuleNotFoundError: No module named 'py_msgs.msg'
+Could not find the resource 'py_msgs' of type 'rosidl_interfaces'
+py_msgs in ros2 interface packages: 0
+
+##### G. package without <member_of_group>rosidl_interface_packages</member_of_group>
+CMake Error at /opt/ros/jazzy/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:223 (message):
+  Packages installing interfaces must include
+  '<member_of_group>rosidl_interface_packages</member_of_group>' in their
+  package.xml
+Failed   <<< nogroup_interfaces [0.74s, exited with code 1]
+Summary: 0 packages finished [0.90s]
+rc=1 ModuleNotFoundError: No module named 'nogroup_interfaces'
+
+##### H. script named like its package (my_server/my_server.py) vs renamed (server_node.py)
+
+Summary: 2 packages finished [19.7s]
+[ros2 run my_server my_server.py]
+sys.path[0] = install/my_server/lib/my_server
+sys.path[0] = install/my_server/lib/my_server
+ModuleNotFoundError: No module named 'my_server.msg'; 'my_server' is not a package
+[ros2 run my_server2 server_node.py]
+sys.path[0] = install/my_server2/lib/my_server2
+imported Ping, data field: True
+[python3 -c import my_server.msg from another dir]
+OK: ok
+
+##### H0. interface package that also calls ament_python_install_package(${PROJECT_NAME})
+CMake Error at /opt/ros/jazzy/share/ament_cmake_python/cmake/ament_python_install_package.cmake:122 (add_custom_target):
+  add_custom_target cannot create target "ament_cmake_python_copy_my_server3"
+CMake Error at /opt/ros/jazzy/share/ament_cmake_python/cmake/ament_python_install_package.cmake:144 (add_custom_target):
+  add_custom_target cannot create target
+Failed   <<< my_server3 [5.48s, exited with code 1]
+Summary: 0 packages finished [5.63s]
+
+##### H2. a local file named std_msgs.py next to your script (robotics.SE 24881 pattern)
+[python3 talker.py next to std_msgs.py]
+ModuleNotFoundError: No module named 'std_msgs.msg'; 'std_msgs' is not a package
+[after deleting std_msgs.py, stale __pycache__ left in place]
+std_msgs.cpython-312.pyc
+ok std_msgs.msg.String(data='a')
+
+##### I. stale install: interface package removed from src but install/ kept
+import with source gone, install/ kept:
+OK: 
+after rm -rf install/my_interfaces:
+rc=1 ModuleNotFoundError: No module named 'my_interfaces'
+
+##### done jazzy

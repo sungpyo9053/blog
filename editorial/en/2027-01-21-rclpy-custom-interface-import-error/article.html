@@ -1,0 +1,218 @@
+<pre><code>Traceback (most recent call last):
+  File "&lt;string&gt;", line 1, in &lt;module&gt;
+ModuleNotFoundError: No module named 'my_interfaces'</code></pre>
+
+<p>The second form of the same problem names the message instead of the package:</p>
+
+<pre><code>ImportError: cannot import name 'Extra' from 'my_interfaces.msg' (/w/ws_humble/install/my_interfaces/local/lib/python3.10/dist-packages/my_interfaces/msg/__init__.py)</code></pre>
+
+<p>Short answer: <code>No module named 'my_interfaces'</code> means Python can't see the generated package at all. In my runs that came from a shell that never sourced the workspace, or one that sourced <code>install/setup.bash</code> before the interface package had been built. Build it, then source again in the same terminal:</p>
+
+<pre><code>colcon build --packages-select my_interfaces
+source install/setup.bash
+python3 -c "from my_interfaces.msg import Num; print(Num(num=3))"
+# my_interfaces.msg.Num(num=3)</code></pre>
+
+<p><code>cannot import name 'X' from 'my_interfaces.msg'</code> means the package was found but has no type called <code>X</code>. Either the <code>.msg</code> file isn't listed in <code>rosidl_generate_interfaces()</code>, or the import spells the name differently from the file. The class name is the file name, <code>Num.msg</code> gives <code>Num</code>, and it lives in <code>.msg</code>, <code>.srv</code> or <code>.action</code>, never in the package root.</p>
+
+<p>Three other causes gave different text. A <code>msg/</code> folder inside an <code>ament_python</code> package built without errors and generated nothing. A script with the same name as its package gave <code>'my_server' is not a package</code>. And a local file named <code>std_msgs.py</code> gave <code>'std_msgs' is not a package</code>.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical unless the last column says otherwise. <code>my_interfaces</code> is an <code>ament_cmake</code> package with <code>msg/Num.msg</code> and <code>srv/AddTwoInts.srv</code> listed, plus a <code>msg/Extra.msg</code> that wasn't listed at first.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>What Python printed</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Workspace never sourced, only <code>/opt/ros</code></td><td><code>ModuleNotFoundError: No module named 'my_interfaces'</code></td><td><code>ros2 interface show</code> said <code>Unknown package 'my_interfaces'</code></td></tr>
+<tr><td>Workspace sourced before <code>my_interfaces</code> was first built</td><td><code>ModuleNotFoundError: No module named 'my_interfaces'</code></td><td>Fixed by sourcing again. With <code>--merge-install</code> it worked without that on Jazzy and Lyrical</td></tr>
+<tr><td><code>Extra.msg</code> in <code>msg/</code> but not in <code>rosidl_generate_interfaces()</code></td><td><code>ImportError: cannot import name 'Extra' from 'my_interfaces.msg'</code></td><td>The build itself passed</td></tr>
+<tr><td><code>from my_interfaces import Num</code></td><td><code>ImportError: cannot import name 'Num' from 'my_interfaces'</code></td><td>Missing <code>.msg</code></td></tr>
+<tr><td><code>from my_interfaces.msg import num</code> or <code>NUM</code></td><td><code>ImportError: cannot import name 'num' from 'my_interfaces.msg'</code></td><td>Jazzy added <code>Did you mean: 'Num'?</code></td></tr>
+<tr><td><code>from my_interfaces.msg import AddTwoInts</code> (a service)</td><td><code>ImportError: cannot import name 'AddTwoInts' from 'my_interfaces.msg'</code></td><td><code>from my_interfaces.srv import AddTwoInts</code> worked</td></tr>
+<tr><td><code>import my_interfaces.msg.Num</code></td><td><code>ModuleNotFoundError: No module named 'my_interfaces.msg.Num'</code></td><td><code>Num</code> is a class, not a module</td></tr>
+<tr><td>Typo in the package name (<code>my_interface</code>)</td><td><code>ModuleNotFoundError: No module named 'my_interface'</code></td><td>Looks exactly like the unsourced case</td></tr>
+<tr><td><code>.msg</code> files in an <code>ament_python</code> package</td><td><code>ModuleNotFoundError: No module named 'py_msgs.msg'</code></td><td>Build passed, 0 generated files</td></tr>
+<tr><td>Script <code>my_server.py</code> in package <code>my_server</code></td><td><code>ModuleNotFoundError: No module named 'my_server.msg'; 'my_server' is not a package</code></td><td>Renaming the script fixed it</td></tr>
+<tr><td>File <code>std_msgs.py</code> next to the script</td><td><code>ModuleNotFoundError: No module named 'std_msgs.msg'; 'std_msgs' is not a package</code></td><td>Deleting the file fixed it</td></tr>
+<tr><td>No <code>&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;</code></td><td>Build failed: <code>Packages installing interfaces must include '&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;' in their package.xml</code></td><td>No module, so <code>No module named</code> afterwards</td></tr>
+</tbody>
+</table>
+
+<p>The quickest test is the difference between the two errors. <code>No module named 'pkg'</code> is about your environment: build, source, spelling. <code>cannot import name</code> is about the package contents, so look at <code>CMakeLists.txt</code> and the import line.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-15 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one at a time, with no network. These images already include colcon, <code>ament_cmake</code> and <code>rosidl_default_generators</code>, so nothing was installed. One script built a workspace with these packages:</p>
+
+<ul>
+<li><code>my_interfaces</code>: <code>ament_cmake</code>, <code>Num.msg</code> (<code>int64 num</code>), <code>AddTwoInts.srv</code>, and an unlisted <code>Extra.msg</code>.</li>
+<li><code>nogroup_interfaces</code>: the same package with the <code>member_of_group</code> line removed from <code>package.xml</code>.</li>
+<li><code>py_msgs</code>: an <code>ament_python</code> package with <code>msg/Point2.msg</code>.</li>
+<li><code>consumer</code>: an <code>ament_python</code> node that imports <code>Num</code>. Its <code>package.xml</code> doesn't list <code>my_interfaces</code>.</li>
+<li><code>my_server</code>, <code>my_server2</code>, <code>my_server3</code>: <code>ament_cmake</code> packages with a <code>Ping.msg</code> and a Python script, set up like <a href="https://robotics.stackexchange.com/questions/110109">this question</a>.</li>
+</ul>
+
+<p>Each import was a fresh <code>python3 -c</code> process, and I kept the last line of its output. Builds ran with one colcon worker and <code>MAKEFLAGS=-j1</code>. The full script is <code>repro.sh</code> in the evidence folder.</p>
+
+<h2>Cause 1: the workspace isn't sourced, or was sourced too early</h2>
+
+<p>The generated Python code lives under your workspace's <code>install/</code>, not under <code>/opt/ros</code>. These are the paths it landed in:</p>
+
+<table>
+<thead><tr><th>Distro</th><th>Python</th><th>Path of <code>_num.py</code></th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>3.10.12</td><td><code>install/my_interfaces/local/lib/python3.10/dist-packages/my_interfaces/msg/</code></td></tr>
+<tr><td>Jazzy</td><td>3.12.3</td><td><code>install/my_interfaces/lib/python3.12/site-packages/my_interfaces/msg/</code></td></tr>
+<tr><td>Lyrical</td><td>3.14.4</td><td><code>install/my_interfaces/lib/python3.14/site-packages/my_interfaces/msg/</code></td></tr>
+</tbody>
+</table>
+
+<p>Python finds that folder only through <code>PYTHONPATH</code>, and <code>source install/setup.bash</code> is what adds it. With only <code>/opt/ros/&lt;distro&gt;/setup.bash</code> sourced, the import failed with <code>No module named 'my_interfaces'</code> on all three distros. After sourcing the workspace, <code>PYTHONPATH</code> had exactly one new entry, the folder in the table, and the import printed <code>my_interfaces.msg.Num(num=3)</code>.</p>
+
+<p>The case that confuses people is the order. I built a workspace with only the <code>consumer</code> node, sourced it, then added <code>my_interfaces</code> and built it. In that same shell:</p>
+
+<ul>
+<li><code>python3 -c "from my_interfaces.msg import Num"</code>: <code>ModuleNotFoundError: No module named 'my_interfaces'</code></li>
+<li><code>ros2 run consumer node</code>: the same <code>ModuleNotFoundError</code>, then <code>[ros2run]: Process exited with failure 1</code></li>
+<li><code>ros2 interface show my_interfaces/msg/Num</code>: <code>Unknown package 'my_interfaces'</code></li>
+</ul>
+
+<p>After one more <code>source install/setup.bash</code>, the import worked and the node logged <code>built Num num=42</code>. The reason is that the default isolated layout gives each package its own prefix. <code>setup.bash</code> adds the prefixes that exist when you source it, so a package built later stays invisible until you source again. A new terminal that sources the workspace works the same way.</p>
+
+<p>Two related results:</p>
+
+<ul>
+<li>With <code>--merge-install</code> and the same order, Humble still needed a second source. Jazzy and Lyrical imported the new package straight away. I didn't dig into why. If you rely on that, test it on your distro first.</li>
+<li>Sourcing only the package's own <code>install/my_interfaces/share/my_interfaces/local_setup.bash</code> on top of <code>/opt/ros</code> was enough to import it.</li>
+</ul>
+
+<p>Rebuilding a package that was already sourced is different. After I added <code>Extra.msg</code> to <code>rosidl_generate_interfaces()</code> and rebuilt, the import of <code>Extra</code> worked in the same shell without a new source, on all three distros. The prefix was already on the path, and only the files inside it changed.</p>
+
+<p>The <code>consumer</code> package had no <code>&lt;depend&gt;my_interfaces&lt;/depend&gt;</code>, and <code>ros2 run consumer node</code> still worked, because both packages were in the same sourced workspace. That doesn't make the depend line optional. colcon uses it to build packages in the right order, and I didn't test a clean build of both packages at once without it.</p>
+
+<p>One more check: after I moved <code>src/my_interfaces</code> away, the import still worked from the old <code>install/</code> folder. It failed only after I deleted <code>install/my_interfaces</code>. If you renamed or deleted an interface package and old types still import, look in <code>install/</code>.</p>
+
+<h2>Cause 2: the message isn't generated, or the import names it wrong</h2>
+
+<p><code>rosidl_generate_interfaces()</code> generates only the files you list. <code>Extra.msg</code> sat in <code>msg/</code> next to <code>Num.msg</code>, the build finished with no warning, and <code>from my_interfaces.msg import Extra</code> failed with <code>cannot import name 'Extra'</code>. Adding the line fixed it:</p>
+
+<pre><code class="language-cmake">rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/Num.msg"
+  "msg/Extra.msg"
+  "srv/AddTwoInts.srv"
+)</code></pre>
+
+<p>The other <code>cannot import name</code> cases were all import lines:</p>
+
+<ul>
+<li><code>from my_interfaces import Num</code> fails. Messages are in <code>my_interfaces.msg</code>, services in <code>my_interfaces.srv</code>, actions in <code>my_interfaces.action</code>.</li>
+<li><code>num</code> and <code>NUM</code> fail. The class name matches the file name exactly, <code>Num</code>.</li>
+<li>A service imported from <code>.msg</code> fails. <code>from my_interfaces.srv import AddTwoInts</code> printed <code>my_interfaces.srv.AddTwoInts_Request(a=1, b=2)</code> for <code>AddTwoInts.Request(a=1, b=2)</code>.</li>
+<li><code>import my_interfaces.msg.Num</code> fails with <code>No module named 'my_interfaces.msg.Num'</code>. Use <code>from my_interfaces.msg import Num</code>, or <code>import my_interfaces.msg as m</code> and then <code>m.Num</code>, which worked.</li>
+</ul>
+
+<p>The path in the error is useful. <code>cannot import name 'Extra' from 'my_interfaces.msg' (.../install/my_interfaces/...)</code> tells you which <code>install/</code> folder Python used. If that isn't the workspace you just built, you have an older copy on the path.</p>
+
+<h2>Cause 3: .msg files in an ament_python package</h2>
+
+<p>This is the case in <a href="https://robotics.stackexchange.com/questions/114128">ROS2.Jazzy Python Custom Messages</a>. The <code>py_msgs</code> package had a <code>msg/Point2.msg</code>, a <code>setup.py</code> and even the <code>member_of_group</code> line. colcon built it in about a second with no error. The install folder had 0 files with <code>point2</code> in their name. Then:</p>
+
+<ul>
+<li><code>from py_msgs.msg import Point2</code>: <code>ModuleNotFoundError: No module named 'py_msgs.msg'</code></li>
+<li><code>ros2 interface show py_msgs/msg/Point2</code>: <code>Could not find the resource 'py_msgs' of type 'rosidl_interfaces'</code></li>
+<li><code>ros2 interface packages</code> didn't list <code>py_msgs</code>.</li>
+</ul>
+
+<p>Message generation runs from CMake, and <code>setup.py</code> never calls it. The usual fix is a separate <code>ament_cmake</code> package that holds only the interfaces, like <code>my_interfaces</code> here, and your Python package imports from it.</p>
+
+<p>A related error appeared when I tried to keep Python code in the interface package. <code>my_server3</code> called <code>ament_python_install_package(${PROJECT_NAME})</code> after <code>rosidl_generate_interfaces()</code>. On Humble and Jazzy the build stopped with:</p>
+
+<pre><code>CMake Error at /opt/ros/humble/share/ament_cmake_python/cmake/ament_python_install_package.cmake:122 (add_custom_target):
+  add_custom_target cannot create target "ament_cmake_python_copy_my_server3"</code></pre>
+
+<p>On Lyrical the same package built, and its script imported <code>Ping</code>. The rosidl generator already installs a Python package with the project's name, so on Humble and Jazzy you can't install a second one with that name. A separate package is the layout that built on all three.</p>
+
+<h2>Cause 4: a file shadows the package name</h2>
+
+<p><code>'x' is not a package</code> means Python found something called <code>x</code>, but it was a single <code>.py</code> file, so it had no <code>.msg</code> inside.</p>
+
+<p>In <code>my_server</code> the script was <code>my_server/my_server.py</code>, installed with <code>install(PROGRAMS ... DESTINATION lib/${PROJECT_NAME})</code>. <code>ros2 run my_server my_server.py</code> printed <code>sys.path[0] = install/my_server/lib/my_server</code> twice and then <code>ModuleNotFoundError: No module named 'my_server.msg'; 'my_server' is not a package</code>. Python puts the script's own folder first on the path, so <code>import my_server</code> found the script itself. The script ran a second time as a module, and its <code>from my_server.msg import Ping</code> failed. <code>my_server2</code> was identical except the script was named <code>server_node.py</code>, and it printed <code>imported Ping, data field: True</code>. The generated package was fine the whole time: the same import worked from <code>/tmp</code>.</p>
+
+<p><a href="https://robotics.stackexchange.com/questions/24881">This question</a> has the same pattern with a file named <code>turtlesim.py</code>. I reproduced it with a <code>std_msgs.py</code> next to a script that imports <code>std_msgs.msg</code>. It failed with <code>'std_msgs' is not a package</code>. After I deleted <code>std_msgs.py</code>, the script printed <code>ok std_msgs.msg.String(data='a')</code>, even though <code>__pycache__/std_msgs.cpython-310.pyc</code> was still there. Python 3 ignores a cached file once its source is gone.</p>
+
+<h2>Cause 5: the package.xml is missing member_of_group</h2>
+
+<p>Without <code>&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;</code>, the build stopped in CMake on all three distros:</p>
+
+<pre><code>CMake Error at /opt/ros/humble/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:229 (message):
+  Packages installing interfaces must include
+  '&lt;member_of_group&gt;rosidl_interface_packages&lt;/member_of_group&gt;' in their
+  package.xml</code></pre>
+
+<p>Jazzy and Lyrical reported it at line 223. You only see <code>No module named</code> for this package if you missed the failed build. colcon printed <code>Failed   &lt;&lt;&lt; nogroup_interfaces [0.46s, exited with code 1]</code> on Humble, so read the build output before you debug the import.</p>
+
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Fixed</th><th>Did not fix</th></tr></thead>
+<tbody>
+<tr><td><code>source install/setup.bash</code> after the build</td><td>Unsourced shell, shell sourced before the package existed (Humble, Jazzy, Lyrical)</td><td>Anything in the package or the import line</td></tr>
+<tr><td>List the file in <code>rosidl_generate_interfaces()</code> and rebuild</td><td><code>cannot import name 'Extra'</code>, without a new source</td><td>Wrong module or wrong case in the import</td></tr>
+<tr><td>Correct the import (<code>.msg</code> vs <code>.srv</code>, exact class name)</td><td>All the <code>cannot import name</code> rows from import lines</td><td>Unlisted files</td></tr>
+<tr><td>Separate <code>ament_cmake</code> interface package</td><td><code>.msg</code> files in <code>ament_python</code>; the duplicate target error on Humble and Jazzy</td><td>-</td></tr>
+<tr><td>Rename the script or local file</td><td><code>'my_server' is not a package</code>, <code>'std_msgs' is not a package</code></td><td>-</td></tr>
+<tr><td>Add <code>member_of_group</code></td><td>The CMake error above</td><td>-</td></tr>
+</tbody>
+</table>
+
+<p>None of these fixes takes long to try. A full build of <code>my_interfaces</code> with one worker took 10.5 s on Humble, 14.5 s on Jazzy and 16.6 s on Lyrical. Importing <code>Num</code> in a fresh interpreter took about 16 ms on Humble, about 19 ms on Jazzy and 74 to 110 ms on Lyrical.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Install path: Humble uses <code>local/lib/python3.10/dist-packages</code>. Jazzy and Lyrical use <code>lib/python3.X/site-packages</code>. If you hard-code <code>PYTHONPATH</code> or an editor path, this changes between distros.</li>
+<li>The <code>Did you mean: 'Num'?</code> hint appeared only on Jazzy (Python 3.12.3). Humble (3.10.12) and Lyrical (3.14.4) printed the plain <code>cannot import name</code> line for the same import.</li>
+<li><code>ament_python_install_package(${PROJECT_NAME})</code> in an interface package failed on Humble and Jazzy and built on Lyrical.</li>
+<li><code>--merge-install</code>: a package added after sourcing was importable without a second source on Jazzy and Lyrical, but not on Humble.</li>
+<li>On Lyrical, CMake printed a deprecation warning for <code>cmake_minimum_required(VERSION 3.8)</code>, so colcon reported <code>1 package had stderr output</code> even though the build passed.</li>
+<li>Everything else, including all the error texts in the first table, matched on the three distros.</li>
+</ul>
+
+<p>If the import fails only inside a virtual environment or conda, that's a different problem. Python then looks for the right files under a different interpreter. See <a href="https://huntlab.app/en/no-module-named-rclpy-rclpy-pybind11-ros-2/">No module named 'rclpy' or 'rclpy._rclpy_pybind11'</a>.</p>
+
+<h2>Not tested</h2>
+
+<p>Virtual environments and conda, <code>--symlink-install</code>, action imports, interfaces that depend on other packages' messages, a clean build of a package without a <code>&lt;depend&gt;</code> on its interface package, launch files, zsh and fish setup files, Windows, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why do I get "No module named" for my custom message when colcon build succeeded?</h3>
+<p>The shell can't see the workspace. In my runs this happened when only <code>/opt/ros</code> was sourced, and when <code>install/setup.bash</code> was sourced before the interface package was first built. Run <code>source install/setup.bash</code> again in that terminal. Also check the colcon summary, because a failed build gives the same error.</p>
+
+<h3>What does "cannot import name ... from my_interfaces.msg" mean?</h3>
+<p>Python found the package but not that type. Either the <code>.msg</code> file isn't listed in <code>rosidl_generate_interfaces()</code>, or the name in the import doesn't match the file name exactly. A service imported from <code>.msg</code> instead of <code>.srv</code> also gives this error.</p>
+
+<h3>Can I put custom messages in an ament_python package?</h3>
+<p>Not in my test. The build passed, nothing was generated, and the import failed with <code>No module named 'py_msgs.msg'</code>. Put the interfaces in a separate <code>ament_cmake</code> package and import them from your Python package.</p>
+
+<h3>What does "'my_server' is not a package" mean?</h3>
+<p>A plain <code>.py</code> file with that name is earlier on the path than the real package. A script named after its own package did this, and so did a local <code>std_msgs.py</code>. Rename the file.</p>
+
+<h3>Do I need to source again after adding a new .msg to an existing package?</h3>
+<p>No, not in my runs. After listing <code>Extra.msg</code> and rebuilding, it imported in the same shell on Humble, Jazzy and Lyrical. You only need to source again when a new package appears in <code>install/</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why do I get No module named for my custom message when colcon build succeeded?", "acceptedAnswer": {"@type": "Answer", "text": "The shell can't see the workspace. In my runs this happened when only /opt/ros was sourced, and when install/setup.bash was sourced before the interface package was first built. Run source install/setup.bash again in that terminal. Also check the colcon summary, because a failed build gives the same error."}},
+{"@type": "Question", "name": "What does cannot import name ... from my_interfaces.msg mean?", "acceptedAnswer": {"@type": "Answer", "text": "Python found the package but not that type. Either the .msg file isn't listed in rosidl_generate_interfaces(), or the name in the import doesn't match the file name exactly. A service imported from .msg instead of .srv also gives this error."}},
+{"@type": "Question", "name": "Can I put custom messages in an ament_python package?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my test. The build passed, nothing was generated, and the import failed with No module named py_msgs.msg. Put the interfaces in a separate ament_cmake package and import them from your Python package."}},
+{"@type": "Question", "name": "What does my_server is not a package mean?", "acceptedAnswer": {"@type": "Answer", "text": "A plain .py file with that name is earlier on the path than the real package. A script named after its own package did this, and so did a local std_msgs.py. Rename the file."}},
+{"@type": "Question", "name": "Do I need to source again after adding a new .msg to an existing package?", "acceptedAnswer": {"@type": "Answer", "text": "No, not in my runs. After listing Extra.msg and rebuilding, it imported in the same shell on Humble, Jazzy and Lyrical. You only need to source again when a new package appears in install/."}}
+]}
+</script>
+
+<p>Measured on 2026-11-15 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rosidl_generator_py 0.14.6, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rosidl_generator_py 0.22.2, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rosidl_generator_py 0.27.2, Python 3.14.4), colcon-core 0.21.3, default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-21-rclpy-custom-interface-import-error/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/89393">ROS2 Custom Messages Not Found</a>, <a href="https://robotics.stackexchange.com/questions/96312">ROS2 custom message python import error</a>, <a href="https://robotics.stackexchange.com/questions/24881">ModuleNotFoundError: No module named 'turtlesim.msg'; 'turtlesim' is not a package</a>, <a href="https://robotics.stackexchange.com/questions/110109">ROS2 using Python with CMakelists gives an error when importing custom message</a>, <a href="https://robotics.stackexchange.com/questions/114128">ROS2.Jazzy Python Custom Messages</a>.</p>

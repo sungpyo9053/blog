@@ -1,0 +1,150 @@
+
+##### versions
+Python 3.14.4
+colcon-core 0.21.3
+
+##### A. colcon build my_interfaces (fresh shell, only /opt/ros sourced), timed
+
+Summary: 1 package finished [16.3s]
+  1 package had stderr output: my_interfaces
+build_seconds my_interfaces: 16.6
+
+##### A2. import with only /opt/ros sourced (never sourced the workspace)
+rc=1 ModuleNotFoundError: No module named 'my_interfaces'
+
+##### A3. ros2 interface show with only /opt/ros sourced
+Unknown package 'my_interfaces'
+
+##### A4. generated module location
+install/my_interfaces/lib/python3.14/site-packages/my_interfaces/msg/_num.py
+
+##### A5. after source install/setup.bash
+OK: my_interfaces.msg.Num(num=3)
+PYTHONPATH entries with my_interfaces:
+install/my_interfaces/lib/python3.14/site-packages
+
+##### A6. import timing (fresh interpreter, 5 runs, ms)
+74.7 74.1 74.2 104.2 109.9 
+int64 num
+
+##### B. wrong import forms (workspace sourced)
+[from my_interfaces import Num]
+rc=1 ImportError: cannot import name 'Num' from 'my_interfaces' (/w/ws_lyrical/install/my_interfaces/lib/python3.14/site-packages/my_interfaces/__init__.py)
+[from my_interfaces.msg import num]
+rc=1 ImportError: cannot import name 'num' from 'my_interfaces.msg' (/w/ws_lyrical/install/my_interfaces/lib/python3.14/site-packages/my_interfaces/msg/__init__.py)
+[from my_interfaces.msg import NUM]
+rc=1 ImportError: cannot import name 'NUM' from 'my_interfaces.msg' (/w/ws_lyrical/install/my_interfaces/lib/python3.14/site-packages/my_interfaces/msg/__init__.py)
+[import my_interfaces.msg.Num]
+rc=1 ModuleNotFoundError: No module named 'my_interfaces.msg.Num'
+[from my_interfaces.msg import AddTwoInts]
+rc=1 ImportError: cannot import name 'AddTwoInts' from 'my_interfaces.msg' (/w/ws_lyrical/install/my_interfaces/lib/python3.14/site-packages/my_interfaces/msg/__init__.py)
+[from my_interfaces.srv import AddTwoInts; print(AddTwoInts.Request(a=1,b=2))]
+OK: my_interfaces.srv.AddTwoInts_Request(a=1, b=2)
+[from my_interfaces.msg import Extra]
+rc=1 ImportError: cannot import name 'Extra' from 'my_interfaces.msg' (/w/ws_lyrical/install/my_interfaces/lib/python3.14/site-packages/my_interfaces/msg/__init__.py)
+[from my_interface.msg import Num]
+rc=1 ModuleNotFoundError: No module named 'my_interface'
+[import my_interfaces.msg as m; print(m.Num)]
+OK: <class 'my_interfaces.msg._num.Num'>
+
+##### C. Extra.msg in msg/ but not listed: build ok? then list it and rebuild
+Summary: 1 package finished [18.0s]
+  1 package had stderr output: my_interfaces
+same shell, not re-sourced:
+OK: my_interfaces.msg.Extra(note='hi')
+
+##### D. sourced BEFORE the interface package existed (new terminal order problem)
+
+Summary: 1 package finished [1.36s]
+Summary: 1 package finished [20.1s]
+  1 package had stderr output: my_interfaces
+same shell after building my_interfaces:
+rc=1 ModuleNotFoundError: No module named 'my_interfaces'
+ros2 run consumer node:
+ModuleNotFoundError: No module named 'my_interfaces'
+[ros2run]: Process exited with failure 1
+ros2 interface show:
+Unknown package 'my_interfaces'
+after re-sourcing install/setup.bash:
+OK: 
+ros2 run consumer node:
+[INFO] [1794706305.365910853] [consumer]: built Num num=42
+
+##### D2. same order with --merge-install
+
+Summary: 1 package finished [1.38s]
+Summary: 1 package finished [20.5s]
+  1 package had stderr output: my_interfaces
+same shell after building my_interfaces:
+OK: 
+after re-sourcing:
+OK: 
+
+##### D3. only the package's own local_setup.bash sourced
+OK: 
+
+##### E. consumer with no <depend>my_interfaces</depend>, ros2 run in the same workspace
+
+Summary: 1 package finished [1.38s]
+[INFO] [1794706331.567250691] [consumer]: built Num num=42
+
+##### F. ament_python package with a msg/ folder
+Finished <<< py_msgs [1.25s]
+
+Summary: 1 package finished [1.39s]
+files named *point2* in install/py_msgs: 0
+rc=1 ModuleNotFoundError: No module named 'py_msgs.msg'
+Could not find the resource 'py_msgs' of type 'rosidl_interfaces'
+py_msgs in ros2 interface packages: 0
+
+##### G. package without <member_of_group>rosidl_interface_packages</member_of_group>
+CMake Error at /opt/ros/lyrical/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:223 (message):
+  Packages installing interfaces must include
+  '<member_of_group>rosidl_interface_packages</member_of_group>' in their
+  package.xml
+Failed   <<< nogroup_interfaces [0.78s, exited with code 1]
+Summary: 0 packages finished [0.92s]
+rc=1 ModuleNotFoundError: No module named 'nogroup_interfaces'
+
+##### H. script named like its package (my_server/my_server.py) vs renamed (server_node.py)
+Summary: 2 packages finished [22.3s]
+  2 packages had stderr output: my_server my_server2
+[ros2 run my_server my_server.py]
+sys.path[0] = install/my_server/lib/my_server
+sys.path[0] = install/my_server/lib/my_server
+ModuleNotFoundError: No module named 'my_server.msg'; 'my_server' is not a package
+[ros2 run my_server2 server_node.py]
+sys.path[0] = install/my_server2/lib/my_server2
+imported Ping, data field: True
+[python3 -c import my_server.msg from another dir]
+OK: ok
+
+##### H0. interface package that also calls ament_python_install_package(${PROJECT_NAME})
+Summary: 1 package finished [11.1s]
+
+##### H2. a local file named std_msgs.py next to your script (robotics.SE 24881 pattern)
+[python3 talker.py next to std_msgs.py]
+ModuleNotFoundError: No module named 'std_msgs.msg'; 'std_msgs' is not a package
+[after deleting std_msgs.py, stale __pycache__ left in place]
+std_msgs.cpython-314.pyc
+ok std_msgs.msg.String(data='a')
+
+##### I. stale install: interface package removed from src but install/ kept
+import with source gone, install/ kept:
+OK: 
+after rm -rf install/my_interfaces:
+rc=1 ModuleNotFoundError: No module named 'my_interfaces'
+
+##### done lyrical
+
+
+##### S1. stderr of the first my_interfaces build (log/build_*/my_interfaces/stderr.log, first 3 lines)
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+##### S2. my_server3 (ament_python_install_package in an interface package) on lyrical: import + ros2 run
+__init__.py __pycache__ _my_server3_s.ep.rosidl_typesupport_c.c _my_server3_s.ep.rosidl_typesupport_fastrtps_c.c _my_server3_s.ep.rosidl_typesupport_introspection_c.c msg my_server3_s__rosidl_typesupport_c.so my_server3_s__rosidl_typesupport_fastrtps_c.so my_server3_s__rosidl_typesupport_introspection_c.so py.typed server_node.py 
+sys.path[0] = /w/ws_lyrical/install/my_server3/lib/my_server3
+imported Ping, data field: True
+##### S3. plain 'import rclpy' time, 3 runs, ms (the my_interfaces timing loop failed here because step I had removed install/my_interfaces)
+123.5 124.2 123.5 
