@@ -137,3 +137,28 @@ add_action(
             $english ? 'ko' : 'en', $english ? '한국어' : 'English edition' );
     }
 );
+
+// AIOSEO builds schema strings from texturized titles, so quotes reach JSON-LD as &#8220; / &#8217; literals
+// (EN titles quote error messages). Decode them in the text fields only.
+add_filter(
+    'aioseo_schema_output',
+    static function ( $graph ) {
+        if ( ! is_array( $graph ) ) {
+            return $graph;
+        }
+        $walk = static function ( $node ) use ( &$walk ) {
+            if ( ! is_array( $node ) ) {
+                return $node;
+            }
+            foreach ( $node as $k => $v ) {
+                if ( is_array( $v ) ) {
+                    $node[ $k ] = $walk( $v );
+                } elseif ( is_string( $v ) && in_array( $k, array( 'headline', 'name', 'description', 'alternativeHeadline', 'text' ), true ) ) {
+                    $node[ $k ] = html_entity_decode( $v, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+                }
+            }
+            return $node;
+        };
+        return $walk( $graph );
+    }
+);
