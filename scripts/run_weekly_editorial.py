@@ -341,6 +341,8 @@ def run(root=ROOT, *, now=None, apply=False, notify=False, client=None,
                                 'metrics': metrics, 'recent_articles': posts, 'writer_id': writer_id, 'reviewer_id': reviewer_id,
                                 'action_sha256': action_hash(action), 'after_sha256': sha256(after),
                                 'review_schema': 'HOLD: {verdict:HOLD,reason:string}; APPROVED: {verdict:APPROVED,post_id:int,title:string,slug:string,action_sha256:string,after_sha256:string,writer_id:string,reviewer_id:string,gates:{gate1:true,...,gate8:true},items:[20 objects id/score/reason/body_location/evidence_ref],total:int>=99,naturalness:exact object from physical-ai-quality.md schema2}. Naturalness PASS and item17=5 required; compare recent_articles. Use supplied exact hashes, do not approve unverified source claims.'}
+                # target + after add two more full bodies: 11/15 reviewer call overflowed 400KB with recent_articles fitted only for the writer
+                review_input['recent_articles'] = fit_posts(posts, {k: v for k, v in review_input.items() if k != 'recent_articles'})
                 review = agent(root, 'reviewer', review_input, directory)
                 if not isinstance(review, dict):
                     raise ValueError('invalid_review')
