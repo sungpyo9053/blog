@@ -1,0 +1,182 @@
+<pre><code>CvBridgeError: [16UC1] is not a color format. but [bgr8] is. The conversion does not make sense</code></pre>
+
+<p>In C++ the same text comes from <code>cv_bridge::Exception</code> thrown by <code>cv_bridge::toCvCopy</code>. The sibling error on the publishing side is <code>CvBridgeError: encoding specified as bgr8, but image has incompatible type 8UC1</code>.</p>
+
+<p>Short answer: you asked cv_bridge to turn an image into a color or mono format, and the message's encoding is not one cv_bridge treats as color or mono. Depth images (<code>16UC1</code>, <code>32FC1</code>) and generic OpenCV types (<code>8UC1</code>, <code>8UC3</code>) all hit it. Ask for the image as it is, then convert it yourself:</p>
+
+<pre><code class="language-python">depth = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')   # uint16, millimetres for 16UC1
+view = cv2.convertScaleAbs(depth, alpha=255.0 / 5000)                # 0..5000 mm -> 0..255 for display
+# or: view = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)</code></pre>
+
+<p>If you publish the image yourself, name its encoding: <code>bridge.cv2_to_imgmsg(frame, encoding='bgr8')</code>. Without it, a <code>uint8</code> 3-channel array goes out as <code>8UC3</code>, and every subscriber that asks for <code>bgr8</code> gets this error. The rules below were identical on Humble, Jazzy and Lyrical.</p>
+
+<h2>Find your error text</h2>
+
+<p>Every message below came from my runs. All of them matched on all three distros, in Python and, where I tested it, in C++.</p>
+
+<table>
+<thead><tr><th>Error text</th><th>What happened</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>[16UC1] is not a color format. but [bgr8] is. The conversion does not make sense</code></td><td>Depth or other non-color image read as <code>bgr8</code>, <code>rgb8</code>, <code>bgra8</code>, <code>mono8</code> or <code>mono16</code></td><td><code>passthrough</code>, then scale with OpenCV</td></tr>
+<tr><td><code>[8UC1] is not a color format. but [mono8] is</code></td><td>Same rule. It fires even though <code>8UC1</code> and <code>mono8</code> have the same bytes</td><td><code>passthrough</code>, or publish as <code>mono8</code></td></tr>
+<tr><td><code>[8UC3] is not a color format. but [bgr8] is</code></td><td>Publisher used <code>cv2_to_imgmsg(frame)</code> with no encoding</td><td>Publish with <code>encoding='bgr8'</code></td></tr>
+<tr><td><code>[16UC1] and [8UC3] do not have the same number of channel</code></td><td>Numeric target with a different channel count</td><td>Ask for a 1-channel type, or <code>passthrough</code></td></tr>
+<tr><td><code>[bgr8] is a color format but [8UC1] is not so they must have the same OpenCV type, CV_8UC3, CV16UC1 ....</code></td><td>Color image read as a numeric type with a different layout</td><td><code>mono8</code> for gray, <code>8UC3</code> or <code>bgr8</code> for color</td></tr>
+<tr><td><code>Unsupported conversion from [bayer_rggb8] to [bgra8]</code></td><td>No conversion code for that pair</td><td>Go through <code>bgr8</code> first</td></tr>
+<tr><td><code>encoding specified as bgr8, but image has incompatible type 8UC1</code></td><td><code>cv2_to_imgmsg</code> with an encoding that doesn't match the array's dtype and channels</td><td>Match the encoding to the array, see below</td></tr>
+<tr><td><code>encoding specified as 32FC1, but image has incompatible type 64FC1</code></td><td>NumPy <code>float64</code> array sent as <code>32FC1</code></td><td><code>arr.astype(np.float32)</code></td></tr>
+<tr><td><code>KeyError: 'int64'</code> (or <code>'bool'</code>)</td><td><code>cv2_to_imgmsg</code> got a dtype cv_bridge has no type for</td><td>Cast to <code>uint8</code>, <code>uint16</code> or <code>float32</code></td></tr>
+<tr><td><code>TypeError: Your input type is not a numpy array</code></td><td>A Python list passed to <code>cv2_to_imgmsg</code></td><td><code>np.asarray(..., dtype=np.uint8)</code></td></tr>
+<tr><td><code>Unrecognized image encoding [BGR8]</code> or <code>Unrecognized image encoding []</code></td><td>The message's <code>encoding</code> field is upper case or empty</td><td>Fix the publisher, or set <code>msg.encoding</code> before converting</td></tr>
+<tr><td><code>Unknown encoding BGR8</code> / <code>Unknown encoding bgr</code></td><td>Typo in <code>desired_encoding</code></td><td>Lower case, full names: <code>bgr8</code>, <code>mono16</code></td></tr>
+<tr><td><code>TypeError: buffer is too small for requested array</code></td><td><code>data</code> shorter than <code>height</code> times <code>step</code></td><td>Fix the publisher's <code>step</code> or size</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, added <code>ros-&lt;distro&gt;-cv-bridge</code> with apt, then cut the container's network before the tests. One Python script built small 4x6 images with <code>cv2_to_imgmsg</code> in 11 source encodings and asked <code>imgmsg_to_cv2</code> for 10 target encodings each, 110 conversions per distro. The sources were <code>16UC1</code>, <code>mono16</code>, <code>32FC1</code>, <code>8UC1</code>, <code>mono8</code>, <code>8UC3</code>, <code>bgr8</code>, <code>rgb8</code>, <code>bgra8</code>, <code>bayer_rggb8</code> and <code>yuv422</code>. It also sent 19 arrays through <code>cv2_to_imgmsg</code>, fed in 9 hand-built broken messages, and timed the common fixes on a 640x480 image, 300 calls each. A small C++ program called <code>toCvCopy</code> and <code>cvtColorForDisplay</code> on a <code>16UC1</code> message. The script and full output are in the evidence folder linked at the end.</p>
+
+<p>The 110-cell matrix gave the same OK and ERR pattern on every distro. Condensed:</p>
+
+<table>
+<thead><tr><th>Source encoding</th><th>Color or mono targets (<code>bgr8</code>, <code>rgb8</code>, <code>bgra8</code>, <code>mono8</code>, <code>mono16</code>)</th><th>Numeric targets (<code>8UC1</code>, <code>16UC1</code>, <code>32FC1</code>)</th></tr></thead>
+<tbody>
+<tr><td><code>16UC1</code>, <code>32FC1</code>, <code>8UC1</code></td><td>all fail, "is not a color format"</td><td>all work, values converted (see below)</td></tr>
+<tr><td><code>8UC3</code></td><td>all fail, "is not a color format"</td><td>fail, "same number of channel". Only <code>8UC3</code> and <code>passthrough</code> work</td></tr>
+<tr><td><code>mono16</code>, <code>mono8</code></td><td>all work</td><td>all work. <code>8UC3</code> fails</td></tr>
+<tr><td><code>bgr8</code>, <code>rgb8</code></td><td>all work</td><td>fail ("must have the same OpenCV type"). <code>8UC3</code> works</td></tr>
+<tr><td><code>bgra8</code></td><td>all work</td><td>all fail, including <code>8UC3</code></td></tr>
+<tr><td><code>bayer_rggb8</code></td><td>work, except <code>bgra8</code> ("Unsupported conversion")</td><td>work. <code>8UC3</code> fails</td></tr>
+<tr><td><code>yuv422</code></td><td>all work</td><td>all fail</td></tr>
+</tbody>
+</table>
+
+<p><code>passthrough</code> worked for every source. It is the one target that never raised.</p>
+
+<h2>Cause 1: a depth image asked for as bgr8 or mono8</h2>
+
+<p>This is the case in the <a href="https://robotics.stackexchange.com/questions/105438">RealSense question</a> and in most GitHub issues about the error. A depth topic such as <code>/camera/depth/image_raw</code> or an aligned depth topic is <code>16UC1</code> (millimetres) or <code>32FC1</code> (metres). Code copied from a color callback asks for <code>bgr8</code>, and cv_bridge refuses.</p>
+
+<p>The rule is about labels, not bytes. cv_bridge knows which names mean color or mono (<code>bgr8</code>, <code>rgb8</code>, <code>mono8</code>, <code>mono16</code> and the like) and which are generic OpenCV types (<code>8UC1</code>, <code>16UC1</code>, <code>32FC1</code>, <code>8UC3</code>). A generic source can't go to a color or mono target. That is why <code>[8UC1] is not a color format. but [mono8] is</code> appears even though both are one 8-bit channel, the case in <a href="https://github.com/ros-perception/vision_opencv/issues/175">vision_opencv issue 175</a>. It is also why <code>mono16</code> is refused for a <code>16UC1</code> depth image. Swapping <code>bgr8</code> for <code>mono16</code> doesn't help.</p>
+
+<p>The same data labelled <code>mono16</code> converts without complaint, and that shows what you would get. A <code>mono16</code> pixel of 1500 became <code>6</code> in <code>mono8</code> and <code>[6, 6, 6]</code> in <code>bgr8</code>. The value is divided by about 256. At that factor a depth range of 500 to 4500 mm would land between 2 and 18 out of 255, which looks black. Relabelling a depth message as <code>mono16</code> silences the error but doesn't give you a usable picture.</p>
+
+<p>Numeric targets do work for depth, but read the values:</p>
+
+<table>
+<thead><tr><th>Conversion</th><th>Input pixel</th><th>Output pixel</th></tr></thead>
+<tbody>
+<tr><td><code>16UC1</code> to <code>32FC1</code></td><td>1500</td><td>1500.0 (no scaling, still millimetres)</td></tr>
+<tr><td><code>16UC1</code> to <code>8UC1</code></td><td>1500</td><td>6</td></tr>
+<tr><td><code>32FC1</code> to <code>16UC1</code></td><td>1.5</td><td>2 (rounded, not multiplied by 1000)</td></tr>
+<tr><td><code>32FC1</code> to <code>8UC1</code></td><td>1.5</td><td>2</td></tr>
+<tr><td><code>8UC1</code> or <code>mono8</code> to <code>16UC1</code> / <code>mono16</code></td><td>100</td><td>25700 (times 257)</td></tr>
+<tr><td><code>8UC1</code> to <code>32FC1</code></td><td>100</td><td>100.0</td></tr>
+</tbody>
+</table>
+
+<p>Asking for <code>16UC1</code> from a <code>32FC1</code> depth image turns 1.5 m into 2, not 1500. If you need millimetres from a float image, multiply first: <code>(depth_m * 1000).astype(np.uint16)</code>. The units part is the same one that matters when you <a href="https://huntlab.app/en/ros-2-depth-image-pixel-to-3d-point-xyz-camera-info-k/">turn a depth pixel into a 3D point</a>.</p>
+
+<h2>Cause 2: the publisher sent 8UC3 instead of bgr8</h2>
+
+<p><code>cv2_to_imgmsg</code> defaults to <code>encoding='passthrough'</code>, and passthrough names the OpenCV type, not the color order. In my run a <code>uint8</code> HxWx3 array was published as <code>8UC3</code>. Reading that message back with <code>imgmsg_to_cv2(msg, 'bgr8')</code> failed with <code>[8UC3] is not a color format. but [bgr8] is. The conversion does not make sense</code>, the error in <a href="https://github.com/UbiquityRobotics/fiducials/issues/208">fiducials issue 208</a>. The fix belongs on the publisher: <code>cv2_to_imgmsg(frame, encoding='bgr8')</code>. If you can't change the publisher, read with <code>passthrough</code> and treat the array as BGR yourself.</p>
+
+<p>What passthrough wrote for each array type:</p>
+
+<table>
+<thead><tr><th>NumPy array</th><th>Encoding written</th></tr></thead>
+<tbody>
+<tr><td><code>uint8</code> HxW</td><td><code>8UC1</code></td></tr>
+<tr><td><code>uint8</code> HxWx3</td><td><code>8UC3</code></td></tr>
+<tr><td><code>uint16</code> HxW</td><td><code>16UC1</code></td></tr>
+<tr><td><code>float32</code> HxW</td><td><code>32FC1</code></td></tr>
+<tr><td><code>float64</code> HxW</td><td><code>64FC1</code></td></tr>
+<tr><td><code>int64</code> or <code>bool</code></td><td>fails, <code>KeyError: 'int64'</code> / <code>KeyError: 'bool'</code></td></tr>
+</tbody>
+</table>
+
+<p>The <code>int64</code> case is common. <code>np.zeros((h, w), dtype=int)</code> and many NumPy operations give <code>int64</code>, and the resulting <code>KeyError</code> doesn't mention cv_bridge at all. Cast before publishing.</p>
+
+<h2>Cause 3: cv2_to_imgmsg with an encoding that doesn't fit the array</h2>
+
+<p>On the publishing side the check is strict: dtype and channel count must match the encoding. A 2D <code>uint8</code> array as <code>bgr8</code> failed with <code>encoding specified as bgr8, but image has incompatible type 8UC1</code>. A 4-channel array as <code>bgr8</code> gave <code>incompatible type 8UC4</code>. A <code>float64</code> array as <code>32FC1</code> gave <code>incompatible type 64FC1</code>, and a <code>uint16</code> array as <code>mono8</code> gave <code>incompatible type 16UC1</code>. Unlike <code>imgmsg_to_cv2</code>, <code>cv2_to_imgmsg</code> never converts. It only labels. Convert with OpenCV first (<code>cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)</code>, <code>cv2.cvtColor(bgra, cv2.COLOR_BGRA2BGR)</code>, <code>arr.astype(np.float32)</code>) and then publish with the matching name.</p>
+
+<h2>Cause 4: rgb8 vs bgr8, the silent one</h2>
+
+<p>No error here, just wrong colors. A message labelled <code>rgb8</code> with pixel <code>(10, 20, 30)</code> came back as <code>[30, 20, 10]</code> when I asked for <code>bgr8</code>, which is correct: cv_bridge swapped the channels for OpenCV. With <code>passthrough</code> it stayed <code>[10, 20, 30]</code>, still RGB, so <code>cv2.imshow</code> or <code>cv2.imwrite</code> would show red and blue swapped. If you plan to use OpenCV functions, ask for <code>bgr8</code>, not <code>passthrough</code>.</p>
+
+<h2>Cause 5: a broken encoding field or buffer</h2>
+
+<p>Hand-built <code>sensor_msgs/Image</code> messages and some drivers get the header fields wrong. An empty <code>encoding</code> gave <code>Unrecognized image encoding []</code> both with <code>passthrough</code> and with <code>bgr8</code>, which matches the C++ report in <a href="https://robotics.stackexchange.com/questions/48411">this IR camera question</a>. <code>BGR8</code> in upper case was also unrecognized. The names are case-sensitive and lower case. A typo in <code>desired_encoding</code> gave a slightly different message, <code>Unknown encoding bgr</code>. A buffer half the declared size gave <code>TypeError: buffer is too small for requested array</code>. A <code>mono8</code> message with two padding bytes per row (<code>step</code> 8 for width 6) converted fine to shape <code>(4, 6)</code>, so row padding is handled.</p>
+
+<h2>Fix options compared</h2>
+
+<p>For a 640x480 image, mean time per call over 300 calls on a 2 vCPU machine (Humble / Jazzy / Lyrical, ms):</p>
+
+<table>
+<thead><tr><th>Approach</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>bgr8</code> message, <code>passthrough</code></td><td>0.006</td><td>0.004</td><td>0.004</td><td>fastest</td></tr>
+<tr><td><code>bgr8</code> message, <code>desired_encoding='bgr8'</code></td><td>0.149</td><td>0.142</td><td>0.138</td><td>same encoding, still slower than passthrough</td></tr>
+<tr><td><code>rgb8</code> message, <code>'bgr8'</code></td><td>0.228</td><td>0.216</td><td>0.220</td><td>channel swap inside cv_bridge</td></tr>
+<tr><td><code>rgb8</code> message, passthrough + <code>cv2.cvtColor</code></td><td>0.137</td><td>0.124</td><td>0.129</td><td>same result, a bit faster</td></tr>
+<tr><td><code>16UC1</code> passthrough</td><td>0.039</td><td>0.033</td><td>0.011</td><td>raw millimetres</td></tr>
+<tr><td><code>16UC1</code>, <code>desired_encoding='32FC1'</code></td><td>0.275</td><td>0.261</td><td>0.208</td><td>float, still millimetres</td></tr>
+<tr><td><code>16UC1</code> passthrough + <code>convertScaleAbs</code></td><td>0.121</td><td>0.105</td><td>0.077</td><td>fixed scale for display</td></tr>
+<tr><td><code>16UC1</code> passthrough + <code>normalize</code> + <code>applyColorMap</code></td><td>1.655</td><td>1.090</td><td>1.412</td><td>per-frame contrast, colored</td></tr>
+<tr><td><code>cv2_to_imgmsg(..., 'bgr8')</code></td><td>0.153</td><td>0.152</td><td>0.148</td><td>publish side, for reference</td></tr>
+</tbody>
+</table>
+
+<p>None of these will bottleneck a 30 Hz camera. The choice is about what the picture shows. With a test image of 500 to 4499 mm and one zero pixel, <code>convertScaleAbs(alpha=255/5000)</code> gave a maximum of 229 and kept 0 as 0, so brightness means the same distance in every frame. <code>normalize</code> with <code>NORM_MINMAX</code> stretched the frame to the full 0 to 255, which shows more detail but changes from frame to frame, and the zero "no depth" pixels pull the minimum down. For metres, divide in NumPy: <code>depth.astype(np.float32) / 1000.0</code> gave 1.140 for a 1140 mm pixel.</p>
+
+<p>In C++ there is a helper for exactly this. <code>cv_bridge::cvtColorForDisplay(cv_bridge::toCvCopy(msg), "bgr8")</code> accepted the <code>16UC1</code> message that <code>toCvCopy(msg, "bgr8")</code> rejected and returned a <code>bgr8</code> image. With default options the 1500 pixel became <code>[6, 6, 6]</code>, the same divide-by-256 as <code>mono16</code>. With <code>CvtColorForDisplayOptions.do_dynamic_scaling = true</code> the brightest pixel became 255 and the darkest 0. The Python <code>CvBridge</code> class had no <code>cvtColorForDisplay</code> on any distro, so in Python you do the scaling with OpenCV as shown above.</p>
+
+<p>One C++ trap: <code>toCvCopy(msg, "passthrough")</code> threw <code>Unknown encoding passthrough</code> as a <code>std::exception</code>, not a <code>cv_bridge::Exception</code>. A <code>catch (cv_bridge::Exception &amp;)</code> block won't catch it. In C++, passthrough is an empty string: <code>toCvCopy(msg)</code> or <code>toCvCopy(msg, "")</code> returned the <code>16UC1</code> image unchanged.</p>
+
+<h2>Version notes</h2>
+
+<p>All error messages and the full 110-cell matrix matched across Humble (cv_bridge 3.2.1, OpenCV 4.5.4, NumPy 1.21.5), Jazzy (cv_bridge 4.1.0, OpenCV 4.6.0, NumPy 1.26.4) and Lyrical (cv_bridge 4.1.0, OpenCV 4.10.0, NumPy 2.3.5). Two things differed:</p>
+
+<ul>
+<li>A <code>16UC1</code> message with <code>is_bigendian=1</code> converted correctly (1500 stayed 1500) on Humble and Jazzy. On Lyrical it raised <code>AttributeError: `newbyteorder` was removed from the ndarray class in NumPy 2.0</code>. Little-endian messages worked on all three. If you see this on Lyrical, the sender set <code>is_bigendian</code>.</li>
+<li>The C++ header: on Humble my script did not find <code>cv_bridge/cv_bridge.hpp</code> and compiled against <code>cv_bridge/cv_bridge.h</code>. Jazzy and Lyrical had <code>cv_bridge/cv_bridge.hpp</code>.</li>
+</ul>
+
+<p>Timings were close on all three. Lyrical was fastest for the <code>16UC1</code> paths, but differences of a few hundredths of a millisecond on a shared 2 vCPU host are not a reason to pick a distro.</p>
+
+<h2>Not tested</h2>
+
+<p><code>compressed_imgmsg_to_cv2</code> and compressed depth (<code>compressedDepth</code>) topics, <code>image_transport</code> subscribers, real cameras and their drivers, rviz2 image display, C++ <code>toCvShare</code>, 16-bit color encodings such as <code>bgr16</code>, cv_bridge with a pip-installed OpenCV or NumPy, and Foxy, Iron or Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "[16UC1] is not a color format. but [bgr8] is" mean?</h3>
+<p>You asked cv_bridge to convert a depth image (16-bit, one channel) into a color image. cv_bridge only converts between color and mono encodings, and <code>16UC1</code> is neither. Use <code>desired_encoding='passthrough'</code> and scale the values with OpenCV if you want to display them.</p>
+
+<h3>Why does 8UC1 to mono8 fail when they are the same format?</h3>
+<p>The check uses the encoding names, not the bytes. <code>8UC1</code> is a generic OpenCV type and <code>mono8</code> is a mono format, so the conversion is refused on Humble, Jazzy and Lyrical. Read with <code>passthrough</code>, or have the publisher send <code>mono8</code>.</p>
+
+<h3>How do I fix "encoding specified as bgr8, but image has incompatible type 8UC1"?</h3>
+<p>The array you passed to <code>cv2_to_imgmsg</code> is grayscale. Either publish it as <code>mono8</code>, or convert it first with <code>cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)</code> and then publish as <code>bgr8</code>. <code>cv2_to_imgmsg</code> labels data but never converts it.</p>
+
+<h3>Why does my subscriber get "[8UC3] is not a color format"?</h3>
+<p>The publisher called <code>cv2_to_imgmsg(frame)</code> without an encoding, so the message says <code>8UC3</code>. Add <code>encoding='bgr8'</code> on the publisher. On the subscriber side, <code>passthrough</code> works in the meantime.</p>
+
+<h3>Does converting 32FC1 depth to 16UC1 give millimetres?</h3>
+<p>No. In my run 1.5 became 2. cv_bridge rounds the value and does not rescale it. Multiply by 1000 in NumPy and cast to <code>uint16</code> yourself.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does [16UC1] is not a color format. but [bgr8] is mean?", "acceptedAnswer": {"@type": "Answer", "text": "You asked cv_bridge to convert a depth image (16-bit, one channel) into a color image. cv_bridge only converts between color and mono encodings, and 16UC1 is neither. Use desired_encoding='passthrough' and scale the values with OpenCV if you want to display them."}},
+{"@type": "Question", "name": "Why does 8UC1 to mono8 fail when they are the same format?", "acceptedAnswer": {"@type": "Answer", "text": "The check uses the encoding names, not the bytes. 8UC1 is a generic OpenCV type and mono8 is a mono format, so the conversion is refused on Humble, Jazzy and Lyrical. Read with passthrough, or have the publisher send mono8."}},
+{"@type": "Question", "name": "How do I fix encoding specified as bgr8, but image has incompatible type 8UC1?", "acceptedAnswer": {"@type": "Answer", "text": "The array you passed to cv2_to_imgmsg is grayscale. Either publish it as mono8, or convert it first with cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) and then publish as bgr8. cv2_to_imgmsg labels data but never converts it."}},
+{"@type": "Question", "name": "Why does my subscriber get [8UC3] is not a color format?", "acceptedAnswer": {"@type": "Answer", "text": "The publisher called cv2_to_imgmsg(frame) without an encoding, so the message says 8UC3. Add encoding='bgr8' on the publisher. On the subscriber side, passthrough works in the meantime."}},
+{"@type": "Question", "name": "Does converting 32FC1 depth to 16UC1 give millimetres?", "acceptedAnswer": {"@type": "Answer", "text": "No. In my run 1.5 became 2. cv_bridge rounds the value and does not rescale it. Multiply by 1000 in NumPy and cast to uint16 yourself."}}
+]}
+</script>
+
+<p>Measured on 2026-11-15 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, cv_bridge 3.2.1, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, python3-opencv 4.5.4, NumPy 1.21.5, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, cv_bridge 4.1.0, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, python3-opencv 4.6.0, NumPy 1.26.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, cv_bridge 4.1.0, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, python3-opencv 4.10.0, NumPy 2.3.5, Python 3.14.4). cv_bridge came from the ROS apt repository, and the tests ran with the container network disconnected. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-22-ros2-cv-bridge-encoding-errors/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105438">cv_bridge exception: '[16UC1] is not a color format. but [bgr8] is' with depth-aligned capture</a>, <a href="https://robotics.stackexchange.com/questions/48411">Error when converting IR kinect image to CvImage using cv_bridge</a>, <a href="https://github.com/IntelRealSense/realsense-ros/issues/797">realsense-ros: cv_bridge exception '[16UC1] is not a color format. but [bgr8] is'</a>, <a href="https://github.com/IntelRealSense/realsense-ros/issues/2929">realsense-ros: the same error with align_depth:=true</a>, <a href="https://github.com/ros-perception/vision_opencv/issues/175">vision_opencv: converting 8UC1 to mono8 fails</a>, <a href="https://github.com/UbiquityRobotics/fiducials/issues/208">fiducials: [8UC3] is not a color format. but [bgr8] is</a>.</p>
