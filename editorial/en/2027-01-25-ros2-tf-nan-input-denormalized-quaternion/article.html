@@ -1,0 +1,181 @@
+<pre><code>Error:   TF_NAN_INPUT: Ignoring transform for child_frame_id "base_link" from authority "direct_test" because of a nan value in the transform (0.000000 0.000000 0.000000) (-nan -nan -nan -nan)
+         at line 237 in ./src/buffer_core.cpp
+Error:   TF_DENORMALIZED_QUATERNION: Ignoring transform for child_frame_id "base_link" from authority "direct_test" because of an invalid quaternion in the transform (-nan -nan -nan -nan)
+         at line 256 in ./src/buffer_core.cpp</code></pre>
+
+<p>That pair came from Humble when a transform had the rotation <code>(0, 0, 0, 0)</code>. On Jazzy and Lyrical each line starts with <code>[ERROR] [timestamp] []:</code> instead of <code>Error:</code>, and there is no <code>at line</code> part. The authority is whatever name the receiver records: <code>default_authority</code> for a Python <code>TransformListener</code>, <code>Authority undetectable</code> for <code>tf2_echo</code>, and <code>direct_test</code> above because my test passed that name.</p>
+
+<p>Short answer: tf2 threw the transform away. The node that prints the error is the one receiving <code>/tf</code> (rviz2, <code>tf2_echo</code>, your listener), not the one publishing it. Fix the publisher. Send a real unit quaternion, never all zeros. For "no rotation" that is <code>x=0, y=0, z=0, w=1</code>. If you compute a rotation, check for NaN and normalize it before you publish:</p>
+
+<pre><code class="language-python">import math
+
+def safe_quat(x, y, z, w):
+    n = math.sqrt(x*x + y*y + z*z + w*w)
+    if n == 0.0 or math.isnan(n) or math.isinf(n):
+        return None          # skip this transform, don't publish it
+    return (x / n, y / n, z / n, w / n)
+
+# from a yaw angle in radians, no library needed:
+t.transform.rotation.z = math.sin(yaw / 2.0)
+t.transform.rotation.w = math.cos(yaw / 2.0)</code></pre>
+
+<p>The guard matters because normalizing a zero quaternion in plain Python raised <code>ZeroDivisionError: float division by zero</code> in my run. One version difference changes which inputs fail. Humble and Jazzy normalized any non-zero quaternion silently and accepted it. Lyrical did not normalize. It rejected any quaternion whose squared length was more than about 0.01 away from 1. A hand-typed <code>0 0 0.7 0.7</code> worked on Humble and Jazzy and failed on Lyrical.</p>
+
+<h2>Find your error</h2>
+
+<p>Every row below was measured on Humble, Jazzy and Lyrical. "Dropped" means the transform never entered the buffer. If it was the only one for that frame, <code>lookup_transform</code> raised <code>LookupException: "odom" passed to lookupTransform argument target_frame does not exist.</code></p>
+
+<table>
+<thead><tr><th>What the publisher sent</th><th>Humble and Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Rotation <code>(0, 0, 0, 0)</code></td><td>Both lines: <code>TF_NAN_INPUT</code> with <code>(-nan -nan -nan -nan)</code>, then <code>TF_DENORMALIZED_QUATERNION</code>. Dropped</td><td>Only <code>TF_DENORMALIZED_QUATERNION ... (0.000000 0.000000 0.000000 0.000000)</code>. Dropped</td></tr>
+<tr><td>NaN in the rotation</td><td>Both lines. Dropped</td><td>Both lines. Dropped</td></tr>
+<tr><td>NaN in the translation, rotation fine</td><td>Only <code>TF_NAN_INPUT ... (nan 0.000000 0.000000) (0.000000 0.000000 0.000000 1.000000)</code>. Dropped</td><td>Same. Dropped</td></tr>
+<tr><td><code>inf</code> in the rotation (<code>w=inf</code>)</td><td>Both lines, rotation shown as <code>(-nan -nan -nan 1.000000)</code>. Dropped</td><td>Only <code>TF_DENORMALIZED_QUATERNION ... (0.000000 0.000000 0.000000 inf)</code>. Dropped</td></tr>
+<tr><td><code>inf</code> in the translation</td><td>No error. Accepted</td><td>No error. Accepted</td></tr>
+<tr><td>Non-zero but not unit length, for example <code>(0, 0, 0.7, 0.7)</code></td><td>No error. Normalized to <code>(0, 0, 0.707107, 0.707107)</code></td><td><code>TF_DENORMALIZED_QUATERNION ... (0.000000 0.000000 0.700000 0.700000)</code>. Dropped</td></tr>
+<tr><td>Slightly off, for example <code>(0, 0, 0.71, 0.71)</code></td><td>No error. Normalized</td><td>No error. Stored as given: <code>(0, 0, 0.71, 0.71)</code></td></tr>
+<tr><td>Rotation never set in Python</td><td>No error. The field defaulted to <code>w=1.0</code></td><td>Same</td></tr>
+</tbody>
+</table>
+
+<p>So on Humble and Jazzy the error means a zero, NaN or infinite rotation. On Lyrical it can also mean a rotation that is simply not normalized.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-16 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro after another, with no network. It had three parts.</p>
+
+<ul>
+<li>Direct: build a <code>geometry_msgs/TransformStamped</code>, pass it to <code>tf2_ros.Buffer.set_transform()</code>, then call <code>lookup_transform('odom', 'base_link', Time())</code>. This was done for 29 rotations and translations, including a sweep of the squared length.</li>
+<li>Over DDS: a Python node published 40 messages on <code>/tf</code> at 20 Hz (or 1 on <code>/tf_static</code>), and a Python <code>Buffer</code> plus <code>TransformListener</code> listened for 6 seconds. I counted the error lines on the listener and on the publisher. I repeated some cases with <code>ros2 run tf2_ros tf2_echo odom base_link</code> as the listener.</li>
+<li><code>static_transform_publisher</code> with new-style flags (<code>--qx</code> to <code>--qw</code>, <code>--yaw</code>) and old-style positional arguments.</li>
+</ul>
+
+<p>The squared-length sweep scaled the identity quaternion so that <code>x²+y²+z²+w²-1</code> was one of ±0.001, ±0.005, ±0.0099, ±0.0101 and ±0.05:</p>
+
+<table>
+<thead><tr><th>|q|² - 1</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>±0.001, ±0.005</td><td>accepted, returned as <code>w=1.000000</code></td><td>same as Humble</td><td>accepted, returned unchanged (for example <code>w=0.997497</code>)</td></tr>
+<tr><td>±0.0099</td><td>accepted, <code>w=1.000000</code></td><td>same</td><td>accepted, unchanged</td></tr>
+<tr><td>±0.0101</td><td>accepted, <code>w=1.000000</code></td><td>same</td><td><code>TF_DENORMALIZED_QUATERNION</code>, dropped</td></tr>
+<tr><td>±0.05</td><td>accepted, <code>w=1.000000</code></td><td>same</td><td><code>TF_DENORMALIZED_QUATERNION</code>, dropped</td></tr>
+<tr><td>-1 (all zeros)</td><td>both errors, dropped</td><td>both errors, dropped</td><td><code>TF_DENORMALIZED_QUATERNION</code>, dropped</td></tr>
+</tbody>
+</table>
+
+<p>On Lyrical the limit was on the squared length and was the same on both sides of 1: 0.0099 passed and 0.0101 failed. On Humble and Jazzy even <code>|q|²-1 = +2.4649</code> passed.</p>
+
+<h2>Zero quaternions: the most common cause</h2>
+
+<p>An all-zero quaternion is not a rotation, and both errors in the opening block come from it. On Humble and Jazzy, tf2 normalized the quaternion first. Zero divided by zero is NaN, so the NaN check fired and printed the rotation as <code>-nan</code>, and the quaternion check fired after it. That is why a zero rotation shows up as a "nan value" even though the publisher sent no NaN. Lyrical printed the real values, <code>(0.000000 0.000000 0.000000 0.000000)</code>, and only the quaternion line.</p>
+
+<p>Where do zeros come from? In my run, a Python <code>TransformStamped()</code> whose rotation was never set had <code>w=1.0</code>, so the default is safe. Zeros came from code that set all four fields from something that was zero. Two other ways I measured:</p>
+
+<ul>
+<li><code>static_transform_publisher 1 0 0 0 0 0 0 odom base_link</code>. Seven numbers are read as <code>x y z qx qy qz qw</code>, so this is a zero quaternion. On Humble and Jazzy it logged <code>rotation: ('0.000000', '0.000000', '0.000000', '0.000000')</code> and every listener printed both errors once. Six numbers (<code>1 0 0 0 0 0 odom base_link</code>) are read as <code>x y z yaw pitch roll</code> and gave the identity.</li>
+<li><code>static_transform_publisher --x 1 --qx 0 --qy 0 --qz 0 --qw 0 ...</code>. On all three distros the listener printed the error once (the pair on Humble and Jazzy, one line on Lyrical) and the frame was missing.</li>
+</ul>
+
+<p>The questions linked at the end show two more sources that I did not reproduce: a URDF revolute joint with axis <code>0 0 0</code>, and a misspelled diff drive parameter (<code>wheel_seperation</code>) that left a divisor at zero.</p>
+
+<h2>NaN and inf</h2>
+
+<p>A NaN anywhere in the translation or rotation made tf2 drop the transform on every distro. A NaN in the translation produced only <code>TF_NAN_INPUT</code>, with the translation printed as <code>(nan 0.000000 0.000000)</code>. Check which group holds the <code>nan</code>: the first three numbers are the translation, the last four are the rotation.</p>
+
+<p>Infinity was treated differently. <code>inf</code> in the translation passed on all three distros and <code>lookup_transform</code> returned it. <code>inf</code> in the rotation was dropped. Don't count on tf2 to catch every bad number. Check with <code>math.isfinite()</code> before you publish.</p>
+
+<h2>Unnormalized quaternions: silent on Humble and Jazzy, rejected on Lyrical</h2>
+
+<p>On Humble and Jazzy any non-zero quaternion was scaled to unit length and accepted without a message. That hides a real bug. A common mistake is to put the yaw angle into <code>z</code>, as in <code>(0, 0, 1.57, 1)</code>. Humble and Jazzy accepted it, and <code>tf2_echo</code> printed:</p>
+
+<pre><code>- Rotation: in Quaternion (xyzw) [0.000, 0.000, 0.843, 0.537]
+- Rotation: in RPY (radian) [0.000, -0.000, 2.007]</code></pre>
+
+<p>That is a yaw of 2.007 rad, not 1.57. There was no warning. On Lyrical the same message gave 40 <code>TF_DENORMALIZED_QUATERNION</code> lines in <code>tf2_echo</code>, one per message, and the frame never appeared. If you move to Lyrical and this error starts on a transform that worked before, the publisher was probably always sending an unnormalized quaternion.</p>
+
+<p>Hand-typed values behaved like this:</p>
+
+<table>
+<thead><tr><th>Rotation</th><th>|q|² - 1</th><th>Humble and Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>0 0 0.7071 0.7071</code></td><td>-0.000019</td><td>accepted</td><td>accepted</td></tr>
+<tr><td><code>0 0 0.71 0.71</code></td><td>+0.0082</td><td>accepted</td><td>accepted</td></tr>
+<tr><td><code>0 0 0.7 0.7</code></td><td>-0.02</td><td>accepted</td><td>dropped</td></tr>
+<tr><td><code>0 0 0.5 0.5</code></td><td>-0.5</td><td>accepted</td><td>dropped</td></tr>
+<tr><td><code>0 0 1 1</code> via <code>static_transform_publisher --qz 1 --qw 1</code></td><td>+1</td><td>accepted</td><td>dropped</td></tr>
+</tbody>
+</table>
+
+<p>Four decimals were enough everywhere. <code>static_transform_publisher</code> did not normalize the flags itself on any distro. It logged <code>rotation: ('0.000000', '0.000000', '1.000000', '1.000000')</code> and sent that. On Humble and Jazzy the listener normalized it to <code>(0, 0, 0.707107, 0.707107)</code>. <code>--yaw 1.57</code> gave <code>(0, 0, 0.706825, 0.707388)</code> and worked on all three.</p>
+
+<h2>Who prints it, how often, and what lookups return</h2>
+
+<ul>
+<li>The publisher printed nothing. In every DDS case the publishing node's output had zero <code>TF_</code> lines. You will see the error in rviz2, <code>tf2_echo</code>, Nav2 or your own listener, so start by finding which node publishes the <code>child_frame_id</code> it names.</li>
+<li>It goes to stderr. With 20 bad messages the listener's stdout had 0 lines and its stderr had 20.</li>
+<li>There was no rate limit. <code>tf2_echo</code> printed 40 lines for 40 messages on all three distros. A bad <code>/tf_static</code> message printed once.</li>
+<li><code>--ros-args --log-level error</code> on the listener did not hide it. It is an ERROR, and 20 of 20 still printed.</li>
+<li>An earlier good transform survives. I stored a good transform at t=100 and a zero-quaternion one at t=101. <code>lookup_transform(..., Time())</code> returned the old one (<code>x=1.0 stamp=100</code>), and a lookup at t=101 raised <code>ExtrapolationException: Lookup would require extrapolation at time 101.000000, but only time 100.000000 is in the buffer</code>. When bad messages arrive in a stream, frames freeze or go stale. They don't disappear at once. Timing errors of that kind are covered in <a href="https://huntlab.app/en/ros2-tf2-lookup-would-require-extrapolation-into-the-future/">the tf2 extrapolation post</a>.</li>
+<li><code>tf2_echo</code> with only bad input printed <code>Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist</code> every one to two seconds, along with the error lines.</li>
+</ul>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Result on Humble, Jazzy, Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Divide by the length before publishing</td><td><code>(0, 0, 0.7, 0.7)</code> became <code>(0, 0, 0.7071067811865476, 0.7071067811865476)</code>, accepted on all three</td></tr>
+<tr><td>Build the quaternion from yaw: <code>z=sin(yaw/2)</code>, <code>w=cos(yaw/2)</code></td><td><code>yaw=1.57</code> gave <code>(0, 0, 0.706825, 0.707388)</code>, accepted on all three</td></tr>
+<tr><td><code>w=1</code> for no rotation (or leave the rotation unset in Python)</td><td>Accepted on all three</td></tr>
+<tr><td><code>static_transform_publisher --yaw</code> instead of <code>--qx</code> to <code>--qw</code></td><td>Accepted on all three</td></tr>
+<tr><td>Normalizing without a zero check</td><td>Plain Python raised <code>ZeroDivisionError</code> on a zero quaternion. Skip the message instead</td></tr>
+<tr><td>Hiding the log with <code>--log-level error</code></td><td>Did not hide it, and the transform is still dropped</td></tr>
+<tr><td>Normalizing a yaw that was put straight into <code>z</code></td><td>The error goes away, but the angle is wrong (2.007 rad for 1.57). Build it from <code>sin</code>/<code>cos</code> instead</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (tf2 0.25.24) and Jazzy (tf2 0.36.23) normalized non-zero quaternions and printed both errors for a zero quaternion. Lyrical (tf2 0.45.10) stored quaternions as given, rejected <code>|q|²-1</code> beyond about ±0.01, and printed only <code>TF_DENORMALIZED_QUATERNION</code> for a zero quaternion.</li>
+<li>Log format: Humble printed <code>Error:   TF_...</code> followed by <code>at line 237 in ./src/buffer_core.cpp</code> (NaN check) or <code>at line 256</code> (quaternion check). Jazzy and Lyrical printed <code>[ERROR] [timestamp] []: TF_...</code> on one line.</li>
+<li>Humble and Jazzy accepted old-style <code>static_transform_publisher</code> arguments with <code>Old-style arguments are deprecated; see --help for new-style arguments</code>. Lyrical refused them with <code>error parsing command line arguments: Frame id must not be empty</code> and printed the usage, so no transform was sent.</li>
+<li>Lyrical returned a negated identity <code>(0, 0, 0, -1)</code> unchanged. Humble and Jazzy returned <code>(0, 0, 0, 1)</code>. Both are the same rotation.</li>
+<li>Jazzy anomaly: the Python listener printed 28 error pairs for 40 zero-quaternion messages, and 15 for 100. Humble and Lyrical printed 40 for 40, and <code>tf2_echo</code> printed 40 for 40 on Jazzy. I didn't find the reason. The lookup failed in every case.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>rviz2 and RobotModel displays, C++ <code>tf2::Quaternion</code> and <code>setRPY</code>, <code>tf_transformations</code> and SciPy, <code>robot_state_publisher</code> with a URDF joint axis of <code>0 0 0</code>, ros2_control diff drive odometry, robot_localization, Nav2, Cyclone DDS or Zenoh, message_filters, the exact Lyrical tolerance between 0.0099 and 0.0101, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does TF_DENORMALIZED_QUATERNION mean?</h3>
+<p>The receiving node got a transform whose rotation is not a usable unit quaternion and dropped it. On Humble and Jazzy that meant zero, NaN or infinite values. On Lyrical it also meant any quaternion whose squared length was more than about 0.01 away from 1.</p>
+
+<h3>Why does a zero quaternion also print TF_NAN_INPUT?</h3>
+<p>On Humble and Jazzy, tf2 normalized the rotation before checking it. Zero divided by zero is NaN, so the NaN check fired first and printed <code>-nan</code> values, and the quaternion check followed. On Lyrical a zero quaternion printed only <code>TF_DENORMALIZED_QUATERNION</code>.</p>
+
+<h3>Which node is publishing the bad transform?</h3>
+<p>Not the one printing the error. The publisher printed nothing in every case. Look for the node that publishes the <code>child_frame_id</code> named in the message, and check every place it sets <code>transform.rotation</code>.</p>
+
+<h3>My transform worked on Humble but fails on Lyrical. Why?</h3>
+<p>Humble normalized unnormalized quaternions silently, and Lyrical didn't. <code>0 0 0.7 0.7</code> and <code>static_transform_publisher --qz 1 --qw 1</code> passed on Humble and Jazzy and were dropped on Lyrical. Normalize before publishing, or use <code>--yaw</code>.</p>
+
+<h3>Can I turn this error off?</h3>
+<p><code>--log-level error</code> did not hide it, and the transform was dropped either way. Fix the data. Send <code>w=1</code> for no rotation, build rotations with <code>sin</code>/<code>cos</code> or normalize them, and skip messages that contain NaN.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does TF_DENORMALIZED_QUATERNION mean?", "acceptedAnswer": {"@type": "Answer", "text": "The receiving node got a transform whose rotation is not a usable unit quaternion and dropped it. On Humble and Jazzy that meant zero, NaN or infinite values. On Lyrical it also meant any quaternion whose squared length was more than about 0.01 away from 1."}},
+{"@type": "Question", "name": "Why does a zero quaternion also print TF_NAN_INPUT?", "acceptedAnswer": {"@type": "Answer", "text": "On Humble and Jazzy, tf2 normalized the rotation before checking it. Zero divided by zero is NaN, so the NaN check fired first and printed -nan values, and the quaternion check followed. On Lyrical a zero quaternion printed only TF_DENORMALIZED_QUATERNION."}},
+{"@type": "Question", "name": "Which node is publishing the bad transform?", "acceptedAnswer": {"@type": "Answer", "text": "Not the one printing the error. The publisher printed nothing in every case. Look for the node that publishes the child_frame_id named in the message, and check every place it sets transform.rotation."}},
+{"@type": "Question", "name": "My transform worked on Humble but fails on Lyrical. Why?", "acceptedAnswer": {"@type": "Answer", "text": "Humble normalized unnormalized quaternions silently, and Lyrical didn't. 0 0 0.7 0.7 and static_transform_publisher --qz 1 --qw 1 passed on Humble and Jazzy and were dropped on Lyrical. Normalize before publishing, or use --yaw."}},
+{"@type": "Question", "name": "Can I turn this error off?", "acceptedAnswer": {"@type": "Answer", "text": "--log-level error did not hide it, and the transform was dropped either way. Fix the data. Send w=1 for no rotation, build rotations with sin and cos or normalize them, and skip messages that contain NaN."}}
+]}
+</script>
+
+<p>Measured on 2026-11-16 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, tf2 0.25.24, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, tf2 0.36.23, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, tf2 0.45.10, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2), default RMW, on a 2 vCPU Linux host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-25-ros2-tf-nan-input-denormalized-quaternion/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/114839">How to solve [rviz2-4] Error: TF_NAN_INPUT: Ignoring transform for child_frame_id</a>, <a href="https://robotics.stackexchange.com/questions/110978">ros2_control publishing NaN to /diff_controller/odom</a>, <a href="https://robotics.stackexchange.com/questions/94052">ros2 rviz2 getting NaNs in TF for revolute joints</a>, <a href="https://robotics.stackexchange.com/questions/81979">How to find source of TF_NAN_INPUT error</a>, <a href="https://robotics.stackexchange.com/questions/90018">Getting an error that my tf has been ignored</a>.</p>
