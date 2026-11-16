@@ -1,0 +1,216 @@
+<pre><code>RuntimeError: Database directory already exists (/tmp/bags/w_none), can't overwrite existing database</code></pre>
+
+<p>That is what <code>rosbag2_py.SequentialWriter().open()</code> raised on Humble. On Jazzy and Lyrical the same call fails with <code>RuntimeError: Bag directory already exists (/tmp/bags/w_none), can't overwrite existing bag</code>.</p>
+
+<p>Short answer: <code>SequentialWriter.open()</code> only opens a path that doesn't exist yet. It refuses any folder that already exists, including an empty one, so give every run a new path or delete the old folder before you open the writer. The second half of the problem is finishing the bag. <code>metadata.yaml</code> is written only when the writer is closed: <code>writer.close()</code>, <code>del writer</code>, or a normal end of the Python process. If the process is killed first, the folder has no <code>metadata.yaml</code> and readers reject it. These are the calls that worked in my runs on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-python">import time
+import rosbag2_py
+from rclpy.serialization import serialize_message
+from std_msgs.msg import String
+
+uri = f'/tmp/bags/run_{time.strftime("%Y%m%d_%H%M%S")}'   # a path that does not exist yet
+writer = rosbag2_py.SequentialWriter()
+writer.open(rosbag2_py.StorageOptions(uri=uri),           # default storage: sqlite3 on Humble, mcap on Jazzy/Lyrical
+            rosbag2_py.ConverterOptions('cdr', 'cdr'))
+try:
+    topic = rosbag2_py.TopicMetadata(name='/chatter', type='std_msgs/msg/String',
+                                     serialization_format='cdr')            # Humble
+except TypeError:
+    topic = rosbag2_py.TopicMetadata(id=0, name='/chatter', type='std_msgs/msg/String',
+                                     serialization_format='cdr')            # Jazzy, Lyrical
+writer.create_topic(topic)
+try:
+    writer.write('/chatter', serialize_message(String(data='hi')), time.time_ns())  # bytes, int nanoseconds
+finally:
+    writer.close()   # writes metadata.yaml (and, for MCAP, the data still in memory)</code></pre>
+
+<h2>Find your error text</h2>
+
+<p>Every row is copied from the runs below. "All" means Humble, Jazzy and Lyrical gave the same result.</p>
+
+<table>
+<thead><tr><th>What you did</th><th>What you get</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>writer.open()</code> on a folder that exists, even an empty one</td><td>Humble: <code>Database directory already exists (...), can't overwrite existing database</code>. Jazzy, Lyrical: <code>Bag directory already exists (...), can't overwrite existing bag</code></td><td>New path per run, or remove the folder first</td></tr>
+<tr><td><code>TopicMetadata(name, type, fmt)</code> on Jazzy or Lyrical</td><td><code>TypeError: __init__(): incompatible constructor arguments</code>, listing <code>TopicMetadata(id: int, name: str, ...)</code></td><td>Pass <code>id=0</code></td></tr>
+<tr><td><code>TopicMetadata(id=0, ...)</code> on Humble</td><td>The same <code>TypeError</code>, listing <code>TopicMetadata(name: str, type: str, ...)</code></td><td>Leave out <code>id</code></td></tr>
+<tr><td><code>write()</code> with a float or an <code>rclpy.time.Time</code> as the timestamp</td><td>All: <code>TypeError: write(): incompatible function arguments</code></td><td>Pass <code>Time.nanoseconds</code> or another int</td></tr>
+<tr><td><code>write()</code> with a message object instead of bytes</td><td>All: the same <code>TypeError</code></td><td><code>serialize_message(msg)</code></td></tr>
+<tr><td><code>write()</code> before <code>create_topic()</code>, or with <code>'chatter'</code> when you created <code>'/chatter'</code></td><td>All: <code>RuntimeError: Failed to write on topic 'chatter'. Call create_topic() before first write.</code></td><td>Same name, with the slash</td></tr>
+<tr><td>Bytes of another type (an <code>Int32</code>) written to a <code>String</code> topic</td><td>All: <code>write()</code> accepted it. The read failed later with <code>RMWError: failed to deserialize ROS message: Fast CDR exception</code></td><td>Serialize the type you declared</td></tr>
+<tr><td>Storage <code>'mcap'</code> on Humble <code>ros-base</code></td><td><code>Could not load/open plugin with storage id 'mcap'</code>, then <code>No storage could be initialized. Abort</code></td><td>Install <code>ros-humble-rosbag2-storage-mcap</code> (not tested here), or use sqlite3</td></tr>
+<tr><td>Reader opened on a folder with no <code>metadata.yaml</code>, or on a path that doesn't exist</td><td>Jazzy, Lyrical: <code>No storage could be initialized for the input URI: ...</code>. Humble: <code>No storage could be initialized from the inputs.</code></td><td>Close the writer; or <code>ros2 bag reindex</code></td></tr>
+<tr><td>Reader opened with the wrong <code>storage_id</code></td><td><code>SQLite error (26): file is not a database</code> (sqlite3 on MCAP) or <code>invalid magic bytes in Header</code> (mcap on .db3), then <code>No storage could be initialized</code></td><td>Leave <code>storage_id</code> empty</td></tr>
+<tr><td>Reader opened while the writer is still alive</td><td>sqlite3: <code>SQLite error (10): disk I/O error</code>. MCAP: <code>Error: read failed</code></td><td>Read after <code>close()</code></td></tr>
+<tr><td><code>read_next()</code> after <code>has_next()</code> returned False</td><td>All: <code>RuntimeError: Bag is at end. No next message.</code></td><td>Loop on <code>has_next()</code></td></tr>
+<tr><td><code>ros2 bag info</code> on an unfinished bag</td><td>All: <code>Could not find metadata in bag directory ...</code></td><td><code>ros2 bag reindex</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-16 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host, one distro at a time, with <code>--network none</code> and domain 88. One Python script, <code>bag.py</code>, runs one case per process so a crash in one case can't hide another. <code>repro.sh</code> calls it about 60 times per distro. It writes bags of <code>std_msgs/String</code> with <code>SequentialWriter</code> and tries to open existing folders. It also passes bad arguments to <code>write()</code>, reads the bags back with <code>SequentialReader</code> under each storage id, and ends some writers with <code>close()</code>, <code>del</code>, a normal exit, <code>os._exit(0)</code> or SIGKILL. Then it runs <code>ros2 bag info</code> and <code>ros2 bag reindex</code> on the broken bags. Last, it runs an rclpy node that writes from a 20 Hz timer and stops it with SIGINT, SIGTERM or SIGKILL after 3 seconds. Jazzy ran twice, because the first pass didn't yet have the sqlite3 and 100,000-message kill cases. <code>out_jazzy.txt</code> is the second, complete pass.</p>
+
+<h2>Why the writer refuses an existing folder</h2>
+
+<p>The <code>uri</code> in <code>StorageOptions</code> is a folder that the writer creates. It is not a file name. If anything is already there, <code>open()</code> raises before it writes a byte. My run gave the same error for a finished bag and for an empty folder made with <code>mkdir</code>. That is why a script that worked once fails on the second run: the first run left the folder behind. The <a href="https://github.com/ros2/rosbag2/issues/1921">rosbag2 issue #1921</a> shows this case. A recorder node used a fixed path and failed on Humble with the "Database directory already exists" text.</p>
+
+<p>Every write case in my script used a path that didn't exist yet, and none of them hit the error. So use one of these two patterns:</p>
+
+<ul>
+<li>Put a timestamp or a counter in the path, as in the code above. <code>ros2 bag record</code> names its folders the same way.</li>
+<li>If you really want to overwrite, delete the folder with <code>shutil.rmtree(uri, ignore_errors=True)</code> before <code>open()</code>. I didn't run this line. The run only shows that a missing path opens and an existing one doesn't.</li>
+</ul>
+
+<p>The file names inside the folder changed in Lyrical. Humble and Jazzy wrote <code>w_none_0.db3</code> or <code>w_none_0.mcap</code>. Lyrical wrote <code>0_w_none_2026_11_16-05_32_56.mcap</code>. Scripts that build the file path by hand break on Lyrical. Pass the folder to the reader instead. Pointing the reader at the <code>.db3</code> or <code>.mcap</code> file also worked on all three, as long as the bag was finished.</p>
+
+<h2>When metadata.yaml gets written</h2>
+
+<p>This is the question in <a href="https://robotics.stackexchange.com/questions/24321">How to stop writing to a bag file when using the rosbag2_py API?</a>. The accepted answer says <code>self.writer.close()</code> works in Humble and later. My runs agree, and they show what happens without it:</p>
+
+<table>
+<thead><tr><th>How the writer ended</th><th>Humble (sqlite3)</th><th>Jazzy, Lyrical (MCAP)</th></tr></thead>
+<tbody>
+<tr><td>Before close, 1,000 messages written</td><td><code>.db3</code> 73,728 bytes, no metadata.yaml</td><td><code>.mcap</code> <strong>0 bytes</strong>, no metadata.yaml</td></tr>
+<tr><td><code>del writer</code></td><td>metadata.yaml written</td><td>metadata.yaml written, <code>.mcap</code> 65,393 bytes (Jazzy) and 65,477 (Lyrical)</td></tr>
+<tr><td><code>writer.close()</code></td><td>metadata.yaml written</td><td>metadata.yaml written</td></tr>
+<tr><td>Script returns, writer never closed</td><td>metadata.yaml written</td><td>metadata.yaml written</td></tr>
+<tr><td><code>os._exit(0)</code></td><td>No metadata.yaml, <code>.db3</code> 24,576 bytes</td><td>No metadata.yaml, <code>.mcap</code> 0 bytes</td></tr>
+<tr><td>SIGKILL</td><td>No metadata.yaml, <code>.db3</code> 24,576 bytes</td><td>No metadata.yaml, <code>.mcap</code> 0 bytes</td></tr>
+</tbody>
+</table>
+
+<p>A normal exit finished the bag because the writer object is destroyed on the way out. Anything that skips Python's cleanup also skips the metadata. That includes <code>os._exit</code>, SIGKILL, a container stopped with <code>docker kill</code> and an out-of-memory kill. The MCAP column matters most. Small MCAP bags stay in memory until close. A 100-message bag killed early left a 0-byte file and nothing to recover. With 100,000 messages, 6,262,784 bytes were already on disk at the kill (6,260,772 on Lyrical). The finished file is 6,492,281 bytes.</p>
+
+<h2>Recovering a bag with no metadata.yaml</h2>
+
+<p><code>ros2 bag reindex &lt;folder&gt;</code> scans the storage files and writes a new <code>metadata.yaml</code>. Results for the killed bags:</p>
+
+<table>
+<thead><tr><th>Killed bag</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>sqlite3, 1,000 messages</td><td>reindex OK, 1,000 read</td><td>reindex OK, 1,000 read</td><td>reindex OK, 1,000 read</td></tr>
+<tr><td>sqlite3, 100 messages (default storage on Humble)</td><td>reindex OK, 100 read</td><td colspan="2">Not tested (default is MCAP there)</td></tr>
+<tr><td>MCAP, 100 messages</td><td>No mcap plugin</td><td colspan="2"><code>Could not open ... with 'mcap'. Error: file too small</code>. Nothing to recover.</td></tr>
+<tr><td>MCAP, 100,000 messages</td><td>No mcap plugin</td><td>reindex OK, 96,519 of 100,000 read</td><td>reindex OK, 96,513 of 100,000 read</td></tr>
+</tbody>
+</table>
+
+<p>Without <code>-s</code>, reindex found the storage type by itself in every case that could be recovered. On Jazzy, the killed 100,000-message MCAP file could also be read directly by its file path (96,519 messages), with a warning: <code>attempted to read in receive timestamp order with no message index</code>. On Lyrical the same direct read failed at the cut-off end with <code>record type 0x73 at offset 491 has length 4210710021092762719 but only 785923 bytes remaining</code>, and then a deserialize error. After reindex it read 96,513 messages with no error. Reading a killed <code>.db3</code> by its file path worked on all three without reindexing.</p>
+
+<p>If losing the last messages on a crash matters, choose sqlite3 for the writer. In my run the killed sqlite3 bags kept every message. MCAP lost all of a small bag and about 3.5% of a large one.</p>
+
+<h2>A node that records with rclpy</h2>
+
+<p>The node opened the writer, wrote from a 20 Hz timer, and ran <code>rclpy.spin()</code> inside <code>try/finally</code>. It was stopped after 3 seconds:</p>
+
+<table>
+<thead><tr><th>Signal</th><th>Result, all distros</th></tr></thead>
+<tbody>
+<tr><td>SIGINT (Ctrl+C)</td><td><code>spin()</code> raised <code>ExternalShutdownException</code>, the script ran to the end, metadata.yaml written with or without <code>del writer</code> in <code>finally</code></td></tr>
+<tr><td>SIGTERM</td><td>Same as SIGINT. rclpy handled it, so the script ended normally</td></tr>
+<tr><td>SIGKILL</td><td>No metadata.yaml. MCAP left 0 bytes; sqlite3 left a 24,576-byte <code>.db3</code> (Jazzy, Lyrical: 28,672)</td></tr>
+</tbody>
+</table>
+
+<p>In one run per distro on Jazzy and Lyrical, <code>spin()</code> ended with <code>RCLError: failed to initialize wait set: the given context is not valid</code> instead of <code>ExternalShutdownException</code>. The bag was still finished. Catch both, and close the writer in <code>finally</code> instead of trusting the exit. Humble recorded 53 messages in each 3-second run. Jazzy recorded 44 to 51 and Lyrical 47 to 49.</p>
+
+<h2>Reading: storage id, filters and close()</h2>
+
+<p>The question <a href="https://robotics.stackexchange.com/questions/96730">How to read a bag file in ROS2?</a> asks for the basic loop. This worked on all three:</p>
+
+<pre><code class="language-python">from rclpy.serialization import deserialize_message
+from rosidl_runtime_py.utilities import get_message
+import rosbag2_py
+
+reader = rosbag2_py.SequentialReader()
+reader.open(rosbag2_py.StorageOptions(uri='/tmp/bags/run_x'),   # folder; storage_id left empty
+            rosbag2_py.ConverterOptions('', ''))
+types = {t.name: t.type for t in reader.get_all_topics_and_types()}
+while reader.has_next():
+    name, data, t_ns = reader.read_next()
+    msg = deserialize_message(data, get_message(types[name]))</code></pre>
+
+<ul>
+<li>Leave <code>storage_id</code> empty. An empty id opened sqlite3 and MCAP bags on every distro that had the plugin. A wrong id failed even when the right plugin was installed.</li>
+<li><code>reader.set_filter(rosbag2_py.StorageFilter(topics=['/chatter']))</code> returned all 1,000 messages, and a filter on <code>/other</code> returned 0. After <code>reset_filter()</code> and <code>seek(0)</code> the reader returned 1,000 again.</li>
+<li><code>SequentialReader.close()</code> doesn't exist on Humble (<code>hasattr</code> was False). It does on Jazzy and Lyrical. <code>SequentialWriter.close()</code> existed on all three. <a href="https://github.com/ros2/rosbag2/issues/1934">rosbag2 issue #1934</a> reported the missing reader <code>close()</code>.</li>
+<li>Lyrical prints a <code>DeprecationWarning</code> on every <code>read_next()</code>: <code>Use read_next_ext() which returns both send and receive timestamps</code>. <code>read_next()</code> still returned the same three values.</li>
+<li>A reader can't open a bag while the writer is still writing it (<a href="https://robotics.stackexchange.com/questions/101085">Is it possible in ROS2 to concurrently RW a bag file?</a>). Opening the reader failed while the writer was alive, for sqlite3 on all three and for MCAP on Jazzy and Lyrical. After <code>del writer</code>, all 50 messages were read.</li>
+</ul>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Handles</th><th>Measured cost or limit</th></tr></thead>
+<tbody>
+<tr><td>New path per run (timestamp)</td><td>"directory already exists"</td><td>None seen</td></tr>
+<tr><td><code>writer.close()</code> in <code>finally</code></td><td>Missing metadata.yaml after an exception, SIGINT or SIGTERM</td><td>Can't help with SIGKILL or <code>os._exit</code></td></tr>
+<tr><td>sqlite3 storage for the writer</td><td>Data loss on a hard kill</td><td>100,000 writes: 3.8 to 5.4 s, against 0.65 to 1.2 s for MCAP</td></tr>
+<tr><td><code>ros2 bag reindex</code></td><td>Folder without metadata.yaml</td><td>A 0-byte MCAP file can't be recovered; a large one lost its last ~3.5%</td></tr>
+<tr><td>Read the <code>.db3</code> file path directly</td><td>A killed sqlite3 bag, quick look</td><td>Worked on all three; killed MCAP only on Jazzy</td></tr>
+</tbody>
+</table>
+
+<p>Timings for 100,000 small messages, one run each. Write is <code>write()</code> calls only, and read includes deserialization:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Write, default storage</td><td>4.404 s (sqlite3)</td><td>0.798 s (MCAP)</td><td>1.230 s (MCAP)</td></tr>
+<tr><td>Write, sqlite3</td><td>3.822 s</td><td>5.350 s</td><td>4.935 s</td></tr>
+<tr><td>Write, MCAP</td><td>plugin missing</td><td>0.803 s</td><td>0.651 s</td></tr>
+<tr><td>Read, default storage</td><td>2.190 s</td><td>1.508 s</td><td>1.039 s</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (rosbag2_py 0.15.17): default storage sqlite3, no MCAP plugin in <code>ros-base</code>, <code>TopicMetadata</code> without <code>id</code>, no <code>SequentialReader.close()</code>, error text "Database directory already exists". <code>get_registered_writers()</code> also listed <code>my_test_plugin</code>, a test plugin that ships in the image.</li>
+<li>Jazzy (0.26.11): default storage MCAP, <code>TopicMetadata</code> requires <code>id</code>, error text "Bag directory already exists", <code>write()</code> has a second overload with a fourth int argument.</li>
+<li>Lyrical (0.33.4): like Jazzy, plus new file names (<code>0_&lt;folder&gt;_&lt;timestamp&gt;.mcap</code>), named <code>write()</code> arguments (<code>topic_name, message, time_stamp, sequence_number=0</code>) and the <code>read_next()</code> deprecation warning.</li>
+<li>To convert or replay bags across distros, see <a href="https://huntlab.app/en/ros-2-bag-convert-db3-to-mcap-jazzy-bag-in-humble/">Convert a ROS 2 .db3 bag to MCAP (and play Jazzy bags in Humble)</a>.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li><code>shutil.rmtree</code> before <code>open()</code>, and installing <code>ros-humble-rosbag2-storage-mcap</code> on Humble.</li>
+<li>Custom message types, compression, split bags (<code>max_bagfile_size</code>), <code>seek()</code> to a time and <code>read_next_ext()</code>.</li>
+<li>The C++ <code>rosbag2_cpp::Writer</code>, the <code>ros2 bag record</code> CLI, Windows and macOS.</li>
+<li>Large messages such as images or point clouds. All timings use small <code>String</code> messages from one run each.</li>
+<li>Out-of-memory kills and <code>docker stop</code>. I expect them to act like SIGKILL and SIGTERM, but I didn't run them.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I fix "Database directory already exists, can't overwrite existing database"?</h3>
+<p>Open the writer on a path that doesn't exist yet, for example with a timestamp in the folder name, or delete the old folder first. The writer refused both a finished bag and an empty folder. Jazzy and Lyrical say "Bag directory already exists" instead.</p>
+
+<h3>Why is there no metadata.yaml in my rosbag2_py bag?</h3>
+<p>The writer was never closed. metadata.yaml was written on <code>writer.close()</code>, <code>del writer</code> or a normal end of the script. It was missing after <code>os._exit</code> and SIGKILL. Run <code>ros2 bag reindex</code> on the folder to rebuild it.</p>
+
+<h3>Why is my .mcap file 0 bytes?</h3>
+<p>MCAP keeps data in memory until close. With 1,000 messages the file was 0 bytes until <code>del writer</code>, then 65,393 bytes. A small MCAP bag that is killed before close can't be recovered. The reindex reported "file too small".</p>
+
+<h3>Why does TopicMetadata give "incompatible constructor arguments"?</h3>
+<p>Jazzy and Lyrical require an <code>id</code> as the first argument, and Humble rejects it. Pass <code>id=0</code> on Jazzy and Lyrical and leave it out on Humble, or try one form and fall back to the other.</p>
+
+<h3>Do I need to set storage_id when reading?</h3>
+<p>No. An empty storage_id opened sqlite3 and MCAP bags on every distro that had the plugin. A wrong id failed with "No storage could be initialized". Humble ros-base can't read MCAP at all without the MCAP storage plugin.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I fix Database directory already exists, can't overwrite existing database?", "acceptedAnswer": {"@type": "Answer", "text": "Open the writer on a path that doesn't exist yet, for example with a timestamp in the folder name, or delete the old folder first. The writer refused both a finished bag and an empty folder. Jazzy and Lyrical say Bag directory already exists instead."}},
+{"@type": "Question", "name": "Why is there no metadata.yaml in my rosbag2_py bag?", "acceptedAnswer": {"@type": "Answer", "text": "The writer was never closed. metadata.yaml was written on writer.close(), del writer or a normal end of the script. It was missing after os._exit and SIGKILL. Run ros2 bag reindex on the folder to rebuild it."}},
+{"@type": "Question", "name": "Why is my .mcap file 0 bytes?", "acceptedAnswer": {"@type": "Answer", "text": "MCAP keeps data in memory until close. With 1,000 messages the file was 0 bytes until del writer, then 65,393 bytes. A small MCAP bag that is killed before close can't be recovered. The reindex reported file too small."}},
+{"@type": "Question", "name": "Why does TopicMetadata give incompatible constructor arguments?", "acceptedAnswer": {"@type": "Answer", "text": "Jazzy and Lyrical require an id as the first argument, and Humble rejects it. Pass id=0 on Jazzy and Lyrical and leave it out on Humble, or try one form and fall back to the other."}},
+{"@type": "Question", "name": "Do I need to set storage_id when reading?", "acceptedAnswer": {"@type": "Answer", "text": "No. An empty storage_id opened sqlite3 and MCAP bags on every distro that had the plugin. A wrong id failed with No storage could be initialized. Humble ros-base can't read MCAP at all without the MCAP storage plugin."}}
+]}
+</script>
+
+<p>Measured on 2026-11-16 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rosbag2_py 0.15.17, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rosbag2_py 0.26.11, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rosbag2_py 0.33.4, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, Python 3.14.4), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-27-rosbag2-py-reader-writer-errors/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/rosbag2/issues/1921">RuntimeError: Database directory already exists, can't overwrite existing database</a>, <a href="https://robotics.stackexchange.com/questions/24321">How to stop writing to a bag file when using the rosbag2_py API?</a>, <a href="https://robotics.stackexchange.com/questions/96730">How to read a bag file in ROS2?</a>, <a href="https://robotics.stackexchange.com/questions/102047">How to read ros2 bag file in a node</a>, <a href="https://robotics.stackexchange.com/questions/101085">Is it possible in ROS2 to concurrently RW a bag file?</a>, <a href="https://github.com/ros2/rosbag2/issues/1934">Python SequentialReader does not bind close method</a>.</p>
