@@ -1,0 +1,165 @@
+<pre><code>rclpy._rclpy_pybind11.RCLError: Failed to get number of ready entities for action client: wait set index for status subscription is out of bounds, at ./src/rcl_action/action_client.c:623</code></pre>
+
+<p>The same crash also shows up as <code>wait set index for feedback subscription is out of bounds</code>, <code>wait set index for result client is out of bounds</code>, or, from a plain Python wait set, <code>IndexError: wait set index too big</code>. The traceback always ends in an executor's <code>_wait_for_ready_callbacks</code>, inside <code>is_ready(wait_set)</code>.</p>
+
+<p>Short answer: one node is being waited on by two wait sets at the same time. That happens when two threads spin the same executor (Humble), or when the node gets moved into a second executor while the first one is still spinning it. <code>rclpy.spin_until_future_complete(node, ...)</code> and <code>rclpy.spin_once(node)</code> do that move: they put the node into the global executor. The fix is to spin each node in exactly one place, and to wait for action results without spinning again:</p>
+
+<pre><code class="language-python">import threading
+
+def wait_for(future, timeout_sec):
+    """Block this thread until the future is done. Never spins."""
+    done = threading.Event()
+    future.add_done_callback(lambda f: done.set())
+    return done.wait(timeout_sec)
+
+# one executor, spun by one thread, for the whole life of the node
+executor = rclpy.executors.SingleThreadedExecutor()
+executor.add_node(node)
+threading.Thread(target=executor.spin, daemon=True).start()
+
+# any other thread:
+goal_future = action_client.send_goal_async(goal)
+if wait_for(goal_future, 5.0):
+    result_future = goal_future.result().get_result_async()
+    if wait_for(result_future, 5.0):
+        result = result_future.result().result</code></pre>
+
+<p>In my runs this pattern finished 509 to 598 goals per 6-second run with zero errors on Humble, Jazzy and Lyrical. Every pattern that moved the node between executors raised the error on all three distros.</p>
+
+<h2>Find your error</h2>
+
+<p>Each row is a pattern I ran 3 times for 6 seconds, with an action client node that also had a 100 Hz timer, a publisher and 3 subscriptions. Counts are errors per run.</p>
+
+<table>
+<thead><tr><th>Pattern</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>One thread runs <code>executor.spin_once()</code> in a loop, another thread calls <code>executor.spin_until_future_complete()</code> on the same <code>MultiThreadedExecutor</code></td><td>68, 102, 71 (status and feedback subscription out of bounds)</td><td><code>RuntimeError: Executor is already spinning</code> on every call, 0 goals done</td><td>Same as Jazzy</td></tr>
+<tr><td>Same, with <code>SingleThreadedExecutor</code></td><td>2, 0, 0</td><td><code>Executor is already spinning</code>, 0 goals</td><td>Same as Jazzy</td></tr>
+<tr><td>Node moved into the global executor with <code>rclpy.spin_until_future_complete(node, ...)</code>, then added back, on every goal</td><td>1, 1, 18 (<code>IndexError: wait set index too big</code>)</td><td>26, 20, 18 (both kinds)</td><td>0, 2, 6 (feedback subscription)</td></tr>
+<tr><td>Same, but <code>rclpy.spin_once(node)</code> in a loop (the pymoveit2 pattern)</td><td>1, 26, 2</td><td>25, 25, 21</td><td>0, 2, 1</td></tr>
+<tr><td>Node moved back and forth between two executors that both spin in their own threads</td><td>136, 128, 124</td><td>9, 4, 7</td><td>34, 51, 17</td></tr>
+<tr><td><code>rclpy.spin_until_future_complete(node, ...)</code> once, node never added back</td><td>0, 0, 0</td><td>0, 0, 0</td><td>0, 0, 0</td></tr>
+<tr><td>One spinner, other thread waits with <code>threading.Event</code></td><td>0, 0, 0</td><td>0, 0, 0</td><td>0, 0, 0</td></tr>
+</tbody>
+</table>
+
+<p>The second-to-last row is a trap, explained below.</p>
+
+<h2>What I ran</h2>
+
+<p>One Python process per run. An action server node (type <code>tf2_msgs/action/LookupTransform</code>, because <code>ros-base</code> has no <code>example_interfaces</code>) got its own <code>SingleThreadedExecutor</code> in its own thread. It accepted every goal and succeeded right away. The client node held the action client, a service client for the server's <code>list_parameters</code> service, a 100 Hz timer publishing <code>std_msgs/Empty</code>, and 3 subscriptions to that topic.</p>
+
+<p>The main thread sent goals in a loop for 6 seconds. It waited for the goal response and then the result, and counted completed goals. A background thread spun the client's executor. In most cases the spinner called <code>spin_once(timeout_sec=0.05)</code> in a loop and caught exceptions, so I could count every error instead of stopping at the first one. The cases ending in <code>_spin</code> used a plain <code>executor.spin()</code> instead, the way most code does. Each case ran 3 times on each distro, inside <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code>, with <code>--network none</code> and default RMW (Fast DDS). The machine had 2 vCPUs. The script is <code>ws.py</code> and the driver is <code>repro.sh</code>.</p>
+
+<h2>Why the index goes out of bounds</h2>
+
+<p>Every time an executor waits, it builds a new wait set and asks each entity to add itself. An action client adds its goal, cancel and result service clients and its status and feedback subscriptions. rcl_action stores the slot numbers it got inside the action client itself. After the wait, the executor calls <code>is_ready(wait_set)</code>, and the action client reads its stored slot numbers back.</p>
+
+<p>Now let a second wait set add the same action client before the first one checks it. The stored slot numbers now belong to the second wait set. When the first executor wakes up and asks, the numbers can point past the end of its own wait set. rcl_action reports <code>wait set index for ... is out of bounds</code>. Subscriptions and QoS event handlers in rclpy keep their slot number in Python the same way. They report <code>IndexError: wait set index too big</code>. On Humble that came from <code>rclpy/qos_event.py</code> and on Jazzy from <code>rclpy/event_handler.py</code>. It's the same race.</p>
+
+<p>I first expected the size of the second wait set to matter, so I ran each moving case twice: once with an extra node holding 30 subscriptions in the second executor, and once without. It didn't decide it. Without the extra node, Humble still had 142, 135 and 134 errors when both executors spun, Jazzy 4, 4 and 7, and Lyrical 13, 12 and 17. Two wait sets on one node at the same moment is enough.</p>
+
+<h2>Two threads spinning one executor (Humble)</h2>
+
+<p>On Humble, nothing stops two threads from spinning the same executor. With a <code>MultiThreadedExecutor</code>, a background <code>spin_once()</code> loop plus <code>executor.spin_until_future_complete()</code> in the main thread gave 68, 102 and 71 errors per 6-second run. The first one came after 0.025, 0.029 and 0.198 seconds. Most were <code>status subscription</code> (202 in total), the rest <code>feedback subscription</code> (39). Still, 368 to 414 goals finished per run.</p>
+
+<p>With a <code>SingleThreadedExecutor</code> the same pattern produced only 2 errors in 3 runs: one <code>status subscription</code> error and one <code>ValueError: generator already executing</code>.</p>
+
+<p>The real damage shows up when the background thread uses <code>executor.spin()</code>. <code>spin()</code> doesn't catch the error, so the thread ends. On Humble that happened after 0.015, 0.428 and 0.084 seconds. My main thread kept spinning, so goals still finished. In a node where only that background thread spins, every timer and subscription would stop at that point.</p>
+
+<p>I also put the same pattern on a service client. The node still had its action client, and the errors came from the action client: 3,056 to 3,101 per run, mostly <code>wait set index for result client is out of bounds</code>. So one action client on a node is enough to make a service-call pattern crash.</p>
+
+<h2>Jazzy and Lyrical refuse a second spin</h2>
+
+<p>From Jazzy on, the executor has a lock and a flag. A second <code>spin()</code>, <code>spin_once()</code> or <code>spin_until_future_complete()</code> on an executor that is already spinning raises <code>RuntimeError: Executor is already spinning</code> right away. I found the check in <code>executors.py</code> of rclpy 7.1.12 (Jazzy) and 10.0.11 (Lyrical); Humble's rclpy 3.3.22 has no such check. In my runs every such call raised it. The same-executor goal and service cases hit it 1,986 to 76,281 times per run, and no goal or service call finished. So on Jazzy and Lyrical the same-executor version of this bug turns into a different, clearer error. If you see the wait set error on Jazzy or Lyrical, look for a second executor.</p>
+
+<h2>Moving a node into another executor</h2>
+
+<p>This is how the error reaches Jazzy and Lyrical. A node belongs to one executor at a time. <code>executor.add_node(node)</code> takes it away from the executor it was in. <code>rclpy.spin_until_future_complete(node, future)</code> and <code>rclpy.spin_once(node)</code> call <code>add_node</code> on the global executor. If another thread is spinning the old executor at that moment, it may be inside a wait with the node's entities in its wait set. The global executor then builds its own wait set with the same entities, and the old executor's next <code>is_ready</code> check fails.</p>
+
+<p>When the node was moved on every goal (global executor, then back to the background executor), the errors came quickly. The first one appeared after 0.001 seconds in all 3 Humble runs. On Jazzy the runs had 26, 20 and 18 errors, and on Lyrical 0, 2 and 6. With <code>rclpy.spin_once(node)</code> in a loop instead, Humble had 1, 26 and 2, Jazzy 25, 25 and 21, Lyrical 0, 2 and 1. With a plain <code>spin()</code> in the background thread, that thread died in every run: after 0.001 seconds on Humble (3 of 3), after 0.011, 0.001 and 0.485 seconds on Jazzy, and after 3.418, 0.011 and 0.010 seconds on Lyrical.</p>
+
+<p>Two executors that both spin, with the node handed back and forth, gave the most errors on Humble: 136, 128 and 124 per run. Jazzy had 9, 4 and 7, Lyrical 34, 51 and 17.</p>
+
+<h3>The case with no error is a trap</h3>
+
+<p>Calling <code>rclpy.spin_until_future_complete(node, future)</code> on a node that a background executor spins, and never adding it back, gave 0 errors on every distro. Over 500 goals finished per run. That looks like a fix. It isn't. After the first call I printed where the node was. On all three distros it was no longer in the background executor, and <code>node.executor</code> pointed to the global <code>SingleThreadedExecutor</code>. From then on the background thread spins an empty executor. Anything that depends on that executor stops, unless your code keeps spinning the global one. The race only had one chance to hit, at the first call. A program that does this gets a crash now and then, right after startup. rclpy issue 1133 describes the error "early in node lifetime".</p>
+
+<h2>Fix options compared</h2>
+
+<p>Goals finished per 6-second run, 3 runs, errors in brackets. All of these had 0 errors on all three distros.</p>
+
+<table>
+<thead><tr><th>Fix</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>One <code>SingleThreadedExecutor</code> spun by one thread (<code>spin()</code>), other thread waits on <code>threading.Event</code></td><td>510, 521, 511</td><td>589, 580, 597</td><td>598, 589, 596</td></tr>
+<tr><td>Same, background thread runs a <code>spin_once()</code> loop</td><td>515, 511, 509</td><td>542, 548, 588</td><td>581, 521, 574</td></tr>
+<tr><td>Same with <code>MultiThreadedExecutor</code> and <code>spin()</code></td><td>473, 486, 439</td><td>8, 13, 13</td><td>74, 84, 82</td></tr>
+<tr><td>Coroutine task: <code>await send_goal_async()</code>, then <code>await get_result_async()</code>, <code>MultiThreadedExecutor</code>, <code>ReentrantCallbackGroup</code>, <code>spin()</code></td><td>458, 422, 439</td><td>9, 5, 84</td><td>95, 45, 89</td></tr>
+<tr><td>Second node with its own action client and its own <code>SingleThreadedExecutor</code>, used only by the worker thread</td><td>352, 364, 365</td><td>22, 31, 17</td><td>486, 499, 495</td></tr>
+</tbody>
+</table>
+
+<p>All of them avoid the crash for the same reason: no node is in two wait sets at once. Pick by how your code is shaped:</p>
+
+<ul>
+<li><strong>Wait on the future, don't spin.</strong> The <code>threading.Event</code> helper at the top works from any thread that isn't an executor callback. With a <code>SingleThreadedExecutor</code> it was the fastest option in the table on every distro.</li>
+<li><strong>Use coroutines inside the node.</strong> If the goal is sent from a callback, make the callback <code>async def</code> and <code>await</code> the futures. The executor keeps spinning while the coroutine waits.</li>
+<li><strong>Give the worker its own node.</strong> If a library insists on calling <code>spin_until_future_complete</code>, let it do that on a separate node and executor that nothing else spins. Don't pass it your main node.</li>
+<li><strong>Don't call <code>rclpy.spin_once(node)</code> or <code>rclpy.spin_until_future_complete(node, ...)</code> on a node that already has an executor.</strong> Both move the node.</li>
+</ul>
+
+<p>One anomaly I didn't explain. With <code>MultiThreadedExecutor</code>, Jazzy and Lyrical finished far fewer goals than Humble in this setup: 8 to 13 per run on Jazzy against 439 to 486 on Humble, for the same code. With <code>SingleThreadedExecutor</code> all three were close (509 to 598). I didn't look into why, so treat the low numbers as specific to this test: a 100 Hz timer, 3 subscriptions and 2 vCPUs. If you need throughput and don't need parallel callbacks, measure a <code>SingleThreadedExecutor</code> first.</p>
+
+<p>If your symptom is a blocking call that never returns rather than a crash, the executor is probably not spinning at all while you wait. <a href="https://huntlab.app/en/rclpy-asyncio-no-running-event-loop-call-async-hangs/">rclpy and asyncio: hung service calls and the thread bridge that works</a> covers that case.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li><strong>Humble</strong> (rclpy 3.3.22, rcl_action 5.3.13): no guard against two threads spinning one executor. All four error texts showed up: status subscription (<code>action_client.c:623</code>), feedback subscription (<code>:619</code>), result client (<code>:635</code>) and <code>IndexError: wait set index too big</code> from <code>qos_event.py</code>. <code>ValueError: generator already executing</code> also appeared when two threads spun one executor.</li>
+<li><strong>Jazzy</strong> (rclpy 7.1.12, rcl_action 9.2.11): same-executor spinning raises <code>RuntimeError: Executor is already spinning</code>. Moving a node between executors still raised feedback subscription errors (<code>action_client.c:659</code>) and <code>IndexError: wait set index too big</code> from <code>event_handler.py</code>.</li>
+<li><strong>Lyrical</strong> (rclpy 10.0.11, rcl_action 10.4.5, Python 3.14): same guard as Jazzy. Moving a node still raised feedback (<code>action_client.c:643</code>) and status (<code>:647</code>) subscription errors. No <code>IndexError</code> appeared in any Lyrical run.</li>
+<li>The upstream fixes, <a href="https://github.com/ros2/rclpy/pull/1575">rclpy PR 1575</a> and rcl PR 1280, were both still open when I checked on 2026-11-17. None of the three images contains them.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>Cyclone DDS, Zenoh or any RMW other than the default Fast DDS.</li>
+<li>Action servers in the racing node. Only the client side raced here.</li>
+<li><code>tf2_ros.TransformListener(spin_thread=True)</code> and pymoveit2 themselves. I reproduced the pattern they are reported with, not the libraries.</li>
+<li>The <code>EventsExecutor</code>.</li>
+<li>Calling the <code>threading.Event</code> helper from inside a callback of the executor that has to deliver the result. That would wait on itself. I didn't run it.</li>
+<li>Error rates on other machines. These counts come from 6-second runs on 2 vCPUs; use them to compare patterns.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "wait set index for status subscription is out of bounds" mean?</h3>
+<p>The executor checked an action client against its wait set. The action client's stored slot numbers came from a different wait set, built by another executor or thread at the same moment. The node is being spun from two places. In my runs this happened with two threads spinning one executor on Humble, and with a node moved into a second executor on all three distros.</p>
+
+<h3>Is "IndexError: wait set index too big" the same bug?</h3>
+<p>Yes. It's the same race, hitting a subscription or QoS event handler instead of the action client. It came from <code>qos_event.py</code> on Humble and <code>event_handler.py</code> on Jazzy, in the same runs and patterns as the action client errors. Lyrical showed only the action client form.</p>
+
+<h3>Why does it happen when I call rclpy.spin_until_future_complete from another thread?</h3>
+<p>Without an <code>executor=</code> argument, it adds your node to the global executor. That takes the node away from the executor your other thread is spinning, while that executor may still be inside a wait. After the first call the node stayed in the global executor on Humble, Jazzy and Lyrical, so the background executor stopped spinning it.</p>
+
+<h3>How do I wait for an action result in rclpy without this error?</h3>
+<p>Spin the node in one thread only. In any other thread, attach a done callback that sets a <code>threading.Event</code> and wait on the event. Inside a callback, use <code>async def</code> and <code>await</code> the goal and result futures. Both had 0 errors on all three distros.</p>
+
+<h3>Does upgrading from Humble to Jazzy fix it?</h3>
+<p>Partly. Jazzy and Lyrical raise <code>RuntimeError: Executor is already spinning</code> instead of racing when two threads spin one executor. Moving a node between executors still raised the wait set error on both. The upstream fix was still an open pull request on 2026-11-17.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does wait set index for status subscription is out of bounds mean?", "acceptedAnswer": {"@type": "Answer", "text": "The executor checked an action client against its wait set, but the action client's stored slot numbers came from a different wait set built by another executor or thread at the same moment. The node is being spun from two places. In my runs this happened with two threads spinning one executor on Humble, and with a node moved into a second executor on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Is IndexError: wait set index too big the same bug?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It is the same race hitting a subscription or QoS event handler instead of the action client. It came from qos_event.py on Humble and event_handler.py on Jazzy, in the same runs. Lyrical showed only the action client form."}},
+{"@type": "Question", "name": "Why does it happen when I call rclpy.spin_until_future_complete from another thread?", "acceptedAnswer": {"@type": "Answer", "text": "Without an executor argument it adds your node to the global executor. That takes the node away from the executor your other thread is spinning, while that executor may still be inside a wait. After the first call the node stayed in the global executor on all three distros, so the background executor stopped spinning it."}},
+{"@type": "Question", "name": "How do I wait for an action result in rclpy without this error?", "acceptedAnswer": {"@type": "Answer", "text": "Spin the node in one thread only. In any other thread, attach a done callback that sets a threading.Event and wait on the event. Inside a callback, use async def and await the goal and result futures. Both had 0 errors on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Does upgrading from Humble to Jazzy fix it?", "acceptedAnswer": {"@type": "Answer", "text": "Partly. Jazzy and Lyrical raise RuntimeError: Executor is already spinning instead of racing when two threads spin one executor. Moving a node between executors still raised the wait set error on both. The upstream fix was still an open pull request on 2026-11-17."}}
+]}
+</script>
+
+<p>Measured on 2026-11-17 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rclpy 3.3.22, rcl and rcl_action 5.3.13, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, rmw_fastrtps_cpp 6.2.10, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rcl and rcl_action 9.2.11, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, rmw_fastrtps_cpp 8.4.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rcl and rcl_action 10.4.5, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, rmw_fastrtps_cpp 9.4.10, Python 3.14.4), default RMW (Fast DDS), 2 vCPUs, each case 3 runs of 6 seconds. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-30-rclpy-action-wait-set-index/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/rclpy/issues/1455">Failed to get number of ready entities for action client: wait set index for status subscription is out of bounds</a>, <a href="https://github.com/ros2/rclpy/issues/1381">Wait Set Index Too Big</a>, <a href="https://github.com/ros2/rclpy/issues/1133">IndexError: wait set index too big when calling service early in node lifetime</a>, <a href="https://github.com/AndrejOrsula/pymoveit2/issues/95">pymoveit2 wait_set error</a>, <a href="https://github.com/AndrejOrsula/pymoveit2/issues/93">rclpy.spin_once() without executor can break node's executor association and cause IndexError</a>, <a href="https://github.com/ros-controls/ros2_control/issues/2381">Controller manager crashing when launching custom RQT plugin with action client</a>.</p>
