@@ -1,0 +1,190 @@
+<pre><code>tf2.InvalidArgumentException: Invalid argument "/map" passed to lookupTransform argument target_frame - in tf2 frame_ids cannot start with a '/'</code></pre>
+
+<p>That is the exact text from <code>rclpy</code> on Humble, Jazzy and Lyrical. ROS 1 printed the same check with a trailing <code>like:</code>. In ROS 2 the message ends right after the slash. The empty-name version reads <code>Invalid argument "" passed to lookupTransform argument target_frame - in tf2 frame_ids cannot be empty</code>. Tools that call <code>canTransform</code>, such as <code>tf2_echo</code>, print <code>Invalid frame ID "/map" passed to canTransform argument target_frame - in tf2 frame_ids cannot start with a '/'</code> instead.</p>
+
+<p>Short answer: tf2 accepts a leading slash when a transform comes in, but not when you ask for one. A publisher can send <code>/map</code>, and the buffer stores it as <code>map</code>. A lookup that passes <code>/map</code> is rejected before tf2 even checks whether the frame exists. So strip the slash from the name you pass to <code>lookup_transform</code> or <code>can_transform</code>, and remove it at the source if you can:</p>
+
+<pre><code class="language-python">from tf2_ros import TransformException
+
+def tf_name(frame):
+    return frame.lstrip('/')   # "/map" -> "map", "//map" -> "map"
+
+try:
+    t = tf_buffer.lookup_transform(tf_name(target), tf_name(msg.header.frame_id), rclpy.time.Time())
+except TransformException as e:   # InvalidArgumentException is a subclass
+    node.get_logger().warn(str(e))</code></pre>
+
+<p>Two details make this error harder to find than it should be. <code>can_transform('/map', ...)</code> doesn't raise. It returns <code>False</code>, so a "wait until the transform is available" loop just waits forever. And <code>lookup_transform</code> with a timeout waited the full timeout (2.0 s in my runs) before raising the error, even though the name could never be valid.</p>
+
+<h2>Find your error</h2>
+
+<p>Each row was the same in all three distros unless noted.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>What was wrong in my tests</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>Invalid argument "/map" passed to lookupTransform argument target_frame - in tf2 frame_ids cannot start with a '/'</code></td><td>The first argument of <code>lookup_transform</code> starts with <code>/</code></td><td>Pass <code>map</code></td></tr>
+<tr><td>Same text, <code>argument source_frame</code></td><td>The second argument starts with <code>/</code>, often a <code>header.frame_id</code> copied from a message</td><td><code>lstrip('/')</code> the name, fix the sender</td></tr>
+<tr><td><code>Invalid argument "" passed to lookupTransform argument target_frame - in tf2 frame_ids cannot be empty</code></td><td>Empty string, for example a message whose header was never filled</td><td>Set <code>header.frame_id</code> in the publisher</td></tr>
+<tr><td><code>can_transform</code> returns <code>False</code> forever</td><td>Slashed or empty name. The reason is only in the debug tuple</td><td>Call it with <code>return_debug_tuple=True</code> once</td></tr>
+<tr><td><code>tf2_echo</code> prints <code>Waiting for transform /map -&gt;  base_link: Invalid frame ID "/map" ...</code> and never a <code>Translation</code></td><td>Slash in the <code>tf2_echo</code> argument</td><td><code>ros2 run tf2_ros tf2_echo map base_link</code></td></tr>
+<tr><td><code>"map" passed to lookupTransform argument target_frame does not exist</code> although the publisher says <code>map</code></td><td>The publisher sent <code>//map</code>, <code>map/</code> or <code>" map"</code>. Only one leading slash is removed</td><td>Fix the string in the publisher</td></tr>
+<tr><td><code>TF_NO_FRAME_ID: Ignoring transform with child_frame_id "base_link"  from authority ... because frame_id not set</code></td><td>Transform published with an empty <code>header.frame_id</code>. It is dropped</td><td>Set <code>header.frame_id</code></td></tr>
+<tr><td>Lyrical only: <code>error parsing command line arguments: Frame id must not be empty</code> from <code>static_transform_publisher</code></td><td>Old positional arguments (<code>1 0 0 0 0 0 /map base_link</code>)</td><td>Use <code>--x 1 --frame-id map --child-frame-id base_link</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-17 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro after another, with <code>--network none</code> and <code>ROS_DOMAIN_ID=88</code>. It had three parts:</p>
+
+<ol>
+<li><code>tf2_ros.Buffer</code> used directly, no DDS. I called <code>set_transform</code> with ten different frame strings (plain, slash in the parent, slash in the child, both, <code>//map</code>, <code>map/</code>, empty parent, empty child, same frame twice, <code>" map"</code>). After each one I printed <code>all_frames_as_string()</code> and tried three lookups. Then I ran nine lookups and four <code>can_transform</code> calls on a plain <code>map</code> to <code>base_link</code> buffer.</li>
+<li>Real traffic: <code>static_transform_publisher</code> with <code>/map</code> or <code>/base_link</code>, the old positional form, a Python <code>/tf</code> publisher sending <code>/odom</code> to <code>/base_link</code> 40 times, <code>tf2_echo</code> with good, slashed and empty names, <code>ros2 topic echo</code> on <code>/tf_static</code> to see the bytes on the wire, and a timing test of <code>lookup_transform</code> and <code>can_transform</code> with <code>timeout=2.0</code>, three runs each.</li>
+<li><code>robot_state_publisher</code> with a two-link URDF and <code>frame_prefix</code> set to <code>robot1/</code>, <code>/robot1/</code> and unset.</li>
+</ol>
+
+<p>The direct <code>Buffer</code> results were identical on all three distros. The only difference was how the C++ core printed its own error lines (see Version notes).</p>
+
+<table>
+<thead><tr><th>Published parent / child</th><th>Stored in the buffer as</th><th><code>lookup('map', 'base_link')</code></th></tr></thead>
+<tbody>
+<tr><td><code>map</code> / <code>base_link</code></td><td><code>map</code> / <code>base_link</code></td><td>OK</td></tr>
+<tr><td><code>/map</code> / <code>base_link</code></td><td><code>map</code> / <code>base_link</code></td><td>OK</td></tr>
+<tr><td><code>map</code> / <code>/base_link</code></td><td><code>map</code> / <code>base_link</code></td><td>OK</td></tr>
+<tr><td><code>/map</code> / <code>/base_link</code></td><td><code>map</code> / <code>base_link</code></td><td>OK</td></tr>
+<tr><td><code>//map</code> / <code>base_link</code></td><td><code>/map</code> / <code>base_link</code></td><td><code>LookupException</code>, "map" does not exist</td></tr>
+<tr><td><code>map/</code> / <code>base_link</code></td><td><code>map/</code> / <code>base_link</code></td><td><code>LookupException</code></td></tr>
+<tr><td><code>" map"</code> / <code>base_link</code></td><td><code>" map"</code> (leading space kept)</td><td><code>LookupException</code></td></tr>
+<tr><td>empty / <code>base_link</code></td><td>nothing, <code>TF_NO_FRAME_ID</code> logged</td><td><code>LookupException</code></td></tr>
+<tr><td><code>map</code> / empty</td><td>nothing, <code>TF_NO_CHILD_FRAME_ID</code> logged</td><td><code>LookupException</code></td></tr>
+<tr><td><code>map</code> / <code>map</code></td><td>nothing, <code>TF_SELF_TRANSFORM</code> logged</td><td><code>LookupException</code></td></tr>
+</tbody>
+</table>
+
+<p>In every one of those ten buffers, <code>lookup('/map', 'base_link')</code> raised <code>InvalidArgumentException</code>. That includes the <code>//map</code> buffer, where the stored name really was <code>/map</code>. That frame can't be looked up under any name.</p>
+
+<h2>Publishing a slash works, asking for one doesn't</h2>
+
+<p>This asymmetry causes most of the confusion. On all three distros, <code>static_transform_publisher --frame-id /map --child-frame-id base_link</code> printed <code>from '/map' to 'base_link'</code>. <code>ros2 topic echo</code> on <code>/tf_static</code> showed <code>frame_id: /map</code> and <code>child_frame_id: /base_link</code> on the wire when both had a slash. A Python <code>TransformListener</code> then reported <code>Frame base_link exists with parent map.</code>, and <code>lookup_transform('map', 'base_link')</code> returned <code>x=1.0</code> with header <code>map -&gt; base_link</code>. The Python <code>/tf</code> publisher sending <code>/odom</code> to <code>/base_link</code> behaved the same way. The listener stored <code>odom</code> and <code>base_link</code> and returned <code>x=2.0</code> for <code>odom</code>.</p>
+
+<p>So a slash in a publisher doesn't break tf2-based listeners. The listener strips one leading slash when the transform goes in. What breaks is code that takes the name it was given and asks for it back with the slash still on. That name usually comes from one of these places:</p>
+
+<ul>
+<li>a sensor message with <code>header.frame_id = "/laser"</code>, where your callback passes <code>msg.header.frame_id</code> straight to <code>lookup_transform</code>;</li>
+<li>a parameter or launch argument written ROS 1 style, such as <code>global_frame: /map</code>;</li>
+<li>a <code>frame_prefix</code> or namespace string glued onto a frame name;</li>
+<li>a <code>tf2_echo</code> or RViz fixed frame typed with a slash (RViz was not tested).</li>
+</ul>
+
+<p>The listener cleans up incoming transforms, but nothing cleans up the copies of that name in your own messages. A <code>LaserScan</code> sent with <code>/laser</code> still carries <code>/laser</code> to every subscriber.</p>
+
+<h2>Per cause</h2>
+
+<h3>Slash in lookup_transform or lookup_transform_full</h3>
+
+<p>Target and source are both checked, and the target is reported first when both are wrong. <code>lookup('/map', '/base_link')</code> named only <code>"/map"</code> in its message. <code>lookup_transform_full('/map', ...)</code> raised the same <code>InvalidArgumentException</code>. In Python the class hierarchy was <code>InvalidArgumentException</code>, <code>TransformException</code>, <code>Exception</code>. So <code>except TransformException</code> catches it, and <code>except LookupException</code> does not. If your code only catches <code>LookupException</code>, which is common in tutorials, the slash error escapes and kills the callback.</p>
+
+<p>For C++ I didn't measure an uncaught throw. One ROS 2 report linked below shows the result anyway: <code>terminate called after throwing an instance of 'tf2::InvalidArgumentException'</code>, followed by <code>process has died [pid ..., exit code -6 ...]</code>.</p>
+
+<h3>can_transform returns False, with no exception</h3>
+
+<p>On the plain buffer, <code>can_transform('map', 'base_link', Time())</code> returned <code>1</code>. For <code>'/map'</code>, <code>''</code> and a missing <code>'odom'</code> it returned <code>0</code>, and nothing in the return value tells those three apart. With <code>return_debug_tuple=True</code> you get the reason:</p>
+
+<pre><code>(0, 'Invalid frame ID "/map" passed to canTransform argument target_frame - in tf2 frame_ids cannot start with a \'/\'')
+(0, 'Invalid frame ID "" passed to canTransform argument target_frame - in tf2 frame_ids cannot be empty')
+(0, 'Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist')</code></pre>
+
+<p>If a node sits in a "waiting for transform" loop and you know the transform is being published, print this tuple once.</p>
+
+<h3>The timeout runs out before the error</h3>
+
+<p>With a <code>TransformListener</code> on a spin thread and <code>map</code> to <code>base_link</code> published, I timed <code>lookup_transform(target, 'base_link', Time(), timeout=Duration(seconds=2.0))</code> three times for each target:</p>
+
+<table>
+<thead><tr><th>Target</th><th>Elapsed (9 runs, 3 distros)</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td><code>map</code></td><td>0.000 s</td><td>OK</td></tr>
+<tr><td><code>/map</code></td><td>2.004 to 2.016 s</td><td><code>InvalidArgumentException</code></td></tr>
+<tr><td><code>''</code></td><td>2.004 to 2.016 s</td><td><code>InvalidArgumentException</code> (cannot be empty)</td></tr>
+<tr><td><code>nonexistent</code></td><td>2.004 to 2.016 s</td><td><code>LookupException</code></td></tr>
+</tbody>
+</table>
+
+<p><code>can_transform</code> with the same timeout also took about 2.0 s and returned <code>0</code> for the last three. A slashed name can never succeed, but the Python buffer still waited as if the frame might show up later. Any callback that makes this call blocks for the whole timeout each time. I didn't time calls without a timeout.</p>
+
+<h3>Empty frame IDs</h3>
+
+<p>Lookups with an empty target or source raised <code>InvalidArgumentException</code> with <code>frame_ids cannot be empty</code>. A transform published with an empty parent or child is not stored at all. The buffer logs <code>TF_NO_FRAME_ID</code> or <code>TF_NO_CHILD_FRAME_ID</code> and drops it. The usual source is a message built in code where <code>header.frame_id</code> was never set. The default is an empty string, and a subscriber that passes it to <code>lookup_transform</code> gets this error. <code>tf2_echo '' base_link</code> printed <code>Waiting for transform  -&gt;  base_link: Invalid frame ID "" passed to canTransform argument target_frame - in tf2 frame_ids cannot be empty</code> about every 2 s.</p>
+
+<h3>Double, trailing and padded names</h3>
+
+<p>Only one leading slash is removed. <code>//map</code> was stored as <code>/map</code>, <code>map/</code> as <code>map/</code> and <code>" map"</code> with its space. None of them could be found as <code>map</code>, and the error is the ordinary <code>"map" passed to lookupTransform argument target_frame does not exist</code>. If <code>all_frames_as_string()</code> shows a name that looks right but lookups fail, check for an extra slash or a stray space. Names are also case sensitive: <code>Map</code> was not found.</p>
+
+<h3>robot_state_publisher frame_prefix</h3>
+
+<p>With <code>frame_prefix:=robot1/</code>, <code>/tf_static</code> carried <code>robot1/base_link</code> and <code>robot1/laser</code>, and the lookup returned <code>x=0.3</code>. With <code>frame_prefix:=/robot1/</code>, the wire carried <code>/robot1/base_link</code> and <code>/robot1/laser</code>. The Python listener still stored <code>robot1/base_link</code> and <code>robot1/laser</code>, and the same lookup worked. In both cases, <code>lookup('/robot1/base_link', 'robot1/laser')</code> raised the slash error. A slashed prefix didn't break tf2 listeners in my test. It did put slashed names on the wire for anything else that reads <code>/tf_static</code>. Use <code>robot1/</code>. I didn't test RViz, Nav2 or <code>message_filters</code> against slashed names.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Measured effect</th><th>When to use it</th></tr></thead>
+<tbody>
+<tr><td>Strip at the lookup: <code>frame.lstrip('/')</code></td><td><code>/map</code> and <code>//map</code> became <code>map</code> and the lookup returned <code>x=1.0</code>. <code>/robot1/base_link</code> became <code>robot1/base_link</code>, keeping the namespace part</td><td>You can't change the sender (a driver or a bag), or you take frame names from messages</td></tr>
+<tr><td>Fix the sender (<code>header.frame_id = 'laser'</code>, <code>--frame-id map</code>, <code>frame_prefix:=robot1/</code>)</td><td>Wire, buffer and lookup all use the same name</td><td>Always, when you own the publisher</td></tr>
+<tr><td>Catch <code>TransformException</code> instead of <code>LookupException</code></td><td><code>InvalidArgumentException</code> is a subclass, so it gets caught</td><td>Always. It keeps a bad name from crashing a callback</td></tr>
+<tr><td>Check once with <code>can_transform(..., return_debug_tuple=True)</code></td><td>Shows "cannot start with a '/'" instead of a bare <code>0</code></td><td>Debugging a wait loop that never ends</td></tr>
+<tr><td>Rewrite a recorded bag</td><td>Not tested</td><td>Old bags with <code>/laser</code> in message headers</td></tr>
+</tbody>
+</table>
+
+<p>A note on <code>lstrip('/')</code>: it fixes the slash, not the name. In my run, <code>robot1/base_link</code> still failed with "does not exist" in a buffer that only had <code>map</code> and <code>base_link</code>, because that frame really wasn't there. If stripping the slash leaves you with a "does not exist" error, the name itself is wrong or the transform hasn't arrived. That's a separate problem, covered in <a href="https://huntlab.app/en/ros2-tf2-lookup-would-require-extrapolation-into-the-future/">"Lookup would require extrapolation" and "target_frame does not exist" in tf2</a>.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The check is the same in all three distros. <code>strings libtf2.so</code> contained <code> - in tf2 frame_ids cannot start with a '/'</code> and <code> - in tf2 frame_ids cannot be empty</code> on Humble (tf2 0.25.24), Jazzy (0.36.23) and Lyrical (0.45.10). All exception texts, return values and stored names matched.</li>
+<li>Humble prints the buffer's own errors as two lines without a timestamp: <code>Error:   TF_NO_FRAME_ID: ...</code> then <code>at line 226 in ./src/buffer_core.cpp</code>. Jazzy and Lyrical print one line through the ROS logger: <code>[ERROR] [1794875449.960577998] []: TF_NO_FRAME_ID: ...</code>.</li>
+<li>Old positional arguments for <code>static_transform_publisher</code> (<code>1 0 0 0 0 0 /map base_link</code>) printed <code>Old-style arguments are deprecated; see --help for new-style arguments</code> on Humble and Jazzy and still worked, with the frame stored as <code>map</code>. On Lyrical they failed with <code>error parsing command line arguments: Frame id must not be empty</code> and the usage text, and nothing was published.</li>
+<li>ROS 1 tf2 put <code>like:</code> at the end of the message, and many old answers quote it that way. The ROS 2 text ends at <code>'/'</code>, so search for the part before it.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>C++ <code>tf2_ros::Buffer::lookupTransform</code> called directly, and whether it also waits out the timeout for a slashed name. Only <code>tf2_echo</code> (C++, <code>canTransform</code>) was run.</li>
+<li>RViz2 fixed frame or display frames with a slash, <code>tf2_ros::MessageFilter</code>, Nav2 and <code>robot_localization</code> parameters.</li>
+<li>Rewriting frame IDs in recorded bags.</li>
+<li>Non-default RMW implementations. The default RMW was used everywhere.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does tf2 reject a frame ID that starts with a slash?</h3>
+<p>tf2 treats frame names as plain strings. It doesn't resolve them like topic names. Incoming transforms get one leading slash stripped, so <code>/map</code> is stored as <code>map</code>. Lookups are validated instead, and a leading slash raises <code>InvalidArgumentException</code> on Humble, Jazzy and Lyrical.</p>
+
+<h3>My publisher uses /map. Do I have to change it?</h3>
+<p>For tf2 listeners, not strictly. In my runs, a <code>/map</code> publisher was found as <code>map</code>. But the slash stays on the wire and in your message headers, and any code that copies <code>header.frame_id</code> into a lookup will fail. Remove it at the source when you can.</p>
+
+<h3>Why does can_transform return False when the transform is being published?</h3>
+<p>If the name has a slash or is empty, <code>can_transform</code> returns <code>False</code> instead of raising. Call it with <code>return_debug_tuple=True</code>. The second item said <code>frame_ids cannot start with a '/'</code> in my test.</p>
+
+<h3>Why does the error take exactly as long as my timeout?</h3>
+<p>In rclpy, <code>lookup_transform</code> with <code>timeout=2.0</code> waited 2.004 to 2.016 s before raising the slash error, the same as for a frame that doesn't exist. A longer timeout only makes the wait longer, so fix the name.</p>
+
+<h3>What does "frame_ids cannot be empty" mean?</h3>
+<p>The target or source name passed to the lookup was an empty string, usually a <code>header.frame_id</code> nobody set. A transform with an empty <code>frame_id</code> is dropped with <code>TF_NO_FRAME_ID</code>, so set the field in the publisher.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does tf2 reject a frame ID that starts with a slash?", "acceptedAnswer": {"@type": "Answer", "text": "tf2 treats frame names as plain strings. It doesn't resolve them like topic names. Incoming transforms get one leading slash stripped, so /map is stored as map. Lookups are validated instead, and a leading slash raises InvalidArgumentException on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "My publisher uses /map. Do I have to change it?", "acceptedAnswer": {"@type": "Answer", "text": "For tf2 listeners, not strictly. In my runs, a /map publisher was found as map. But the slash stays on the wire and in your message headers, and any code that copies header.frame_id into a lookup will fail. Remove it at the source when you can."}},
+{"@type": "Question", "name": "Why does can_transform return False when the transform is being published?", "acceptedAnswer": {"@type": "Answer", "text": "If the name has a slash or is empty, can_transform returns False instead of raising. Call it with return_debug_tuple=True. The second item said frame_ids cannot start with a slash in my test."}},
+{"@type": "Question", "name": "Why does the error take exactly as long as my timeout?", "acceptedAnswer": {"@type": "Answer", "text": "In rclpy, lookup_transform with timeout=2.0 waited 2.004 to 2.016 s before raising the slash error, the same as for a frame that doesn't exist. A longer timeout only makes the wait longer, so fix the name."}},
+{"@type": "Question", "name": "What does frame_ids cannot be empty mean?", "acceptedAnswer": {"@type": "Answer", "text": "The target or source name passed to the lookup was an empty string, usually a header.frame_id nobody set. A transform with an empty frame_id is dropped with TF_NO_FRAME_ID, so set the field in the publisher."}}
+]}
+</script>
+
+<p>Measured on 2026-11-17 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, tf2 and tf2_ros 0.25.24, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, robot_state_publisher 3.0.3), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, tf2 0.36.23, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, robot_state_publisher 3.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, tf2 0.45.10, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, robot_state_publisher 3.5.6), default RMW, on a 2 vCPU Ubuntu host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-29-ros2-tf2-frame-id-leading-slash/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/DynamicSwarms/pad_swarming/issues/9">invalidargumentexception (ROS 2 node killed by a slashed source_frame)</a>, <a href="https://robotics.stackexchange.com/questions/104474">Invalid argument passed to canTransform argument source_frame in tf2 frame_ids cannot be empty</a>, <a href="https://github.com/HKUST-Aerial-Robotics/FUEL/issues/69">Invalid argument "/world" passed to canTransform argument source_frame</a>, <a href="https://robotics.stackexchange.com/questions/80847">Could not obtain transform from /gps to base_link</a>, <a href="https://github.com/ros/geometry2/issues/12">Invalid argument "/any_frame" passed to canTransform argument source_frame</a>.</p>
