@@ -1,0 +1,258 @@
+=== distro=lyrical nproc=2 date=2026-11-18T00:00:16Z load=1.11 0.47 0.18
+Python 3.14.4
+python3-numpy 1:2.3.5+ds-3ubuntu1
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-tf2-ros 0.45.10-1resolute.20260915.140307
+ros-lyrical-tf2-ros-py 0.45.10-1resolute.20260915.135515
+
+### A1 not sourced, nothing installed
+$ python3 -c 'import tf_transformations'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import tf_transformations
+ModuleNotFoundError: No module named 'tf_transformations'
+exit=1
+default RMW: rmw_fastrtps_cpp
+
+### A2 sourced, nothing installed
+$ python3 -c 'import tf_transformations'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import tf_transformations
+ModuleNotFoundError: No module named 'tf_transformations'
+exit=1
+$ python3 -c 'from tf.transformations import euler_from_quaternion'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from tf.transformations import euler_from_quaternion
+ModuleNotFoundError: No module named 'tf'
+exit=1
+$ python3 -c 'import tf2'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import tf2
+ModuleNotFoundError: No module named 'tf2'
+exit=1
+$ python3 -c 'from tf2_ros.transformations import euler_from_quaternion'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from tf2_ros.transformations import euler_from_quaternion
+ModuleNotFoundError: No module named 'tf2_ros.transformations'
+exit=1
+$ python3 -c 'import tf2_ros; print("tf2_ros ok", [n for n in dir(tf2_ros) if "euler" in n.lower() or "quat" in n.lower()])'
+tf2_ros ok []
+exit=0
+$ python3 -c 'import transforms3d'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import transforms3d
+ModuleNotFoundError: No module named 'transforms3d'
+exit=1
+$ python3 -c 'import scipy'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import scipy
+ModuleNotFoundError: No module named 'scipy'
+exit=1
+$ python3 -c 'import numpy; print(numpy.__version__)'
+2.3.5
+exit=0
+$ ros2 pkg list | grep -c tf_transformations
+0
+exit=1
+
+### B apt index and candidates
+$ apt-get update -qq
+exit=0
+took 5.9 s
+--- ros-lyrical-tf-transformations
+ros-lyrical-tf-transformations:
+  Installed: (none)
+  Candidate: 1.1.1-3resolute.20260728.175016
+--- python3-transforms3d
+python3-transforms3d:
+  Installed: (none)
+  Candidate: 0.4.2+ds-1build1
+--- python3-scipy
+python3-scipy:
+  Installed: (none)
+  Candidate: 1.16.3-4build1
+--- depends of ros-lyrical-tf-transformations
+ros-lyrical-tf-transformations
+  Depends: python3-numpy
+  Depends: python3-transforms3d
+  Depends: ros-lyrical-ros-workspace
+
+### C rosdep keys
+$ rosdep update --rosdistro lyrical 2>&1 | tail -2
+Skip distro "rolling" different from requested "lyrical"
+updated cache in /root/.ros/rosdep/sources.cache
+exit=0
+took 2.8 s
+$ rosdep resolve tf_transformations
+#apt
+ros-lyrical-tf-transformations
+exit=0
+$ rosdep resolve python3-transforms3d
+#apt
+python3-transforms3d
+exit=0
+$ rosdep resolve python3-scipy
+#apt
+python3-scipy
+exit=0
+$ cd /tmp/ws && rosdep install --from-paths src --ignore-src -y --simulate
+#[apt] Installation commands:
+  apt-get install -y ros-lyrical-tf-transformations
+exit=0
+
+### D only python3-transforms3d installed
+$ apt-get install -y -qq --no-install-recommends python3-transforms3d >/dev/null; echo installed
+installed
+exit=0
+took 5.7 s
+$ python3 -c 'import transforms3d; print(transforms3d.__version__)'
+0.4.2
+exit=0
+$ python3 -c 'import tf_transformations'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import tf_transformations
+ModuleNotFoundError: No module named 'tf_transformations'
+exit=1
+
+### E install ros-lyrical-tf-transformations (shell was sourced before the install)
+$ apt-get install -y --no-install-recommends ros-lyrical-tf-transformations | grep -E 'newly installed|Need to get|After this'
+0 upgraded, 1 newly installed, 0 to remove and 6 not upgraded.
+Need to get 25.2 kB of archives.
+After this operation, 123 kB of additional disk space will be used.
+exit=0
+took 3.7 s
+python3-transforms3d 0.4.2+ds-1build1
+ros-lyrical-tf-transformations 1.1.1-3resolute.20260728.175016
+$ python3 -c 'import tf_transformations as t; print(t.__file__); print(t.euler_from_quaternion([0,0,0.7071068,0.7071068]))'
+/opt/ros/lyrical/lib/python3.14/site-packages/tf_transformations/__init__.py
+(0.0, -0.0, 1.5707963267948966)
+exit=0
+$ env -u PYTHONPATH python3 -c 'import tf_transformations'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import tf_transformations
+ModuleNotFoundError: No module named 'tf_transformations'
+exit=1
+$ ros2 pkg list | grep tf_transformations
+tf_transformations
+exit=0
+$ rosdep check --from-paths /tmp/ws/src --ignore-src
+All system dependencies have been satisfied
+exit=0
+
+### F SciPy
+$ apt-get install -y --no-install-recommends python3-scipy | grep -E 'newly installed|Need to get|After this'
+0 upgraded, 3 newly installed, 0 to remove and 6 not upgraded.
+Need to get 16.0 MB of archives.
+After this operation, 69.1 MB of additional disk space will be used.
+exit=0
+took 11.1 s
+
+### G compare.py
+python 3.14.4
+numpy 2.3.5
+tf_transformations file /opt/ros/lyrical/lib/python3.14/site-packages/tf_transformations/__init__.py
+transforms3d 0.4.2 scipy 1.16.3
+
+## import time (fresh interpreter)
+tf_transformations: 83.6 ms (min of 3; runs 84.3, 83.7, 83.6)
+transforms3d: 82.6 ms (min of 3; runs 83.7, 82.6, 82.9)
+scipy.spatial.transform: 270.4 ms (min of 3; runs 270.4, 271.3, 339.9)
+math: 0.1 ms (min of 3; runs 0.1, 0.1, 0.1)
+
+## quaternion_from_euler for the same roll, pitch, yaw (degrees)
+rpy=(0, 0, 90): tft(x,y,z,w)=[0.0000, 0.0000, 0.7071, 0.7071] t3d(w,x,y,z)=[0.7071, 0.0000, 0.0000, 0.7071] scipy(x,y,z,w)=[0.0000, 0.0000, 0.7071, 0.7071] hand(x,y,z,w)=[0.0000, 0.0000, 0.7071, 0.7071]
+rpy=(10, 20, 30): tft(x,y,z,w)=[0.0381, 0.1893, 0.2393, 0.9515] t3d(w,x,y,z)=[0.9515, 0.0381, 0.1893, 0.2393] scipy(x,y,z,w)=[0.0381, 0.1893, 0.2393, 0.9515] hand(x,y,z,w)=[0.0381, 0.1893, 0.2393, 0.9515]
+rpy=(-45, 30, 170): tft(x,y,z,w)=[-0.2704, -0.3474, 0.8976, -0.0209] t3d(w,x,y,z)=[-0.0209, -0.2704, -0.3474, 0.8976] scipy(x,y,z,w)=[-0.2704, -0.3474, 0.8976, -0.0209] hand(x,y,z,w)=[-0.2704, -0.3474, 0.8976, -0.0209]
+rpy=(180, 0, 0): tft(x,y,z,w)=[1.0000, 0.0000, 0.0000, 0.0000] t3d(w,x,y,z)=[0.0000, 1.0000, 0.0000, 0.0000] scipy(x,y,z,w)=[1.0000, 0.0000, 0.0000, 0.0000] hand(x,y,z,w)=[1.0000, 0.0000, 0.0000, 0.0000]
+rpy=(0, 89.9, 0): tft(x,y,z,w)=[0.0000, 0.7065, 0.0000, 0.7077] t3d(w,x,y,z)=[0.7077, 0.0000, 0.7065, 0.0000] scipy(x,y,z,w)=[0.0000, 0.7065, 0.0000, 0.7077] hand(x,y,z,w)=[0.0000, 0.7065, 0.0000, 0.7077]
+rpy=(0, 90, 0): tft(x,y,z,w)=[0.0000, 0.7071, 0.0000, 0.7071] t3d(w,x,y,z)=[0.7071, 0.0000, 0.7071, 0.0000] scipy(x,y,z,w)=[0.0000, 0.7071, 0.0000, 0.7071] hand(x,y,z,w)=[0.0000, 0.7071, 0.0000, 0.7071]
+rpy=(30, 90, 40): tft(x,y,z,w)=[-0.0616, 0.7044, 0.0616, 0.7044] t3d(w,x,y,z)=[0.7044, -0.0616, 0.7044, 0.0616] scipy(x,y,z,w)=[-0.0616, 0.7044, 0.0616, 0.7044] hand(x,y,z,w)=[-0.0616, 0.7044, 0.0616, 0.7044]
+
+## euler_from_quaternion round trip, result in degrees
+rpy=(0, 0, 90): tft=[0.000, -0.000, 90.000] t3d=[0.000, -0.000, 90.000] scipy_xyz=[0.000, 0.000, 90.000] scipy_XYZ(intrinsic)=[-0.000, 0.000, 90.000] hand=[0.000, 0.000, 90.000]
+rpy=(10, 20, 30): tft=[10.000, 20.000, 30.000] t3d=[10.000, 20.000, 30.000] scipy_xyz=[10.000, 20.000, 30.000] scipy_XYZ(intrinsic)=[-1.116, 22.242, 28.452] hand=[10.000, 20.000, 30.000]
+rpy=(-45, 30, 170): tft=[-45.000, 30.000, 170.000] t3d=[-45.000, 30.000, 170.000] scipy_xyz=[-45.000, 30.000, 170.000] scipy_XYZ(intrinsic)=[46.038, -28.097, -165.196] hand=[-45.000, 30.000, 170.000]
+rpy=(180, 0, 0): tft=[180.000, -0.000, 0.000] t3d=[180.000, -0.000, 0.000] scipy_xyz=[180.000, 0.000, 0.000] scipy_XYZ(intrinsic)=[180.000, 0.000, 0.000] hand=[180.000, 0.000, 0.000]
+rpy=(0, 89.9, 0): tft=[0.000, 89.900, 0.000] t3d=[0.000, 89.900, 0.000] scipy_xyz=[0.000, 89.900, 0.000] scipy_XYZ(intrinsic)=[-0.000, 89.900, 0.000] hand=[0.000, 89.900, 0.000]
+<sys>:0: UserWarning: Gimbal lock detected. Setting third angle to zero since it is not possible to uniquely determine all angles.
+rpy=(0, 90, 0): tft=[-0.000, 90.000, 0.000] t3d=[-0.000, 90.000, 0.000] scipy_xyz=[-0.000, 90.000, 0.000] scipy_XYZ(intrinsic)=[0.000, 90.000, 0.000] hand=[0.000, 90.000, 0.000]
+rpy=(30, 90, 40): tft=[-10.000, 90.000, 0.000] t3d=[-10.000, 90.000, 0.000] scipy_xyz=[-10.000, 90.000, 0.000] scipy_XYZ(intrinsic)=[-90.000, 80.000, 90.000] hand=[90.000, 90.000, 90.000]
+
+## same rotation? (angle between rotations from each library's Euler output, degrees)
+rpy=(0, 0, 90): tft=0.00e+00 t3d=0.00e+00 scipy=0.00e+00 hand=0.00e+00
+rpy=(10, 20, 30): tft=4.65e-15 t3d=4.65e-15 scipy=4.58e-15 hand=3.18e-15
+rpy=(-45, 30, 170): tft=6.56e-15 t3d=6.56e-15 scipy=1.94e-14 hand=9.73e-15
+rpy=(180, 0, 0): tft=0.00e+00 t3d=0.00e+00 scipy=0.00e+00 hand=0.00e+00
+rpy=(0, 89.9, 0): tft=1.27e-14 t3d=1.27e-14 scipy=0.00e+00 hand=3.45e-12
+rpy=(0, 90, 0): tft=0.00e+00 t3d=0.00e+00 scipy=0.00e+00 hand=0.00e+00
+rpy=(30, 90, 40): tft=5.64e-15 t3d=5.64e-15 scipy=5.64e-15 hand=1.00e+01
+
+## wrong component order (rpy=(10,20,30) deg)
+tft euler_from_quaternion([w,x,y,z]) -> [150.000, -20.000, 10.000]
+t3d quat2euler([x,y,z,w]) -> [30.000, -20.000, 170.000]
+scipy from_quat([w,x,y,z]) xyz -> [150.000, -20.000, 10.000]
+identity quaternion read as [w,x,y,z] by tft: euler_from_quaternion([1,0,0,0]) -> [180.000, -0.000, 0.000]
+
+## passing a geometry_msgs Quaternion directly
+tft.euler_from_quaternion(msg) -> TypeError: cannot unpack non-iterable Quaternion object
+t3d.quat2euler(msg) -> TypeError: cannot unpack non-iterable Quaternion object
+Rotation.from_quat(msg) -> TypeError: float() argument must be a string or a real number, not 'Quaternion'
+tft.euler_from_quaternion([msg.x, msg.y, msg.z, msg.w]) -> [10.000, 20.000, 30.000]
+Quaternion(x=q[0],...) from numpy floats: ok, type float64
+
+## unnormalized quaternion [0, 0, 1, 1] (x,y,z,w), expected yaw 90
+tft -> [0.000, -0.000, 90.000]
+t3d -> [0.000, -0.000, 90.000]
+scipy -> [0.000, 0.000, 90.000]
+hand -> [0.000, 0.000, 116.565]
+scaled [0,0,2,3.464] (yaw 60 x4): tft -> [0.000, -0.000, 60.000] hand -> [0.000, 0.000, 116.802]
+
+## time per euler_from_quaternion call (20000 calls, best of 3), microseconds
+tf_transformations: 14.11 us
+transforms3d: 11.87 us
+scipy (one Rotation per call): 9.44 us
+hand-written math: 1.90 us
+scipy vectorized, 20000 quaternions in one call: 0.604 us each (12.09 ms total)
+
+## tf_transformations functions available: 48
+has euler_from_quaternion/quaternion_from_euler/quaternion_multiply/euler_matrix: True
+
+### H tf2_echo RPY output for roll=10 pitch=20 yaw=30 deg
+load 0.94
+terminate called after throwing an instance of 'std::system_error'
+  what():  pthread_create failed: Resource temporarily unavailable
+[ros2run]: Aborted
+=== done lyrical 2026-11-18T00:01:06Z
+
+=== rerun of section H only, pids-limit 120
+
+### H tf2_echo RPY output for roll=10 pitch=20 yaw=30 deg
+load 0.65
+[INFO] [1794960102.079413531] [tf2_echo]: Waiting for transform a ->  b: Invalid frame ID "a" passed to canTransform argument target_frame - frame does not exist
+At time 0.0
+- Translation: [0.000, 0.000, 0.000]
+- Rotation: in Quaternion (xyzw) [0.038, 0.189, 0.239, 0.952]
+- Rotation: in RPY (radian) [0.175, 0.349, 0.524]
+- Rotation: in RPY (degree) [10.000, 20.000, 30.000]
+- Matrix:
+  0.814 -0.441  0.379  0.000
+  0.470  0.883  0.018  0.000
+ -0.342  0.163  0.925  0.000
+  0.000  0.000  0.000  1.000
+At time 0.0
+- Translation: [0.000, 0.000, 0.000]
+- Rotation: in Quaternion (xyzw) [0.038, 0.189, 0.239, 0.952]
+=== done lyrical 2026-11-18T00:01:46Z

@@ -1,0 +1,199 @@
+<pre><code>Traceback (most recent call last):
+  File "&lt;string&gt;", line 1, in &lt;module&gt;
+ModuleNotFoundError: No module named 'tf_transformations'</code></pre>
+
+<p>Code ported from ROS 1 often fails one step earlier, with <code>ModuleNotFoundError: No module named 'tf'</code> from <code>from tf.transformations import euler_from_quaternion</code>.</p>
+
+<p>Short answer: <code>tf_transformations</code> is a separate apt package. It is not part of <code>ros-base</code>, <code>tf2_ros</code> or the <code>tf2</code> Python packages, and installing <code>transforms3d</code> alone doesn't provide it. Install the ROS package, declare it in <code>package.xml</code>, and pass the quaternion as <code>[x, y, z, w]</code>:</p>
+
+<pre><code>sudo apt update
+sudo apt install ros-$ROS_DISTRO-tf-transformations</code></pre>
+
+<pre><code class="language-xml">&lt;exec_depend&gt;tf_transformations&lt;/exec_depend&gt;</code></pre>
+
+<pre><code class="language-python">from tf_transformations import euler_from_quaternion, quaternion_from_euler
+
+q = msg.pose.pose.orientation
+roll, pitch, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])   # radians
+
+x, y, z, w = quaternion_from_euler(roll, pitch, yaw)              # returns x, y, z, w</code></pre>
+
+<p>That worked on Humble, Jazzy and Lyrical. The package was there for all three, and apt pulled in <code>python3-transforms3d</code> as a dependency. The import worked right away in a shell that was already sourced. If you can't install it, <code>transforms3d</code> and SciPy give the same angles, but each one has an ordering trap.</p>
+
+<h2>Find your error</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my run</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>No module named 'tf_transformations'</code></td><td>Package not installed. The official <code>ros:&lt;distro&gt;-ros-base</code> images don't include it on any of the three distros</td><td><code>apt install ros-$ROS_DISTRO-tf-transformations</code></td></tr>
+<tr><td>Same error after <code>apt install python3-transforms3d</code> or a pip install of <code>transforms3d</code></td><td><code>transforms3d</code> is only the dependency. The <code>tf_transformations</code> module is in the ROS package</td><td>Install the ROS package too</td></tr>
+<tr><td>Same error after installing the package</td><td>The Python process didn't get the ROS path (I tested this with <code>PYTHONPATH</code> unset)</td><td><code>source /opt/ros/$ROS_DISTRO/setup.bash</code></td></tr>
+<tr><td><code>No module named 'tf'</code></td><td>ROS 1 import, <code>from tf.transformations import ...</code></td><td>Change the import to <code>tf_transformations</code></td></tr>
+<tr><td><code>No module named 'tf2'</code> or <code>No module named 'tf2_ros.transformations'</code></td><td>No such module in ROS 2. <code>tf2_ros</code> imports, but it has no Euler or quaternion functions</td><td>Use <code>tf_transformations</code>, <code>transforms3d</code> or SciPy</td></tr>
+<tr><td><code>TypeError: cannot unpack non-iterable Quaternion object</code></td><td>A <code>geometry_msgs/Quaternion</code> passed straight to <code>euler_from_quaternion</code></td><td>Pass <code>[q.x, q.y, q.z, q.w]</code></td></tr>
+<tr><td>No error, but the angles are wrong (roll near 180 for a level robot)</td><td>Components passed in <code>w, x, y, z</code> order</td><td>Use <code>x, y, z, w</code> for <code>tf_transformations</code> and SciPy, and <code>w, x, y, z</code> for <code>transforms3d</code></td></tr>
+<tr><td><code>AttributeError: module 'numpy' has no attribute 'float'</code> inside <code>transforms3d</code></td><td>A NumPy version that doesn't match the apt <code>transforms3d</code>. That's a separate problem</td><td>See the NumPy post linked below</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-18 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Ubuntu server, one distro after the other. Each container had network access for apt and rosdep. ROS traffic was kept local with <code>ROS_DOMAIN_ID=88</code> and localhost-only discovery. The script, <code>repro.sh</code>, did this in order:</p>
+
+<ol>
+<li>Tried the imports people report (<code>tf_transformations</code>, <code>tf.transformations</code>, <code>tf2</code>, <code>tf2_ros</code>, <code>transforms3d</code>, <code>scipy</code>), before and after sourcing ROS.</li>
+<li>Ran <code>apt-get update</code>, then checked the apt candidates, the package's dependencies and the rosdep keys. It also ran <code>rosdep install --simulate</code> on a small package that declares <code>tf_transformations</code>.</li>
+<li>Installed <code>python3-transforms3d</code> alone and tried the import again. Then it installed <code>ros-$ROS_DISTRO-tf-transformations</code> and SciPy.</li>
+<li>Ran <code>compare.py</code>, which converts seven roll, pitch and yaw sets with four methods: <code>tf_transformations</code>, <code>transforms3d</code>, SciPy's <code>Rotation</code> and a hand-written formula that is copied around a lot. It also tries the common mistakes and times each method.</li>
+<li>Published a static transform with roll 10°, pitch 20° and yaw 30°, and read it back with <code>tf2_echo</code>.</li>
+</ol>
+
+<h2>Cause 1: the package isn't installed</h2>
+
+<p>None of the three base images had it. <code>ros2 pkg list | grep -c tf_transformations</code> printed <code>0</code>, and the import failed the same way with or without sourcing. NumPy was present (1.21.5 on Humble, 1.26.4 on Jazzy, 2.3.5 on Lyrical). <code>transforms3d</code> and SciPy were not. On Lyrical's Python 3.14 the traceback also shows the import line itself, so the message has one extra line there.</p>
+
+<p>After <code>apt-get update</code>, apt had a candidate on every distro:</p>
+
+<table>
+<thead><tr><th></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>ros-$ROS_DISTRO-tf-transformations</code></td><td>1.1.1-1jammy</td><td>1.1.1-1noble</td><td>1.1.1-3resolute</td></tr>
+<tr><td>Download, disk</td><td>19.6 kB, 110 kB</td><td>23.9 kB, 124 kB</td><td>25.2 kB, 123 kB</td></tr>
+<tr><td>Install time (index already updated)</td><td>3.8 s</td><td>2.8 s</td><td>3.7 s</td></tr>
+<tr><td><code>python3-transforms3d</code></td><td>0.3.1</td><td>0.4.1</td><td>0.4.2</td></tr>
+<tr><td>Depends</td><td colspan="3"><code>python3-numpy</code>, <code>python3-transforms3d</code>, <code>ros-$ROS_DISTRO-ros-workspace</code></td></tr>
+</tbody>
+</table>
+
+<p>An old answer says <code>transforms3d</code> isn't in Ubuntu's apt and must come from pip. On these three distros that's no longer true: <code>apt-cache depends</code> lists <code>python3-transforms3d</code>, so <code>apt install</code> brings it in.</p>
+
+<p>If apt says <code>Unable to locate package ros-humble-tf-transformations</code>, the package isn't the problem. Your apt sources are. That happens when the ROS apt repository isn't configured, when you haven't run <code>apt update</code>, or when the OS isn't the Ubuntu release the distro targets (one of the questions below is Raspberry Pi OS). I didn't reproduce the non-Ubuntu case.</p>
+
+<h2>Cause 2: only transforms3d was installed</h2>
+
+<p>This is the advice in many older answers, and on its own it doesn't fix the error. After <code>apt-get install python3-transforms3d</code>, <code>import transforms3d</code> worked on all three distros, but <code>import tf_transformations</code> still raised the same <code>ModuleNotFoundError</code>. <code>transforms3d</code> is a general-purpose library. <code>tf_transformations</code> is a small ROS package that wraps it with the old ROS 1 function names, and you have to install it separately.</p>
+
+<h2>Cause 3: the process doesn't see the ROS Python path</h2>
+
+<p>The module is installed to <code>/opt/ros/&lt;distro&gt;/lib/python3.X/site-packages/tf_transformations/</code> (<code>python3.10</code>, <code>python3.12</code> and <code>python3.14</code> on Humble, Jazzy and Lyrical). I installed the package in a shell that I had sourced before the install. The import worked right away, with no re-sourcing, because that directory was already on <code>PYTHONPATH</code>. Running the same command with <code>PYTHONPATH</code> unset gave the original error again.</p>
+
+<p>So if <code>ros2 pkg list</code> shows <code>tf_transformations</code> and your script still can't import it, check how the script is started: an IDE run configuration, a systemd unit, cron, or a different Python. The same thing happens with <code>rclpy</code> itself. My post on <a href="https://huntlab.app/en/no-module-named-rclpy-rclpy-pybind11-ros-2/">No module named 'rclpy'</a> covers the same two causes for rclpy: a terminal that wasn't sourced with the setup file for your shell, and a conda Python instead of the system <code>python3</code>.</p>
+
+<h2>Cause 4: package.xml doesn't declare it</h2>
+
+<p>This one doesn't break your machine. It breaks the next machine. The rosdep key is the package name with an underscore, <code>tf_transformations</code>. With the <code>exec_depend</code> line from the short answer, <code>rosdep resolve tf_transformations</code> returned <code>ros-humble-tf-transformations</code> on Humble, and the matching name on Jazzy and Lyrical. <code>rosdep install --from-paths src --ignore-src -y --simulate</code> printed:</p>
+
+<pre><code>#[apt] Installation commands:
+  apt-get install -y ros-humble-tf-transformations</code></pre>
+
+<p>After the install, <code>rosdep check</code> printed <code>All system dependencies have been satisfied</code>. If you call <code>transforms3d</code> or SciPy directly, their keys are <code>python3-transforms3d</code> and <code>python3-scipy</code>. Both resolved to apt packages of the same names on all three distros. If rosdep gives you a different name or an error, your <code>ROS_DISTRO</code> may be unset. My <a href="https://huntlab.app/en/ros2-rosdep-cannot-locate-rosdep-definition-for-key/">rosdep "Cannot locate rosdep definition" post</a> measured that case along with wrong keys and pip keys.</p>
+
+<h2>Cause 5: the ROS 1 import and tf2</h2>
+
+<p><code>from tf.transformations import euler_from_quaternion</code> failed with <code>No module named 'tf'</code> on all three distros. In ROS 2 the only change you need is the import: <code>from tf_transformations import euler_from_quaternion</code>. The function names and argument order are the same. The module exposes 48 public names, and <code>quaternion_multiply</code> and <code>euler_matrix</code> are among them.</p>
+
+<p><code>import tf2</code> failed with <code>No module named 'tf2'</code>. <code>import tf2_ros</code> worked, but it contains nothing with "euler" or "quat" in the name, and <code>tf2_ros.transformations</code> doesn't exist. tf2 in Python handles buffers, listeners and broadcasters. It doesn't convert angles.</p>
+
+<h2>The silent mistakes: component order and message objects</h2>
+
+<p>Once the import works, the most common bug doesn't raise anything. The three libraries don't use the same component order:</p>
+
+<table>
+<thead><tr><th>Library</th><th>Quaternion order</th><th>Euler call</th></tr></thead>
+<tbody>
+<tr><td><code>tf_transformations</code></td><td><code>x, y, z, w</code></td><td><code>euler_from_quaternion([x, y, z, w])</code></td></tr>
+<tr><td><code>transforms3d</code></td><td><code>w, x, y, z</code></td><td><code>transforms3d.euler.quat2euler([w, x, y, z])</code></td></tr>
+<tr><td>SciPy</td><td><code>x, y, z, w</code></td><td><code>Rotation.from_quat([x, y, z, w]).as_euler('xyz')</code></td></tr>
+</tbody>
+</table>
+
+<p>For roll 10°, pitch 20° and yaw 30°, all three returned the same numbers when I used the right order. With the wrong order:</p>
+
+<ul>
+<li><code>tf_transformations</code> given <code>[w, x, y, z]</code> returned <code>[150.000, -20.000, 10.000]</code> degrees. SciPy with the same mistake returned the same values.</li>
+<li><code>transforms3d</code> given <code>[x, y, z, w]</code> returned <code>[30.000, -20.000, 170.000]</code>.</li>
+<li>The identity quaternion written as <code>[1, 0, 0, 0]</code> (w first) and passed to <code>tf_transformations</code> came back as roll 180°. If a robot sitting flat on the floor reports a roll near 180°, check the order first.</li>
+</ul>
+
+<p>Passing the message object fails loudly, which is better. <code>tf_transformations.euler_from_quaternion(msg)</code> and <code>transforms3d</code> both raised <code>TypeError: cannot unpack non-iterable Quaternion object</code>. SciPy raised <code>TypeError: float() argument must be a string or a real number, not 'Quaternion'</code>. In the other direction, <code>Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])</code> accepted the NumPy <code>float64</code> values that <code>quaternion_from_euler</code> returns, with no conversion.</p>
+
+<p>SciPy has one more trap. Lowercase <code>'xyz'</code> is the extrinsic convention. It matched <code>tf_transformations</code> in every case. Uppercase <code>'XYZ'</code> is intrinsic, and for the same 10°, 20°, 30° quaternion it returned <code>[-1.116, 22.242, 28.452]</code>.</p>
+
+<h2>Fix options compared</h2>
+
+<p>I checked each method's output by turning its Euler angles back into a rotation and measuring the angle to the original. For the five cases away from pitch 90°, all four methods were within 4×10<sup>-12</sup> degrees on every distro. The differences showed up at the edges, and in speed and install size:</p>
+
+<table>
+<thead><tr><th></th><th><code>tf_transformations</code></th><th><code>transforms3d</code></th><th>SciPy <code>Rotation</code></th><th>Hand-written formula</th></tr></thead>
+<tbody>
+<tr><td>Install</td><td>1 ROS package, about 120 kB</td><td>comes with the ROS package</td><td>Humble: 14 packages, 36.5 MB download, 311 MB on disk. Jazzy: 3 packages, 15.6 MB, 61.9 MB. Lyrical: 3 packages, 16.0 MB, 69.1 MB</td><td>none</td></tr>
+<tr><td>Import time (Humble / Jazzy / Lyrical)</td><td>168 / 106 / 84 ms</td><td>172 / 106 / 83 ms</td><td>228 / 178 / 270 ms</td><td>0.2 / 0.1 / 0.1 ms (<code>math</code>)</td></tr>
+<tr><td>One call (Humble / Jazzy / Lyrical)</td><td>20.6 / 14.3 / 14.1 µs</td><td>8.2 / 6.8 / 11.9 µs</td><td>28.2 / 10.4 / 9.4 µs</td><td>2.4 / 2.3 / 1.9 µs</td></tr>
+<tr><td>20,000 quaternions in one call</td><td>n/a</td><td>n/a</td><td>4.64 / 0.17 / 0.60 µs each</td><td>n/a</td></tr>
+<tr><td>Pitch exactly 90° (roll 30, yaw 40)</td><td><code>[-10, 90, 0]</code>, same rotation</td><td><code>[-10, 90, 0]</code>, same rotation</td><td><code>[-10, 90, 0]</code>, plus a "Gimbal lock detected" warning</td><td><code>[90, 90, 90]</code>, 10° off</td></tr>
+<tr><td>Unnormalized <code>[0, 0, 1, 1]</code></td><td>yaw 90</td><td>yaw 90</td><td>yaw 90</td><td>yaw 116.565</td></tr>
+</tbody>
+</table>
+
+<p>The hand-written formula is the one you find in tutorials: <code>atan2</code> for roll and yaw, and a clamped <code>asin</code> for pitch. It was the fastest, and it agreed with the libraries for normal, unit-length quaternions. It went wrong in two cases. At exactly pitch 90° it returned roll 90° and yaw 90°, which is a different orientation, 10.0° away from the input. And it assumes the quaternion is unit length. <code>[0, 0, 1, 1]</code> is a 90° yaw that was never normalized, and the formula returned 116.565°. A 60° yaw scaled by four came back as 116.802°. The three libraries normalize first and returned 90° and 60°. If you copy that formula, normalize the quaternion first, and don't use it near pitch ±90°.</p>
+
+<p>At pitch 90° the libraries don't return the roll and yaw you put in. They return <code>[-10, 90, 0]</code> for an input of 30, 90 and 40. That's not a bug. At that pitch, roll and yaw act on the same axis, so only their difference is defined. All three libraries put the whole difference into roll and returned exactly the same rotation (error below 10<sup>-14</sup> degrees). If you need yaw near that pitch, keep the quaternion and don't go through Euler angles.</p>
+
+<p>For speed, a single <code>tf_transformations</code> call took 14 to 21 µs. For a whole array, SciPy's vectorized call was the fastest on Jazzy and Lyrical. On Humble's SciPy 1.8.0 it took 4.64 µs per quaternion, less than 2 times faster than <code>transforms3d</code> called in a loop (8.2 µs). These numbers come from one run on a shared 2 vCPU machine, so treat them as rough sizes.</p>
+
+<p>My pick: use <code>tf_transformations</code> when the code came from ROS 1 or you want <code>x, y, z, w</code> everywhere. Call <code>transforms3d</code> directly if you're comfortable writing <code>w</code> first. Use SciPy if it's already installed or you convert arrays.</p>
+
+<p>One more caution. On Humble, <code>tf_transformations</code> runs on the apt <code>transforms3d</code> 0.3.1, and that version only works with the NumPy versions it was built for. My <a href="https://huntlab.app/en/ros2-cv-bridge-numpy-2-array-api-not-found-compiled-using-numpy-1x/">NumPy 2 and cv_bridge post</a> measured it failing with <code>no attribute 'float'</code> after pip upgraded NumPy to 1.26.4, and failing again with NumPy 2. In this run every distro used its apt NumPy, and nothing failed.</p>
+
+<h2>Checking angles without Python: tf2_echo</h2>
+
+<p>If you only want to see the angles of a transform that's already in TF, you don't need any of these libraries. <code>tf2_echo</code> prints the rotation three ways. For a static transform published with <code>--roll 0.17453293 --pitch 0.34906585 --yaw 0.52359878</code>, all three distros printed:</p>
+
+<pre><code>- Rotation: in Quaternion (xyzw) [0.038, 0.189, 0.239, 0.952]
+- Rotation: in RPY (radian) [0.175, 0.349, 0.524]
+- Rotation: in RPY (degree) [10.000, 20.000, 30.000]</code></pre>
+
+<p>Those match <code>quaternion_from_euler</code> for the same angles (<code>[0.0381, 0.1893, 0.2393, 0.9515]</code>), and the label shows the order is <code>xyzw</code>. This is also a quick way to check the direction of a static transform. My <a href="https://huntlab.app/en/ros2-tf-frame-offset-doubled-static-transform-publisher/">static_transform_publisher offset post</a> measured that publishing a transform backwards puts the child at exactly twice the offset when there's no rotation.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>All three had <code>tf_transformations</code> 1.1.1 in apt. The apt <code>transforms3d</code> was 0.3.1 on Humble, 0.4.1 on Jazzy and 0.4.2 on Lyrical. With each distro's apt NumPy, every conversion gave the same results.</li>
+<li>SciPy was 1.8.0, 1.11.4 and 1.16.3.</li>
+<li>On Lyrical, <code>tf2_echo</code> first failed with <code>pthread_create failed: Resource temporarily unavailable</code>. That was my own container limit (<code>--pids-limit 40</code>, and threads count against it), not ROS. With a higher limit it printed the same output as the other distros. If you limit PIDs in Docker, leave room for DDS threads.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>pip installs of <code>tf_transformations</code> or <code>transforms3d</code>, building <code>tf_transformations</code> from source, Raspberry Pi OS, Debian or any non-Ubuntu host, arm64, Windows, virtual environments, NumPy versions other than each distro's apt NumPy, C++ (<code>tf2::Matrix3x3::getRPY</code>), quaternions that are both near pitch 90° and slightly unnormalized (like <code>0, 0.707, 0, 0.707</code>), axis conventions other than <code>sxyz</code>/<code>'xyz'</code>, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I install tf_transformations in ROS 2?</h3>
+<p>Run <code>sudo apt update</code>, then <code>sudo apt install ros-$ROS_DISTRO-tf-transformations</code>. On Humble, Jazzy and Lyrical this installed version 1.1.1 and pulled in <code>python3-transforms3d</code> from apt, so pip wasn't needed. Add <code>&lt;exec_depend&gt;tf_transformations&lt;/exec_depend&gt;</code> to <code>package.xml</code> so rosdep installs it on other machines.</p>
+
+<h3>I installed transforms3d but still get No module named 'tf_transformations'. Why?</h3>
+<p><code>transforms3d</code> is only the library underneath. The <code>tf_transformations</code> module comes from the ROS package <code>ros-$ROS_DISTRO-tf-transformations</code>. With only <code>python3-transforms3d</code> installed, the import still failed on all three distros.</p>
+
+<h3>What replaces tf.transformations from ROS 1?</h3>
+<p><code>tf_transformations</code>. Change <code>from tf.transformations import euler_from_quaternion</code> to <code>from tf_transformations import euler_from_quaternion</code>. The function names and the <code>[x, y, z, w]</code> order are the same. Neither <code>tf</code> nor <code>tf2</code> exists as a Python module in ROS 2, and <code>tf2_ros</code> has no Euler functions.</p>
+
+<h3>Why does euler_from_quaternion give a roll of 180 degrees for a level robot?</h3>
+<p>The quaternion was probably passed in <code>w, x, y, z</code> order. <code>tf_transformations</code> and SciPy expect <code>x, y, z, w</code>, and <code>transforms3d</code> expects <code>w, x, y, z</code>. The identity quaternion written w-first came back as roll 180 in my run. Pass <code>[q.x, q.y, q.z, q.w]</code>.</p>
+
+<h3>Why are roll and yaw wrong when pitch is 90 degrees?</h3>
+<p>At pitch 90 only the difference between roll and yaw is defined. All three libraries returned roll -10, pitch 90 and yaw 0 for an input of 30, 90 and 40, which is the same rotation. The common hand-written formula returned 90, 90 and 90, which was 10 degrees off. Keep quaternions if you need yaw near pitch 90.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I install tf_transformations in ROS 2?", "acceptedAnswer": {"@type": "Answer", "text": "Run sudo apt update, then sudo apt install ros-$ROS_DISTRO-tf-transformations. On Humble, Jazzy and Lyrical this installed version 1.1.1 and pulled in python3-transforms3d from apt, so pip was not needed. Add tf_transformations as an exec_depend in package.xml so rosdep installs it on other machines."}},
+{"@type": "Question", "name": "I installed transforms3d but still get No module named tf_transformations. Why?", "acceptedAnswer": {"@type": "Answer", "text": "transforms3d is only the library underneath. The tf_transformations module comes from the ROS package ros-$ROS_DISTRO-tf-transformations. With only python3-transforms3d installed, the import still failed on all three distros."}},
+{"@type": "Question", "name": "What replaces tf.transformations from ROS 1?", "acceptedAnswer": {"@type": "Answer", "text": "tf_transformations. Change from tf.transformations import euler_from_quaternion to from tf_transformations import euler_from_quaternion. The function names and the x, y, z, w order are the same. Neither tf nor tf2 exists as a Python module in ROS 2, and tf2_ros has no Euler functions."}},
+{"@type": "Question", "name": "Why does euler_from_quaternion give a roll of 180 degrees for a level robot?", "acceptedAnswer": {"@type": "Answer", "text": "The quaternion was probably passed in w, x, y, z order. tf_transformations and SciPy expect x, y, z, w, and transforms3d expects w, x, y, z. The identity quaternion written w-first came back as roll 180 in my run. Pass q.x, q.y, q.z, q.w."}},
+{"@type": "Question", "name": "Why are roll and yaw wrong when pitch is 90 degrees?", "acceptedAnswer": {"@type": "Answer", "text": "At pitch 90 only the difference between roll and yaw is defined. All three libraries returned roll -10, pitch 90 and yaw 0 for an input of 30, 90 and 40, which is the same rotation. The common hand-written formula returned 90, 90 and 90, which was 10 degrees off. Keep quaternions if you need yaw near pitch 90."}}
+]}
+</script>
+
+<p>Measured on 2026-11-18 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, Python 3.10.12, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, tf2_ros 0.25.24, NumPy 1.21.5, transforms3d 0.3.1, SciPy 1.8.0), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, Python 3.12.3, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, tf2_ros 0.36.23, NumPy 1.26.4, transforms3d 0.4.1, SciPy 1.11.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, Python 3.14.4, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, tf2_ros 0.45.10, NumPy 2.3.5, transforms3d 0.4.2, SciPy 1.16.3), <code>tf_transformations</code> 1.1.1 from apt, and the default RMW (<code>rmw_fastrtps_cpp</code>). Full digests and versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-01-31-ros2-tf-transformations-module-not-found/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/99908">How do you install tf_transformations?</a>, <a href="https://robotics.stackexchange.com/questions/110702">E: Unable to locate package ros-humble-tf-transformations</a>, <a href="https://robotics.stackexchange.com/questions/96357">ROS2 Python quaternion to euler</a>, <a href="https://robotics.stackexchange.com/questions/94054">Quaternion to RPY ROS2</a>, <a href="https://robotics.stackexchange.com/questions/104709">euler_from_quaternion error when rpy is 0 90 0</a>.</p>
