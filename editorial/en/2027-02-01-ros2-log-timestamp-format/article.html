@@ -1,0 +1,218 @@
+<pre><code>[INFO] [1795046662.530581543] [fmt_py]: hello from rclpy
+
+$ export RCUTILS_CONSOLE_OUTPUT_FORMAT='{date_time_with_ms} {time} {message}'
+2026-11-19 00:01:25.698 1795046485.006982476 hello from rclpy</code></pre>
+
+<p>The first line is the default ROS 2 console format. The number in the second bracket is seconds since 1970, which nobody can read at a glance. The second line is the token that is supposed to fix that, <code>{date_time_with_ms}</code>, printed next to <code>{time}</code> for the same message on Jazzy. The clock time is right. The milliseconds are not: <code>.006</code> came out as <code>.698</code>.</p>
+
+<p>Short answer: set the format in the environment before the node starts. Every token is fixed by rcutils, and there is no strftime-style option. <code>{time:%H:%M:%S}</code> and similar guesses are printed literally. For a readable time that you can also trust, print both:</p>
+
+<pre><code>export RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{date_time_with_ms}] [{time}] [{name}]: {message}'</code></pre>
+
+<p><code>{date_time_with_ms}</code> worked on Humble, Jazzy and Lyrical, in rclpy and rclcpp, on screen, in <code>ros2 launch</code> and in the node's log file. But on all three, every line whose milliseconds were below 100 got a wrong millisecond field, so about one line in ten (46 of 400 in my test). Keep <code>{time}</code> next to it, or log <code>{time}</code> only and convert it later with the script further down. The bug is fixed upstream in rcutils, but the Humble, Jazzy and Lyrical packages I tested did not have the fix yet.</p>
+
+<h2>Find your problem</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>[1795046662.530581543]</code> in every line</td><td>Default format, <code>{time}</code> is seconds since the epoch</td><td>Use <code>{date_time_with_ms}</code> in <code>RCUTILS_CONSOLE_OUTPUT_FORMAT</code></td></tr>
+<tr><td>Your token printed as written, for example <code>[{time:%H:%M:%S}]</code> or <code>[{datetime}]</code></td><td>Not a token rcutils knows. Unknown tokens are kept as text, with no warning</td><td>Use one of the tokens in the table below. Names are case-sensitive: <code>{TIME}</code> also stayed literal</td></tr>
+<tr><td>Milliseconds that don't match <code>{time}</code>, such as <code>.017138637</code> printed as <code>.171</code></td><td>The <code>{date_time_with_ms}</code> millisecond bug, when the real value is below 100</td><td>Add <code>{time}</code> to the format, or upgrade once the fixed rcutils ships</td></tr>
+<tr><td>Readable time is hours off</td><td><code>{date_time_with_ms}</code> uses local time from the process's <code>TZ</code></td><td>Set <code>TZ</code> for the node, or read <code>{time}</code>, which is always UTC-based epoch time</td></tr>
+<tr><td>Not sure the variable reaches nodes started by <code>ros2 launch</code></td><td>It did in my runs when exported before <code>ros2 launch</code></td><td>See the launch section for the three ways that worked</td></tr>
+<tr><td>Log lines show wall time while the node uses <code>use_sim_time</code></td><td>The console time is always the system clock</td><td>Log <code>self.get_clock().now()</code> inside the message if you need sim time</td></tr>
+<tr><td>No colors in Docker or in a pipe, or <code>^[[33m</code> garbage in a file</td><td>Colors are automatic: on for a terminal, off for a pipe</td><td><code>RCUTILS_COLORIZED_OUTPUT=1</code> or <code>0</code> forces it</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-19 I ran one script in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro after the other, each container with <code>--network none</code> and <code>TZ=UTC</code>. The Python test node is five lines: it creates a node called <code>fmt_py</code>, logs one INFO and one WARN, and exits. For C++ I didn't compile anything. <code>static_transform_publisher</code> from <code>tf2_ros</code> logs one INFO line through rclcpp when it starts, so I ran it with <code>--x 1 --frame-id a --child-frame-id b</code> and stopped it after 3 seconds. Each test changed one thing:</p>
+
+<ul>
+<li>13 single tokens, including five that don't exist, each tested in rclpy and rclcpp.</li>
+<li>Seven full format strings, among them an empty one, one with no tokens and one with an unclosed brace.</li>
+<li><code>{date_time_with_ms}</code> under three <code>TZ</code> values.</li>
+<li>Colors with <code>RCUTILS_COLORIZED_OUTPUT</code> unset, <code>0</code> and <code>1</code>, through a pipe and under a pseudo-terminal.</li>
+<li>The node's log file under <code>ROS_LOG_DIR</code>.</li>
+<li>Five <code>ros2 launch</code> variants.</li>
+<li>A node with <code>use_sim_time</code> and a <code>/clock</code> at 100.5 s.</li>
+<li>20,000 <code>info()</code> calls per format, three rounds, to see if the format costs time.</li>
+<li>400 lines logged about 4 ms apart with <code>{time}</code> and <code>{date_time_with_ms}</code> on the same line, then a check of every line, plus 15 C++ starts with the same format.</li>
+</ul>
+
+<h2>The tokens, and what happens with anything else</h2>
+
+<p>These tokens were replaced on all three distros, in both rclpy and rclcpp:</p>
+
+<table>
+<thead><tr><th>Token</th><th>rclpy output</th><th>rclcpp output</th></tr></thead>
+<tbody>
+<tr><td><code>{time}</code></td><td><code>1795046666.091700843</code></td><td><code>1795046666.421705699</code></td></tr>
+<tr><td><code>{time_as_nanoseconds}</code></td><td><code>1795046669651492513</code></td><td><code>1795046669987036780</code></td></tr>
+<tr><td><code>{date_time_with_ms}</code></td><td><code>2026-11-19 00:04:33.211</code></td><td><code>2026-11-19 00:04:33.541</code></td></tr>
+<tr><td><code>{severity}</code></td><td><code>INFO</code></td><td><code>INFO</code></td></tr>
+<tr><td><code>{name}</code></td><td><code>fmt_py</code></td><td><code>static_transform_publisher_IB0oUzgZxupiLtrT</code></td></tr>
+<tr><td><code>{function_name}</code></td><td><code>&lt;module&gt;</code></td><td><code>main</code></td></tr>
+<tr><td><code>{file_name}</code></td><td><code>/tmp/t/py_log.py</code></td><td><code>./src/static_transform_broadcaster_program.cpp</code></td></tr>
+<tr><td><code>{line_number}</code></td><td><code>4</code></td><td><code>397</code> (331 on Lyrical)</td></tr>
+<tr><td><code>{message}</code></td><td>the message</td><td>the message</td></tr>
+</tbody>
+</table>
+
+<p>The examples are from the Humble run. <code>{datetime}</code>, <code>{date_time}</code>, <code>{time:%H:%M:%S}</code> and <code>{TIME}</code> all came out exactly as typed, braces included, on every distro. That matches the <a href="https://robotics.stackexchange.com/questions/113795">question</a> where <code>{time:%Y-%m-%d %H:%M:%S}</code> just rendered as text. rcutils doesn't take a strftime pattern. You get the fixed formats above and nothing else.</p>
+
+<p>Edge cases from the same runs:</p>
+
+<ul>
+<li>An empty <code>RCUTILS_CONSOLE_OUTPUT_FORMAT=''</code> gave the default <code>[{severity}] [{time}] [{name}]: {message}</code>.</li>
+<li>A format with no <code>{message}</code> drops the message. <code>'plain text no tokens'</code> printed that text once per log call, and <code>' '</code> printed lines with one space.</li>
+<li>An unclosed <code>'{message'</code> printed <code>{message</code> and no message.</li>
+<li><code>'{{time}} {message}'</code> printed <code>{1795046730.429716628} hello from rclpy</code>. Doubling a brace doesn't escape it. The outer braces stay and the inner token is still replaced.</li>
+</ul>
+
+<p>The Humble documentation page (<a href="https://docs.ros.org/en/humble/Concepts/Intermediate/About-Logging.html">About logging</a>) doesn't list <code>{date_time_with_ms}</code>. The Jazzy page does, and calls it "The time in ISO format, e.g. 2024-06-11 09:29:19.304". The Humble packages I tested still had it. The output has a space between date and time, not a <code>T</code>, and it has no time zone offset.</p>
+
+<h2>The millisecond bug in {date_time_with_ms}</h2>
+
+<p>This is the part to read before you rely on readable timestamps. I logged 400 lines about 4 ms apart, each with <code>{time} {date_time_with_ms}</code>, and compared the two fields with Python. The result was the same on every distro:</p>
+
+<table>
+<thead><tr><th>Distro</th><th>rcutils</th><th>Lines</th><th>Lines with milliseconds below 100</th><th>Wrong <code>{date_time_with_ms}</code></th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>5.1.10</td><td>400</td><td>46</td><td>46</td></tr>
+<tr><td>Jazzy</td><td>6.7.6</td><td>400</td><td>46</td><td>46</td></tr>
+<tr><td>Lyrical</td><td>7.1.3</td><td>400</td><td>46</td><td>46</td></tr>
+</tbody>
+</table>
+
+<p>Every line with milliseconds from 000 to 099 was wrong, and every other line was right. Some samples from Humble:</p>
+
+<pre><code>{time}                  {date_time_with_ms}       should be
+1795046838.001415242    2026-11-19 00:07:18.141   2026-11-19 00:07:18.001
+1795046838.005797156    2026-11-19 00:07:18.579   2026-11-19 00:07:18.005
+1795046838.010242319    2026-11-19 00:07:18.102   2026-11-19 00:07:18.010
+1795046838.019029199    2026-11-19 00:07:18.190   2026-11-19 00:07:18.019</code></pre>
+
+<p>The pattern is the first three digits of the nanosecond part with its leading zeros removed. <code>001415242</code> becomes <code>1415242</code>, and the first three digits are <code>141</code>. The date and the seconds come from a separate calculation and were right in every sample. C++ nodes are affected the same way, because rclcpp and rclpy both format through rcutils. Of 15 <code>static_transform_publisher</code> starts, the wrong lines were exactly the ones below 100 ms: 2 on Humble (<code>.078</code> printed as <code>.780</code>, <code>.038</code> as <code>.381</code>), 3 on Jazzy (<code>.062</code> as <code>.628</code>, <code>.076</code> as <code>.763</code>, <code>.091</code> as <code>.916</code>) and 1 on Lyrical (<code>.000600654</code> printed as <code>.600</code>).</p>
+
+<p>In practice, lines can look out of order. On Jazzy, a line logged at <code>.017</code> printed as <code>.171</code>, so it would show a later time than a line logged at <code>.150</code> in the same second. The largest error in the samples I printed was on Jazzy, <code>.008463174</code> shown as <code>.846</code>, 838 ms off. If you match ROS logs against another system's timestamps, an error that size in about one line in ten is enough to send you looking at the wrong event.</p>
+
+<p>The cause is in rcutils' <code>time.c</code>. On the Humble and Jazzy branches, the nanoseconds are printed with <code>"%" PRIu64</code> (no zero padding) and then cut with <code>".%.3s"</code>. <a href="https://github.com/ros2/rcutils/pull/570">rcutils PR #570</a>, "Fix date_time_with_ms millisecond formatting", changed this to compute milliseconds and print them with <code>%03</code>. It was merged into Rolling on 2026-07-31, and the backport to the Lyrical branch (<a href="https://github.com/ros2/rcutils/pull/608">#608</a>) on 2026-10-05. When I read them on 2026-11-19, the Humble and Jazzy branch sources still had the old code. The Lyrical package I measured was rcutils 7.1.3, built 2026-08-31, before the backport, so it still showed the bug. A newer Lyrical sync should have the fix. I didn't test that.</p>
+
+<h2>Workarounds that worked</h2>
+
+<p>The first is to print both fields. The format <code>'{date_time_with_ms} {time} {message}'</code> worked on all three distros. You read the date part and trust the seconds, and you check the milliseconds against <code>{time}</code> when they matter.</p>
+
+<p>The second is to keep <code>{time}</code> and convert later. This one-liner rewrites the first <code>[1234567890.123...]</code> field of each line as a UTC date with milliseconds. Unlike rcutils, it slices the fraction string, so it keeps the leading zeros:</p>
+
+<pre><code class="language-bash">python3 -c "import re,sys,datetime as d
+for l in sys.stdin: sys.stdout.write(re.sub(r'\[(\d{10})\.(\d+)\]', lambda m: '['+d.datetime.fromtimestamp(int(m.group(1)), d.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')+'.'+m.group(2)[:3]+']', l, 1))" &lt; node.log</code></pre>
+
+<p>On all three distros, <code>[INFO] [1795046837.140108342] [fmt_py]: hello from rclpy</code> became <code>[INFO] [2026-11-19 00:07:17.140] [fmt_py]: hello from rclpy</code>. On Lyrical, Python 3.14 also printed <code>DeprecationWarning: 'count' is passed as positional argument</code>. The output was still correct, and writing <code>count=1</code> instead of the last <code>1</code> should silence it. I ran it only as shown.</p>
+
+<p>The format didn't change logging cost in any way I could measure. For 20,000 rclpy <code>info()</code> calls with stderr sent to <code>/dev/null</code>, the default format, the same with <code>{date_time_with_ms}</code>, and <code>{message}</code> alone all landed in the same range. That was 318 to 336 µs per line on Humble, 309.6 to 331.2 on Jazzy and 244.3 to 256.6 on Lyrical, with no format consistently faster.</p>
+
+<h2>Time zone</h2>
+
+<p><code>{date_time_with_ms}</code> is local time for the process. On Humble, the same node run three times gave:</p>
+
+<table>
+<thead><tr><th><code>TZ</code></th><th><code>{date_time_with_ms}</code></th><th><code>{time}</code></th></tr></thead>
+<tbody>
+<tr><td><code>UTC</code></td><td><code>2026-11-19 00:05:37.559</code></td><td><code>1795046737.559635765</code></td></tr>
+<tr><td><code>Asia/Seoul</code></td><td><code>2026-11-19 09:05:37.987</code></td><td><code>1795046737.987109753</code></td></tr>
+<tr><td><code>America/New_York</code></td><td><code>2026-11-18 19:05:38.412</code></td><td><code>1795046738.412567727</code></td></tr>
+</tbody>
+</table>
+
+<p>The output has no offset, so a log file alone doesn't tell you which zone it was written in. All three images had <code>/usr/share/zoneinfo</code>, so <code>TZ</code> passed to the container was enough. If logs from several machines end up in one place, <code>{time}</code> is the safer field.</p>
+
+<h2>Sim time does not reach the console</h2>
+
+<p>I started a node with <code>use_sim_time</code> set to true and published <code>/clock</code> at 100.5 s from the same process. The node's clock then read <code>100500000000</code> ns, but its log line on Humble was stamped <code>[1795046774.679288081] [2026-11-19 00:06:14.679]</code>, which is wall time. Jazzy and Lyrical did the same. The console time comes from the system clock and ignores the node's clock. To see sim time in a log line, put <code>self.get_clock().now()</code> in the message. The earlier measurement in <a href="https://huntlab.app/en/subtraction-leads-to-negative-time-ros-2-rclpy-use-sim-time/">Subtraction leads to negative time in rclpy</a> showed that this clock reads 0 until the first <code>/clock</code> arrives. And if you are comparing wall-time log lines with message stamps from a simulator, the gap of billions of seconds described in <a href="https://huntlab.app/en/ros2-message-filter-dropping-message-clock-mismatch/">Message Filter dropping message: find the mismatched clock</a> is that same wall-versus-sim difference.</p>
+
+<h2>ros2 launch</h2>
+
+<p>The launch file started the C++ node with <code>Node(...)</code> and the Python script with <code>ExecuteProcess(...)</code>, both with <code>output='screen'</code>. All three distros behaved alike:</p>
+
+<table>
+<thead><tr><th>How the format was set</th><th>C++ node</th><th>Python process</th></tr></thead>
+<tbody>
+<tr><td>Not set</td><td>default <code>{time}</code></td><td>default <code>{time}</code></td></tr>
+<tr><td><code>export</code> in the shell before <code>ros2 launch</code></td><td>new format</td><td>new format</td></tr>
+<tr><td><code>SetEnvironmentVariable('RCUTILS_CONSOLE_OUTPUT_FORMAT', ...)</code> as the first action</td><td>new format</td><td>new format</td></tr>
+<tr><td><code>Node(..., additional_env={'RCUTILS_CONSOLE_OUTPUT_FORMAT': ...})</code></td><td>new format</td><td>default (not set for it)</td></tr>
+<tr><td><code>RCUTILS_COLORIZED_OUTPUT=1</code> in the shell</td><td>color codes in the output</td><td>color codes in the output</td></tr>
+</tbody>
+</table>
+
+<p>A line from the exported case on Humble looked like <code>[static_transform_publisher-1] [INFO] [2026-11-19 00:05:50.254] [stp]: Spinning until stopped - publishing transform</code>. The launch prefix in front comes from launch, not from rcutils.</p>
+
+<p>Launch's own lines are a different logger. <code>[INFO] [launch]: All log files can be found below ...</code> and <code>process started with pid</code> showed no time on screen in any variant, and the variable didn't change them. In <code>launch.log</code> they were stored as <code>1795046768.5032125 [INFO] [launch]: ...</code>, epoch seconds with seven decimals. Each run ended with <code>[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)</code> because my script stopped launch with SIGINT. What launch does after that, up to its escalation to SIGTERM and SIGKILL, was measured in <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">ROS 2 node shutdown: Ctrl+C, SIGTERM and launch's 5-second escalation</a>.</p>
+
+<h2>The log file uses the same format</h2>
+
+<p>With <code>ROS_LOG_DIR=/tmp/rl</code> and the readable format, the node's file <code>python3_946_1795046740351.log</code> on Humble contained exactly the console lines:</p>
+
+<pre><code>[INFO] [2026-11-19 00:05:40.558] [fmt_py]: hello from rclpy
+[WARN] [2026-11-19 00:05:40.558] [fmt_py]: warn from rclpy</code></pre>
+
+<p>This cuts both ways. A C++ node run with <code>RCUTILS_CONSOLE_OUTPUT_FORMAT='{message}'</code> wrote a file with only the messages: no severity, no time and no node name. If you strip the console format to make the terminal quieter, you also strip the files you might need later. All three distros did this.</p>
+
+<h2>Colors</h2>
+
+<p>With <code>RCUTILS_COLORIZED_OUTPUT</code> unset, output through a pipe had no escape codes, and output under a pseudo-terminal (<code>script</code>) had them. <code>0</code> turned them off. <code>1</code> turned them on even through a pipe: WARN lines were wrapped in <code>^[[33m</code> ... <code>^[[0m</code> (yellow) and INFO lines in <code>^[[0m</code> ... <code>^[[0m</code>. That is why a log redirected from a forced-color run shows <code>^[[33m</code> in a text editor. Set <code>RCUTILS_COLORIZED_OUTPUT=0</code> when you write to files, and <code>1</code> when a <code>docker run</code> without <code>-t</code> should still show colors.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Readable</th><th>Milliseconds right</th><th>Notes from the runs</th></tr></thead>
+<tbody>
+<tr><td>Default <code>{time}</code></td><td>no</td><td>yes</td><td>UTC epoch, safe to merge across machines</td></tr>
+<tr><td><code>{date_time_with_ms}</code> alone</td><td>yes</td><td>no, for 46 of 400 lines</td><td>Local time, no offset</td></tr>
+<tr><td><code>{date_time_with_ms}</code> plus <code>{time}</code></td><td>yes</td><td>yes, via <code>{time}</code></td><td>Longer lines, same cost per line</td></tr>
+<tr><td><code>{time}</code> and the Python one-liner</td><td>after conversion</td><td>yes</td><td>Converts to UTC. Lyrical's Python 3.14 printed a DeprecationWarning</td></tr>
+<tr><td><code>{time:...}</code> or other invented tokens</td><td>no</td><td>no</td><td>Printed literally on every distro</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>Token handling, the unknown-token behavior, launch propagation, the log file, colors and the millisecond bug were the same on Humble (rcutils 5.1.10), Jazzy (6.7.6) and Lyrical (7.1.3). Only small things differed. <code>{line_number}</code> for the same <code>static_transform_publisher</code> message was 397 on Humble and Jazzy and 331 on Lyrical. The cost per line was lower on Lyrical's Python 3.14. And Jazzy and Lyrical print a deprecation WARN at startup if <code>ROS_LOCALHOST_ONLY</code> is set. I set it only on Humble so it wouldn't fill the samples, and used <code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code> everywhere.</p>
+
+<h2>Not tested</h2>
+
+<p>A Lyrical or Rolling build that includes the rcutils fix. Kilted, Iron and Foxy. Windows and macOS. Other RMWs, and other logging backends than the default spdlog file logger. Changing the format from inside code instead of the environment. Composable nodes in a container. The <code>/rosout</code> topic, <code>rqt_console</code> and <code>ros2 bag</code> recordings of <code>/rosout</code>, which carry their own stamps. Line buffering (<code>RCUTILS_LOGGING_BUFFERED_STREAM</code>).</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I get a human-readable timestamp in ROS 2 logs?</h3>
+<p>Before starting the node, set <code>RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{date_time_with_ms}] [{name}]: {message}'</code>. It worked in rclpy and rclcpp on Humble, Jazzy and Lyrical. Add <code>{time}</code> too if the milliseconds matter, because of the bug below.</p>
+
+<h3>Can I use a strftime pattern like {time:%H:%M:%S}?</h3>
+<p>No. <code>{time:%H:%M:%S}</code>, <code>{datetime}</code>, <code>{date_time}</code> and <code>{TIME}</code> were all printed literally, with no warning. The time tokens are <code>{time}</code>, <code>{time_as_nanoseconds}</code> and <code>{date_time_with_ms}</code>.</p>
+
+<h3>Why are the milliseconds in {date_time_with_ms} wrong sometimes?</h3>
+<p>The installed rcutils drops the leading zeros of the nanosecond value before taking three digits, so <code>.001415242</code> prints as <code>.141</code>. All 46 lines below 100 ms out of 400 were wrong on all three distros. rcutils PR #570 fixes it. The packages I tested didn't have it yet.</p>
+
+<h3>Does ROS 2 log time follow use_sim_time?</h3>
+<p>No. With <code>/clock</code> at 100.5 s, the node clock read 100.5 s but the log line showed wall time on all three distros.</p>
+
+<h3>Does RCUTILS_CONSOLE_OUTPUT_FORMAT work with ros2 launch?</h3>
+<p>Yes. Exporting it before <code>ros2 launch</code>, using <code>SetEnvironmentVariable</code> in the launch file, and <code>Node(additional_env=...)</code> for one node all worked. Launch's own <code>[launch]</code> lines kept their own format.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I get a human-readable timestamp in ROS 2 logs?", "acceptedAnswer": {"@type": "Answer", "text": "Before starting the node, set RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{date_time_with_ms}] [{name}]: {message}'. It worked in rclpy and rclcpp on Humble, Jazzy and Lyrical. Add {time} too if the milliseconds matter, because of the millisecond bug."}},
+{"@type": "Question", "name": "Can I use a strftime pattern like {time:%H:%M:%S}?", "acceptedAnswer": {"@type": "Answer", "text": "No. {time:%H:%M:%S}, {datetime}, {date_time} and {TIME} were all printed literally, with no warning. The time tokens are {time}, {time_as_nanoseconds} and {date_time_with_ms}."}},
+{"@type": "Question", "name": "Why are the milliseconds in {date_time_with_ms} wrong sometimes?", "acceptedAnswer": {"@type": "Answer", "text": "The installed rcutils drops the leading zeros of the nanosecond value before taking three digits, so .001415242 prints as .141. All 46 lines below 100 ms out of 400 were wrong on all three distros. rcutils PR 570 fixes it. The packages I tested didn't have it yet."}},
+{"@type": "Question", "name": "Does ROS 2 log time follow use_sim_time?", "acceptedAnswer": {"@type": "Answer", "text": "No. With /clock at 100.5 s, the node clock read 100.5 s but the log line showed wall time on all three distros."}},
+{"@type": "Question", "name": "Does RCUTILS_CONSOLE_OUTPUT_FORMAT work with ros2 launch?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Exporting it before ros2 launch, using SetEnvironmentVariable in the launch file, and Node(additional_env=...) for one node all worked. Launch's own [launch] lines kept their own format."}}
+]}
+</script>
+
+<p>Measured on 2026-11-19 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rcutils 5.1.10, rcl 5.3.13, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4, launch 1.0.15), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rcutils 6.7.6, rcl 9.2.11, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, launch 3.4.12) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rcutils 7.1.3, rcl 10.4.5, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, launch 3.9.8), default RMW (Fast DDS), on a 2 vCPU x86_64 machine. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-01-ros2-log-timestamp-format/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105121">How to specify the datetime format for ros2 logs?</a>, <a href="https://robotics.stackexchange.com/questions/113795">Changing time format on RCUTILS_CONSOLE_OUTPUT_FORMAT</a>, <a href="https://discourse.openrobotics.org/t/better-console-logging/44012">Better Console Logging</a>, <a href="https://discourse.openrobotics.org/t/ros2-logging-format/11549">ROS2 Logging Format</a>, <a href="https://github.com/ros2/rcutils/pull/570">rcutils #570: Fix date_time_with_ms millisecond formatting</a>.</p>
