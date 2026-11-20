@@ -1,0 +1,683 @@
+=== distro=jazzy nproc=2 date=2026-11-20T00:06:54Z
+Python 3.12.3
+ros-jazzy-rcl 9.2.11-1noble.20260911.104031
+ros-jazzy-rcl-interfaces 2.0.4-1noble.20260911.093433
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-rmw 7.3.4-1noble.20260911.050254
+ros-jazzy-rmw-fastrtps-cpp 8.4.4-1noble.20260911.100940
+ros-jazzy-rmw-implementation 2.15.6-1noble.20260911.103206
+ros-jazzy-ros2cli 0.32.13-1noble.20261006.033947
+ros-jazzy-ros2param 0.32.13-1noble.20261006.034648
+default RMW: rmw_fastrtps_cpp
+#define RCLCPP_VERSION_STR "28.1.22"
+rclpy node.py has: def add_pre_set_parameters_callback def add_on_set_parameters_callback def add_post_set_parameters_callback 
+1083:  RCUTILS_WARN_UNUSED
+1137:   * add_on_set_parameters_callback() method).  If a callback tries to do any
+1157:  RCUTILS_WARN_UNUSED
+1159:  add_on_set_parameters_callback(OnSetParametersCallbackType callback);
+1218:  RCUTILS_WARN_UNUSED
+The daemon has been started
+=== build pcb_cpp
+/tmp/ws/src/pcb_cpp/src/pcb.cpp:81:41: warning: ignoring return value of ‘rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr rclcpp::Node::add_on_set_parameters_callback(OnSetParametersCallbackType)’, declared with attribute ‘warn_unused_result’ [-Wunused-result]
+/tmp/ws/src/pcb_cpp/src/pcb.cpp:81:41: warning: ignoring return value of ‘rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr rclcpp::Node::add_on_set_parameters_callback(OnSetParametersCallbackType)’, declared with attribute ‘warn_unused_result’ [-Wunused-result]
+Finished <<< pcb_cpp [7.05s]
+Summary: 1 package finished [7.20s]
+pcb_cpp build wall=7.48s
+=== build postcheck (uses add_pre/post_set_parameters_callback)
+Finished <<< postcheck [5.06s]
+postcheck build wall=5.47s
+
+--- lang=py case=before gain:=2.0 load=0.29 0.20 0.12
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.73s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.23s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.72s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=1.24s
+node alive after param calls: yes
+still running 5 s after SIGINT, SIGKILL
+/w/repro.sh: line 99:   327 Killed                  python3 /w/src/pcb.py $c --ros-args -p gain:=$g > /tmp/node.log 2>&1
+node exit code=137
+node log:
+[INFO] [1795133229.532296711] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133229.533050485] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133229.533591068] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133233.209219733] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133234.456317633] [pcb]: CB#4 on_set got: gain=3.0
+
+--- lang=py case=after gain:=2.0 load=0.30 0.21 0.12
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.44s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=3.29s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=2.98s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=2.98s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133243.125762465] [pcb]: READY gain=2.0 mode=idle on_set_calls=0
+[INFO] [1795133246.500953625] [pcb]: CB#1 on_set got: gain=3.0
+[INFO] [1795133249.742156192] [pcb]: CB#2 on_set got: gain=3.0
+spin ended with ExternalShutdownException
+EXIT gain=3.0 mode=idle on_set_calls=2
+
+--- lang=py case=return_none gain:=2.0 load=0.31 0.21 0.12
+node exited before ready after 0.77s
+node exit code=1
+node log:
+[INFO] [1795133256.663834015] [pcb]: CB#1 on_set got: gain=2.0
+/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py:911: UserWarning: Callback returned an invalid type, it should return SetParameterResult.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/w/src/pcb.py", line 83, in <module>
+    n.declare_parameter('gain', 1.0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 389, in declare_parameter
+    return self.declare_parameters('', [args], ignore_override)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 528, in declare_parameters
+    self._declare_parameter_common(
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 586, in _declare_parameter_common
+    raise InvalidParameterValueException(param.name, param.value, result.reason)
+rclpy.exceptions.InvalidParameterValueException: Invalid parameter value (2.0) for parameter. Reason: Callback returned an invalid type: gain
+
+--- lang=py case=return_bool gain:=2.0 load=0.31 0.21 0.12
+node exited before ready after 0.77s
+node exit code=1
+node log:
+[INFO] [1795133257.454521155] [pcb]: CB#1 on_set got: gain=2.0
+/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py:911: UserWarning: Callback returned an invalid type, it should return SetParameterResult.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/w/src/pcb.py", line 83, in <module>
+    n.declare_parameter('gain', 1.0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 389, in declare_parameter
+    return self.declare_parameters('', [args], ignore_override)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 528, in declare_parameters
+    self._declare_parameter_common(
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 586, in _declare_parameter_common
+    raise InvalidParameterValueException(param.name, param.value, result.reason)
+rclpy.exceptions.InvalidParameterValueException: Invalid parameter value (2.0) for parameter. Reason: Callback returned an invalid type: gain
+
+--- lang=py case=reject gain:=2.0 load=0.31 0.21 0.12
+node up after 0.51s
+Setting parameter failed: gain must be <= 2.5
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.23s
+Setting parameter failed: gain must be <= 2.5
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.26s
+Double value is: 2.0
+[ros2 param get gain] try=1 rc=0 wall=1.23s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=1.23s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133258.245302248] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133258.246076160] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133258.246608507] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133261.423533987] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133262.707435663] [pcb]: CB#4 on_set got: gain=3.0
+spin ended with ExternalShutdownException
+EXIT gain=2.0 mode=idle on_set_calls=4
+
+--- lang=py case=reject_init gain:=5.0 load=0.26 0.21 0.12
+node exited before ready after 0.77s
+node exit code=1
+node log:
+[INFO] [1795133266.063916195] [pcb]: CB#1 on_set got: gain=5.0
+Traceback (most recent call last):
+  File "/w/src/pcb.py", line 83, in <module>
+    n.declare_parameter('gain', 1.0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 389, in declare_parameter
+    return self.declare_parameters('', [args], ignore_override)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 528, in declare_parameters
+    self._declare_parameter_common(
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 586, in _declare_parameter_common
+    raise InvalidParameterValueException(param.name, param.value, result.reason)
+rclpy.exceptions.InvalidParameterValueException: Invalid parameter value (5.0) for parameter. Reason: gain must be <= 2.5: gain
+
+--- lang=py case=set_inside gain:=2.0 load=0.26 0.21 0.12
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.73s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=2.99s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.23s
+String value is: changed
+[ros2 param get mode] try=1 rc=0 wall=1.73s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133266.862484483] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133266.863281302] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133266.863808196] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133270.536715559] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133270.537124891] [pcb]: calling set_parameters(mode) inside on_set
+[INFO] [1795133270.537468831] [pcb]: CB#4 on_set got: mode=changed
+[INFO] [1795133270.538066468] [pcb]: inner set_parameters returned successful=True reason=''
+[INFO] [1795133273.541646770] [pcb]: CB#5 on_set got: gain=3.0
+[INFO] [1795133273.542097929] [pcb]: calling set_parameters(mode) inside on_set
+[INFO] [1795133273.542451138] [pcb]: CB#6 on_set got: mode=changed
+[INFO] [1795133273.543096925] [pcb]: inner set_parameters returned successful=True reason=''
+spin ended with ExternalShutdownException
+EXIT gain=3.0 mode=changed on_set_calls=6
+
+--- lang=py case=declare_inside gain:=2.0 load=0.30 0.22 0.12
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.3s
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.18s
+Node not found
+[ros2 param get gain] try=1 rc=1 wall=1.56s
+Node not found
+[ros2 param get gain] try=2 rc=1 wall=1.55s
+Node not found
+[ros2 param get mode] try=1 rc=1 wall=1.55s
+Node not found
+[ros2 param get mode] try=2 rc=1 wall=1.55s
+node alive after param calls: no
+node exit code=1
+node log:
+[INFO] [1795133277.406039729] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133277.406765612] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133277.407334273] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133280.664035865] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133280.664556598] [pcb]: calling declare_parameter(extra) inside on_set
+[INFO] [1795133280.664976070] [pcb]: CB#4 on_set got: extra=0
+[INFO] [1795133280.665620182] [pcb]: declare_parameter(extra) returned
+[INFO] [1795133282.013256012] [pcb]: CB#5 on_set got: gain=3.0
+[INFO] [1795133282.014614937] [pcb]: calling declare_parameter(extra) inside on_set
+Traceback (most recent call last):
+  File "/w/src/pcb.py", line 102, in <module>
+    rclpy.spin(n)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 918, in _spin_once_impl
+    raise handler.exception()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/task.py", line 286, in _execute_coroutine_step
+    result = coro.send(None)
+             ^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 592, in handler
+    await call_coroutine()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 531, in _execute
+    response = await await_or_execute(srv.callback, request, srv.srv_type.Response())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 115, in await_or_execute
+    return callback(*args)
+           ^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/parameter_service.py", line 117, in _set_parameters_callback
+    result = node.set_parameters_atomically([param])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 839, in set_parameters_atomically
+    return self._set_parameters_atomically(parameter_list)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 859, in _set_parameters_atomically
+    return self._set_parameters_atomically_common(parameter_list)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 909, in _set_parameters_atomically_common
+    result = callback(parameter_list)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/w/src/pcb.py", line 40, in on_set
+    n.declare_parameter('extra', 0)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 389, in declare_parameter
+    return self.declare_parameters('', [args], ignore_override)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/node.py", line 524, in declare_parameters
+    raise ParameterAlreadyDeclaredException(parameters_already_declared)
+rclpy.exceptions.ParameterAlreadyDeclaredException: Parameter(s) already declared: ['extra']
+
+--- lang=py case=no_spin gain:=2.0 load=0.23 0.21 0.12
+node up after 0.51s
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.17s
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.18s
+
+[ros2 param get gain] try=1 rc=124 wall=15.18s
+
+[ros2 param get mode] try=1 rc=124 wall=15.18s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133306.778472557] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133306.779249431] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133306.779784905] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+EXIT gain=2.0 mode=idle on_set_calls=2
+
+--- lang=py case=two_cbs gain:=2.0 load=0.08 0.17 0.11
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=2.23s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=2.74s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=2.97s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=3.0s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133370.382714009] [pcb]: CB_B on_set got: gain=2.0
+[INFO] [1795133370.383280173] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133370.383852026] [pcb]: CB_B on_set got: mode=idle
+[INFO] [1795133370.384208201] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133370.384737054] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133374.554918495] [pcb]: CB_B on_set got: gain=3.0
+[INFO] [1795133374.555319704] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133377.299413484] [pcb]: CB_B on_set got: gain=3.0
+[INFO] [1795133377.299793204] [pcb]: CB#4 on_set got: gain=3.0
+spin ended with ExternalShutdownException
+EXIT gain=3.0 mode=idle on_set_calls=4
+
+--- lang=py case=deferred gain:=2.0 load=0.21 0.19 0.12
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.25s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.24s
+String value is: changed_by_timer
+[ros2 param get mode] try=1 rc=0 wall=4.0s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133384.194253302] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133384.195054469] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133384.195646983] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133387.397591892] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133387.496115847] [pcb]: CB#4 on_set got: mode=changed_by_timer
+[INFO] [1795133387.496732404] [pcb]: timer set mode=changed_by_timer successful=True
+[INFO] [1795133388.656729995] [pcb]: CB#5 on_set got: gain=3.0
+[INFO] [1795133388.696246768] [pcb]: CB#6 on_set got: mode=changed_by_timer
+[INFO] [1795133388.697161066] [pcb]: timer set mode=changed_by_timer successful=True
+spin ended with ExternalShutdownException
+EXIT gain=3.0 mode=changed_by_timer on_set_calls=6
+
+--- lang=py case=pre_set gain:=2.0 load=0.26 0.20 0.13
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.24s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=3.61s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=2.71s
+String value is: auto_from_pre_set
+[ros2 param get mode] try=1 rc=0 wall=3.01s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133394.813091346] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133394.813821774] [pcb]: POST got: gain=2.0
+[INFO] [1795133394.814263586] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133394.814719835] [pcb]: POST got: mode=idle
+[INFO] [1795133394.815130901] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133397.992686713] [pcb]: PRE got: gain=3.0
+[INFO] [1795133397.993178597] [pcb]: CB#3 on_set got: gain=3.0, mode=auto_from_pre_set
+[INFO] [1795133397.993790062] [pcb]: POST got: gain=3.0, mode=auto_from_pre_set
+[INFO] [1795133401.500121357] [pcb]: PRE got: gain=3.0
+[INFO] [1795133401.500709494] [pcb]: CB#4 on_set got: gain=3.0, mode=auto_from_pre_set
+[INFO] [1795133401.501302824] [pcb]: POST got: gain=3.0, mode=auto_from_pre_set
+spin ended with ExternalShutdownException
+EXIT gain=3.0 mode=auto_from_pre_set on_set_calls=4
+
+--- lang=py case=post_set gain:=2.0 load=0.28 0.21 0.13
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.24s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=3.48s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=2.98s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=1.23s
+node alive after param calls: yes
+still running 5 s after SIGINT, SIGKILL
+/w/repro.sh: line 99:  1472 Killed                  python3 /w/src/pcb.py $c --ros-args -p gain:=$g > /tmp/node.log 2>&1
+node exit code=137
+node log:
+[INFO] [1795133408.359265348] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133408.359989478] [pcb]: POST got: gain=2.0
+[INFO] [1795133408.360387184] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133408.360813177] [pcb]: POST got: mode=idle
+[INFO] [1795133408.361204382] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133411.536594620] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133411.537172360] [pcb]: POST got: gain=3.0
+[INFO] [1795133415.035486885] [pcb]: CB#4 on_set got: gain=3.0
+[INFO] [1795133415.036109660] [pcb]: POST got: gain=3.0
+
+--- lang=py case=post_set_modify gain:=2.0 load=0.22 0.20 0.13
+node up after 0.51s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.78s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.23s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.72s
+String value is: changed_in_post
+[ros2 param get mode] try=1 rc=0 wall=1.22s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133424.939165396] [pcb]: CB#1 on_set got: gain=2.0
+[INFO] [1795133424.939841939] [pcb]: POST got: gain=2.0
+[INFO] [1795133424.940267167] [pcb]: CB#2 on_set got: mode=idle
+[INFO] [1795133424.940706387] [pcb]: POST got: mode=idle
+[INFO] [1795133424.941099576] [pcb]: READY gain=2.0 mode=idle on_set_calls=2
+[INFO] [1795133428.668622210] [pcb]: CB#3 on_set got: gain=3.0
+[INFO] [1795133428.669236051] [pcb]: POST got: gain=3.0
+[INFO] [1795133428.669586653] [pcb]: calling set_parameters(mode) inside post_set
+[INFO] [1795133428.669975462] [pcb]: CB#4 on_set got: mode=changed_in_post
+[INFO] [1795133428.670455873] [pcb]: POST got: mode=changed_in_post
+[INFO] [1795133428.670905575] [pcb]: inner set_parameters returned successful=True reason=''
+[INFO] [1795133429.920663207] [pcb]: CB#5 on_set got: gain=3.0
+[INFO] [1795133429.921252187] [pcb]: POST got: gain=3.0
+[INFO] [1795133429.921607444] [pcb]: calling set_parameters(mode) inside post_set
+[INFO] [1795133429.922060876] [pcb]: CB#6 on_set got: mode=changed_in_post
+[INFO] [1795133429.922563835] [pcb]: POST got: mode=changed_in_post
+[INFO] [1795133429.922989070] [pcb]: inner set_parameters returned successful=True reason=''
+spin ended with ExternalShutdownException
+EXIT gain=3.0 mode=changed_in_post on_set_calls=6
+
+--- lang=cpp case=before gain:=2.0 load=0.34 0.23 0.13
+node up after 0.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=2.14s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.24s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.24s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=1.23s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133433.403772107] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133433.403913810] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133433.403940231] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133437.609246678] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133438.854143515] [pcb]: CB#4 on_set got: gain=3.000000 
+[INFO] [1795133441.564216135] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=3.000000 mode=idle on_set_calls=4
+
+--- lang=cpp case=after gain:=2.0 load=0.29 0.22 0.13
+node up after 0.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.68s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.25s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.8s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=2.99s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133441.865964627] [pcb]: READY gain=2.000000 mode=idle on_set_calls=0
+[INFO] [1795133445.617698633] [pcb]: CB#1 on_set got: gain=3.000000 
+[INFO] [1795133446.882369549] [pcb]: CB#2 on_set got: gain=3.000000 
+[INFO] [1795133451.906462026] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=3.000000 mode=idle on_set_calls=2
+
+--- lang=cpp case=discard gain:=2.0 load=0.25 0.21 0.13
+node up after 0.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.24s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=3.48s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=3.01s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=2.99s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133452.206577741] [pcb]: registered on_set, handle NOT stored
+[INFO] [1795133452.206713640] [pcb]: READY gain=2.000000 mode=idle on_set_calls=0
+[INFO] [1795133465.236946184] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=3.000000 mode=idle on_set_calls=0
+
+--- lang=cpp case=reject gain:=2.0 load=0.19 0.20 0.13
+node up after 0.26s
+Setting parameter failed: gain must be <= 2.5
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.71s
+Setting parameter failed: gain must be <= 2.5
+[ros2 param set gain 3.0] try=1 rc=0 wall=2.98s
+Double value is: 2.0
+[ros2 param get gain] try=1 rc=0 wall=2.99s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=2.99s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133465.537830697] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133465.537990607] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133465.538019755] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133469.311257180] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133472.305895331] [pcb]: CB#4 on_set got: gain=3.000000 
+[INFO] [1795133478.518579546] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=2.000000 mode=idle on_set_calls=4
+
+--- lang=cpp case=reject_init gain:=5.0 load=0.16 0.19 0.13
+/w/repro.sh: line 80:  2173 Aborted                 (core dumped) /tmp/ws/install/pcb_cpp/lib/pcb_cpp/pcb $c --ros-args -p gain:=$g > /tmp/node.log 2>&1
+node exited before ready after 0.26s
+node exit code=134
+node log:
+[INFO] [1795133478.819618349] [pcb]: CB#1 on_set got: gain=5.000000 
+terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterValueException'
+  what():  parameter 'gain' could not be set: gain must be <= 2.5
+
+--- lang=cpp case=set_inside gain:=2.0 load=0.16 0.19 0.13
+node up after 0.26s
+/w/repro.sh: line 61:  2199 Aborted                 (core dumped) /tmp/ws/install/pcb_cpp/lib/pcb_cpp/pcb $c --ros-args -p gain:=$g > /tmp/node.log 2>&1
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.18s
+Wait for service timed out waiting for parameter services for node /pcb
+[ros2 param set gain 3.0] try=1 rc=1 wall=6.22s
+Node not found
+[ros2 param get gain] try=1 rc=1 wall=1.55s
+Node not found
+[ros2 param get gain] try=2 rc=1 wall=1.55s
+Node not found
+[ros2 param get mode] try=1 rc=1 wall=1.63s
+Node not found
+[ros2 param get mode] try=2 rc=1 wall=1.57s
+node alive after param calls: no
+node exit code=134
+node log:
+[INFO] [1795133479.105990844] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133479.106138472] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133479.106161838] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133482.825578639] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133482.825632249] [pcb]: calling set_parameter(mode) inside on_set
+terminate called after throwing an instance of 'rclcpp::exceptions::ParameterModifiedInCallbackException'
+  what():  cannot set or declare a parameter, or change the callback from within set callback
+
+--- lang=cpp case=declare_inside gain:=2.0 load=0.09 0.17 0.12
+node up after 0.26s
+/w/repro.sh: line 61:  2313 Aborted                 (core dumped) /tmp/ws/install/pcb_cpp/lib/pcb_cpp/pcb $c --ros-args -p gain:=$g > /tmp/node.log 2>&1
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.19s
+Wait for service timed out waiting for parameter services for node /pcb
+[ros2 param set gain 3.0] try=1 rc=1 wall=6.24s
+Node not found
+[ros2 param get gain] try=1 rc=1 wall=1.58s
+Node not found
+[ros2 param get gain] try=2 rc=1 wall=1.56s
+Node not found
+[ros2 param get mode] try=1 rc=1 wall=1.55s
+Node not found
+[ros2 param get mode] try=2 rc=1 wall=1.56s
+node alive after param calls: no
+node exit code=134
+node log:
+[INFO] [1795133513.227475950] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133513.227601740] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133513.227630480] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133517.020113386] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133517.020181150] [pcb]: calling declare_parameter(extra) inside on_set
+terminate called after throwing an instance of 'rclcpp::exceptions::ParameterModifiedInCallbackException'
+  what():  cannot set or declare a parameter, or change the callback from within set callback
+
+--- lang=cpp case=no_spin gain:=2.0 load=0.13 0.17 0.12
+node up after 0.26s
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.18s
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.18s
+
+[ros2 param get gain] try=1 rc=124 wall=15.19s
+
+[ros2 param get mode] try=1 rc=124 wall=15.18s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133547.311206531] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133547.311340899] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133547.311366892] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133610.354218464] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=2.000000 mode=idle on_set_calls=2
+
+--- lang=cpp case=two_cbs gain:=2.0 load=0.58 0.29 0.16
+node up after 0.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.73s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=3.2s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.34s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=1.24s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133610.655795083] [pcb]: CB_B on_set got: gain=2.000000 
+[INFO] [1795133610.655932069] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133610.655973477] [pcb]: CB_B on_set got: mode=idle 
+[INFO] [1795133610.655981084] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133610.656000214] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133614.446636953] [pcb]: CB_B on_set got: gain=3.000000 
+[INFO] [1795133614.446704680] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133617.609275060] [pcb]: CB_B on_set got: gain=3.000000 
+[INFO] [1795133617.609344550] [pcb]: CB#4 on_set got: gain=3.000000 
+[INFO] [1795133620.484350607] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=3.000000 mode=idle on_set_calls=4
+
+--- lang=cpp case=deferred gain:=2.0 load=0.56 0.29 0.17
+node up after 0.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.98s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=2.98s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=2.98s
+String value is: changed_by_timer
+[ros2 param get mode] try=1 rc=0 wall=1.25s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133620.785259640] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133620.785382240] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133620.785422344] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133624.826623075] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133624.885582323] [pcb]: CB#4 on_set got: mode=changed_by_timer 
+[INFO] [1795133624.885736434] [pcb]: timer set mode=changed_by_timer successful=1
+[INFO] [1795133627.842678288] [pcb]: CB#5 on_set got: gain=3.000000 
+[INFO] [1795133627.885586965] [pcb]: CB#6 on_set got: mode=changed_by_timer 
+[INFO] [1795133627.885732121] [pcb]: timer set mode=changed_by_timer successful=1
+[INFO] [1795133632.297720731] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=3.000000 mode=changed_by_timer on_set_calls=6
+
+--- lang=cpp case=pre_set gain:=2.0 load=0.55 0.30 0.17
+node up after 0.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.73s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.24s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=1.23s
+String value is: auto_from_pre_set
+[ros2 param get mode] try=1 rc=0 wall=1.25s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133632.598147189] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133632.598256036] [pcb]: POST got: gain=2.000000 
+[INFO] [1795133632.598281463] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133632.598288955] [pcb]: POST got: mode=idle 
+[INFO] [1795133632.598305264] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133636.385345079] [pcb]: PRE got: gain=3.000000 
+[INFO] [1795133636.385412686] [pcb]: CB#3 on_set got: gain=3.000000 mode=auto_from_pre_set 
+[INFO] [1795133636.385424658] [pcb]: POST got: gain=3.000000 mode=auto_from_pre_set 
+[INFO] [1795133637.644943492] [pcb]: PRE got: gain=3.000000 
+[INFO] [1795133637.645038015] [pcb]: CB#4 on_set got: gain=3.000000 mode=auto_from_pre_set 
+[INFO] [1795133637.645058004] [pcb]: POST got: gain=3.000000 mode=auto_from_pre_set 
+[INFO] [1795133640.361164004] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=3.000000 mode=auto_from_pre_set on_set_calls=4
+
+--- lang=cpp case=post_set gain:=2.0 load=0.62 0.32 0.18
+node up after 0.26s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=1.23s
+Set parameter successful
+[ros2 param set gain 3.0] try=1 rc=0 wall=3.49s
+Double value is: 3.0
+[ros2 param get gain] try=1 rc=0 wall=3.24s
+String value is: idle
+[ros2 param get mode] try=1 rc=0 wall=2.78s
+node alive after param calls: yes
+node exit code=0
+node log:
+[INFO] [1795133640.662051661] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133640.662166002] [pcb]: POST got: gain=2.000000 
+[INFO] [1795133640.662195405] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133640.662203652] [pcb]: POST got: mode=idle 
+[INFO] [1795133640.662220479] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133643.957139824] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133643.957219887] [pcb]: POST got: gain=3.000000 
+[INFO] [1795133647.467424173] [pcb]: CB#4 on_set got: gain=3.000000 
+[INFO] [1795133647.467499303] [pcb]: POST got: gain=3.000000 
+[INFO] [1795133653.724275798] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+EXIT gain=3.000000 mode=idle on_set_calls=4
+
+--- lang=cpp case=post_set_modify gain:=2.0 load=0.52 0.31 0.18
+node up after 0.26s
+/w/repro.sh: line 61:  2992 Aborted                 (core dumped) /tmp/ws/install/pcb_cpp/lib/pcb_cpp/pcb $c --ros-args -p gain:=$g > /tmp/node.log 2>&1
+
+[ros2 param set gain 3.0] try=1 rc=124 wall=15.18s
+Wait for service timed out waiting for parameter services for node /pcb
+[ros2 param set gain 3.0] try=1 rc=1 wall=6.23s
+Node not found
+[ros2 param get gain] try=1 rc=1 wall=1.56s
+Node not found
+[ros2 param get gain] try=2 rc=1 wall=1.56s
+Node not found
+[ros2 param get mode] try=1 rc=1 wall=1.56s
+Node not found
+[ros2 param get mode] try=2 rc=1 wall=1.55s
+node alive after param calls: no
+node exit code=134
+node log:
+[INFO] [1795133654.026685209] [pcb]: CB#1 on_set got: gain=2.000000 
+[INFO] [1795133654.026823368] [pcb]: POST got: gain=2.000000 
+[INFO] [1795133654.026855971] [pcb]: CB#2 on_set got: mode=idle 
+[INFO] [1795133654.026890794] [pcb]: POST got: mode=idle 
+[INFO] [1795133654.026914458] [pcb]: READY gain=2.000000 mode=idle on_set_calls=2
+[INFO] [1795133657.824128562] [pcb]: CB#3 on_set got: gain=3.000000 
+[INFO] [1795133657.824188363] [pcb]: POST got: gain=3.000000 
+[INFO] [1795133657.824195104] [pcb]: calling set_parameter(mode) inside post_set
+terminate called after throwing an instance of 'rclcpp::exceptions::ParameterModifiedInCallbackException'
+  what():  cannot set or declare a parameter, or change the callback from within set callback
+=== done jazzy 2026-11-20T00:14:48Z

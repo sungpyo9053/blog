@@ -1,0 +1,174 @@
+<pre><code>terminate called after throwing an instance of 'rclcpp::exceptions::ParameterModifiedInCallbackException'
+  what():  cannot set or declare a parameter, or change the callback from within set callback</code></pre>
+
+<p>That is the loud version. The quiet version is worse: you register a callback with <code>add_on_set_parameters_callback</code>, run <code>ros2 param set</code>, get <code>Set parameter successful</code>, and your callback never runs.</p>
+
+<p>Short answer: in C++, store the handle that <code>add_on_set_parameters_callback</code> returns in a member variable. If you drop it, the callback is gone right away and no error tells you. In both C++ and Python, register the callback before <code>declare_parameter</code>, or it never sees the start-up values from <code>-p</code> or a params file. Make sure something spins the node. And never set or declare a parameter from inside the callback in C++. On Humble, defer that change to a timer. On Jazzy and Lyrical, use a pre-set callback instead:</p>
+
+<pre><code class="language-cpp">// member: rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr handle_;
+handle_ = add_on_set_parameters_callback(
+  [this](const std::vector&lt;rclcpp::Parameter&gt; &amp; ps) {
+    rcl_interfaces::msg::SetParametersResult r;
+    r.successful = true;
+    for (auto &amp; p : ps) {
+      if (p.get_name() == "gain" &amp;&amp; p.as_double() &gt; 2.5) {
+        r.successful = false;
+        r.reason = "gain must be &lt;= 2.5";
+      }
+    }
+    return r;   // validate only: no set_parameter() or declare_parameter() here
+  });
+declare_parameter("gain", 1.0);   // after the callback, so it sees the -p value</code></pre>
+
+<p>In Python, the callback must return a <code>SetParametersResult</code>. Returning <code>None</code> or <code>True</code> killed the node at start-up in every run.</p>
+
+<h2>Find your symptom</h2>
+
+<p>Each row behaved the same on Humble, Jazzy and Lyrical unless the row says otherwise.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my runs</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>C++: <code>Set parameter successful</code>, value changes, callback never runs</td><td>Handle returned by <code>add_on_set_parameters_callback</code> not stored</td><td>Keep the handle in a member</td></tr>
+<tr><td>Callback runs for <code>ros2 param set</code> but missed the start-up value from <code>-p</code></td><td>Callback registered after <code>declare_parameter</code></td><td>Register first, then declare</td></tr>
+<tr><td><code>ros2 param set</code> hangs, callback never runs</td><td>Node not spinning (a <code>while</code> loop with sleep)</td><td>Spin, and use a timer for the loop</td></tr>
+<tr><td>C++ node aborts with <code>ParameterModifiedInCallbackException</code></td><td><code>set_parameter</code> or <code>declare_parameter</code> called inside an on-set or post-set callback</td><td>Pre-set callback (Jazzy+) or a timer</td></tr>
+<tr><td>Python: <code>Callback returned an invalid type</code> at start-up</td><td>Callback returns <code>None</code> or a bool</td><td>Return <code>SetParametersResult(successful=True)</code></td></tr>
+<tr><td><code>Setting parameter failed: &lt;your reason&gt;</code></td><td>Your callback returned <code>successful=False</code></td><td>Working as designed; the old value stays</td></tr>
+<tr><td>Python node dies on the second <code>ros2 param set</code> with <code>ParameterAlreadyDeclaredException</code></td><td><code>declare_parameter</code> inside the callback</td><td>Declare once, outside callbacks</td></tr>
+<tr><td>C++ build error: <code>has no member named 'add_post_set_parameters_callback'</code></td><td>Humble (rclcpp 16) has no pre-set or post-set callbacks</td><td>Timer, or move to Jazzy or later</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-20 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images on a 2 vCPU Linux host. Each container ran with <code>--network none</code> and <code>ROS_DOMAIN_ID=88</code>. One Python script and one C++ executable, both a node named <code>pcb</code>, declare <code>gain</code> (default <code>1.0</code>) and <code>mode</code> (default <code>"idle"</code>). They log every callback call with the parameters it received. A command-line argument picks the case.</p>
+
+<p>Each case started the node with <code>--ros-args -p gain:=2.0</code> (<code>gain:=5.0</code> for one case). Two seconds after the node was up, the script ran <code>ros2 param set /pcb gain 3.0</code> twice, then <code>ros2 param get</code> for both parameters. Every CLI call had a 15-second limit. Then it stopped the node with SIGINT. That made 14 Python cases and 13 C++ cases per distro.</p>
+
+<table>
+<thead><tr><th>Case</th><th>Python (rclpy)</th><th>C++ (rclcpp)</th></tr></thead>
+<tbody>
+<tr><td>Register, then declare</td><td>callback ran 4 times: <code>gain=2.0</code>, <code>mode=idle</code>, <code>gain=3.0</code>, <code>gain=3.0</code></td><td>same 4 calls</td></tr>
+<tr><td>Declare, then register</td><td>2 calls, both <code>gain=3.0</code>; start-up values never seen</td><td>same</td></tr>
+<tr><td>Handle not stored</td><td>not applicable</td><td>0 calls; both sets said <code>Set parameter successful</code>; <code>gain</code> became 3.0</td></tr>
+<tr><td>Reject <code>gain &gt; 2.5</code></td><td><code>Setting parameter failed: gain must be &lt;= 2.5</code>; <code>gain</code> stayed 2.0</td><td>same</td></tr>
+<tr><td>Reject, started with <code>gain:=5.0</code></td><td><code>InvalidParameterValueException</code>, exit 1</td><td><code>terminate called</code>, exit 134</td></tr>
+<tr><td>Return <code>None</code> or <code>True</code></td><td><code>Callback returned an invalid type</code>, exit 1 before ready</td><td>not applicable</td></tr>
+<tr><td><code>set_parameter(mode)</code> inside on-set</td><td>worked; nested call for <code>mode=changed</code></td><td>abort, <code>ParameterModifiedInCallbackException</code></td></tr>
+<tr><td><code>declare_parameter(extra)</code> inside on-set</td><td>first set worked; second set killed the node</td><td>abort on the first set</td></tr>
+<tr><td>No spin (sleep loop)</td><td>every <code>ros2 param</code> call timed out at 15 s</td><td>same</td></tr>
+<tr><td>Two on-set callbacks</td><td>both ran, last registered first</td><td>same</td></tr>
+<tr><td>Timer applies the change</td><td><code>mode=changed_by_timer</code></td><td>same</td></tr>
+<tr><td>Pre-set callback adds <code>mode</code></td><td>Jazzy, Lyrical: worked. Humble: method missing</td><td>Jazzy, Lyrical: worked. Humble: does not compile</td></tr>
+<tr><td><code>set_parameter</code> inside post-set</td><td>Jazzy, Lyrical: worked</td><td>Jazzy, Lyrical: abort, same exception</td></tr>
+</tbody>
+</table>
+
+<h2>Cause 1: the C++ handle was dropped</h2>
+
+<p><code>add_on_set_parameters_callback</code> returns a <code>shared_ptr</code> to a handle. The node doesn't keep the callback alive for you. When your copy of the handle is gone, so is the callback. In my <code>discard</code> case the call's result was thrown away. Both <code>ros2 param set</code> calls printed <code>Set parameter successful</code>, <code>ros2 param get</code> showed <code>Double value is: 3.0</code>, and the node exited with <code>on_set_calls=0</code>. Nothing validated the value and nothing logged an error.</p>
+
+<p>The compiler did warn. On all three distros, <code>colcon build</code> printed this for the line that dropped the handle:</p>
+
+<pre><code>warning: ignoring return value of ‘rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr rclcpp::Node::add_on_set_parameters_callback(OnSetParametersCallbackType)’, declared with attribute ‘warn_unused_result’ [-Wunused-result]</code></pre>
+
+<p>That is the Jazzy and Lyrical text. On Humble the argument type reads <code>rclcpp::Node::OnParametersSetCallbackType</code>.</p>
+
+<p>If your build log has this line, that is your bug. The ros2/demos discussion on the <a href="https://github.com/ros2/demos/pull/651">parameter callback demo</a> spells it out: keep the pointer, or the callback is unregistered immediately. I only tested a discarded return value. A handle in a local variable that goes out of scope should behave the same, but I didn't test it. rclpy has no handle to lose. In my runs the Python callback kept working without storing anything.</p>
+
+<h2>Cause 2: the callback was registered after declare</h2>
+
+<p><code>declare_parameter</code> runs the on-set callbacks that exist at that moment. With the callback registered first, the first two calls in every run were <code>gain=2.0</code> (the <code>-p</code> override) and <code>mode=idle</code> (the plain default). Registered after the declares, the callback started with zero calls. It only saw the later <code>ros2 param set</code> values.</p>
+
+<p>This is the <a href="https://robotics.stackexchange.com/questions/103377">launch parameter question</a> exactly: the value from the launch file or a params file arrives during <code>declare_parameter</code>, before a late callback exists. I tested <code>-p</code>, not a launch file or a params file. My <a href="https://huntlab.app/en/ros2-failed-to-parse-global-arguments-cannot-have-a-value-before-ros-parameters/">params YAML post</a> measured how those overrides are parsed and when they are silently skipped, on the same three distros. If your callback also validates start-up values, register it first. Then a rejected start-up value fails loudly, as the next section shows.</p>
+
+<h2>Cause 3: nothing spins the node</h2>
+
+<p><code>ros2 param set</code> is a service call to the node. Services are handled by the executor, so a node that never spins can't answer. My <code>no_spin</code> case declared the parameters and then sat in <code>while rclpy.ok(): time.sleep(0.1)</code> (C++: <code>sleep_for(100ms)</code>). On all three distros, all four <code>ros2 param</code> calls hit the 15-second limit (exit code 124). They printed no result. On Lyrical, the Python CLI printed <code>!rclpy.ok()</code> as the limit killed it. The callback count stayed at 2, both from start-up.</p>
+
+<p>This is the <a href="https://answers.ros.org/question/403864/">"not trigger with open loop"</a> question. Run the loop body in a timer and call <code>spin</code>, or spin in another thread. The same rule explains a related hang I measured in <a href="https://huntlab.app/en/ros-2-rclpy-rate-sleep-blocks-forever-fix/">rclpy rate.sleep() blocks forever</a>: a rate waits on a timer callback that only an executor runs. A callback that blocks the executor has the same effect on parameter services. My <a href="https://huntlab.app/en/rclpy-asyncio-no-running-event-loop-call-async-hangs/">rclpy and asyncio post</a> measured an awaited service call that hung on a single-threaded executor until it moved to a reentrant callback group.</p>
+
+<h2>Cause 4: setting or declaring inside the callback</h2>
+
+<p>In C++ this is the error at the top. My <code>set_inside</code> case called <code>set_parameter(rclcpp::Parameter("mode", "changed"))</code> inside the on-set callback when <code>gain</code> became 3.0. <code>declare_inside</code> called <code>declare_parameter("extra", 0)</code> there instead. Both threw <code>ParameterModifiedInCallbackException</code>. Nothing caught it, and the process aborted with exit code 134. The client side looked like a network problem. The first <code>ros2 param set</code> hung until my 15-second limit. The next one failed after about 6 seconds with <code>Wait for service timed out</code> on Humble and <code>Wait for service timed out waiting for parameter services for node /pcb</code> on Jazzy and Lyrical. If <code>ros2 param set</code> hangs once and the node is then gone, read the node's own log.</p>
+
+<p>rclpy has no such guard. In Python, <code>set_parameters</code> inside the callback worked on every distro. The callback was entered again for <code>mode=changed</code>, the inner call returned <code>successful=True</code>, and <code>mode</code> ended as <code>changed</code>. <code>declare_parameter</code> inside the callback also worked once. On the second <code>ros2 param set</code> it raised <code>ParameterAlreadyDeclaredException: Parameter(s) already declared: ['extra']</code>, the node died, and the CLI hung until the limit. So Python lets you do it, but the nested call runs your validation again in the middle of the outer one. The <a href="https://robotics.stackexchange.com/questions/107521">runtime declare question</a> hits the C++ wall from the ros2_control side.</p>
+
+<h2>Cause 5: Python callbacks must return a result</h2>
+
+<p>A callback that logs and falls off the end returns <code>None</code>. With the callback registered before <code>declare_parameter</code>, this ended the node before it was ready, on every distro:</p>
+
+<pre><code>UserWarning: Callback returned an invalid type, it should return SetParameterResult.
+rclpy.exceptions.InvalidParameterValueException: Invalid parameter value (2.0) for parameter. Reason: Callback returned an invalid type: gain</code></pre>
+
+<p>Returning <code>True</code> gave the same two lines. On Humble the exception text is a tuple, <code>('Invalid parameter value (2.0) for parameter. Reason: Callback returned an invalid type', 'gain')</code>, so search without the trailing <code>: gain</code>. The fix is <code>return SetParametersResult(successful=True)</code> from <code>rcl_interfaces.msg</code>.</p>
+
+<p>A rejected value is a different story. When my callback returned <code>successful=False</code> with a reason, <code>ros2 param set</code> printed <code>Setting parameter failed: gain must be &lt;= 2.5</code> and <code>gain</code> stayed 2.0. The CLI still exited with code 0, so a script can't detect the failure from the exit status. Parse the output. At start-up a rejected <code>-p</code> value is fatal. Python raised <code>InvalidParameterValueException ... Reason: gain must be &lt;= 2.5</code>. C++ printed <code>terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterValueException'</code> with <code>what():  parameter 'gain' could not be set: gain must be &lt;= 2.5</code>.</p>
+
+<h2>Two smaller surprises</h2>
+
+<p>Setting the same value again still runs the callback. Both of my sets used <code>gain=3.0</code>, and the second one was logged and validated like the first, in both languages. A callback that does real work on every call will redo it.</p>
+
+<p>With two on-set callbacks, both ran on every set, and the one registered last ran first. That held in Python and C++ on all three distros. The maintainers in the demos discussion advise against relying on that order, so treat it as an observation, not an API promise.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Goal</th><th>Option</th><th>Result in my runs</th><th>Distros</th></tr></thead>
+<tbody>
+<tr><td>Validate a value</td><td>On-set callback returning <code>successful=False</code></td><td>Rejected, old value kept; fatal at start-up</td><td>all</td></tr>
+<tr><td>Change another parameter too</td><td>Pre-set callback appends it to the list</td><td>On-set got <code>gain=3.0, mode=auto_from_pre_set</code>; both applied, no nested call</td><td>Jazzy, Lyrical</td></tr>
+<tr><td>Change another parameter too</td><td>On-set stores a flag, a 100 ms timer calls <code>set_parameter</code></td><td><code>mode=changed_by_timer</code>, 3 to 92 ms after the on-set call; on-set ran again for <code>mode</code></td><td>all</td></tr>
+<tr><td>React after the value is applied</td><td>Post-set callback (no return value)</td><td>Ran after on-set, also during <code>declare_parameter</code></td><td>Jazzy, Lyrical</td></tr>
+<tr><td>Change a parameter after it is applied</td><td><code>set_parameter</code> inside post-set</td><td>Python: worked. C++: abort with <code>ParameterModifiedInCallbackException</code></td><td>Jazzy, Lyrical</td></tr>
+</tbody>
+</table>
+
+<p>The pre-set callback is the clean option. It gets the list of parameters about to be set and may change it. In my runs it was not called during <code>declare_parameter</code>, only for later sets, while the on-set and post-set callbacks were. The post-set callback answers the <a href="https://answers.ros.org/question/328202/">"callback for when the parameters are already set"</a> question. It runs after the change is accepted, so it is the place to reconfigure. On Humble the timer is the only one of these that works in C++. My timer added a call because the deferred <code>set_parameter</code> goes through the on-set callback like any other set.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble: rclpy 3.3.22 has only <code>add_on_set_parameters_callback</code>. The postcheck package failed with <code>has no member named ‘add_pre_set_parameters_callback’; did you mean ‘add_on_set_parameters_callback’?</code> and the same for <code>add_post_set_parameters_callback</code>.</li>
+<li>Jazzy (rclpy 7.1.12, rclcpp 28.1.22) and Lyrical (rclpy 10.0.11, rclcpp 32.0.3): all three callback types exist in both languages and behaved identically.</li>
+<li>The <code>warn_unused_result</code> warning for a dropped handle appeared on all three.</li>
+<li>Successful <code>ros2 param set</code> and <code>get</code> calls took a median of 1.14 s on Humble, 1.73 s on Jazzy and 1.29 s on Lyrical (range 1.06 to 4.02 s) on this 2 vCPU host.</li>
+<li>Stopping a Python node with SIGINT was not always clean, which is unrelated to callbacks. Five of 42 Python runs needed SIGKILL after 5 seconds, and one Lyrical run ended in <code>RCLError: failed to initialize wait set: the given context is not valid</code>.</li>
+<li>A first Jazzy pass with <code>ros2 param set --no-daemon</code> printed <code>Node not found</code> 65 times, often for nodes that were running. The runs above use the daemon. With it, <code>Node not found</code> only appeared after a node had crashed.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Parameters set through a launch file or a component container (I used <code>-p</code>, which takes the same path at declare time), <code>ParameterEventHandler</code> and <code>/parameter_events</code>, lifecycle nodes, <code>ros2 param load</code>, <code>MultiThreadedExecutor</code> or callback groups for the parameter services, <code>rclcpp::Node::remove_on_set_parameters_callback</code>, Cyclone DDS or other RMWs, Foxy, Iron and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why is my add_on_set_parameters_callback never called in C++?</h3>
+<p>The most common cause in my runs was a dropped handle. Store the returned <code>OnSetParametersCallbackHandle::SharedPtr</code> in a member. Without it, <code>ros2 param set</code> still reported success and changed the value, but the callback ran 0 times. The build log warned with <code>-Wunused-result</code>.</p>
+
+<h3>Why doesn't my parameter callback see the value from the launch file?</h3>
+<p>Start-up overrides are applied inside <code>declare_parameter</code>. In my runs a callback registered after the declare never saw the <code>-p</code> value. I didn't test a launch file. Register the callback first, and it gets one call per declared parameter, with the override or the default.</p>
+
+<h3>How do I fix "cannot set or declare a parameter, or change the callback from within set callback"?</h3>
+<p>Don't call <code>set_parameter</code> or <code>declare_parameter</code> from an on-set or post-set callback in C++. On Jazzy and Lyrical, add the extra parameter in a pre-set callback. On Humble, set a flag and apply the change from a timer.</p>
+
+<h3>Why does ros2 param set hang?</h3>
+<p>In my runs it hung when the node never spun, and when a C++ node aborted inside the callback. Both ran into the 15-second limit. Check that the node spins and that it is still alive.</p>
+
+<h3>Is a parameter callback called if the value doesn't change?</h3>
+<p>Yes. Setting <code>gain</code> to 3.0 twice ran the callback twice, in Python and C++, on Humble, Jazzy and Lyrical.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why is my add_on_set_parameters_callback never called in C++?", "acceptedAnswer": {"@type": "Answer", "text": "The most common cause in my runs was a dropped handle. Store the returned OnSetParametersCallbackHandle::SharedPtr in a member. Without it, ros2 param set still reported success and changed the value, but the callback ran 0 times. The build log warned with -Wunused-result."}},
+{"@type": "Question", "name": "Why doesn't my parameter callback see the value from the launch file?", "acceptedAnswer": {"@type": "Answer", "text": "Start-up overrides are applied inside declare_parameter. In my runs a callback registered after the declare never saw the -p value. I did not test a launch file. Register the callback first, and it gets one call per declared parameter, with the override or the default."}},
+{"@type": "Question", "name": "How do I fix cannot set or declare a parameter, or change the callback from within set callback?", "acceptedAnswer": {"@type": "Answer", "text": "Don't call set_parameter or declare_parameter from an on-set or post-set callback in C++. On Jazzy and Lyrical, add the extra parameter in a pre-set callback. On Humble, set a flag and apply the change from a timer."}},
+{"@type": "Question", "name": "Why does ros2 param set hang?", "acceptedAnswer": {"@type": "Answer", "text": "In my runs it hung when the node never spun, and when a C++ node aborted inside the callback. Both ran into the 15-second limit. Check that the node spins and that it is still alive."}},
+{"@type": "Question", "name": "Is a parameter callback called if the value doesn't change?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Setting gain to 3.0 twice ran the callback twice, in Python and C++, on Humble, Jazzy and Lyrical."}}
+]}
+</script>
+
+<p>Measured on 2026-11-20 with <code>ros:humble-ros-base</code> (<code>sha256:d9f14e84747b...</code>, rclpy 3.3.22, rclcpp 16.0.21, ros2cli 0.18.20, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2), default RMW (<code>rmw_fastrtps_cpp</code>). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-02-ros2-parameter-callback-not-called/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103377">ROS2 add_on_set_parameters_callback not triggered for launch parameter</a>, <a href="https://answers.ros.org/question/403864/">ROS2 add_on_set_parameters_callback not trigger with open loop</a>, <a href="https://robotics.stackexchange.com/questions/96324">[ROS2] using dynamic parameters in Python</a>, <a href="https://answers.ros.org/question/328202/">Callback for when the parameters are already set</a>, <a href="https://robotics.stackexchange.com/questions/107521">How to declare parameter that are only known at runtime</a>, <a href="https://github.com/ros2/demos/pull/651">ros2/demos #651: parameter callback demo clarifications</a>.</p>

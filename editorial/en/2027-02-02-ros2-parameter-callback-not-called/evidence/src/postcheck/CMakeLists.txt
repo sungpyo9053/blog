@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.8)
+project(postcheck)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+add_executable(postcheck src/postcheck.cpp)
+target_link_libraries(postcheck rclcpp::rclcpp)
+ament_package()
