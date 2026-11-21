@@ -2,7 +2,7 @@
 // biggest <table> per published EN post (or KO with: wp eval-file glance_export.php ko) + the heading right before it
 $ko=isset($args[0])&&$args[0]==="ko"; $st=$args[1]??"publish"; // 2nd arg: future for scheduled EN (scheduled KO stay untouched)
 $out=[];
-foreach(get_posts(["post_type"=>$ko?"post":"hunt_en","post_status"=>$st,"numberposts"=>-1]) as $p){
+foreach(get_posts(["post_type"=>$ko?"post":"hunt_en","post_status"=>$st,"numberposts"=>-1,"post__not_in"=>[2419,2421,2521,2523]]) as $p){ // pipeline/publisher posts stay untouched
   $c=$p->post_content; if(strpos($c,'hl-glance')!==false) continue;
   if(!preg_match_all('#<table.*?</table>#s',$c,$m,PREG_OFFSET_CAPTURE)) continue;
   $best=null; foreach($m[0] as $t){ $n=substr_count($t[0],'<td'); if(!$best||$n>$best[2]) $best=[$t[0],$t[1],$n]; }
