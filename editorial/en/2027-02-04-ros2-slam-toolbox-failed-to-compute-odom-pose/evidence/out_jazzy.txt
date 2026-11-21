@@ -1,0 +1,479 @@
+ 18:29:40 up 115 days, 22:25,  1 user,  load average: 0.98, 0.34, 0.22
+=== distro=jazzy date=2026-11-21T09:29:41Z
+ros-jazzy-launch-ros 0.26.13-1noble.20260920.233704
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-rmw 7.3.4-1noble.20260911.050254
+ros-jazzy-rmw-fastrtps-cpp 8.4.4-1noble.20260911.100940
+ros-jazzy-ros2cli 0.32.13-1noble.20261006.033947
+ros-jazzy-slam-toolbox 2.8.5-1noble.20261105.115130
+ros-jazzy-tf2-ros 0.36.23-1noble.20260915.173839
+Python 3.12.3
+RMW default: unset (Fast DDS)
+--- launch arguments of online_async_launch.py
+    'autostart':
+        (default: 'true')
+    'use_lifecycle_manager':
+        (default: 'false')
+    'use_sim_time':
+        (default: 'true')
+    'slam_params_file':
+        (default: '/opt/ros/jazzy/share/slam_toolbox/config/mapper_params_online_async.yaml')
+--- frames in the shipped params file
+13:    odom_frame: odom
+14:    map_frame: map
+15:    base_frame: base_footprint
+16:    scan_topic: /scan
+30:    map_update_interval: 5.0
+36:    transform_timeout: 0.2
+37:    tf_buffer_duration: 30.0
+/w/p_queue10.yaml:36:    transform_timeout: 0.2
+/w/p_queue10.yaml:37:    scan_queue_size: 10
+/w/p_queue10_timeout1.yaml:36:    transform_timeout: 1.0
+/w/p_queue10_timeout1.yaml:37:    scan_queue_size: 10
+15:    base_frame: base_link
+36:    transform_timeout: 1.0
+
+######## CASE ok_footprint
+robot: --odom-child base_footprint --laser-parent base_footprint
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=5.71 maps=2 size=80x60@0.050 map_to_odom_tf=651 last_map_to_odom_stamp_sec=1795253399 wall_sec=1795253399
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-29-44-529018-5e61d2d9cf65-3336
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [3365]
+    [async_slam_toolbox_node-1] [INFO] [1795253384.786212122] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE baselink_default
+robot: --odom-child base_link --laser-parent base_link
+slam:  launch use_sim_time:=false
+  tf2_echo odom base_footprint:
+    [INFO] [1795253410.026403241] [tf2_echo]: Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist
+    [INFO] [1795253411.974943552] [tf2_echo]: Waiting for transform odom ->  base_footprint: Invalid frame ID "base_footprint" passed to canTransform argument source_frame - frame does not exist
+    [INFO] [1795253413.756196689] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+  param base_frame: String value is: base_footprint
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=656 last_map_to_odom_stamp_sec=1795253420 wall_sec=1795253420
+  wall seconds slam ran: 15.5
+  count 'Failed to compute odom pose': 133
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: 10
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+        134 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: Failed to compute odom pose
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-30-05-193491-5e61d2d9cf65-3432
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [3462]
+    [async_slam_toolbox_node-1] [INFO] [1795253405.416144806] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE baselink_launcharg
+robot: --odom-child base_link --laser-parent base_link
+slam:  launch use_sim_time:=false base_frame:=base_link
+  param base_frame: String value is: base_footprint
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=669 last_map_to_odom_stamp_sec=1795253440 wall_sec=1795253440
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 136
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: 10
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+        136 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: Failed to compute odom pose
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-30-25-811102-5e61d2d9cf65-3588
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [3618]
+    [async_slam_toolbox_node-1] [INFO] [1795253426.044246681] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE baselink_paramsfile
+robot: --odom-child base_link --laser-parent base_link
+slam:  launch use_sim_time:=false slam_params_file:=/w/p_base_link.yaml
+  PROBE first_map_s=5.62 maps=2 size=80x60@0.050 map_to_odom_tf=669 last_map_to_odom_stamp_sec=1795253461 wall_sec=1795253461
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-30-46-443237-5e61d2d9cf65-3700
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [3729]
+    [async_slam_toolbox_node-1] [INFO] [1795253446.667146665] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE baselink_extra_static
+robot: --odom-child base_link --laser-parent base_link --extra-static base_link:base_footprint
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=5.51 maps=2 size=80x60@0.050 map_to_odom_tf=656 last_map_to_odom_stamp_sec=1795253482 wall_sec=1795253482
+  wall seconds slam ran: 15.5
+  count 'Failed to compute odom pose': 1
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: 10
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: Failed to compute odom pose
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-31-07-114648-5e61d2d9cf65-3796
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [3825]
+    [async_slam_toolbox_node-1] [INFO] [1795253467.334058438] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE run_p_nolc
+robot: --odom-child base_link --laser-parent base_link
+slam:  run --ros-args -p base_frame:=base_link -p use_sim_time:=false
+  lifecycle state after 4 s: unconfigured [1]
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253502
+  wall seconds slam ran: 15.5
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+
+######## CASE run_p_lc
+robot: --odom-child base_link --laser-parent base_link
+slam:  runlc --ros-args -p base_frame:=base_link -p use_sim_time:=false
+  lifecycle before: unconfigured [1]
+  configure: Transitioning successful
+  activate: Transitioning successful
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=162 last_map_to_odom_stamp_sec=1795253523 wall_sec=1795253523
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [1795253513.992237019] [slam_toolbox]: Configuring
+    [INFO] [1795253513.998029830] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
+    [INFO] [1795253515.111956821] [slam_toolbox]: Activating
+
+######## CASE no_odom
+robot: --odom-child none --laser-parent base_footprint
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253544
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253529.553 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-32-09-014296-5e61d2d9cf65-4118
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4147]
+    [async_slam_toolbox_node-1] [INFO] [1795253529.242826291] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_ns_topic
+robot: --odom-child base_footprint --laser-parent base_footprint --tf-topic /robot1/tf
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253564
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253550.277 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-32-29-736616-5e61d2d9cf65-4213
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4242]
+    [async_slam_toolbox_node-1] [INFO] [1795253549.965526639] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE no_laser_tf
+robot: --odom-child base_footprint --laser-parent none
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253585
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253570.975 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-32-50-431193-5e61d2d9cf65-4308
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4337]
+    [async_slam_toolbox_node-1] [INFO] [1795253570.653257451] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.1
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.1
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253606
+  wall seconds slam ran: 15.5
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253591.617 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-33-11-080126-5e61d2d9cf65-4404
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4433]
+    [async_slam_toolbox_node-1] [INFO] [1795253591.313777872] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.15
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.15
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253626
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253612.256 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-33-31-718140-5e61d2d9cf65-4499
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4528]
+    [async_slam_toolbox_node-1] [INFO] [1795253611.950918860] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.25
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.25
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253647
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253633.886 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-33-52-340566-5e61d2d9cf65-4594
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4623]
+    [async_slam_toolbox_node-1] [INFO] [1795253632.565808331] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.3
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.3
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253667
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253655.124 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-34-12-982559-5e61d2d9cf65-4689
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4718]
+    [async_slam_toolbox_node-1] [INFO] [1795253653.206696067] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_1.0
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 1.0
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253688
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253674.170 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-34-33-625648-5e61d2d9cf65-4785
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4814]
+    [async_slam_toolbox_node-1] [INFO] [1795253673.854026111] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.6_timeout1
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.6
+slam:  launch use_sim_time:=false slam_params_file:=/w/p_timeout1.yaml
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=0 last_map_to_odom_stamp_sec=None wall_sec=1795253709
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253694.809 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-34-54-272487-5e61d2d9cf65-4880
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [4909]
+    [async_slam_toolbox_node-1] [INFO] [1795253694.504090906] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.3_queue10
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.3
+slam:  launch use_sim_time:=false slam_params_file:=/w/p_queue10.yaml
+  PROBE first_map_s=5.53 maps=2 size=80x60@0.050 map_to_odom_tf=660 last_map_to_odom_stamp_sec=1795253716 wall_sec=1795253729
+  wall seconds slam ran: 15.5
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253715.449 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-35-14-905214-5e61d2d9cf65-4976
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5005]
+    [async_slam_toolbox_node-1] [INFO] [1795253715.134198314] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.15_queue10
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.15
+slam:  launch use_sim_time:=false slam_params_file:=/w/p_queue10.yaml
+  PROBE first_map_s=5.55 maps=2 size=80x60@0.050 map_to_odom_tf=648 last_map_to_odom_stamp_sec=1795253750 wall_sec=1795253750
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-35-35-542222-5e61d2d9cf65-5072
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5101]
+    [async_slam_toolbox_node-1] [INFO] [1795253735.765997901] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_0.6_queue10_timeout1
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 0.6
+slam:  launch use_sim_time:=false slam_params_file:=/w/p_queue10_timeout1.yaml
+  PROBE first_map_s=5.52 maps=2 size=80x60@0.050 map_to_odom_tf=695 last_map_to_odom_stamp_sec=1795253771 wall_sec=1795253771
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-35-56-180171-5e61d2d9cf65-5168
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5197]
+    [async_slam_toolbox_node-1] [INFO] [1795253756.407327679] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_lag_1.0_queue10_timeout1
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-lag 1.0
+slam:  launch use_sim_time:=false slam_params_file:=/w/p_queue10_timeout1.yaml
+  PROBE first_map_s=5.52 maps=2 size=80x60@0.050 map_to_odom_tf=560 last_map_to_odom_stamp_sec=1795253790 wall_sec=1795253791
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253777.368 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-36-16-834524-5e61d2d9cf65-5263
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5292]
+    [async_slam_toolbox_node-1] [INFO] [1795253777.061088855] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE two_parents
+robot: --odom-child base_link --laser-parent base_link --extra-static base_footprint:base_link
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=None maps=0 size=None map_to_odom_tf=669 last_map_to_odom_stamp_sec=1795253812 wall_sec=1795253812
+  wall seconds slam ran: 15.5
+  count 'Failed to compute odom pose': 136
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: 10
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+        136 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: Failed to compute odom pose
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-36-37-469350-5e61d2d9cf65-5358
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5387]
+    [async_slam_toolbox_node-1] [INFO] [1795253797.692239261] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE scan_past_1.0
+robot: --odom-child base_footprint --laser-parent base_footprint --scan-offset -1.0
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=5.53 maps=2 size=80x60@0.050 map_to_odom_tf=670 last_map_to_odom_stamp_sec=1795253832 wall_sec=1795253833
+  wall seconds slam ran: 15.5
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 1
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253817.627 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-36-58-089977-5e61d2d9cf65-5453
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5482]
+    [async_slam_toolbox_node-1] [INFO] [1795253818.320434502] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE odom_2hz
+robot: --odom-child base_footprint --laser-parent base_footprint --odom-rate 2
+slam:  launch use_sim_time:=false
+  PROBE first_map_s=5.52 maps=2 size=80x60@0.050 map_to_odom_tf=681 last_map_to_odom_stamp_sec=1795253853 wall_sec=1795253853
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 6
+  count 'Failed to compute laser pose': 0
+  first drop line: Message Filter dropping message: frame 'laser' at time 1795253839.261 for reason 'discarding message because the queue is full'
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-37-18-718428-5e61d2d9cf65-5548
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5577]
+    [async_slam_toolbox_node-1] [INFO] [1795253838.943916509] [slam_toolbox]: Node using stack size 40000000
+
+######## CASE simtime_default
+robot: --odom-child base_footprint --laser-parent base_footprint
+slam:  launch 
+  PROBE first_map_s=5.52 maps=2 size=80x60@0.050 map_to_odom_tf=655 last_map_to_odom_stamp_sec=1795253874 wall_sec=1795253874
+  wall seconds slam ran: 15.6
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [async_slam_toolbox_node-1] [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-21-09-37-39-364538-5e61d2d9cf65-5644
+    [INFO] [launch]: Default logging verbosity is set to INFO
+    [INFO] [async_slam_toolbox_node-1]: process started with pid [5673]
+    [async_slam_toolbox_node-1] [INFO] [1795253859.599046672] [slam_toolbox]: Node using stack size 40000000
+
+=== done 2026-11-21T09:37:57Z
+ 18:37:57 up 115 days, 22:34,  2 users,  load average: 0.68, 0.36, 0.24
+ 18:38:43 up 115 days, 22:35,  1 user,  load average: 0.32, 0.31, 0.23
+
+=== RERUN ONLY=run_p_lc
+######## CASE run_p_lc
+robot: --odom-child base_link --laser-parent base_link
+slam:  runlc --ros-args -p base_frame:=base_link -p use_sim_time:=false
+  lifecycle before: unconfigured [1]
+  configure: Transitioning successful
+  activate: Transitioning successful
+  PROBE first_map_s=15.7 maps=1 size=80x60@0.050 map_to_odom_tf=386 last_map_to_odom_stamp_sec=1795253952 wall_sec=1795253951
+  wall seconds slam ran: 25.5
+  count 'Failed to compute odom pose': 0
+  count 'Message Filter dropping': 0
+  count 'Failed to compute laser pose': 0
+  first 'Failed to compute odom pose' line no: none
+  distinct WARN/ERROR lines (numbers stripped, with counts):
+          1 [WARN]  [slam_toolbox]: maximum laser range setting (N m) exceeds the capabilities of the used Lidar (N m)
+  first INFO lines:
+    [INFO] [1795253931.447348536] [slam_toolbox]: Configuring
+    [INFO] [1795253931.453241782] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
+    [INFO] [1795253932.545581324] [slam_toolbox]: Activating
+
+=== done 2026-11-21T09:39:15Z

@@ -1,0 +1,174 @@
+<pre><code>[async_slam_toolbox_node-1] [WARN] [slam_toolbox]: Failed to compute odom pose
+[async_slam_toolbox_node-1] [WARN] [slam_toolbox]: Failed to compute odom pose
+[async_slam_toolbox_node-1] [WARN] [slam_toolbox]: Failed to compute odom pose
+...</code></pre>
+
+<p>(Timestamps removed.) In my runs this line repeated about 9 to 10 times a second, once per scan at 10 Hz, and no map was ever published. RViz then shows "No map received", even though the <code>map</code> frame exists.</p>
+
+<p>Short answer: slam_toolbox looks up <code>odom</code> to <code>base_frame</code> at the time stamp of every scan, and <code>base_frame</code> defaults to <code>base_footprint</code>. If your robot's odometry publishes <code>odom</code> to <code>base_link</code> and you have no <code>base_footprint</code>, that lookup fails on every scan. In my runs that was the one setup that printed this exact warning, apart from a tree where <code>base_link</code> had two parents. Set <code>base_frame</code> in the params file you pass to the launch file:</p>
+
+<pre><code class="language-yaml">slam_toolbox:
+  ros__parameters:
+    odom_frame: odom
+    base_frame: base_link     # the child frame your odometry actually publishes
+    map_frame: map
+    scan_topic: /scan</code></pre>
+
+<pre><code>ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false slam_params_file:=/path/to/my_params.yaml</code></pre>
+
+<p>Passing <code>base_frame:=base_link</code> directly to <code>ros2 launch</code> does not work. The launch file doesn't declare that argument, so launch accepts it without a warning and the node keeps <code>base_footprint</code>. I measured that on Humble, Jazzy and Lyrical. Publishing a static <code>base_link</code> to <code>base_footprint</code> transform also fixed it.</p>
+
+<p>If you see no warning at all and still get no map, the cause is somewhere else. Missing odometry, odometry on a namespaced <code>/tf</code>, a missing laser transform and late odometry stamps all ended in the same <code>Message Filter dropping message ... queue is full</code> line instead. Those are covered below.</p>
+
+<h2>Find your symptom</h2>
+
+<p>Each row is one setup I ran for 15 seconds with slam_toolbox's <code>online_async_launch.py</code>. The result was the same on Humble, Jazzy and Lyrical unless the row says otherwise.</p>
+
+<table>
+<thead><tr><th>Setup</th><th>What the log showed</th><th>Map published?</th></tr></thead>
+<tbody>
+<tr><td><code>odom</code> to <code>base_footprint</code> to <code>laser</code>, shipped params</td><td>nothing besides two laser range warnings</td><td>yes, first map after 5.2 to 5.8 s</td></tr>
+<tr><td><code>odom</code> to <code>base_link</code> to <code>laser</code>, shipped params (<code>base_frame: base_footprint</code>)</td><td><code>Failed to compute odom pose</code> 150, 133 and 149 times</td><td>no</td></tr>
+<tr><td>Same, plus <code>base_frame:=base_link</code> on the <code>ros2 launch</code> line</td><td><code>Failed to compute odom pose</code> 152, 136 and 140 times</td><td>no</td></tr>
+<tr><td>Static <code>base_footprint</code> to <code>base_link</code> (URDF style) and odometry <code>odom</code> to <code>base_link</code></td><td><code>Failed to compute odom pose</code> 137, 136 and 146 times</td><td>no</td></tr>
+<tr><td>No odometry transform at all</td><td><code>Message Filter dropping message ... 'discarding message because the queue is full'</code>, 6 lines</td><td>no</td></tr>
+<tr><td>Odometry only on <code>/robot1/tf</code></td><td>same 6 queue-full lines</td><td>no</td></tr>
+<tr><td>No transform from the base to <code>laser</code></td><td>same 6 queue-full lines</td><td>no</td></tr>
+<tr><td>Odometry stamps 0.25 s or more behind the scans</td><td>same 6 queue-full lines</td><td>no</td></tr>
+<tr><td><code>ros2 run</code> on Jazzy or Lyrical without lifecycle transitions</td><td>nothing at all, node stays <code>unconfigured [1]</code></td><td>no</td></tr>
+</tbody>
+</table>
+
+<p>The first column of the log doesn't tell you much by itself. "Failed to compute odom pose" means the scan got through the message filter and then the odometry lookup failed. "queue is full" means the scan never reached slam_toolbox at all. In the no-odometry case the drop line said "queue is full", not "frame does not exist", so don't read the reason text literally.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-21 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one container per distro, with <code>ros-&lt;distro&gt;-slam-toolbox</code> installed from apt (2.6.10 on Humble, 2.8.5 on Jazzy, 2.10.0 on Lyrical). After the install I disconnected each container from the network, so only loopback was left. A small rclpy node played the robot. It published a <code>LaserScan</code> of a 4 by 3 m rectangular room on <code>/scan</code> at 10 Hz in frame <code>laser</code>, an odometry transform at 20 Hz, and a static transform from the base to <code>laser</code>. The robot didn't move. A second node subscribed to <code>/map</code> with transient local QoS and to <code>/tf</code>. It recorded when the first map arrived and whether <code>map</code> to <code>odom</code> was published.</p>
+
+<p>Each of the 24 cases changed one thing: the frame names, which transforms existed, how late the odometry stamps were, or how slam_toolbox was started and configured. Each ran for 15 seconds, or 25 seconds for the <code>ros2 run</code> case with lifecycle calls. I counted the warnings in the log. Everything ran with the default RMW (Fast DDS).</p>
+
+<h2>Cause 1: base_frame names a frame you don't have</h2>
+
+<p>The shipped <code>mapper_params_online_async.yaml</code> sets <code>odom_frame: odom</code>, <code>base_frame: base_footprint</code> and <code>map_frame: map</code>. This was identical on all three distros. Many robots, and most hobby setups like the one in <a href="https://robotics.stackexchange.com/questions/105955">this question</a>, publish odometry as <code>odom</code> to <code>base_link</code> and have no <code>base_footprint</code>. With that tree, every scan produced one warning. 150 warnings in 15.5 seconds on Humble works out to every scan.</p>
+
+<p>Asking tf directly shows the missing frame. <code>ros2 run tf2_ros tf2_echo odom base_footprint</code> printed this on all three distros:</p>
+
+<pre><code>Waiting for transform odom ->  base_footprint: Invalid frame ID "base_footprint" passed to canTransform argument source_frame - frame does not exist</code></pre>
+
+<p>The first attempt said <code>Invalid frame ID "odom"</code> instead, because <code>tf2_echo</code>'s own buffer hadn't received anything yet. Wait a second before you trust the first line. To read the frame slam_toolbox is really using, ask the node: <code>ros2 param get /slam_toolbox base_frame</code> returned <code>String value is: base_footprint</code>.</p>
+
+<p>The warning comes from slam_toolbox's scan callback. Before it uses a scan, it transforms an identity pose in <code>base_frame</code> into <code>odom_frame</code> at the scan's stamp. If tf can't do that, it logs the warning and drops the scan. The message filter in front of the callback only checks <code>odom</code> to <code>laser</code>, and here <code>odom</code> to <code>base_link</code> to <code>laser</code> was complete, so every scan reached the callback and then failed. That is also why <code>map</code> to <code>odom</code> was still being published (656 to 736 messages in 15 s) while <code>/map</code> got nothing. The <code>map</code> frame existed, but there was no map.</p>
+
+<h2>Launch arguments that aren't declared are ignored</h2>
+
+<p><code>ros2 launch slam_toolbox online_async_launch.py --show-args</code> lists only <code>use_sim_time</code> and <code>slam_params_file</code> on Humble. Jazzy and Lyrical add <code>autostart</code> and <code>use_lifecycle_manager</code>. There is no <code>base_frame</code>, <code>odom_frame</code> or <code>scan_topic</code> argument. When I added <code>base_frame:=base_link</code> to the command, launch printed no warning. The node still reported <code>base_footprint</code> and logged the same warning 136 to 152 times. The command in <a href="https://github.com/SteveMacenski/slam_toolbox/issues/678">slam_toolbox issue #678</a> passes all its frames that way.</p>
+
+<p>Frame names have to go into the params file. I copied the shipped file, changed only <code>base_frame</code> to <code>base_link</code> and passed it with <code>slam_params_file:=</code>. The warning dropped to 0 and the first map arrived after 5.0, 5.6 and 6.1 s on Humble, Jazzy and Lyrical. Copy the whole file and don't write a short one with only the frames. The launch file loads only the file you give it, so a short file leaves every other parameter at the code default. Those defaults are different from the shipped file: <code>map_update_interval</code> is 10 s in the Humble and Jazzy source, against 5.0 in the file.</p>
+
+<h2>Cause 2: base_link with two parents</h2>
+
+<p>A common setup has the URDF define <code>base_footprint</code> as the parent of <code>base_link</code>, while the odometry node publishes <code>odom</code> to <code>base_link</code>. In tf a frame can have only one parent, and here <code>base_link</code> had two. I published a static <code>base_footprint</code> to <code>base_link</code> next to the dynamic <code>odom</code> to <code>base_link</code>, with default params. The result was the same warning, 137, 136 and 146 times, and no map. The fix is to make the odometry publish to the root of your URDF (<code>odom</code> to <code>base_footprint</code>), or to set <code>base_frame</code> to the frame the odometry actually publishes. Turning the static transform around (<code>base_link</code> to <code>base_footprint</code>, so <code>base_footprint</code> hangs below <code>base_link</code>) also worked. That gave 0 warnings on Humble and Lyrical, 1 on Jazzy at startup, and a map after 5.2 to 5.5 s on all three.</p>
+
+<h2>The silent cases: the scan never gets through</h2>
+
+<p>slam_toolbox receives scans through a <code>tf2_ros::MessageFilter</code> that waits until <code>odom</code> to <code>laser</code> can be computed at the scan's stamp. If that never happens, the scan is dropped before the callback, and "Failed to compute odom pose" never prints. Three different setups looked exactly the same:</p>
+
+<ul>
+<li>No odometry transform at all, only the static base to <code>laser</code>.</li>
+<li>Odometry published on <code>/robot1/tf</code>, as namespaced multi-robot setups do, while slam_toolbox listened on <code>/tf</code>.</li>
+<li>Odometry present, but no transform from the base to <code>laser</code>.</li>
+</ul>
+
+<p>In all three, the log had 6 lines like this in 15 seconds, while no scan at all reached the callback:</p>
+
+<pre><code>[INFO] [slam_toolbox]: Message Filter dropping message: frame 'laser' at time 1795252952.311 for reason 'discarding message because the queue is full'</code></pre>
+
+<p>This line is printed at INFO, not WARN. There was also no <code>map</code> to <code>odom</code> transform, so RViz says the <code>map</code> frame doesn't exist. Check the chain with <code>tf2_echo odom laser</code>. If that works and the drops continue, look at the stamps. The <a href="https://huntlab.app/en/ros2-message-filter-dropping-message-clock-mismatch/">Message Filter dropping message post</a> shows how to read the two times in this line and separate a clock mismatch from a normal wait.</p>
+
+<h2>Late odometry stamps and scan_queue_size</h2>
+
+<p>Here the frames were right, but the odometry was stamped some time before "now", as it is when odometry is computed on another machine or behind a filter. The shipped params set <code>transform_timeout: 0.2</code>, and <code>scan_queue_size</code> isn't in the file, so the code default of 1 applies. With a queue of one, a scan that has to wait for tf is pushed out when the next scan arrives 0.1 s later. I changed the lag and the two parameters:</p>
+
+<table>
+<thead><tr><th>Odometry lag</th><th><code>scan_queue_size</code></th><th><code>transform_timeout</code></th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>0 (reference)</td><td>1</td><td>0.2</td><td>map</td><td>map</td><td>map</td></tr>
+<tr><td>0.1 s</td><td>1</td><td>0.2</td><td>no map</td><td>no map</td><td>map</td></tr>
+<tr><td>0.15 s</td><td>1</td><td>0.2</td><td>no map</td><td>no map</td><td>map from early scans, then updates stopped</td></tr>
+<tr><td>0.25, 0.3, 1.0 s</td><td>1</td><td>0.2</td><td>no map</td><td>no map</td><td>no map</td></tr>
+<tr><td>0.6 s</td><td>1</td><td>1.0</td><td>no map</td><td>no map</td><td>no map</td></tr>
+<tr><td>0.15 s</td><td>10</td><td>0.2</td><td>map</td><td>map</td><td>map</td></tr>
+<tr><td>0.3 s</td><td>10</td><td>0.2</td><td>no map</td><td>map from early scans, then updates stopped</td><td>no map</td></tr>
+<tr><td>0.6 s</td><td>10</td><td>1.0</td><td>map</td><td>map</td><td>map</td></tr>
+<tr><td>1.0 s</td><td>10</td><td>1.0</td><td>map (first after 10.2 s)</td><td>map</td><td>map</td></tr>
+</tbody>
+</table>
+
+<p>"Updates stopped" means the last <code>map</code> to <code>odom</code> stamp was 11 or 13 seconds older than the end of the run. slam_toolbox stamps that transform from the last scan it accepted, so the old stamp shows that only a few early scans got in. Close to the limits the outcome changed from run to run and from distro to distro. Leave a margin.</p>
+
+<p>Raising only the timeout didn't help, because the queue of one still pushed every scan out. With <code>scan_queue_size: 10</code> and the timeout too short, the drop reason changed to <code>'the timestamp on the message is earlier than all the data in the transform cache'</code>. Setting both helped: a queue that covers the lag at your scan rate, and a timeout longer than the lag. The better fix is to stamp odometry with the time it describes and keep it close to the scan clock. Two other setups worked without changes. Odometry at only 2 Hz with correct stamps gave a map on all three distros, with 6 queue-full lines. So did scans stamped a full second in the past.</p>
+
+<p>The same timing rules apply to your own code that looks up transforms. The <a href="https://huntlab.app/en/ros2-tf2-lookup-would-require-extrapolation-into-the-future/">lookup_transform timing post</a> measured that asking for "now" failed 1,800 times out of 1,800 at 10, 50 and 100 Hz.</p>
+
+<h2>Jazzy and Lyrical: ros2 run leaves it unconfigured</h2>
+
+<p>From Jazzy on, slam_toolbox is a lifecycle node. <code>online_async_launch.py</code> configures and activates it because <code>autostart</code> defaults to <code>true</code>. <code>ros2 run slam_toolbox async_slam_toolbox_node --ros-args -p base_frame:=base_link -p use_sim_time:=false</code> doesn't. On Jazzy and Lyrical the node logged nothing. After 4 seconds <code>ros2 lifecycle get /slam_toolbox</code> said <code>unconfigured [1]</code>, and no map came in 15 seconds. On Humble the same command worked and the first map arrived after 10.0 s (code default <code>map_update_interval</code> of 10 s). On Jazzy and Lyrical, these two calls fixed it:</p>
+
+<pre><code>ros2 lifecycle set /slam_toolbox configure
+ros2 lifecycle set /slam_toolbox activate</code></pre>
+
+<p>Both returned <code>Transitioning successful</code>. The first map arrived 15.7 s (Jazzy) and 17.0 s (Lyrical) after the node started, which includes the 3-second wait and the two CLI calls.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Fixes</th><th>Result in my runs</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>Copy the shipped params file, set <code>base_frame</code>, pass <code>slam_params_file:=</code></td><td>Cause 1</td><td>0 warnings, map after 5.0 to 6.1 s</td><td>Keeps every other shipped value</td></tr>
+<tr><td>Static <code>base_link</code> to <code>base_footprint</code> transform</td><td>Cause 1</td><td>0 or 1 warnings, map after 5.2 to 5.5 s</td><td>Don't use it if your URDF already gives <code>base_link</code> a parent</td></tr>
+<tr><td>Odometry publishes to the URDF root</td><td>Cause 2</td><td>Same as the reference case</td><td>Fix it where the odometry is published</td></tr>
+<tr><td><code>base_frame:=</code> on the <code>ros2 launch</code> line</td><td>nothing</td><td>Still <code>base_footprint</code>, 136 to 152 warnings</td><td>Undeclared arguments are ignored</td></tr>
+<tr><td><code>ros2 run ... -p base_frame:=base_link</code></td><td>Cause 1</td><td>Humble: map after 10.0 s. Jazzy, Lyrical: only after configure and activate</td><td>Uses code defaults for all other parameters</td></tr>
+<tr><td><code>scan_queue_size: 10</code> plus <code>transform_timeout</code> above the lag</td><td>Late odometry</td><td>Map with 0.6 and 1.0 s lag</td><td>Correct stamps are the better fix</td></tr>
+<tr><td>Remap the namespaced tf to <code>/tf</code></td><td>Odometry on <code>/robot1/tf</code></td><td>Not tested</td><td>I only measured the failure</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The warning text, the shipped frame names, <code>transform_timeout: 0.2</code> and the missing <code>scan_queue_size</code> were the same in slam_toolbox 2.6.10 (Humble), 2.8.5 (Jazzy) and 2.10.0 (Lyrical). Jazzy and Lyrical print three more lines before the first warning (the lifecycle "Configuring" and "Activating" messages). They also need the lifecycle transitions when started with <code>ros2 run</code>. The launch file's <code>use_sim_time</code> defaults to <code>true</code> on all three. With no <code>/clock</code> publisher and correct frames, that default still gave a map after 5.2 s, 5.5 s and 6.1 s. In my setup it was not a cause of this warning. Simulated time with a real <code>/clock</code> is a separate case that I didn't run. If you replay a bag instead, the <a href="https://huntlab.app/en/ros2-bag-play-tf-static-missing-transient-local-qos-override/">ros2 bag play /tf_static post</a> measured when static transforms go missing during playback, which ends in the same "frame does not exist" state.</p>
+
+<h2>Not tested</h2>
+
+<p>The sync, localization and lifelong modes. Gazebo, a real lidar, Nav2 bringup, <code>use_sim_time</code> with a real <code>/clock</code>. A moving robot or scan matching quality. Remapping <code>/robot1/tf</code> to <code>/tf</code>, namespaced slam_toolbox launch files, Cyclone DDS or Zenoh. Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Failed to compute odom pose" mean in slam_toolbox?</h3>
+<p>The scan reached slam_toolbox, but tf couldn't transform <code>base_frame</code> into <code>odom_frame</code> at the scan's stamp, so the scan was dropped. In my runs this happened when <code>base_frame</code> (default <code>base_footprint</code>) wasn't in the same chain as the odometry, for example because the robot only had <code>base_link</code>.</p>
+
+<h3>Why doesn't ros2 launch slam_toolbox online_async_launch.py base_frame:=base_link work?</h3>
+<p>The launch file only declares <code>use_sim_time</code> and <code>slam_params_file</code> (plus <code>autostart</code> and <code>use_lifecycle_manager</code> on Jazzy and Lyrical). Other arguments are accepted silently and not passed to the node. Put <code>base_frame</code> in a copy of the params file and pass it with <code>slam_params_file:=</code>.</p>
+
+<h3>Why do I get "No map received" in RViz with no warning?</h3>
+<p>Scans were dropped before slam_toolbox's callback. Missing odometry, odometry on a namespaced tf topic, a missing laser transform and odometry stamps 0.25 s or more late all gave only INFO lines saying <code>Message Filter dropping message</code> and "queue is full", and no map.</p>
+
+<h3>slam_toolbox on Jazzy does nothing when started with ros2 run. Why?</h3>
+<p>It is a lifecycle node and stays <code>unconfigured</code>. Run <code>ros2 lifecycle set /slam_toolbox configure</code> and then <code>activate</code>, or start it with <code>online_async_launch.py</code>, which does both because <code>autostart</code> defaults to <code>true</code>.</p>
+
+<h3>Does increasing transform_timeout fix Message Filter dropping message?</h3>
+<p>Not alone. With 0.6 s of odometry lag and <code>transform_timeout: 1.0</code>, every scan was still dropped, because <code>scan_queue_size</code> defaults to 1. Setting <code>scan_queue_size: 10</code> together with the longer timeout gave a map at 0.6 and 1.0 s of lag.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Failed to compute odom pose mean in slam_toolbox?", "acceptedAnswer": {"@type": "Answer", "text": "The scan reached slam_toolbox, but tf couldn't transform base_frame into odom_frame at the scan's stamp, so the scan was dropped. In my runs this happened when base_frame (default base_footprint) wasn't in the same chain as the odometry, for example because the robot only had base_link."}},
+{"@type": "Question", "name": "Why doesn't ros2 launch slam_toolbox online_async_launch.py base_frame:=base_link work?", "acceptedAnswer": {"@type": "Answer", "text": "The launch file only declares use_sim_time and slam_params_file (plus autostart and use_lifecycle_manager on Jazzy and Lyrical). Other arguments are accepted silently and not passed to the node. Put base_frame in a copy of the params file and pass it with slam_params_file:=."}},
+{"@type": "Question", "name": "Why do I get No map received in RViz with no warning?", "acceptedAnswer": {"@type": "Answer", "text": "Scans were dropped before slam_toolbox's callback. Missing odometry, odometry on a namespaced tf topic, a missing laser transform and odometry stamps 0.25 s or more late all gave only INFO lines saying Message Filter dropping message and queue is full, and no map."}},
+{"@type": "Question", "name": "slam_toolbox on Jazzy does nothing when started with ros2 run. Why?", "acceptedAnswer": {"@type": "Answer", "text": "It is a lifecycle node and stays unconfigured. Run ros2 lifecycle set /slam_toolbox configure and then activate, or start it with online_async_launch.py, which does both because autostart defaults to true."}},
+{"@type": "Question", "name": "Does increasing transform_timeout fix Message Filter dropping message?", "acceptedAnswer": {"@type": "Answer", "text": "Not alone. With 0.6 s of odometry lag and transform_timeout 1.0, every scan was still dropped, because scan_queue_size defaults to 1. Setting scan_queue_size 10 together with the longer timeout gave a map at 0.6 and 1.0 s of lag."}}
+]}
+</script>
+
+<p>Measured on 2026-11-21 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, slam_toolbox 2.6.10, rclpy 3.3.22, rclcpp 16.0.23, ros2cli 0.18.21, tf2_ros 0.25.24, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, slam_toolbox 2.8.5, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, tf2_ros 0.36.23, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, slam_toolbox 2.10.0, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, tf2_ros 0.45.10, rmw 7.10.2), default RMW (Fast DDS), containers with no network after the apt install. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-04-ros2-slam-toolbox-failed-to-compute-odom-pose/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/105955">[slam_toolbox]: Failed to compute odom pose</a>, <a href="https://robotics.stackexchange.com/questions/110316">[slam_toolbox]: Failed to compute odom pose leading to "No map received"</a>, <a href="https://robotics.stackexchange.com/questions/110336">slam_toolbox - Failed to compute odom pose (No map received in rviz)</a>, <a href="https://github.com/SteveMacenski/slam_toolbox/issues/678">slam_toolbox issue #678: Failed to compute odom pose</a>, <a href="https://github.com/rai-opensource/spot_ros2/issues/694">spot_ros2 issue #694: Failed to compute the odometry pose, SLAM Toolbox TF layout</a>.</p>
