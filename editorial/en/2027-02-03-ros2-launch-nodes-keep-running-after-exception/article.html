@@ -1,0 +1,144 @@
+<pre><code>$ CASE=bad_last ros2 launch /w/case.launch.py
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): executable 'fake_node' not found on the libexec directory '/opt/ros/humble/lib/tf2_ros'
+$ echo $?
+1
+$ ros2 node list --no-daemon --spin-time 3
+/pk66a
+/pk66b</code></pre>
+
+<p>The prompt is back and the exit code is 1, so it looks like launch stopped. But the two nodes that started before the bad one are still running. In my container their parent was now PID 1. Nothing in the log says they were ever started.</p>
+
+<p>Short answer: this is a known bug in <code>launch</code> (<a href="https://github.com/ros2/launch/issues/747">ros2/launch#747</a>). When an action throws after some processes were started, launch shuts down before it has handled the "process started" events. The processes it already spawned never get a signal. In my runs it happened in 34 of 34 failing launches on Humble and in 31 of 34 on both Jazzy and Lyrical. The upstream fix (<a href="https://github.com/ros2/launch/pull/996">PR #996</a>) is merged in Rolling only. Until it reaches your distro, the cleanup that worked every time was to kill the launch's process group after it exits:</p>
+
+<pre><code>#!/bin/bash
+# run_launch.sh: start ros2 launch in its own process group, then clean that group up
+setsid ros2 launch "$@" &amp;
+pid=$!
+wait $pid
+rc=$?
+kill -TERM -- -$pid 2&gt;/dev/null   # every orphan is still in this group
+exit $rc</code></pre>
+
+<p>If the nodes are already orphaned, find their group and kill it the same way: <code>ps -eo pid,pgid,ppid,cmd | grep -- --ros-args</code>, then <code>kill -TERM -- -PGID</code>. In my runs the orphans always kept the process group of the <code>ros2 launch</code> that started them, and killing that group left 0 of them alive 1.5 seconds later, on all three distros.</p>
+
+<h2>Find your case</h2>
+
+<p>Each row is one launch file. The first two nodes were <code>tf2_ros static_transform_publisher</code> processes, except in the last row, which used two rclpy nodes. The number is how many of the repeated runs left at least one node running after <code>ros2 launch</code> exited.</p>
+
+<table>
+<thead><tr><th>What failed</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th></tr></thead>
+<tbody>
+<tr><td>Third <code>Node</code> has an executable that doesn't exist</td><td>6 of 6</td><td>4 of 6</td><td>6 of 6</td></tr>
+<tr><td><code>OpaqueFunction</code> that raises, after two nodes</td><td>6 of 6</td><td>5 of 6</td><td>3 of 6</td></tr>
+<tr><td><code>LaunchConfiguration('not_declared')</code> in the third node's arguments</td><td>6 of 6</td><td>6 of 6</td><td>6 of 6</td></tr>
+<tr><td><code>IncludeLaunchDescription</code> of a child file whose second node is bad</td><td>6 of 6 (3 nodes each)</td><td>6 of 6 (3 nodes)</td><td>6 of 6 (3 nodes)</td></tr>
+<tr><td><code>IncludeLaunchDescription</code> of a file that doesn't exist</td><td>4 of 4</td><td>4 of 4</td><td>4 of 4</td></tr>
+<tr><td>Two rclpy nodes (<code>ExecuteProcess</code>), then the bad node</td><td>6 of 6</td><td>6 of 6</td><td>6 of 6</td></tr>
+<tr><td>Bad node listed first</td><td>0 of 4</td><td>0 of 4</td><td>0 of 4</td></tr>
+<tr><td>Typo in a <code>Node</code> keyword (<code>ackage=</code>)</td><td>0 of 3</td><td>0 of 3</td><td>0 of 3</td></tr>
+<tr><td>Bad node inside <code>TimerAction(period=2.0)</code></td><td>0 of 4</td><td>0 of 4</td><td>0 of 4</td></tr>
+</tbody>
+</table>
+
+<p>If your launch printed <code>Caught exception in launch</code> and you see nodes in <code>ros2 node list</code> afterwards, they're real processes, not a stale cache. The cause of the error itself is a separate problem. For the libexec message, the <a href="https://huntlab.app/en/ros2-run-no-executable-found-ament-python-setup-cfg-entry-points/">"No executable found" post</a> measured where <code>ros2 run</code> and launch look for a Python node and what puts it somewhere else. For a missing include, the <a href="https://huntlab.app/en/ros2-launch-file-was-not-found-in-the-share-directory-of-package/">"file was not found in the share directory" post</a> measured how launch files get into <code>install/</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-21 I ran the same script in <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code>, one container at a time, with <code>--init</code> and <code>--network none</code>. One launch file built a different description depending on an environment variable: two good nodes plus one of the failures in the table. For each run the script:</p>
+
+<ul>
+<li>started <code>ros2 launch</code> in a new session, with SIGINT at its default action, the way a terminal starts it;</li>
+<li>waited for it to exit (30 seconds at most) and recorded the exit code and time;</li>
+<li>counted live node processes 1 second and 3 seconds after the exit by reading <code>/proc</code>, skipping zombies;</li>
+<li>on the first run of each case, ran <code>ros2 node list --no-daemon</code>;</li>
+<li>sent SIGTERM to the launch's process group, waited 1.5 seconds and counted again;</li>
+<li>killed anything left before the next run.</li>
+</ul>
+
+<p>I repeated each case 3 to 6 times. Then I sent Ctrl+C (SIGINT to the process group) to a healthy launch after 0.1, 0.3, 1 and 3 seconds, sent SIGINT, SIGTERM and SIGKILL to the launch PID alone, and tried <code>ros2 launch --print-description</code>. Last, I patched the installed <code>launch_service.py</code> with the change from PR #996 and ran the failing cases again. That added up to 120 launches per distro.</p>
+
+<p>My first attempt gave misleading results. A background job of a non-interactive bash starts with SIGINT ignored, and children inherit that. Ctrl+C at 0.1 seconds then looked like it hung launch for 30 seconds. I threw that run away and started every launch through a small wrapper that resets SIGINT. The script in the evidence folder is the corrected one.</p>
+
+<h2>Why the nodes survive</h2>
+
+<p>Launch spawns processes in the background. It learns that one has started from an event, which runs later in its event loop. When the next action throws, launch catches the exception and starts its shutdown. In the stock code, shutdown checks whether the loop is idle by looking at its entity futures and the event queue. It doesn't look at the asyncio tasks that are still spawning processes. One commenter on the issue traced it to this check: launch "waits till it is 'idle' to shutdown, but the way it decides if it's idle is flawed: It doesn't take into account async tasks still running". So launch decides there's nothing left to stop and exits.</p>
+
+<p>The log shows this. In the failing runs, the stock log contained the ERROR line and nothing else. It had no <code>process started with pid</code> lines for the nodes that were running. With the patch, the same launch logged the ERROR line, then both <code>process started</code> lines, then <code>sending signal 'SIGINT'</code>, then <code>process has died [pid ..., exit code -2, ...]</code> for each node.</p>
+
+<p>After <code>ros2 launch</code> exits, the orphans are re-parented. In the container their parent PID was 1. Their process group didn't change, which is why killing the group works. They kept running: the counts 1 and 3 seconds after the exit were always the same. Whenever the first run of a case left orphans, <code>ros2 node list --no-daemon</code> listed them by name. The rclpy nodes were orphaned the same way as the C++ ones.</p>
+
+<h2>Failures that left nothing behind</h2>
+
+<p>Three kinds of failure never left orphans in my runs.</p>
+
+<p>A bad node listed first fails before anything is spawned, so there's nothing to orphan. The error text was the same as in the bad-last case.</p>
+
+<p>A typo in a keyword argument (<code>Node(ackage='tf2_ros', ...)</code>) fails while <code>generate_launch_description()</code> is building the list. Nothing has started yet. The message was <code>Caught multiple exceptions when trying to load file of format [py]: - TypeError: Action.__init__() got an unexpected keyword argument 'ackage'</code>. A comment on the issue reports orphans from this typo. That would need the typo to be in a description built after other nodes have started, for example in an included file. I didn't test that layout.</p>
+
+<p>A failure that came 2 seconds later, from a bad node inside a <code>TimerAction</code>, shut the earlier nodes down every time. Launch exited after 2.51 to 2.72 seconds, and no nodes were left. By then the start events had been handled. So the bug is about failures that come while processes are still being spawned, which in practice means a mistake in the launch file itself.</p>
+
+<h2>Includes leave the child's nodes too</h2>
+
+<p>This is the case in the Stack Exchange question about <a href="https://robotics.stackexchange.com/questions/114308">zombie nodes from a child launch file</a>. The parent started two nodes and included a child file. The child started one node and then hit the bad executable. All three nodes survived in every run on all three distros: <code>ros2 node list</code> showed <code>/pk66a</code>, <code>/pk66b</code> and <code>/pk66child</code>. An include that pointed at a missing file failed with <code>[Errno 2] No such file or directory: '/w/does_not_exist.launch.py'</code>. It left the parent's two nodes running in 4 of 4 runs.</p>
+
+<h2>SIGTERM and SIGKILL to ros2 launch also leave orphans</h2>
+
+<p>A healthy launch stopped with Ctrl+C never left anything behind. I sent SIGINT to its process group after 0.1, 0.3, 1 and 3 seconds, 4 times each, and got 0 survivors on all three distros. At 0.1 seconds launch hadn't started any nodes yet. It exited with code 130 in 207 to 277 ms. From 0.3 seconds on, it logged <code>user interrupted with ctrl-c (SIGINT)</code> and the nodes exited. SIGINT sent to the launch PID alone after 3 seconds also stopped both nodes. A comment on the issue says it "might happen when you press Ctrl+C too quickly after launching". I didn't reproduce that at these four delays.</p>
+
+<p>Signals other than SIGINT were different. <code>kill -TERM</code> on the <code>ros2 launch</code> PID ended it with exit code 143, and both nodes kept running in 3 of 3 runs on every distro. It printed nothing. That's odd, because the installed <code>launch_service.py</code> has a SIGTERM handler that logs <code>using SIGTERM can result in orphaned processes</code>, and that line never appeared. <code>kill -KILL</code> left both nodes too, which is expected, because a killed process can't clean up. If a supervisor, IDE or script stops launch this way, signal the process group or use SIGINT. The <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">node shutdown post</a> measured how rclpy nodes react to Ctrl+C and SIGTERM, and launch's 5-second escalation from SIGINT to SIGTERM.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Option</th><th>Orphans in my runs</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Stock launch, no cleanup</td><td>Humble 34 of 34 failing runs, Jazzy 31 of 34, Lyrical 31 of 34</td><td>Exit code 1 after 0.41 to 1.30 s</td></tr>
+<tr><td>Kill the process group after launch exits (<code>kill -TERM -- -PGID</code>)</td><td>0 left, every run, all distros</td><td>Works for any cause, including SIGTERM and SIGKILL to launch</td></tr>
+<tr><td><code>launch_service.py</code> patched like PR #996</td><td>0 of 33 failing runs on each distro</td><td>Exit time unchanged (0.37 to 0.79 s). Nodes got SIGINT and exited, mostly with code -2</td></tr>
+<tr><td>Fix the launch file error</td><td>0</td><td>The real fix, but orphans from the earlier tries are still running</td></tr>
+<tr><td><code>ros2 launch --print-description</code> first</td><td>not a fix</td><td>Exit code 0 and 4 lines of output for the bad node, the missing launch configuration and the missing include. It doesn't run actions, so it caught none of the three</td></tr>
+</tbody>
+</table>
+
+<p>Patching the installed file worked, but <code>apt upgrade</code> overwrites it, and it changes a file that other users of the machine depend on. Use it to confirm the diagnosis, or wait for the backports. I applied the three hunks of the PR to <code>launch_service.py</code> with a script, which is in <code>repro.sh</code>. It applied cleanly to Humble's launch 1.0.16, Jazzy's 3.4.12 and Lyrical's 3.9.8.</p>
+
+<p>The process-group cleanup is the one I'd keep in scripts and containers. In a container you can also stop the whole container, which removes every process in it. In an interactive terminal Bash normally starts each job in its own process group. I didn't test that from a real terminal, so check the group with <code>ps -o pgid=</code> before you kill it.</p>
+
+<h2>Version notes</h2>
+
+<p>All three distros have the bug. On Humble every failing run left all of its started nodes. On Jazzy and Lyrical it depended on timing: Jazzy left 6 of 12 nodes in the bad-last case and 9 of 12 in the <code>OpaqueFunction</code> case, and Lyrical left 6 of 12 in the <code>OpaqueFunction</code> case. The missing launch configuration, both include cases and the rclpy case left everything on every distro. Neither Humble's nor Lyrical's installed <code>launch_service.py</code> contains the PR #996 change. PR #996 was merged into Rolling on 2026-08-21. The backports for Lyrical (<a href="https://github.com/ros2/launch/pull/1052">#1052</a>) and Jazzy (<a href="https://github.com/ros2/launch/pull/1053">#1053</a>) were still open when I checked on 2026-11-21. I found no Humble backport. Stock launch was a little slower to exit on Lyrical (0.60 to 0.92 s) than on Humble (0.41 to 0.53 s). The error texts were identical except for the distro path.</p>
+
+<h2>Not tested</h2>
+
+<p>Rolling, Kilted and Iron, a real interactive terminal, XML and YAML launch files, composable nodes and <code>ComposableNodeContainer</code>, <code>respawn=True</code>, lifecycle nodes, <code>launch_testing</code>, Cyclone DDS and Zenoh, nodes on other machines, a typo inside an included file after nodes have started, and why the SIGTERM handler printed nothing.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why are my ROS 2 nodes still running after ros2 launch failed?</h3>
+<p>Launch caught an exception while it was still starting processes, then shut down without signalling the ones it had already spawned (ros2/launch#747). In my runs this happened in 34 of 34 such failures on Humble and 31 of 34 on Jazzy and Lyrical. The nodes keep running with PID 1 as their parent.</p>
+
+<h3>How do I kill nodes left over from a failed launch?</h3>
+<p>They stay in the process group of the <code>ros2 launch</code> that started them. Find it with <code>ps -eo pid,pgid,cmd</code>, then run <code>kill -TERM -- -PGID</code>. That left none alive after 1.5 seconds in every run. Starting launch with <code>setsid</code> and killing the group after it exits does the same automatically.</p>
+
+<h3>Is this fixed in Jazzy or Lyrical?</h3>
+<p>Not in the images I measured (launch 3.4.12 on Jazzy, 3.9.8 on Lyrical, 1.0.16 on Humble). The fix, ros2/launch PR #996, is in Rolling. Backports for Jazzy and Lyrical were open on 2026-11-21. Applying the same change by hand removed every orphan on all three.</p>
+
+<h3>Does Ctrl+C leave orphaned nodes too?</h3>
+<p>Not in my runs. Ctrl+C at 0.1, 0.3, 1 and 3 seconds after start left 0 nodes on all three distros. SIGTERM or SIGKILL sent only to the <code>ros2 launch</code> process did leave both nodes running, every time.</p>
+
+<h3>Which launch errors leave nodes running?</h3>
+<p>Errors raised after the first processes were spawned: a bad executable in a later node, an exception in an <code>OpaqueFunction</code>, an undeclared <code>LaunchConfiguration</code>, and a broken or missing included file. An error in the first action, a typo caught while the description is built, and a failure 2 seconds later left nothing.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why are my ROS 2 nodes still running after ros2 launch failed?", "acceptedAnswer": {"@type": "Answer", "text": "Launch caught an exception while it was still starting processes, then shut down without signalling the ones it had already spawned (ros2/launch#747). In my runs this happened in 34 of 34 such failures on Humble and 31 of 34 on Jazzy and Lyrical. The nodes keep running with PID 1 as their parent."}},
+{"@type": "Question", "name": "How do I kill nodes left over from a failed launch?", "acceptedAnswer": {"@type": "Answer", "text": "They stay in the process group of the ros2 launch that started them. Find it with ps -eo pid,pgid,cmd, then run kill -TERM -- -PGID. That left none alive after 1.5 seconds in every run. Starting launch with setsid and killing the group after it exits does the same automatically."}},
+{"@type": "Question", "name": "Is this fixed in Jazzy or Lyrical?", "acceptedAnswer": {"@type": "Answer", "text": "Not in the images I measured (launch 3.4.12 on Jazzy, 3.9.8 on Lyrical, 1.0.16 on Humble). The fix, ros2/launch PR #996, is in Rolling. Backports for Jazzy and Lyrical were open on 2026-11-21. Applying the same change by hand removed every orphan on all three."}},
+{"@type": "Question", "name": "Does Ctrl+C leave orphaned nodes too?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my runs. Ctrl+C at 0.1, 0.3, 1 and 3 seconds after start left 0 nodes on all three distros. SIGTERM or SIGKILL sent only to the ros2 launch process did leave both nodes running, every time."}},
+{"@type": "Question", "name": "Which launch errors leave nodes running?", "acceptedAnswer": {"@type": "Answer", "text": "Errors raised after the first processes were spawned: a bad executable in a later node, an exception in an OpaqueFunction, an undeclared LaunchConfiguration, and a broken or missing included file. An error in the first action, a typo caught while the description is built, and a failure 2 seconds later left nothing."}}
+]}
+</script>
+
+<p>Measured on 2026-11-21 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, launch 1.0.16, launch_ros 0.19.14, rclpy 3.3.22, rclcpp 16.0.23, ros2cli 0.18.21, rmw 6.1.4, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, launch 3.4.12, launch_ros 0.26.13, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, launch 3.9.8, launch_ros 0.29.9, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, Python 3.14.4), default RMW (Fast DDS), on a 2 vCPU Linux host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-03-ros2-launch-nodes-keep-running-after-exception/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/ros2/launch/issues/747">Launch doesn't stop running nodes when exception thrown</a>, <a href="https://github.com/ros2/launch/issues/627">Launch with parsing error should not start anything</a>, <a href="https://robotics.stackexchange.com/questions/114308">Parent launch file starting child launch file results in "zombie" nodes</a>, <a href="https://robotics.stackexchange.com/questions/103335">How do I stop these nodes from running</a>, <a href="https://robotics.stackexchange.com/questions/91696">How to kill nodes in ROS2?</a>.</p>
