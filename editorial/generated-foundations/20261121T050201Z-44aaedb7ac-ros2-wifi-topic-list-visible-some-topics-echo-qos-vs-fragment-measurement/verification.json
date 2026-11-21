@@ -1,0 +1,70 @@
+{
+  "checked_at": "2026-11-21T14:02:09.836104+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"QoS 표: 발행 Best effort × 구독 Reliable → reliability 0, durability 1을 곱한 연결 여부\", \"actual\": 0}, {\"name\": \"QoS 표: 발행 Reliable × 구독 Best effort → 연결 여부\", \"actual\": 1}, {\"name\": \"대조군: reliability가 맞지 않는 토픽의 60초 수신 수 (크기와 무관)\", \"actual\": 0}, {\"name\": \"측정 창 60초 동안 10 Hz 토픽의 기대 수신 수 (메시지)\", \"actual\": 600}, {\"name\": \"측정 창 길이 ÷ 기본 ipfrag_time 30초 (1보다 커야 함)\", \"actual\": 2.0}, {\"name\": \"가설(best-effort, 독립 손실 1/32): 1조각 토픽의 기대 수신 수\", \"actual\": 581.25}, {\"name\": \"가설(best-effort, 독립 손실 1/32): 4조각 토픽의 기대 수신 수\", \"actual\": 528.4429550170898}, {\"name\": \"가설에서 손실 확률 비: 4조각 대 1조각 (4보다 약간 작음)\", \"actual\": 3.816375732421875}, {\"name\": \"문서 예시대로 ipfrag_time을 30초에서 3초로 줄였을 때 최대 대기 시간의 비\", \"actual\": 10.0}]\n",
+  "cases": [
+    {
+      "name": "QoS 표: 발행 Best effort × 구독 Reliable → reliability 0, durability 1을 곱한 연결 여부",
+      "expression": "0*1",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "QoS 표: 발행 Reliable × 구독 Best effort → 연결 여부",
+      "expression": "1*1",
+      "expected": 1,
+      "actual": 1
+    },
+    {
+      "name": "대조군: reliability가 맞지 않는 토픽의 60초 수신 수 (크기와 무관)",
+      "expression": "10*60*0",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "측정 창 60초 동안 10 Hz 토픽의 기대 수신 수 (메시지)",
+      "expression": "10*60",
+      "expected": 600,
+      "actual": 600
+    },
+    {
+      "name": "측정 창 길이 ÷ 기본 ipfrag_time 30초 (1보다 커야 함)",
+      "expression": "60/30",
+      "expected": 2,
+      "actual": 2.0
+    },
+    {
+      "name": "가설(best-effort, 독립 손실 1/32): 1조각 토픽의 기대 수신 수",
+      "expression": "600*(31/32)",
+      "expected": 581.25,
+      "actual": 581.25
+    },
+    {
+      "name": "가설(best-effort, 독립 손실 1/32): 4조각 토픽의 기대 수신 수",
+      "expression": "600*(31/32)*(31/32)*(31/32)*(31/32)",
+      "expected": 528.4429550170898,
+      "actual": 528.4429550170898
+    },
+    {
+      "name": "가설에서 손실 확률 비: 4조각 대 1조각 (4보다 약간 작음)",
+      "expression": "(1 - (31/32)*(31/32)*(31/32)*(31/32)) / (1/32)",
+      "expected": 3.816375732421875,
+      "actual": 3.816375732421875
+    },
+    {
+      "name": "문서 예시대로 ipfrag_time을 30초에서 3초로 줄였을 때 최대 대기 시간의 비",
+      "expression": "30/3",
+      "expected": 10,
+      "actual": 10.0
+    }
+  ],
+  "teaching_context": {
+    "description": "설명용 산술 모델이며 두 부분으로 나뉩니다. 첫째, ROS 2 QoS 공식 문서의 reliability 호환성 표를 0/1 값으로 옮깁니다. 연결은 모든 정책이 호환될 때만 되므로 정책별 값을 곱합니다. durability는 양쪽 모두 volatile이라 호환(1)이라고 둡니다. 둘째, 측정 계획에 쓸 기대 수신 수를 계산합니다. 발행 주파수는 10 Hz입니다. 측정 창은 DDS 튜닝 문서가 적은 기본 ipfrag_time 30초보다 길어야 하므로 60초로 잡습니다. 이렇게 하면 최대 30초 정지가 창 전체를 덮어 버리지 않습니다. 그다음 best-effort 구독에서 시험할 가설을 숫자로 적습니다. 조각 하나가 독립적으로 1/32 확률로 사라지고, 조각 하나라도 빠진 메시지는 버려진다고 가정합니다. 이 독립 손실 모델과 1/32라는 값은 문서에 없는 가정입니다. 1/32를 고른 이유는 31/32의 거듭제곱이 이진 부동소수점에서 정확히 표현되기 때문입니다. 비교하는 메시지는 1조각 상태 메시지와 4조각(약 4KB) 메시지입니다.",
+    "conclusion": "공식 표만으로 판정할 수 있는 것은 처음 세 경우입니다. best-effort 발행자를 reliable 구독으로 받으면 크기와 무관하게 0건입니다. 구독을 best-effort로 바꾸면 reliable 발행자와 best-effort 발행자 모두와 연결됩니다. 따라서 0건이던 토픽이 best-effort 구독에서 받아지기 시작하면 reliability 불일치가 원인 후보 1순위입니다. 그 뒤에도 토픽별 수신 수가 크기에 따라 갈리는지는 가설입니다. 독립 손실을 가정하면 4조각 토픽은 600건 중 약 528건, 1조각 토픽은 약 581건을 받는다고 예측됩니다. 측정한 수가 이 모양에 가까우면 DDS 튜닝 문서의 대응을 시험합니다. 순서는 best-effort 사용, ipfrag_time 단축, ipfrag_high_thresh 증가입니다. 독자가 할 일은 같은 와이파이에서 크기가 다른 토픽을 60초 이상 best-effort로 구독하고, 기대 수신 수 대비 실제 수신 수를 표로 적는 것입니다.",
+    "limitations": "조각당 손실률 1/32, 조각 손실의 독립성, '조각 하나만 빠져도 메시지 전체가 버려진다'는 가정은 모두 공식 문서에 없는 설명용 가설입니다. 실제 와이파이 손실은 몰려서 일어나는 경우가 많습니다. 다음 항목은 제공된 자료에 없어서 모델에 넣지 않았습니다. DDS가 큰 샘플을 UDP 패킷으로 나누는 방식, reliable 구독에서 생기는 재전송과 지연, Cyclone DDS 고유 설정, ros2 topic echo의 기본 QoS와 이를 바꾸는 명령 옵션입니다. 문서가 적은 증상은 수신 비율이 서서히 떨어지는 것이 아니라 최대 30초 정지이므로, 실제 결과는 비율 감소가 아니라 끊김으로 나타날 수 있습니다. 이 계산으로 질문자의 원인을 확정하거나 실제 수신율을 예측할 수는 없습니다. ROS 2, 네트워크, 로봇을 실행한 결과가 아닌 산술 모델입니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
