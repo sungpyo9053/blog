@@ -1,0 +1,145 @@
+<pre><code>$ ros2 run demo_py talker
+Package 'demo_py' not found
+
+$ ros2 launch demo_py t.launch.py
+Package 'demo_py' not found: "package 'demo_py' not found, searching: ['/opt/ros/humble']"
+
+$ ros2 pkg prefix demo_py
+Package not found</code></pre>
+
+<p>In Python code the same lookup ends in <code>ament_index_python.packages.PackageNotFoundError: "package 'nope_pkg' not found, searching: [...]"</code>, raised from <code>get_package_prefix</code> or <code>get_package_share_directory</code>.</p>
+
+<p>Short answer: ros2 doesn't look in your workspace folder. It looks at the prefixes listed in <code>AMENT_PREFIX_PATH</code>, and inside each one for the file <code>share/ament_index/resource_index/packages/&lt;name&gt;</code>. "Package not found" means no listed prefix has that file. The <code>searching: [...]</code> list in the launch error is that variable, so read it first. If your <code>install/&lt;pkg&gt;</code> isn't in it, the fix is to source the setup file that colcon wrote in the same shell, after the build:</p>
+
+<pre><code>cd ~/ws                      # the folder that contains src/, not src/ itself
+colcon build
+source install/setup.bash    # again after every build that adds a package
+ros2 run demo_py talker</code></pre>
+
+<p>If the build succeeded, the shell is sourced and the package is still missing, check the <code>&lt;build_type&gt;</code> line in <code>package.xml</code>. An <code>ament_cmake</code> package marked <code>cmake</code> or <code>catkin</code>, or with no <code>build_type</code> at all, built with exit code 0 in my run on every distro. Sourcing then left <code>AMENT_PREFIX_PATH</code> without the package, and <code>ros2 pkg list</code> didn't show it.</p>
+
+<h2>Find your case</h2>
+
+<p>Every row below behaved the same on Humble, Jazzy and Lyrical. The left column is what was wrong; the middle is what ros2 printed.</p>
+
+<table>
+<thead><tr><th>What was wrong</th><th>What ros2 said</th><th>Fix that worked</th></tr></thead>
+<tbody>
+<tr><td>Built, but only <code>/opt/ros/&lt;distro&gt;/setup.bash</code> sourced</td><td><code>Package 'demo_py' not found</code>; launch listed only <code>['/opt/ros/humble']</code></td><td><code>source install/setup.bash</code></td></tr>
+<tr><td>New package built after the shell was sourced</td><td><code>Package 'new_pkg' not found</code> (build exit 0)</td><td>Source <code>install/setup.bash</code> again</td></tr>
+<tr><td><code>--packages-select</code> built a different package</td><td><code>Package 'demo_py' not found</code>; no <code>install/demo_py</code></td><td>Build the package you run</td></tr>
+<tr><td><code>colcon build</code> run inside <code>src/</code></td><td><code>/ws7/install/setup.bash: No such file or directory</code>, then not found</td><td>Build from the workspace root, delete <code>src/build</code>, <code>src/install</code>, <code>src/log</code></td></tr>
+<tr><td><code>install/</code> deleted while the shell was still sourced</td><td><code>Package 'demo_py' not found</code>, the old path still in <code>AMENT_PREFIX_PATH</code></td><td>Rebuild, then source again</td></tr>
+<tr><td><code>build_type</code> in <code>package.xml</code> is <code>cmake</code>, <code>catkin</code> or missing</td><td><code>Package not found</code>, build exit 0</td><td><code>&lt;build_type&gt;ament_cmake&lt;/build_type&gt;</code>, rebuild, source</td></tr>
+<tr><td>Typo, wrong case, or dash for underscore</td><td><code>Package 'demo_pyy' not found</code>, <code>'Demo_py'</code>, <code>'demo-py'</code></td><td>Use the exact name from <code>package.xml</code></td></tr>
+<tr><td>Package found, executable name wrong</td><td><code>No executable found</code></td><td>Different error, see below</td></tr>
+</tbody>
+</table>
+
+<p>Two cases that look like causes did not give this error. Removing the <code>resource_index</code> line from <code>data_files</code> in <code>setup.py</code> didn't break anything, and a <code>package.xml</code> name that differs from <code>package_name</code> in <code>setup.py</code> gave "No executable found" instead. Both are explained further down.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-22 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one after another, each container with <code>--network none</code>. Inside each, <code>ros2 pkg create</code> made an <code>ament_python</code> package <code>demo_py</code> with a <code>talker</code> node (it prints <code>Hi from demo_py.</code> and exits) and an empty <code>ament_cmake</code> package <code>demo_cmake</code>. I added a launch file <code>t.launch.py</code> that starts the talker. <code>colcon build</code> finished both packages in 1.9 s on Humble, 2.2 s on Jazzy and 2.3 s on Lyrical. Then I broke the setup one way at a time and ran <code>ros2 run</code>, <code>ros2 launch</code>, <code>ros2 pkg prefix</code>, <code>ros2 pkg executables</code> and <code>ros2 pkg list</code>, printing <code>AMENT_PREFIX_PATH</code> each time.</p>
+
+<p>The failure is fast. Five failing <code>ros2 run</code> calls took 144 to 146 ms each on Humble, 195 to 198 ms on Jazzy and 301 to 401 ms on Lyrical. Five working calls took 207 to 210 ms, 280 to 282 ms and 364 to 375 ms. So ros2 doesn't wait or retry before it gives up. It reads the index once and stops.</p>
+
+<h2>Not sourced, or sourced before the build</h2>
+
+<p>With only <code>/opt/ros/&lt;distro&gt;/setup.bash</code> sourced, <code>AMENT_PREFIX_PATH</code> was just <code>/opt/ros/humble</code> (or <code>/opt/ros/jazzy</code>, <code>/opt/ros/lyrical</code>). All four commands failed with exit code 1. After <code>source /ws/install/setup.bash</code> it was <code>/ws/install/demo_py:/ws/install/demo_cmake:/opt/ros/jazzy</code>, and <code>ros2 pkg prefix demo_py</code> printed <code>/ws/install/demo_py</code>. colcon's default install layout gives every package its own prefix, so each new package adds one entry.</p>
+
+<p>That is why a package you create later is missing in a shell you sourced earlier. I sourced the workspace, created <code>new_pkg</code>, built it with <code>colcon build --packages-select new_pkg</code> (exit 0) and ran it in the same shell: <code>Package 'new_pkg' not found</code>. After sourcing <code>install/setup.bash</code> again, the same command printed <code>Hi from new_pkg.</code>. Sourcing is a snapshot of the install folder at that moment. It doesn't follow later builds.</p>
+
+<p>The opposite case also fails. I built, sourced, then deleted <code>install/</code>. <code>AMENT_PREFIX_PATH</code> still listed <code>/ws6/install/demo_py</code>, but the marker file was gone, so ros2 said not found. A path in the variable doesn't help if the folder behind it no longer exists.</p>
+
+<p>Which setup file you source matters too. With a clean environment, <code>install/local_setup.bash</code> alone put the workspace in <code>AMENT_PREFIX_PATH</code> but left no <code>ros2</code> on the <code>PATH</code>. The earlier post on <a href="https://huntlab.app/en/ros2-local-setup-bash-vs-setup-bash-ros2-command-not-found/">local_setup.bash vs setup.bash</a> measured that difference on Jazzy in detail, including the 127 exit code you get from the missing <code>ros2</code> command.</p>
+
+<h2>The package isn't in install/</h2>
+
+<p>A successful build doesn't mean the package you want was built. In a fresh workspace with both packages in <code>src/</code>, <code>colcon build --packages-select demo_cmake</code> finished with exit 0, and <code>install/</code> held only <code>demo_cmake</code>. <code>ros2 run demo_py talker</code> then failed after sourcing. <code>ls install</code> is the fastest check: no folder named after your package means it was never installed.</p>
+
+<p>The other common way to end up there is running <code>colcon build</code> from the wrong folder. colcon writes <code>build/</code>, <code>install/</code> and <code>log/</code> into the current directory. When I ran it inside <code>/ws7/src</code>, it built the package into <code>/ws7/src/install</code>, and <code>/ws7/install</code> didn't exist. <code>source /ws7/install/setup.bash</code> printed <code>No such file or directory</code>, and the next <code>ros2 run</code> said <code>Package 'demo_py' not found</code>. Sourcing <code>/ws7/src/install/setup.bash</code> worked. Delete the three folders inside <code>src/</code> and build from the workspace root instead.</p>
+
+<h2>build_type in package.xml</h2>
+
+<p>This is the case that survives "I sourced it, I promise". The template from <code>ros2 pkg create --build-type ament_cmake</code> ends with:</p>
+
+<pre><code class="language-xml">&lt;export&gt;
+  &lt;build_type&gt;ament_cmake&lt;/build_type&gt;
+&lt;/export&gt;</code></pre>
+
+<p>I made three copies of <code>demo_cmake</code>: one with <code>&lt;build_type&gt;cmake&lt;/build_type&gt;</code>, one with <code>catkin</code>, and one with the line removed. <code>CMakeLists.txt</code> was unchanged and still called <code>ament_package()</code>. All three built with exit code 0 and <code>Finished &lt;&lt;&lt; demo_cmake</code>, and all three installed the marker file <code>install/demo_cmake/share/ament_index/resource_index/packages/demo_cmake</code>. After <code>source install/setup.bash</code>, though, <code>AMENT_PREFIX_PATH</code> was still only <code>/opt/ros/&lt;distro&gt;</code>. <code>CMAKE_PREFIX_PATH</code> was <code>/ws8/install/demo_cmake</code>. <code>ros2 pkg prefix demo_cmake</code> printed <code>Package not found</code> and <code>ros2 pkg list</code> had 0 matching lines.</p>
+
+<p>So the marker was there, but nothing told ros2 to look in that prefix. For these three variants the setup script only extended the CMake search path. The answer on the 2024 <a href="https://robotics.stackexchange.com/questions/111133">Package not found after sourcing with ROS 2 Humble</a> question gives the same fix: "you also need to set ament_cmake for build_type in the export section of the package.xml". An old ROS 1 <code>package.xml</code> copied into a ROS 2 workspace hits the same thing, which is what the answer on <a href="https://robotics.stackexchange.com/questions/92079">Why doesn't ros2 pkg list show the packages that I built?</a> found. I didn't test changing <code>format="2"</code> to <code>format="3"</code> on its own.</p>
+
+<p>After you fix <code>build_type</code>, rebuild that package and source again. A shell sourced while the package was still a plain CMake package won't pick up the change.</p>
+
+<h2>Two setup.py edits that did not cause it</h2>
+
+<p>The <code>ament_python</code> template installs the marker through <code>data_files</code>:</p>
+
+<pre><code class="language-python">('share/ament_index/resource_index/packages',
+    ['resource/' + package_name]),</code></pre>
+
+<p>Some askers suspect a missing marker behind "Package not found". With these two lines deleted, the build still passed and <code>ros2 run demo_py talker</code> printed <code>Hi from demo_py.</code> on all three distros. The marker was in <code>install</code> anyway. colcon-ros 0.5.0, the version in all three images, checks whether the package installs it and creates the file when it doesn't: <code>colcon_ros/task/ament_python/build.py</code> calls <code>create_file(args, 'share/ament_index/resource_index/packages/' f'{self.context.pkg.name}')</code>. The template has the lines and they cost nothing, so keep them. Deleting the <code>resource/demo_py</code> file while leaving the lines in is worse. The build failed with <code>error: can't copy 'resource/demo_py': doesn't exist or not a regular file</code>.</p>
+
+<p>The second edit was renaming the package in <code>package.xml</code> to <code>demo_pkg</code> while <code>setup.py</code> kept <code>package_name = 'demo_py'</code>. The build passed and produced <code>install/demo_pkg</code>, which held two markers, <code>demo_pkg</code> and <code>demo_py</code>. <code>ros2 run demo_pkg talker</code> said <code>No executable found</code>, because the script went to <code>lib/demo_py</code>. <code>ros2 run demo_py talker</code> worked. Keep the two names the same and you avoid both puzzles.</p>
+
+<h2>Package not found vs No executable found</h2>
+
+<p>The two errors mean different things. <code>Package 'x' not found</code> stops at the index lookup. <code>No executable found</code> means the package was found and ros2 looked in its <code>lib/&lt;pkg&gt;</code> folder for a file with that name. A wrong executable name (<code>ros2 run demo_py talkr</code>) gave the second one, while a misspelled package name (<code>demo_pyy</code>) gave the first. If you have "No executable found", the earlier post on <a href="https://huntlab.app/en/ros2-run-no-executable-found-ament-python-setup-cfg-entry-points/">No executable found and not found on the libexec directory</a> measured the entry point, <code>setup.cfg</code> and <code>--symlink-install</code> causes. If ros2 launch finds the package but not the file, that's the error covered in <a href="https://huntlab.app/en/ros2-launch-file-was-not-found-in-the-share-directory-of-package/">file was not found in the share directory of package</a>, where the launch file never made it into <code>install/&lt;pkg&gt;/share</code>.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Fix</th><th>Result in my run</th><th>Caveat</th></tr></thead>
+<tbody>
+<tr><td><code>source install/setup.bash</code> after the build</td><td>Fixed every sourcing case, all distros</td><td>Must be repeated after a build that adds a package</td></tr>
+<tr><td><code>source install/local_setup.bash</code> only</td><td>Workspace in <code>AMENT_PREFIX_PATH</code>, no <code>ros2</code> on <code>PATH</code> in a clean shell</td><td>Source <code>/opt/ros/&lt;distro&gt;/setup.bash</code> first</td></tr>
+<tr><td>Build from the workspace root</td><td>Fixed the <code>src/install</code> case</td><td>Clean the stray folders in <code>src/</code></td></tr>
+<tr><td>Build without <code>--packages-select</code>, or select the right one</td><td>Fixed the missing <code>install/&lt;pkg&gt;</code></td><td>None</td></tr>
+<tr><td><code>&lt;build_type&gt;ament_cmake&lt;/build_type&gt;</code></td><td>The original package with this line was found; the three variants without it were not</td><td>Rebuild, then source again</td></tr>
+<tr><td>Adding the marker line back to <code>setup.py</code></td><td>Not needed with colcon-ros 0.5.0</td><td>Harmless, keep it</td></tr>
+</tbody>
+</table>
+
+<p>One check covers most of the table. Run <code>echo $AMENT_PREFIX_PATH</code> and <code>ls install/&lt;pkg&gt;/share/ament_index/resource_index/packages/</code>. If the folder is missing, the package wasn't installed there. If the folder is there but not in the variable, the shell isn't sourced, or the package isn't an ament package to colcon.</p>
+
+<h2>Version notes</h2>
+
+<p>All cases behaved the same on Humble, Jazzy and Lyrical. The messages were identical apart from the distro path in <code>searching: [...]</code>. ros2run was 0.18.21 on Humble, 0.32.13 on Jazzy and 0.40.9 on Lyrical, and ament_index_python was 1.4.1, 1.8.4 and 1.13.3. The Python traceback from <code>get_package_prefix</code> shows the same <code>LookupError: Could not find the resource 'nope_pkg' of type 'packages'</code> and then <code>PackageNotFoundError</code> on all three. All three images had colcon-core 0.21.3 and colcon-ros 0.5.0, so the colcon results above don't show a difference between distros. They describe that colcon version. Lyrical was the slowest at both failing and working <code>ros2 run</code> calls, by about 90 to 110 ms over Jazzy (medians of five calls each).</p>
+
+<h2>Not tested</h2>
+
+<p><code>--merge-install</code>, zsh and <code>setup.zsh</code>, <code>.bashrc</code> sourcing, Windows and <code>setup.bat</code>, binary packages missing from apt (for example <code>nav2_bringup</code> not installed), <code>package.xml</code> <code>format</code> versions on their own, catkin packages with ROS 1 dependencies, Foxy, Iron and Rolling. I didn't run a C++ node; the <code>ament_cmake</code> results come from an empty package checked with <code>ros2 pkg prefix</code> and <code>ros2 pkg list</code>.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does ros2 run say Package not found after colcon build succeeded?</h3>
+<p>In my run, the usual reason was the shell. ros2 only searches <code>AMENT_PREFIX_PATH</code>, and the build doesn't change it. Source <code>install/setup.bash</code> in the same terminal after the build, and again after any build that adds a new package.</p>
+
+<h3>I sourced install/setup.bash and the package is still not found. What else?</h3>
+<p>Check that <code>install/&lt;pkg&gt;</code> exists. It was missing after <code>--packages-select</code> picked another package, and after <code>colcon build</code> ran inside <code>src/</code>. If it exists, check <code>&lt;build_type&gt;</code> in <code>package.xml</code>. With <code>cmake</code>, <code>catkin</code> or no build type, the build passed but sourcing didn't add the package.</p>
+
+<h3>What does "searching: ['/opt/ros/humble']" mean?</h3>
+<p>That list is <code>AMENT_PREFIX_PATH</code>. If it only shows <code>/opt/ros/&lt;distro&gt;</code>, your workspace isn't sourced in that shell. A working shell listed <code>/ws/install/demo_py</code> before the distro path.</p>
+
+<h3>Does a missing resource marker in setup.py cause Package not found?</h3>
+<p>Not with colcon-ros 0.5.0. With the <code>resource_index</code> lines removed from <code>data_files</code>, colcon still created the marker and the node ran on all three distros. Deleting the <code>resource/&lt;pkg&gt;</code> file while keeping the lines made the build fail instead.</p>
+
+<h3>Is Package not found the same as No executable found?</h3>
+<p>No. "Package not found" means the index lookup failed. "No executable found" means the package was found but no matching file was in <code>lib/&lt;pkg&gt;</code>. A <code>package.xml</code> name that differed from <code>setup.py</code> gave the second one.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does ros2 run say Package not found after colcon build succeeded?", "acceptedAnswer": {"@type": "Answer", "text": "In my run, the usual reason was the shell. ros2 only searches AMENT_PREFIX_PATH, and the build doesn't change it. Source install/setup.bash in the same terminal after the build, and again after any build that adds a new package."}},
+{"@type": "Question", "name": "I sourced install/setup.bash and the package is still not found. What else?", "acceptedAnswer": {"@type": "Answer", "text": "Check that install/PKG exists. It was missing after --packages-select picked another package, and after colcon build ran inside src/. If it exists, check build_type in package.xml. With cmake, catkin or no build type, the build passed but sourcing didn't add the package."}},
+{"@type": "Question", "name": "What does searching: ['/opt/ros/humble'] mean?", "acceptedAnswer": {"@type": "Answer", "text": "That list is AMENT_PREFIX_PATH. If it only shows /opt/ros/DISTRO, your workspace isn't sourced in that shell. A working shell listed /ws/install/demo_py before the distro path."}},
+{"@type": "Question", "name": "Does a missing resource marker in setup.py cause Package not found?", "acceptedAnswer": {"@type": "Answer", "text": "Not with colcon-ros 0.5.0. With the resource_index lines removed from data_files, colcon still created the marker and the node ran on all three distros. Deleting the resource/PKG file while keeping the lines made the build fail instead."}},
+{"@type": "Question", "name": "Is Package not found the same as No executable found?", "acceptedAnswer": {"@type": "Answer", "text": "No. Package not found means the index lookup failed. No executable found means the package was found but no matching file was in lib/PKG. A package.xml name that differed from setup.py gave the second one."}}
+]}
+</script>
+
+<p>Measured on 2026-11-22 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, Python 3.10.12, rclpy 3.3.22, rclcpp 16.0.23, ros2cli 0.18.21, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, Python 3.12.3, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, Python 3.14.4, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2), colcon-core 0.21.3 and colcon-ros 0.5.0 on all three, on a 2 vCPU Docker host. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-09-ros2-package-not-found/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/95261">ERROR : ROS2 RUN package not found</a>, <a href="https://robotics.stackexchange.com/questions/111133">Package not found after sourcing with ROS 2 Humble</a>, <a href="https://robotics.stackexchange.com/questions/92079">Why doesn't ros2 pkg list show the packages that I built?</a>, <a href="https://robotics.stackexchange.com/questions/114590">ROS 2 Package Not Found After Successful Build (ros2 pkg list Not Detecting Package)</a>, <a href="https://robotics.stackexchange.com/questions/91977">Why doesn't ros2 pkg list show the packages that I built? (2019, minimal_publisher copy)</a>.</p>
