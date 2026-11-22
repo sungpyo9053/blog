@@ -1,0 +1,58 @@
+{
+  "checked_at": "2026-11-23T02:02:09.632340+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"기본 설치 모델: 패키지 3개를 빌드하고 source한 직후의 예상 경로 항목 수(underlay 1 + 패키지 3)\", \"actual\": 4}, {\"name\": \"가설 A(새 설치 디렉터리는 다시 source해야 보인다)가 맞을 때: 새 패키지 1개를 추가해 빌드한 뒤 다시 source하지 않은 터미널이 보는 overlay 패키지 비율(4개 중 3개)\", \"actual\": 0.75}, {\"name\": \"가설 B(다시 source하지 않아도 보인다)가 맞거나, 다시 source한 뒤의 overlay 패키지 비율\", \"actual\": 1.0}, {\"name\": \"대조군: 기존 패키지의 Python 파일만 고쳐 다시 빌드한 경우. 새 하위 디렉터리가 생기지 않으므로 모델의 예상 비율은 3개 중 3개\", \"actual\": 1.0}, {\"name\": \"merge-install 모델의 예상 경로 항목 수(underlay 1 + install 1). 패키지 수와 무관하다는 것은 측정할 예상\", \"actual\": 2}, {\"name\": \"패키지 40개 작업공간에서 기본 설치 모델과 merge-install 모델의 예상 경로 항목 수 차이\", \"actual\": 39}, {\"name\": \"측정 결과 가설 A가 맞고 빌드 10번 중 새 패키지를 추가한 빌드가 2번이라면, '매번 다시 source' 대신 '새 패키지 추가 시에만 다시 source'를 택해 줄어드는 source 횟수\", \"actual\": 8}]\n",
+  "cases": [
+    {
+      "name": "기본 설치 모델: 패키지 3개를 빌드하고 source한 직후의 예상 경로 항목 수(underlay 1 + 패키지 3)",
+      "expression": "1 + 3",
+      "expected": 4,
+      "actual": 4
+    },
+    {
+      "name": "가설 A(새 설치 디렉터리는 다시 source해야 보인다)가 맞을 때: 새 패키지 1개를 추가해 빌드한 뒤 다시 source하지 않은 터미널이 보는 overlay 패키지 비율(4개 중 3개)",
+      "expression": "3 / 4",
+      "expected": 0.75,
+      "actual": 0.75
+    },
+    {
+      "name": "가설 B(다시 source하지 않아도 보인다)가 맞거나, 다시 source한 뒤의 overlay 패키지 비율",
+      "expression": "4 / 4",
+      "expected": 1,
+      "actual": 1.0
+    },
+    {
+      "name": "대조군: 기존 패키지의 Python 파일만 고쳐 다시 빌드한 경우. 새 하위 디렉터리가 생기지 않으므로 모델의 예상 비율은 3개 중 3개",
+      "expression": "(3 + 0) / 3",
+      "expected": 1,
+      "actual": 1.0
+    },
+    {
+      "name": "merge-install 모델의 예상 경로 항목 수(underlay 1 + install 1). 패키지 수와 무관하다는 것은 측정할 예상",
+      "expression": "1 + 1",
+      "expected": 2,
+      "actual": 2
+    },
+    {
+      "name": "패키지 40개 작업공간에서 기본 설치 모델과 merge-install 모델의 예상 경로 항목 수 차이",
+      "expression": "(1 + 40) - (1 + 1)",
+      "expected": 39,
+      "actual": 39
+    },
+    {
+      "name": "측정 결과 가설 A가 맞고 빌드 10번 중 새 패키지를 추가한 빌드가 2번이라면, '매번 다시 source' 대신 '새 패키지 추가 시에만 다시 source'를 택해 줄어드는 source 횟수",
+      "expression": "10 - 2",
+      "expected": 8,
+      "actual": 8
+    }
+  ],
+  "teaching_context": {
+    "description": "설명용 산술 모델이며 ROS나 colcon을 실행한 결과가 아닙니다. 가정은 다음과 같습니다. underlay(/opt/ros/<distro>) 쪽 설치 경로 항목을 1개로 셉니다. overlay 작업공간에는 처음에 패키지 3개가 있습니다. 기본 설치는 튜토리얼 문장('By default each package will be installed into a separate subdirectory')대로 패키지마다 하위 디렉터리를 만들고, 모델에서는 각 디렉터리가 경로 항목 1개에 해당한다고 둡니다. 다만 setup 파일이 정확히 몇 개의 항목을 어느 변수에 더하는지는 튜토리얼에 없으므로 이 1:1 대응은 가정입니다. merge-install은 튜토리얼의 Windows 탭 문장('merge-install will combine all the paths into the install directory')을 근거로 overlay 항목을 1개로 둔 모델이고, Linux에서 이 값이 맞는지는 측정 대상입니다. 단위는 '경로 항목 개수'와 '패키지 개수'입니다. 입력값을 이렇게 고른 이유는 세 가지입니다. 패키지 3개는 손으로 셀 수 있는 최소 규모입니다. 패키지 1개 추가는 질문이 묻는 바로 그 사건입니다. 패키지 40개는 실제 규모의 작업공간에서 두 레이아웃의 예상 항목 수 차이가 얼마나 벌어지는지 보여 줍니다.",
+    "conclusion": "기본 설치 모델에서는 새 패키지가 생길 때마다 overlay 경로 항목이 하나씩 늘 것으로 예상됩니다. 이 예상에서 두 가설이 나옵니다. 가설 A는 빌드 전에 연 터미널이 새 패키지를 보지 못한다는 것이고, 이때 값은 0.75입니다. 가설 B는 그래도 보인다는 것이고, 이때 값은 1입니다. 문서만으로는 둘 중 어느 쪽인지 정할 수 없습니다. 기존 패키지 파일만 고친 빌드는 모델상 새 디렉터리를 만들지 않으므로 비율 1로 예상합니다. --symlink-install을 쓰면 튜토리얼 문장대로 Python 같은 비컴파일 파일 수정이 소스 쪽 변경만으로 설치본에 반영됩니다. merge-install은 overlay 항목이 하나로 고정된다는 예상만 있을 뿐이고, 그 예상과 새 패키지가 보이는지 여부를 모두 직접 재야 합니다. 독자가 할 일은 같은 터미널에서 세 시점에 ros2 pkg list | wc -l과 AMENT_PREFIX_PATH 항목 수를 적는 것입니다. 시점은 빌드 전, 새 패키지를 추가해 빌드한 직후, 다시 source한 직후입니다. 측정에서 가설 A가 확인되고 파일 수정만 한 빌드에서 개수가 변하지 않을 때에만 '새 패키지를 추가했을 때만 다시 source'라는 규칙을 채택합니다. 결과가 예측과 다르면 '매 빌드마다 다시 source'를 유지합니다.",
+    "limitations": "공식 colcon 튜토리얼이 말하는 것은 세 가지까지입니다. 기본 설치가 패키지마다 별도 하위 디렉터리를 쓴다는 것, setup 파일이 path와 library path에 필요한 항목을 더한다는 것, merge-install이 경로를 install 하나로 합친다는 것입니다. 세 번째 문장은 Windows 탭에만 있습니다. 아래 동작은 공급된 문서에 없습니다. source가 항목을 정확히 어떻게 더하는지, 이미 source한 터미널이 이후 생긴 패키지를 찾는지, ament index와 ros2 CLI가 패키지를 어떻게 조회하는지, CLI 쪽 캐시가 목록에 영향을 주는지입니다. 그래서 위 비율과 항목 수는 모두 측정할 가설이며 결과가 아닙니다. 측정할 때는 패키지 목록이 CLI 내부 상태 때문에 늦게 바뀌는 것은 아닌지도 함께 의심해야 합니다. 이 모델은 AMENT_PREFIX_PATH 하나만 셉니다. PATH, PYTHONPATH, 라이브러리 경로, CMake 경로와 패키지를 삭제한 경우는 따로 확인해야 합니다. 원 질문의 본문은 제공되지 않았습니다. 따라서 이 글은 제목이 묻는 '권장 처리 방식' 중 다시 source하는 시점만 다루며, .bashrc 구성 전반이나 여러 배포판 문제(기존 글 2521), local_setup과 setup의 차이(기존 글 888)는 다루지 않습니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}

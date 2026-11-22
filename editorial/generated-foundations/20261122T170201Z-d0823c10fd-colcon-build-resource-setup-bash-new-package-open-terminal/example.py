@@ -1,0 +1,26 @@
+"""Purpose-built arithmetic checks; not robot or simulator execution."""
+import math
+import json
+results = []
+value = (1 + 3)
+assert math.isclose(value, 4, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '기본 설치 모델: 패키지 3개를 빌드하고 source한 직후의 예상 경로 항목 수(underlay 1 + 패키지 3)', "actual": value})
+value = (3 / 4)
+assert math.isclose(value, 0.75, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설 A(새 설치 디렉터리는 다시 source해야 보인다)가 맞을 때: 새 패키지 1개를 추가해 빌드한 뒤 다시 source하지 않은 터미널이 보는 overlay 패키지 비율(4개 중 3개)', "actual": value})
+value = (4 / 4)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '가설 B(다시 source하지 않아도 보인다)가 맞거나, 다시 source한 뒤의 overlay 패키지 비율', "actual": value})
+value = ((3 + 0) / 3)
+assert math.isclose(value, 1, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '대조군: 기존 패키지의 Python 파일만 고쳐 다시 빌드한 경우. 새 하위 디렉터리가 생기지 않으므로 모델의 예상 비율은 3개 중 3개', "actual": value})
+value = (1 + 1)
+assert math.isclose(value, 2, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": 'merge-install 모델의 예상 경로 항목 수(underlay 1 + install 1). 패키지 수와 무관하다는 것은 측정할 예상', "actual": value})
+value = ((1 + 40) - (1 + 1))
+assert math.isclose(value, 39, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": '패키지 40개 작업공간에서 기본 설치 모델과 merge-install 모델의 예상 경로 항목 수 차이', "actual": value})
+value = (10 - 2)
+assert math.isclose(value, 8, rel_tol=1e-9, abs_tol=1e-9)
+results.append({"name": "측정 결과 가설 A가 맞고 빌드 10번 중 새 패키지를 추가한 빌드가 2번이라면, '매번 다시 source' 대신 '새 패키지 추가 시에만 다시 source'를 택해 줄어드는 source 횟수", "actual": value})
+print(json.dumps(results, ensure_ascii=False))
