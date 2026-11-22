@@ -1,0 +1,191 @@
+<pre><code>bad.cpp:5:54: error: cannot capture 'rclcpp::Node::get_clock()()' by reference
+bad.cpp:5:3: error: 'c' was not declared in this scope
+
+bad.cpp:5:3: error: invalid 'static_cast' from type 'rclcpp::Duration' to type 'rcutils_duration_value_t' {aka 'long int'}
+
+ValueError: Logger severity cannot be changed between calls.
+ValueError: Logging filter parameters cannot be changed between calls.</code></pre>
+
+<p>The first two lines are what g++ prints on Humble and Jazzy when you pass <code>get_clock()</code> to <code>RCLCPP_INFO_THROTTLE</code>. The third comes from passing an <code>rclcpp::Duration</code> as the period. The last two are rclpy, raised when one throttled log line is called with a different severity or a different <code>throttle_duration_sec</code> than the first time.</p>
+
+<p>Short answer: in C++, pass the clock object and an integer number of milliseconds. In Python, pass seconds as a float:</p>
+
+<pre><code class="language-cpp">// C++: clock by reference (*get_clock()), period in milliseconds
+RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, "speed %.2f", speed);</code></pre>
+
+<pre><code class="language-python"># Python: period in seconds
+self.get_logger().info(f'speed {speed:.2f}', throttle_duration_sec=1.0)</code></pre>
+
+<p>Both printed 5 lines in 5 seconds from a loop running at about 100 Hz, on Humble, Jazzy and Lyrical. Three more things caught me out in the measurements. With <code>use_sim_time</code> on and no <code>/clock</code>, the C++ macro with the node clock printed nothing at all, not even the first line. In C++ the throttle timer belongs to the line of code, not to the node, so a second node instance using the same line printed 0 lines. And rclpy throttles by system time unless you pass a clock, so it ignores sim time by default.</p>
+
+<h2>Find your symptom</h2>
+
+<table>
+<thead><tr><th>Symptom</th><th>Cause I measured</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>cannot capture 'rclcpp::Node::get_clock()()' by reference</code></td><td>Passed the <code>shared_ptr</code> from <code>get_clock()</code></td><td>Pass <code>*get_clock()</code></td></tr>
+<tr><td><code>invalid 'static_cast' from type 'rclcpp::Duration'</code> (Lyrical: <code>cannot convert 'rclcpp::Duration' to 'rcutils_duration_value_t'</code>)</td><td>Passed an <code>rclcpp::Duration</code> as the period</td><td>Pass milliseconds: <code>d.nanoseconds() / 1000000</code></td></tr>
+<tr><td>Same error for <code>std::chrono::seconds</code></td><td>Passed <code>1s</code> as the period</td><td>Pass <code>1000</code></td></tr>
+<tr><td>C++ throttle prints every call</td><td>Period written as <code>1</code>, meaning 1 ms</td><td>Write <code>1000</code> for one second</td></tr>
+<tr><td>Python throttle prints once and never again</td><td><code>throttle_duration_sec=1000</code>, meaning 1000 s</td><td>Write <code>1.0</code></td></tr>
+<tr><td>Throttled line never prints with <code>use_sim_time</code></td><td>Node clock is at 0 until <code>/clock</code> arrives</td><td>Publish <code>/clock</code>, or throttle on a steady clock</td></tr>
+<tr><td>C++: only one of several node or plugin instances prints</td><td>Throttle state is <code>static</code> per line of code</td><td>Keep the timer yourself, per instance</td></tr>
+<tr><td>Python: throttle has no effect</td><td>A new logger object on every call</td><td>Keep the logger, for example <code>self.get_logger()</code></td></tr>
+<tr><td><code>ValueError: Logger severity cannot be changed between calls.</code></td><td>One throttled call site used with INFO and WARN</td><td>Use one call site per severity</td></tr>
+<tr><td><code>ValueError: Logging filter parameters cannot be changed between calls.</code></td><td>One call site given two different periods</td><td>Keep the period fixed per call site</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-22 I ran the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one after another, with <code>--network none</code>. A Python script and a small C++ package ran the same loop. Each iteration does one <code>spin_once</code> (Python) or <code>spin_some</code> (C++), one log call and a 10 ms sleep, for 5 seconds of wall time. That gave 437 to 464 loop iterations in Python and 481 to 489 in C++. I counted the log lines each case printed. For the sim-time cases, a second process published <code>/clock</code> at 100 Hz and moved it forward 0.1 s per message, so sim time ran about 10 times faster than wall time. Three more C++ packages each held one wrong macro call, for the compiler errors.</p>
+
+<p>The counts were the same on all three distros, except the 10x sim-time rows, which varied from run to run (see below):</p>
+
+<table>
+<thead><tr><th>Case</th><th>Python lines</th><th>C++ lines</th></tr></thead>
+<tbody>
+<tr><td>No filter</td><td>every call (453 to 461)</td><td>not run</td></tr>
+<tr><td>Throttle 1 s (Python <code>1.0</code>, C++ <code>1000</code>)</td><td>5</td><td>5</td></tr>
+<tr><td>C++ period <code>1</code> (1 ms)</td><td>not applicable</td><td>every call (483 to 485)</td></tr>
+<tr><td>C++ period from <code>Duration::from_seconds(1.0).nanoseconds() / 1000000</code></td><td>not applicable</td><td>5</td></tr>
+<tr><td>Python <code>throttle_duration_sec=1000</code></td><td>1</td><td>not applicable</td></tr>
+<tr><td>Python <code>throttle_duration_sec=0</code></td><td>every call (454 to 457)</td><td>not applicable</td></tr>
+<tr><td>Once (<code>once=True</code>, <code>RCLCPP_INFO_ONCE</code>)</td><td>1</td><td>1</td></tr>
+<tr><td>Skip first (<code>skip_first=True</code>, <code>RCLCPP_INFO_SKIPFIRST</code>)</td><td>every call but the first</td><td>every call but the first</td></tr>
+<tr><td>Skip first + throttle 1 s</td><td>4</td><td>4</td></tr>
+<tr><td>Python <code>once=True</code> + <code>throttle_duration_sec=1.0</code></td><td>1</td><td>not applicable</td></tr>
+<tr><td>Same line, two node loggers</td><td>5 + 5</td><td>5 + 0</td></tr>
+<tr><td>Same line, two child loggers (<code>get_child('a')</code>, <code>'b'</code>)</td><td>5 + 5</td><td>not run</td></tr>
+<tr><td>Python: <code>rclpy.logging.get_logger('pt')</code> called inside the loop</td><td>every call (453 to 459)</td><td>not applicable</td></tr>
+<tr><td><code>use_sim_time</code>, no <code>/clock</code>, default (Python) or node clock (C++)</td><td>5</td><td>0</td></tr>
+<tr><td><code>use_sim_time</code>, no <code>/clock</code>, node clock passed in Python</td><td>0</td><td>not applicable</td></tr>
+<tr><td><code>use_sim_time</code>, no <code>/clock</code>, C++ <code>rclcpp::Clock(RCL_STEADY_TIME)</code></td><td>not applicable</td><td>5</td></tr>
+<tr><td><code>use_sim_time</code>, 10x <code>/clock</code>, default (Python)</td><td>5</td><td>not applicable</td></tr>
+<tr><td><code>use_sim_time</code>, 10x <code>/clock</code>, node clock</td><td>28 to 46</td><td>26 to 49</td></tr>
+<tr><td><code>use_sim_time</code>, 10x <code>/clock</code>, C++ steady clock</td><td>not applicable</td><td>5</td></tr>
+</tbody>
+</table>
+
+<p>Why 5 lines in 5 seconds and not 6: the first call printed, and the next ones printed at about 1.0 s, 2.0 s, 3.0 s and 4.0 s. In the Humble run the Python lines came at loop iterations 0, 92, 184, 276 and 368, just over 1 s apart. The loop stopped before the 5 s mark came around again.</p>
+
+<h2>C++: the clock argument is a reference</h2>
+
+<p>The macro signature is <code>RCLCPP_INFO_THROTTLE(logger, clock, duration, ...)</code>. The clock has to be an <code>rclcpp::Clock</code> object, not a pointer to one. <code>get_clock()</code> returns an <code>rclcpp::Clock::SharedPtr</code>, so you write <code>*get_clock()</code> or <code>*this-&gt;get_clock()</code>. The error doesn't say "pointer" anywhere. On Humble and Jazzy it said:</p>
+
+<pre><code>error: cannot capture 'rclcpp::Node::get_clock()()' by reference
+error: 'c' was not declared in this scope</code></pre>
+
+<p>The macro wraps the clock in a lambda that captures it by reference, and you can't capture a function call result that way. The second error, about <code>'c'</code>, is a follow-on from the first. On Lyrical the first line was much longer and named the full <code>std::__shared_ptr_access&lt;rclcpp::Node, ...&gt;</code> expression, but it starts with the same <code>cannot capture</code> text. Older code that builds a local <code>rclcpp::Clock clock;</code> just to throttle comes from before <a href="https://github.com/ros2/rclcpp/issues/969">rclcpp issue 969</a>, which made the node clock usable here. With <code>*get_clock()</code>, the node clock built and worked on all three distros.</p>
+
+<h2>C++: the period is milliseconds, as a plain integer</h2>
+
+<p>The third argument is an integer number of milliseconds. The rcutils macro converts it with <code>RCUTILS_MS_TO_NS(RCUTILS_CAST_DURATION(duration))</code>, which I printed from <code>logging_macros.h</code> in the Humble and Jazzy images. My grep found nothing in the Lyrical image, so I can't quote its header, but it behaved the same. That has two effects.</p>
+
+<p>First, a number in seconds is silently wrong. <code>RCLCPP_INFO_THROTTLE(..., 1, ...)</code> compiled and printed every single call, 483 to 485 lines in 5 s, because the period was 1 ms and the loop ran every 10 ms. Write <code>1000</code> for one second.</p>
+
+<p>Second, duration types don't compile. Both <code>rclcpp::Duration::from_seconds(1.0)</code> and <code>std::chrono::seconds</code> (<code>1s</code>) failed:</p>
+
+<pre><code>Humble, Jazzy:
+error: invalid 'static_cast' from type 'rclcpp::Duration' to type 'rcutils_duration_value_t' {aka 'long int'}
+error: invalid 'static_cast' from type 'std::chrono::seconds' {aka 'std::chrono::duration&lt;long int&gt;'} to type 'rcutils_duration_value_t' {aka 'long int'}
+
+Lyrical:
+error: cannot convert 'rclcpp::Duration' to 'rcutils_duration_value_t' {aka 'long int'} in initialization
+error: cannot convert 'std::chrono::duration&lt;long long int, std::ratio&lt;1&gt; &gt;' to 'rcutils_duration_value_t' {aka 'long int'} in initialization</code></pre>
+
+<p>If you already have an <code>rclcpp::Duration</code>, pass <code>d.nanoseconds() / 1000000</code>. That printed 5 lines, the same as <code>1000</code>. Accepting a <code>Duration</code> directly is still an open request, <a href="https://github.com/ros2/rclcpp/issues/1929">rclcpp issue 1929</a>, and the Lyrical images I used still rejected it.</p>
+
+<h2>C++: one timer per line of code, shared by every instance</h2>
+
+<p>The throttle state lives in <code>static</code> variables inside the macro expansion. The Humble and Jazzy headers hold <code>static rcutils_time_point_value_t __rcutils_logging_last_logged = 0;</code>. A static variable inside a member function exists once for the whole process. So I created two instances of the same node class, <code>ct</code> and <code>ct2</code>, and called one member function containing <code>RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, ...)</code> on both in every iteration. <code>ct</code> printed 5 lines and <code>ct2</code> printed 0, on all three distros. The two loggers have different names, but that doesn't matter. In my loop <code>ct</code> always reached the line first, so it took every slot. <code>RCLCPP_INFO_ONCE</code> behaved the same way: one line for the whole process, from <code>ct</code>, and nothing from <code>ct2</code>.</p>
+
+<p>This is what <a href="https://github.com/ros2/rclcpp/issues/2587">rclcpp issue 2587</a> describes for plugins. Load the same plugin class twice and only one instance's throttled messages appear. If you need one throttle per instance, keep the time in a member and check it yourself:</p>
+
+<pre><code class="language-cpp">// member: rclcpp::Time last_warn_{0, 0, RCL_ROS_TIME};
+auto now = get_clock()-&gt;now();
+if ((now - last_warn_).seconds() &gt;= 1.0) {
+  last_warn_ = now;
+  RCLCPP_WARN(get_logger(), "speed %.2f", speed);
+}</code></pre>
+
+<p>I did not run this snippet. It is the workaround the per-line design leaves you with, and the measured part is the 5 + 0 result above.</p>
+
+<h2>Python: throttle state belongs to the logger object</h2>
+
+<p>rclpy keeps its throttle state on the logger object, per call site. A shared helper function that logs through two different node loggers printed 5 lines for each, and so did two child loggers from <code>get_child('a')</code> and <code>get_child('b')</code>. So the C++ problem above did not happen in Python.</p>
+
+<p>The flip side: if you get a fresh logger object for every call, the state is thrown away each time. With <code>rclpy.logging.get_logger('pt').info(..., throttle_duration_sec=1.0)</code> inside the loop, the throttle did nothing. It printed 453 to 459 lines, which was every call. <code>self.get_logger()</code> on a node returns the same object each time, and it throttled normally.</p>
+
+<p>The two <code>ValueError</code> messages come from the same per-call-site state. rclpy remembers the severity and filter values used the first time a call site runs. If a helper such as <code>def log(level): logger.log(msg, level, throttle_duration_sec=1.0)</code> is called with INFO and then WARN, the second call raises <code>ValueError: Logger severity cannot be changed between calls.</code> The same helper called with <code>throttle_duration_sec=1.0</code> and then <code>2.0</code> raised <code>ValueError: Logging filter parameters cannot be changed between calls.</code> Both happened on the second call, after one line had printed, on all three distros. The fix is a separate call site for each severity or period, for example one <code>logger.info(...)</code> line and one <code>logger.warning(...)</code> line.</p>
+
+<p>The period is in seconds. <code>throttle_duration_sec=1000</code>, a value copied from C++ milliseconds, printed the first line and then nothing for the rest of the run. <code>throttle_duration_sec=0</code> printed every call. <code>once=True</code> combined with a throttle printed one line.</p>
+
+<h2>Sim time: zero lines, or more lines than you expect</h2>
+
+<p>The clock decides what "1 second" means, and the two client libraries pick different clocks by default.</p>
+
+<p>rclpy throttles with a plain <code>Clock()</code> unless you pass <code>throttle_time_source_type</code>. I printed the source in each image: Humble and Jazzy have <code>'throttle_time_source_type': Clock()</code>, Lyrical has <code>BaseClock()</code>. That clock reads system time, so a Python node with <code>use_sim_time</code> set to true still throttled on wall time. It printed 5 lines with no <code>/clock</code> at all, and 5 lines with <code>/clock</code> running 10 times faster. If you pass the node clock (<code>throttle_time_source_type=self.get_clock()</code>), it follows sim time, with the same results as C++ below. The docstring in all three images lists this argument as <code>str</code>, but the code checks <code>isinstance(..., Clock)</code> (<code>BaseClock</code> on Lyrical), and passing the node clock worked.</p>
+
+<p>In C++ you always choose the clock, and <code>*get_clock()</code> is the node clock. With <code>use_sim_time</code> true and nothing publishing <code>/clock</code>, the node clock stays at 0. The throttle check is "now is at least last logged plus period", and with now stuck at 0 that is never true. Not even the first message printed: 0 lines in 5 seconds in C++, and 0 in Python with the node clock. The <code>RESULT</code> line confirmed <code>sim_now_ns=0</code> at the end of those runs. The same zero clock causes other trouble. My earlier post on <a href="https://huntlab.app/en/subtraction-leads-to-negative-time-ros-2-rclpy-use-sim-time/">"Subtraction leads to negative time" in rclpy</a> measured <code>now()</code> returning 0 until the first <code>/clock</code> message arrives, even when the simulator starts at 100 s.</p>
+
+<p>With <code>/clock</code> running at 10x, the node clock throttle printed many more lines than wall-clock seconds. That is correct for sim time, but it can surprise you. The count varied a lot between runs: 28 to 46 lines in Python and 26 to 49 in C++, over 12 runs of each across the three distros, where 50 would be one line per sim second. I don't know why some runs printed fewer. My guess is that <code>/clock</code> messages were handled in bunches, so the sim clock skipped past some of the 1-second marks. I didn't measure that.</p>
+
+<p>If you want wall-clock throttling in a sim-time node, give C++ a steady clock:</p>
+
+<pre><code class="language-cpp">rclcpp::Clock steady_clock_{RCL_STEADY_TIME};   // member
+RCLCPP_WARN_THROTTLE(get_logger(), steady_clock_, 1000, "no data");</code></pre>
+
+<p>That printed 5 lines with no <code>/clock</code> and 5 lines with the 10x <code>/clock</code>, on all three distros. In Python, leaving out <code>throttle_time_source_type</code> already gives you that behavior. Clock types cause other mix-ups too: my post on <a href="https://huntlab.app/en/cant-subtract-times-with-different-clock-types-ros-2-rclpy/">"Can't subtract times with different clock types"</a> measured that <code>rclpy.time.Time()</code> is a 0 ns SYSTEM_TIME value, while <code>get_clock().now()</code> is ROS_TIME.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Goal</th><th>C++</th><th>Python</th><th>Measured</th></tr></thead>
+<tbody>
+<tr><td>Once per second, wall time</td><td><code>RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, ...)</code> (no sim time), or with a steady clock</td><td><code>throttle_duration_sec=1.0</code></td><td>5 lines in 5 s, all distros</td></tr>
+<tr><td>Once per second of sim time</td><td><code>*get_clock()</code> with <code>/clock</code> running</td><td><code>throttle_time_source_type=self.get_clock()</code></td><td>Follows sim time, 0 lines with no <code>/clock</code></td></tr>
+<tr><td>Skip the first message, then throttle</td><td><code>RCLCPP_INFO_SKIPFIRST_THROTTLE</code></td><td><code>skip_first=True, throttle_duration_sec=1.0</code></td><td>4 lines, first at about 1 s</td></tr>
+<tr><td>Only once</td><td><code>RCLCPP_INFO_ONCE</code> (once per process)</td><td><code>once=True</code> (once per logger)</td><td>1 line</td></tr>
+<tr><td>Separate throttle per instance</td><td>Own <code>rclcpp::Time</code> member (not run)</td><td>Already per logger</td><td>C++ macro: 5 + 0. Python: 5 + 5</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The line counts were the same on Humble, Jazzy and Lyrical, apart from the run-to-run spread in the 10x sim-time cases. The C++ error text changed only with the compiler. Humble's g++ 11.4 and Jazzy's g++ 13.3 printed <code>invalid 'static_cast'</code>. Lyrical's g++ 15.2 printed <code>cannot convert ... in initialization</code>, and its <code>cannot capture</code> line spelled out the full <code>shared_ptr</code> access expression. rclpy's two <code>ValueError</code> texts were identical on all three. On Lyrical the rclpy <code>log()</code> signature has type hints (<code>**kwargs: 'Unpack[LoggingFilterArgs]'</code>) and the default throttle clock is <code>BaseClock()</code> instead of <code>Clock()</code>. It behaved the same in every case I ran.</p>
+
+<h2>Not tested</h2>
+
+<p><code>RCLCPP_*_STREAM_THROTTLE</code> and <code>RCLCPP_*_EXPRESSION</code>/<code>FUNCTION</code> variants, the hand-written per-instance timer above, composable nodes and real pluginlib plugins (I used two node objects in one process), <code>MultiThreadedExecutor</code> and logging from several threads, the rosout and <code>rqt_console</code> view of throttled messages, log levels set with <code>--log-level</code>, Gazebo as the <code>/clock</code> source, Foxy, Iron, Kilted and Rolling, and RMW implementations other than each image's default.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What units does RCLCPP_INFO_THROTTLE use?</h3>
+<p>Milliseconds, as an integer. <code>1000</code> printed 5 lines in 5 seconds. <code>1</code> printed every call. <code>rclcpp::Duration</code> and <code>std::chrono::seconds</code> didn't compile on Humble, Jazzy or Lyrical. Python's <code>throttle_duration_sec</code> is in seconds.</p>
+
+<h3>How do I fix "cannot capture get_clock() by reference"?</h3>
+<p>Pass the clock object, not the pointer: <code>RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, "...")</code>. That compiled and throttled correctly on all three distros.</p>
+
+<h3>Why does my throttled log never print with use_sim_time?</h3>
+<p>With <code>use_sim_time</code> true and no <code>/clock</code>, the node clock stays at 0 and the throttle condition is never met. The C++ macro with <code>*get_clock()</code> printed 0 lines, not even the first one. Publish <code>/clock</code>, or throttle on <code>rclcpp::Clock(RCL_STEADY_TIME)</code>, which printed 5 lines in 5 s.</p>
+
+<h3>Why does only one instance of my node or plugin print its throttled message?</h3>
+<p>In C++ the throttle timer is a static variable per line of code, shared by every object in the process. Two node instances calling the same line printed 5 and 0 lines. rclpy keeps the state per logger, and two loggers printed 5 each.</p>
+
+<h3>What does "Logger severity cannot be changed between calls" mean in rclpy?</h3>
+<p>One throttled or once-filtered call site was used with two severities, for example a helper that receives the level as an argument. rclpy raised the <code>ValueError</code> on the second call. Changing <code>throttle_duration_sec</code> at the same site raised "Logging filter parameters cannot be changed between calls." Use one call site per severity and period.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What units does RCLCPP_INFO_THROTTLE use?", "acceptedAnswer": {"@type": "Answer", "text": "Milliseconds, as an integer. 1000 printed 5 lines in 5 seconds. 1 printed every call. rclcpp::Duration and std::chrono::seconds didn't compile on Humble, Jazzy or Lyrical. Python's throttle_duration_sec is in seconds."}},
+{"@type": "Question", "name": "How do I fix cannot capture get_clock() by reference?", "acceptedAnswer": {"@type": "Answer", "text": "Pass the clock object, not the pointer: RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, ...). That compiled and throttled correctly on all three distros."}},
+{"@type": "Question", "name": "Why does my throttled log never print with use_sim_time?", "acceptedAnswer": {"@type": "Answer", "text": "With use_sim_time true and no /clock, the node clock stays at 0 and the throttle condition is never met. The C++ macro with *get_clock() printed 0 lines, not even the first one. Publish /clock, or throttle on rclcpp::Clock(RCL_STEADY_TIME), which printed 5 lines in 5 s."}},
+{"@type": "Question", "name": "Why does only one instance of my node or plugin print its throttled message?", "acceptedAnswer": {"@type": "Answer", "text": "In C++ the throttle timer is a static variable per line of code, shared by every object in the process. Two node instances calling the same line printed 5 and 0 lines. rclpy keeps the state per logger, and two loggers printed 5 each."}},
+{"@type": "Question", "name": "What does Logger severity cannot be changed between calls mean in rclpy?", "acceptedAnswer": {"@type": "Answer", "text": "One throttled or once-filtered call site was used with two severities, for example a helper that receives the level as an argument. rclpy raised the ValueError on the second call. Changing throttle_duration_sec at the same site raised Logging filter parameters cannot be changed between calls. Use one call site per severity and period."}}
+]}
+</script>
+
+<p>Measured on 2026-11-22 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, rclpy 3.3.22, rclcpp 16.0.23, rcutils 5.1.11, ros2cli 0.18.21, rmw 6.1.4, g++ 11.4.0), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rclcpp 28.1.22, rcutils 6.7.6, ros2cli 0.32.13, rmw 7.3.4, g++ 13.3.0) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp 32.0.3, rcutils 7.1.3, ros2cli 0.40.9, rmw 7.10.2, g++ 15.2.0), default RMW, 2 vCPU host, containers capped at 1.5 CPUs. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-10-ros2-log-throttle/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/95855">ros2 throttle logs (what to pass as clock and duration)</a>, <a href="https://github.com/ros2/rclcpp/issues/969">Allow node clock to be used in THROTTLE log macros</a>, <a href="https://github.com/ros2/rclcpp/issues/1929">Make throttle log macros accept a rclcpp::Duration</a>, <a href="https://github.com/ros2/rclcpp/issues/2587">Issue with RCLCPP THROTTLE logging in the plugin based approach</a>.</p>

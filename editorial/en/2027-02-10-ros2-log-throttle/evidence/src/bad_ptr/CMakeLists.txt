@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.8)
+project(bad_ptr)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+add_executable(bad src/bad.cpp)
+target_link_libraries(bad rclcpp::rclcpp)
+install(TARGETS bad DESTINATION lib/${PROJECT_NAME})
+ament_package()

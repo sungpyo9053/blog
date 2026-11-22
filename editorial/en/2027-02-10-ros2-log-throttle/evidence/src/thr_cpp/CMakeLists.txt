@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.8)
+project(thr_cpp)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+add_executable(ctest src/ctest.cpp)
+target_link_libraries(ctest rclcpp::rclcpp)
+install(TARGETS ctest DESTINATION lib/${PROJECT_NAME})
+ament_package()
