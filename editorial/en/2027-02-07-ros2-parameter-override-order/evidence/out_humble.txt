@@ -1,0 +1,422 @@
+=== distro=humble nproc=2 date=2026-11-22T02:34:09Z
+Python 3.10.12
+ros-humble-launch 1.0.16-1jammy.20261031.121509
+ros-humble-launch-ros 0.19.14-1jammy.20261105.224123
+ros-humble-rcl 5.3.13-1jammy.20261105.212816
+ros-humble-rcl-yaml-param-parser 5.3.13-1jammy.20261104.171350
+ros-humble-rclcpp 16.0.23-1jammy.20261110.085103
+ros-humble-rclpy 3.3.22-1jammy.20261105.222008
+ros-humble-rmw 6.1.4-1jammy.20261104.091842
+ros-humble-rmw-fastrtps-cpp 6.2.11-1jammy.20261105.211300
+ros-humble-rmw-implementation 2.8.6-1jammy.20261105.212418
+ros-humble-ros2cli 0.18.21-1jammy.20261105.224944
+default RMW: rmw_fastrtps_cpp
+--- /cfg/f1.yaml
+/pnode:
+  ros__parameters:
+    a: f1
+    b: f1
+--- /cfg/f2.yaml
+/pnode:
+  ros__parameters:
+    a: f2
+--- /cfg/name_then_star.yaml
+/pnode:
+  ros__parameters:
+    a: name
+/**:
+  ros__parameters:
+    a: star
+--- /cfg/ns.yaml
+pnode:
+  ros__parameters:
+    a: f1nest
+/ns/pnode:
+  ros__parameters:
+    a: nsname
+--- /cfg/star.yaml
+/**:
+  ros__parameters:
+    a: star
+--- /cfg/star_then_name.yaml
+/**:
+  ros__parameters:
+    a: star
+/pnode:
+  ros__parameters:
+    a: name
+--- /cfg/yes.yaml
+/pnode:
+  ros__parameters:
+    a: yes
+--- /cfg/yes_quoted.yaml
+/pnode:
+  ros__parameters:
+    a: "yes"
+Finished <<< pk [4.91s]
+
+Summary: 1 package finished [5.13s]
+build_ms=5370
+### CLI C0_nothing exe=pnode PMODE= args: 
+RESULT py node=/pnode a=default b=default c=default
+exit=0
+### CLI C0_nothing exe=cnode PMODE= args: 
+RESULT cpp node=/pnode a=default b=default c=default
+exit=0
+### CLI C1_f1_then_f2 exe=pnode PMODE= args: --ros-args --params-file /cfg/f1.yaml --params-file /cfg/f2.yaml
+RESULT py node=/pnode a=f2 b=f1 c=default
+exit=0
+### CLI C1_f1_then_f2 exe=cnode PMODE= args: --ros-args --params-file /cfg/f1.yaml --params-file /cfg/f2.yaml
+RESULT cpp node=/pnode a=f2 b=f1 c=default
+exit=0
+### CLI C2_f2_then_f1 exe=pnode PMODE= args: --ros-args --params-file /cfg/f2.yaml --params-file /cfg/f1.yaml
+RESULT py node=/pnode a=f1 b=f1 c=default
+exit=0
+### CLI C2_f2_then_f1 exe=cnode PMODE= args: --ros-args --params-file /cfg/f2.yaml --params-file /cfg/f1.yaml
+RESULT cpp node=/pnode a=f1 b=f1 c=default
+exit=0
+### CLI C3_p_then_file exe=pnode PMODE= args: --ros-args -p a:=cli --params-file /cfg/f1.yaml
+RESULT py node=/pnode a=f1 b=f1 c=default
+exit=0
+### CLI C3_p_then_file exe=cnode PMODE= args: --ros-args -p a:=cli --params-file /cfg/f1.yaml
+RESULT cpp node=/pnode a=f1 b=f1 c=default
+exit=0
+### CLI C4_file_then_p exe=pnode PMODE= args: --ros-args --params-file /cfg/f1.yaml -p a:=cli
+RESULT py node=/pnode a=cli b=f1 c=default
+exit=0
+### CLI C4_file_then_p exe=cnode PMODE= args: --ros-args --params-file /cfg/f1.yaml -p a:=cli
+RESULT cpp node=/pnode a=cli b=f1 c=default
+exit=0
+### CLI C5_p_x_then_p_y exe=pnode PMODE= args: --ros-args -p a:=x -p a:=y
+Traceback (most recent call last):
+  File "/ws/install/pk/lib/pk/pnode", line 29, in <module>
+    main()
+  File "/ws/install/pk/lib/pk/pnode", line 15, in main
+    v = [n.declare_parameter(p, 'default').value for p in 'abc']
+  File "/ws/install/pk/lib/pk/pnode", line 15, in <listcomp>
+    v = [n.declare_parameter(p, 'default').value for p in 'abc']
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 367, in declare_parameter
+    return self.declare_parameters('', [args], ignore_override)[0]
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 493, in declare_parameters
+    self._set_parameters(
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 738, in _set_parameters
+    raise InvalidParameterTypeException(
+rclpy.exceptions.InvalidParameterTypeException: Trying to set parameter 'a' to 'True' of type 'BOOL', expecting type 'STRING'
+[ros2run]: Process exited with failure 1
+exit=1
+### CLI C5_p_x_then_p_y exe=cnode PMODE= args: --ros-args -p a:=x -p a:=y
+terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterTypeException'
+  what():  parameter 'a' has invalid type: Wrong parameter type, parameter {a} is of type {string}, setting it to {bool} is not allowed.
+[ros2run]: Aborted
+exit=250
+### CLI C5b_p_first_then_p_second exe=pnode PMODE= args: --ros-args -p a:=first -p a:=second
+RESULT py node=/pnode a=second b=default c=default
+exit=0
+### CLI C5b_p_first_then_p_second exe=cnode PMODE= args: --ros-args -p a:=first -p a:=second
+RESULT cpp node=/pnode a=second b=default c=default
+exit=0
+### CLI C6_one_file_star_then_name exe=pnode PMODE= args: --ros-args --params-file /cfg/star_then_name.yaml
+RESULT py node=/pnode a=name b=default c=default
+exit=0
+### CLI C6_one_file_star_then_name exe=cnode PMODE= args: --ros-args --params-file /cfg/star_then_name.yaml
+RESULT cpp node=/pnode a=name b=default c=default
+exit=0
+### CLI C7_one_file_name_then_star exe=pnode PMODE= args: --ros-args --params-file /cfg/name_then_star.yaml
+RESULT py node=/pnode a=star b=default c=default
+exit=0
+### CLI C7_one_file_name_then_star exe=cnode PMODE= args: --ros-args --params-file /cfg/name_then_star.yaml
+RESULT cpp node=/pnode a=star b=default c=default
+exit=0
+### CLI C8_namefile_then_starfile exe=pnode PMODE= args: --ros-args --params-file /cfg/f1.yaml --params-file /cfg/star.yaml
+RESULT py node=/pnode a=star b=f1 c=default
+exit=0
+### CLI C8_namefile_then_starfile exe=cnode PMODE= args: --ros-args --params-file /cfg/f1.yaml --params-file /cfg/star.yaml
+RESULT cpp node=/pnode a=star b=f1 c=default
+exit=0
+### CLI C9_starfile_then_namefile exe=pnode PMODE= args: --ros-args --params-file /cfg/star.yaml --params-file /cfg/f1.yaml
+RESULT py node=/pnode a=f1 b=f1 c=default
+exit=0
+### CLI C9_starfile_then_namefile exe=cnode PMODE= args: --ros-args --params-file /cfg/star.yaml --params-file /cfg/f1.yaml
+RESULT cpp node=/pnode a=f1 b=f1 c=default
+exit=0
+### CLI C10_p_node_prefixed exe=pnode PMODE= args: --ros-args -p pnode:a:=prefixed
+RESULT py node=/pnode a=prefixed b=default c=default
+exit=0
+### CLI C10_p_node_prefixed exe=cnode PMODE= args: --ros-args -p pnode:a:=prefixed
+RESULT cpp node=/pnode a=prefixed b=default c=default
+exit=0
+### CLI C11_p_other_node_prefixed exe=pnode PMODE= args: --ros-args -p other:a:=prefixed
+RESULT py node=/pnode a=default b=default c=default
+exit=0
+### CLI C11_p_other_node_prefixed exe=cnode PMODE= args: --ros-args -p other:a:=prefixed
+RESULT cpp node=/pnode a=default b=default c=default
+exit=0
+### CLI C12_two_ros_args_blocks exe=pnode PMODE= args: --ros-args -p a:=first -- --ros-args -p a:=second
+RESULT py node=/pnode a=second b=default c=default
+exit=0
+### CLI C12_two_ros_args_blocks exe=cnode PMODE= args: --ros-args -p a:=first -- --ros-args -p a:=second
+RESULT cpp node=/pnode a=second b=default c=default
+exit=0
+### CLI C13_ns_file exe=pnode PMODE= args: --ros-args -r __ns:=/ns --params-file /cfg/ns.yaml
+RESULT py node=/ns/pnode a=nsname b=default c=default
+exit=0
+### CLI C13_ns_file exe=cnode PMODE= args: --ros-args -r __ns:=/ns --params-file /cfg/ns.yaml
+RESULT cpp node=/ns/pnode a=nsname b=default c=default
+exit=0
+### CLI C14_p_on exe=pnode PMODE= args: --ros-args -p a:=on
+Traceback (most recent call last):
+  File "/ws/install/pk/lib/pk/pnode", line 29, in <module>
+    main()
+  File "/ws/install/pk/lib/pk/pnode", line 15, in main
+    v = [n.declare_parameter(p, 'default').value for p in 'abc']
+  File "/ws/install/pk/lib/pk/pnode", line 15, in <listcomp>
+    v = [n.declare_parameter(p, 'default').value for p in 'abc']
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 367, in declare_parameter
+    return self.declare_parameters('', [args], ignore_override)[0]
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 493, in declare_parameters
+    self._set_parameters(
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 738, in _set_parameters
+    raise InvalidParameterTypeException(
+rclpy.exceptions.InvalidParameterTypeException: Trying to set parameter 'a' to 'True' of type 'BOOL', expecting type 'STRING'
+[ros2run]: Process exited with failure 1
+exit=1
+### CLI C14_p_on exe=cnode PMODE= args: --ros-args -p a:=on
+terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterTypeException'
+  what():  parameter 'a' has invalid type: Wrong parameter type, parameter {a} is of type {string}, setting it to {bool} is not allowed.
+[ros2run]: Aborted
+exit=250
+### CLI C15_p_quoted_y exe=pnode PMODE= args: --ros-args -p a:='y'
+RESULT py node=/pnode a=y b=default c=default
+exit=0
+### CLI C15_p_quoted_y exe=cnode PMODE= args: --ros-args -p a:='y'
+RESULT cpp node=/pnode a=y b=default c=default
+exit=0
+### CLI C16_yaml_yes exe=pnode PMODE= args: --ros-args --params-file /cfg/yes.yaml
+Traceback (most recent call last):
+  File "/ws/install/pk/lib/pk/pnode", line 29, in <module>
+    main()
+  File "/ws/install/pk/lib/pk/pnode", line 15, in main
+    v = [n.declare_parameter(p, 'default').value for p in 'abc']
+  File "/ws/install/pk/lib/pk/pnode", line 15, in <listcomp>
+    v = [n.declare_parameter(p, 'default').value for p in 'abc']
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 367, in declare_parameter
+    return self.declare_parameters('', [args], ignore_override)[0]
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 493, in declare_parameters
+    self._set_parameters(
+  File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/node.py", line 738, in _set_parameters
+    raise InvalidParameterTypeException(
+rclpy.exceptions.InvalidParameterTypeException: Trying to set parameter 'a' to 'True' of type 'BOOL', expecting type 'STRING'
+[ros2run]: Process exited with failure 1
+exit=1
+### CLI C16_yaml_yes exe=cnode PMODE= args: --ros-args --params-file /cfg/yes.yaml
+terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterTypeException'
+  what():  parameter 'a' has invalid type: Wrong parameter type, parameter {a} is of type {string}, setting it to {bool} is not allowed.
+[ros2run]: Aborted
+exit=250
+### CLI C17_yaml_yes_quoted exe=pnode PMODE= args: --ros-args --params-file /cfg/yes_quoted.yaml
+RESULT py node=/pnode a=yes b=default c=default
+exit=0
+### CLI C17_yaml_yes_quoted exe=cnode PMODE= args: --ros-args --params-file /cfg/yes_quoted.yaml
+RESULT cpp node=/pnode a=yes b=default c=default
+exit=0
+### CLI C20_code_override_alone exe=pnode PMODE=code_override args: 
+RESULT py node=/pnode a=code b=default c=default
+exit=0
+### CLI C20_code_override_alone exe=cnode PMODE=code_override args: 
+RESULT cpp node=/pnode a=code b=default c=default
+exit=0
+### CLI C21_code_override_and_p exe=pnode PMODE=code_override args: --ros-args -p a:=cli
+RESULT py node=/pnode a=code b=default c=default
+exit=0
+### CLI C21_code_override_and_p exe=cnode PMODE=code_override args: --ros-args -p a:=cli
+RESULT cpp node=/pnode a=code b=default c=default
+exit=0
+### CLI C22_code_override_and_file exe=pnode PMODE=code_override args: --ros-args --params-file /cfg/f1.yaml
+RESULT py node=/pnode a=code b=f1 c=default
+exit=0
+### CLI C22_code_override_and_file exe=cnode PMODE=code_override args: --ros-args --params-file /cfg/f1.yaml
+RESULT cpp node=/pnode a=code b=f1 c=default
+exit=0
+### CLI C23_code_override_noglobal_and_p exe=pnode PMODE=code_override_noglobal args: --ros-args -p a:=cli
+RESULT py node=/pnode a=code b=default c=default
+exit=0
+### CLI C23_code_override_noglobal_and_p exe=cnode PMODE=code_override_noglobal args: --ros-args -p a:=cli
+RESULT cpp node=/pnode a=code b=default c=default
+exit=0
+### LAUNCH L1_file_then_dict exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=dict b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /cfg/f1.yaml --params-file /tmp/launch_params_X
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     a: dict
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=763
+### LAUNCH L1_file_then_dict exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=dict b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=483
+### LAUNCH L2_dict_then_file exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=f1 b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /tmp/launch_params_X --params-file /cfg/f1.yaml
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     a: dict
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=764
+### LAUNCH L2_dict_then_file exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=f1 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=483
+### LAUNCH L3_f1_then_f2 exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=f2 b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /cfg/f1.yaml --params-file /cfg/f2.yaml
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[pnode-1] FILE /cfg/f2.yaml => /pnode: |   ros__parameters: |     a: f2
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=764
+### LAUNCH L3_f1_then_f2 exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=f2 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=480
+### LAUNCH L4_setparam_then_node_file exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=f1 b=f1 c=default
+[pnode-1] ARGV --ros-args -p a:=global --params-file /cfg/f1.yaml
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=767
+### LAUNCH L4_setparam_then_node_file exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=f1 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=488
+### LAUNCH L5_setparam_then_node_dict_b exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=global b=dict c=default
+[pnode-1] ARGV --ros-args -p a:=global --params-file /tmp/launch_params_X
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     b: dict
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=759
+### LAUNCH L5_setparam_then_node_dict_b exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=global b=dict c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=483
+### LAUNCH L6_node_then_setparam exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=f1 b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /cfg/f1.yaml
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=760
+### LAUNCH L6_node_then_setparam exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=f1 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=489
+### LAUNCH L7_file_and_ros_arguments exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=f1 b=f1 c=default
+[pnode-1] ARGV --ros-args -p a:=rosarg --ros-args --params-file /cfg/f1.yaml
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=764
+### LAUNCH L7_file_and_ros_arguments exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=f1 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=487
+### LAUNCH L8_file_and_arguments_ros_args exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=f1 b=f1 c=default
+[pnode-1] ARGV --ros-args -p a:=arg --ros-args --params-file /cfg/f1.yaml
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=759
+### LAUNCH L8_file_and_arguments_ros_args exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=f1 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=487
+### LAUNCH L9_file_then_launcharg_dict exe=pnode PMODE= launch_args: a:=fromcli
+[pnode-1] RESULT py node=/pnode a=fromcli b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /cfg/f1.yaml --params-file /tmp/launch_params_X
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     a: fromcli
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=766
+### LAUNCH L9_file_then_launcharg_dict exe=cnode PMODE= launch_args: a:=fromcli
+[cnode-1] RESULT cpp node=/pnode a=fromcli b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=489
+### LAUNCH L9_file_then_launcharg_dict exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=argdefault b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /cfg/f1.yaml --params-file /tmp/launch_params_X
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     a: argdefault
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=760
+### LAUNCH L9_file_then_launcharg_dict exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=argdefault b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=483
+### LAUNCH L10_launcharg_dict_then_file exe=pnode PMODE= launch_args: a:=fromcli
+[pnode-1] RESULT py node=/pnode a=f1 b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /tmp/launch_params_X --params-file /cfg/f1.yaml
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     a: fromcli
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=757
+### LAUNCH L10_launcharg_dict_then_file exe=cnode PMODE= launch_args: a:=fromcli
+[cnode-1] RESULT cpp node=/pnode a=f1 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=488
+### LAUNCH L11_star_file_then_dict exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=dict b=default c=default
+[pnode-1] ARGV --ros-args --params-file /cfg/star.yaml --params-file /tmp/launch_params_X
+[pnode-1] FILE /cfg/star.yaml => /**: |   ros__parameters: |     a: star
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     a: dict
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=759
+### LAUNCH L11_star_file_then_dict exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=dict b=default c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=488
+### LAUNCH L12_setparametersfromfile exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/pnode a=f1 b=f1 c=default
+[pnode-1] ARGV --ros-args --params-file /cfg/f2.yaml --params-file /cfg/f1.yaml
+[pnode-1] FILE /cfg/f2.yaml => /pnode: |   ros__parameters: |     a: f2
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=761
+### LAUNCH L12_setparametersfromfile exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=f1 b=f1 c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=486
+### LAUNCH L13_node_name_override_file exe=pnode PMODE= launch_args: 
+[pnode-1] RESULT py node=/imu a=default b=default c=default
+[pnode-1] ARGV --ros-args -r __node:=imu --params-file /cfg/f1.yaml
+[pnode-1] FILE /cfg/f1.yaml => /pnode: |   ros__parameters: |     a: f1 |     b: f1
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=765
+### LAUNCH L13_node_name_override_file exe=cnode PMODE= launch_args: 
+[cnode-1] RESULT cpp node=/imu a=default b=default c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=490
+### LAUNCH L14_code_override_and_dict exe=pnode PMODE=code_override launch_args: 
+[pnode-1] RESULT py node=/pnode a=code b=default c=default
+[pnode-1] ARGV --ros-args --params-file /tmp/launch_params_X
+[pnode-1] FILE /tmp/launch_params_X => /**: |   ros__parameters: |     a: dict
+[INFO] [pnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=774
+### LAUNCH L14_code_override_and_dict exe=cnode PMODE=code_override launch_args: 
+[cnode-1] RESULT cpp node=/pnode a=code b=default c=default
+[INFO] [cnode-1]: process has finished cleanly [pid N]
+exit=0 wall_ms=491
+### LAUNCH L15_dict_value_y exe=pnode PMODE= launch_args: 
+[pnode-1]     raise InvalidParameterTypeException(
+[pnode-1] rclpy.exceptions.InvalidParameterTypeException: Trying to set parameter 'a' to 'True' of type 'BOOL', expecting type 'STRING'
+[ERROR] [pnode-1]: process has died [pid N, exit code 1, cmd '/ws/install/pk/lib/pk/pnode --ros-args --params-file /tmp/launch_params_X'].
+exit=0 wall_ms=765
+### LAUNCH L15_dict_value_y exe=cnode PMODE= launch_args: 
+[cnode-1] terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterTypeException'
+[ERROR] [cnode-1]: process has died [pid N, exit code -6, cmd '/ws/install/pk/lib/pk/cnode --ros-args --params-file /tmp/launch_params_X'].
+exit=0 wall_ms=537
+### LAUNCH L9_file_then_launcharg_dict exe=pnode PMODE= launch_args: a:=yes
+[pnode-1]     raise InvalidParameterTypeException(
+[pnode-1] rclpy.exceptions.InvalidParameterTypeException: Trying to set parameter 'a' to 'True' of type 'BOOL', expecting type 'STRING'
+[ERROR] [pnode-1]: process has died [pid N, exit code 1, cmd '/ws/install/pk/lib/pk/pnode --ros-args --params-file /cfg/f1.yaml --params-file /tmp/launch_params_X'].
+exit=0 wall_ms=764
+### LAUNCH L9_file_then_launcharg_dict exe=cnode PMODE= launch_args: a:=yes
+[cnode-1] terminate called after throwing an instance of 'rclcpp::exceptions::InvalidParameterTypeException'
+[ERROR] [cnode-1]: process has died [pid N, exit code -6, cmd '/ws/install/pk/lib/pk/cnode --ros-args --params-file /cfg/f1.yaml --params-file /tmp/launch_params_X'].
+exit=0 wall_ms=538
+=== done humble 2026-11-22T02:34:57Z
