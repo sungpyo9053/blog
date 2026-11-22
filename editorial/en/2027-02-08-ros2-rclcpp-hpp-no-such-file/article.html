@@ -1,0 +1,154 @@
+<pre><code>/root/ws/src/c03_no_link/src/node.cpp:1:10: fatal error: rclcpp/rclcpp.hpp: No such file or directory</code></pre>
+
+<p>The CMake-side cousin of this error stops the build one step earlier:</p>
+
+<pre><code>CMake Error at /opt/ros/humble/share/ament_cmake_target_dependencies/cmake/ament_target_dependencies.cmake:42 (message):
+  ament_target_dependencies() the first argument must be a valid target name</code></pre>
+
+<p>Short answer: the compiler can't find <code>rclcpp/rclcpp.hpp</code> because the target that includes it was never linked to rclcpp. <code>find_package(rclcpp REQUIRED)</code> alone doesn't add any include path. You need a link line, and it has to come after both <code>find_package</code> and <code>add_executable</code> (or <code>add_library</code>). This order built and ran on Humble, Jazzy and Lyrical:</p>
+
+<pre><code class="language-cmake">find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+
+add_executable(node src/node.cpp)
+target_link_libraries(node rclcpp::rclcpp)   # works on every distro I tested
+# ament_target_dependencies(node rclcpp)     # works on Humble and Jazzy, gone in Lyrical
+
+install(TARGETS node DESTINATION lib/${PROJECT_NAME})
+ament_package()</code></pre>
+
+<p>"the first argument must be a valid target name" means the name you passed to <code>ament_target_dependencies()</code> doesn't exist yet at that line. Either the call is above <code>add_executable</code>, or the name is spelled differently. CMake names are case-sensitive, so <code>Node</code> is not <code>node</code>.</p>
+
+<h2>Find your error</h2>
+
+<p>I built 13 small ament_cmake packages, each with a different CMakeLists.txt, on Humble, Jazzy and Lyrical. Every package had the same one-file node that includes <code>rclcpp/rclcpp.hpp</code>. Find the text you see in the middle column.</p>
+
+<table>
+<thead><tr><th>What the CMakeLists.txt did</th><th>What colcon printed</th><th>Humble / Jazzy / Lyrical</th></tr></thead>
+<tbody>
+<tr><td><code>find_package(rclcpp)</code>, <code>add_executable</code>, then nothing</td><td><code>fatal error: rclcpp/rclcpp.hpp: No such file or directory</code></td><td>fail / fail / fail</td></tr>
+<tr><td><code>add_executable</code> and <code>target_link_libraries(node ${rclcpp_LIBRARIES})</code> above <code>find_package</code></td><td><code>fatal error: rclcpp/rclcpp.hpp: No such file or directory</code></td><td>fail / fail / fail</td></tr>
+<tr><td><code>target_link_libraries(node rclcpp)</code> (plain name, no <code>::</code>)</td><td><code>fatal error: rclcpp/rclcpp.hpp: No such file or directory</code></td><td>fail / fail / fail</td></tr>
+<tr><td>Library header includes rclcpp, library links it <code>PRIVATE</code>, executable links the library</td><td><code>mylib.hpp:2:10: fatal error: rclcpp/rclcpp.hpp: No such file or directory</code></td><td>fail / fail / fail</td></tr>
+<tr><td><code>target_include_directories(node PRIVATE ${rclcpp_INCLUDE_DIRS})</code> only</td><td>rclcpp.hpp is found, then the next header isn't: <code>rmw/init.h</code> (Humble), <code>service_msgs/msg/detail/service_event_info__struct.hpp</code> (Jazzy), <code>rosidl_buffer/buffer.hpp</code> (Lyrical)</td><td>fail / fail / fail</td></tr>
+<tr><td><code>ament_target_dependencies(node rclcpp)</code> above <code>add_executable</code></td><td><code>ament_target_dependencies() the first argument must be a valid target name</code></td><td>fail / fail / Unknown CMake command</td></tr>
+<tr><td><code>ament_target_dependencies(Node rclcpp)</code> for a target named <code>node</code></td><td><code>ament_target_dependencies() the first argument must be a valid target name</code></td><td>fail / fail / Unknown CMake command</td></tr>
+<tr><td><code>ament_target_dependencies(node rclcpp)</code> without <code>find_package(rclcpp)</code></td><td><code>ament_target_dependencies() the passed package name 'rclcpp' was not found before</code></td><td>fail / fail / Unknown CMake command</td></tr>
+<tr><td><code>target_link_libraries(node rclcpp::rclcpp)</code> without <code>find_package(rclcpp)</code></td><td><code>Target "node" links to target "rclcpp::rclcpp" but the target was not found.</code> (Humble wording; Jazzy and Lyrical print <code>Target "node" links to:</code> on its own line, then the name)</td><td>fail / fail / fail</td></tr>
+<tr><td><code>ament_target_dependencies(node rclcpp)</code> after <code>add_executable</code></td><td>builds, node runs</td><td>ok / ok / Unknown CMake command</td></tr>
+<tr><td><code>target_link_libraries(node rclcpp::rclcpp)</code> after <code>add_executable</code></td><td>builds, node runs</td><td>ok / ok / ok</td></tr>
+<tr><td>Library links rclcpp <code>PUBLIC</code>, executable links the library</td><td>builds</td><td>ok / ok / ok (see the Lyrical note below)</td></tr>
+<tr><td><code>${rclcpp_INCLUDE_DIRS}</code> plus <code>target_link_libraries(node ${rclcpp_LIBRARIES})</code>, both after <code>find_package</code></td><td>builds, node runs</td><td>ok / ok / ok</td></tr>
+</tbody>
+</table>
+
+<p>Two kinds of failure are mixed in the table, and the exit code tells them apart. The CMake errors exited with code 1 after 1.1 to 1.9 seconds, before any compiling. The "No such file or directory" failures got through CMake and died in the compiler, with exit code 2 after 1.7 to 1.9 seconds for the one-file packages (5.2 to 6.5 seconds for the library package, which compiled its library first). In other words, CMake configure passed for all of those CMakeLists.txt files. The mistake shows up only when g++ reads the <code>#include</code>.</p>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-22 I ran the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images one after another, with networking off. A script wrote 13 packages into a fresh workspace. Each package had the same <code>package.xml</code> (with <code>&lt;depend&gt;rclcpp&lt;/depend&gt;</code>) and differed only in CMakeLists.txt. The node creates an <code>rclcpp::Node</code>, logs one line and exits. The two library packages add a header that includes rclcpp and a small <code>.cpp</code> file.</p>
+
+<p>For each package the script ran <code>colcon build --packages-select &lt;pkg&gt; --parallel-workers 1 --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>, saved the exit code and wall time, grepped the log for the error lines, and counted the rclcpp include flags in <code>build/&lt;pkg&gt;/compile_commands.json</code>. When the build passed, it ran the node with <code>ros2 run</code>. The compilers were g++ 11.4.0 with CMake 3.22.1 (Humble), g++ 13.3.0 with CMake 3.28.3 (Jazzy) and g++ 15.2.0 with CMake 4.2.3 (Lyrical).</p>
+
+<h2>Cause 1: nothing links the target to rclcpp</h2>
+
+<p>This is the most common case in the questions I found. The package calls <code>find_package(rclcpp REQUIRED)</code>, adds the executable, and stops. In <code>compile_commands.json</code> this package had 0 rclcpp include flags on every distro. The working packages had one, <code>-isystem /opt/ros/&lt;distro&gt;/include/rclcpp</code>.</p>
+
+<p>That path is the reason the error looks the way it does. In all three images rclcpp's headers sit one folder deeper than the include prefix, under <code>include/rclcpp/rclcpp/</code>. The <code>#include "rclcpp/rclcpp.hpp"</code> only works when the compiler gets <code>include/rclcpp</code> as a search path, and the only thing that adds it is a link to the rclcpp target. Sourcing <code>/opt/ros/&lt;distro&gt;/setup.bash</code> doesn't add it, and neither does the <code>&lt;depend&gt;</code> in package.xml. Every package in my run had both and still failed.</p>
+
+<p>The fix is one line after <code>add_executable</code>: <code>target_link_libraries(node rclcpp::rclcpp)</code>. It built in 5.3 s on Humble, 5.7 s on Jazzy and 7.0 s on Lyrical, and the node printed <code>pk71 node ok</code> on all three.</p>
+
+<h2>Cause 2: the right lines in the wrong order</h2>
+
+<p>CMake runs the file from top to bottom. Two orderings broke the build, and they failed in different ways.</p>
+
+<p>With <code>add_executable</code> and <code>target_link_libraries(node ${rclcpp_LIBRARIES})</code> above <code>find_package</code>, CMake raised no error. <code>${rclcpp_LIBRARIES}</code> was still empty at that line, so the link call linked nothing. The build reached the compiler and stopped with <code>rclcpp/rclcpp.hpp: No such file or directory</code>. That is the layout in the most viewed question on this error, with 3,297 views. Moving every <code>find_package</code> to the top fixes it.</p>
+
+<p>With <code>ament_target_dependencies(node rclcpp)</code> above <code>add_executable(node ...)</code>, the build stopped at configure time with <code>the first argument must be a valid target name</code>. The call stack points to the line: <code>CMakeLists.txt:5 (ament_target_dependencies)</code>. A typo gives the same text. <code>ament_target_dependencies(Node rclcpp)</code> for a target called <code>node</code> failed identically on Humble and Jazzy. Look at the line number in the call stack, then compare the first argument with the name in <code>add_executable</code> or <code>add_library</code> above it. In one of the questions below, the call used <code>${library_name}</code> before <code>add_library</code> created that target, which is the same mistake as calling it above <code>add_executable</code>.</p>
+
+<h2>Cause 3: rclcpp is in a library header</h2>
+
+<p>This one shows up when you split code into a library. The error points at your own header, not at a <code>.cpp</code> file:</p>
+
+<pre><code>/root/ws/src/c11_lib_private/include/c11_lib_private/mylib.hpp:2:10: fatal error: rclcpp/rclcpp.hpp: No such file or directory</code></pre>
+
+<p>The library itself compiled. Its <code>compile_commands.json</code> entry had the rclcpp include flag. The executable didn't, because the library linked rclcpp with <code>PRIVATE</code>. Private dependencies don't pass their include paths on, so any target that includes <code>mylib.hpp</code> lost the path. Changing that one word to <code>PUBLIC</code> made the package build on all three distros, in 8.5 s (Humble), 9.1 s (Jazzy) and 11.1 s (Lyrical).</p>
+
+<p>The rule is simple: if a public header includes rclcpp, the library must link rclcpp <code>PUBLIC</code>. If only the <code>.cpp</code> includes it, <code>PRIVATE</code> is fine. When the library lives in another package, the same idea applies across packages, and that package also needs to export its targets. That part wasn't in this test.</p>
+
+<h2>Cause 4: include directories without the link</h2>
+
+<p>Some answers suggest adding <code>${rclcpp_INCLUDE_DIRS}</code> by hand. On its own this got past <code>rclcpp/rclcpp.hpp</code> and failed on the next header that rclcpp itself includes. The missing header was different on each distro: <code>rmw/init.h</code> on Humble, <code>service_msgs/msg/detail/service_event_info__struct.hpp</code> on Jazzy and <code>rosidl_buffer/buffer.hpp</code> on Lyrical. In all three images the variable gave the compiler rclcpp's own folder (<code>-I/opt/ros/&lt;distro&gt;/include/rclcpp</code>), but that wasn't enough to reach the headers of rclcpp's dependencies.</p>
+
+<p>The old style with both variables, <code>${rclcpp_INCLUDE_DIRS}</code> and <code>target_link_libraries(node ${rclcpp_LIBRARIES})</code>, did build and run on all three. So the link line, not the include line, is what brought in the rest of the include paths. It works, but it is two lines for what <code>rclcpp::rclcpp</code> does in one.</p>
+
+<p>Linking the plain name, <code>target_link_libraries(node rclcpp)</code>, failed on all three distros with the original error. Use the name with <code>::</code>. The plain-name package had 0 rclcpp include flags in <code>compile_commands.json</code>.</p>
+
+<h2>Cause 5: find_package(rclcpp) is missing</h2>
+
+<p>Without <code>find_package(rclcpp REQUIRED)</code>, the two link styles fail with two different messages. <code>ament_target_dependencies</code> said <code>the passed package name 'rclcpp' was not found before</code>. <code>target_link_libraries(node rclcpp::rclcpp)</code> got through configure and failed at the generate step with <code>Target "node" links to target "rclcpp::rclcpp" but the target was not found</code>. Both are fixed by adding the <code>find_package</code> line.</p>
+
+<p>A different message, <code>Could not find a package configuration file provided by "rclcpp"</code>, means <code>find_package</code> ran but the package wasn't there, usually because <code>/opt/ros</code> wasn't sourced. My earlier post <a href="https://huntlab.app/en/ros2-colcon-could-not-find-a-package-configuration-file-provided-by/">"Could not find a package configuration file provided by" in colcon build</a> measured five causes of that one, from packages that aren't installed to <code>find_package</code> with the wrong case.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Link style (after find_package and add_executable)</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th><th>Build time (Humble / Jazzy / Lyrical)</th></tr></thead>
+<tbody>
+<tr><td><code>target_link_libraries(node rclcpp::rclcpp)</code></td><td>ok</td><td>ok</td><td>ok</td><td>5.3 s / 5.7 s / 7.0 s</td></tr>
+<tr><td><code>ament_target_dependencies(node rclcpp)</code></td><td>ok</td><td>ok</td><td><code>Unknown CMake command "ament_target_dependencies".</code></td><td>5.3 s / 5.5 s / failed in 1.9 s</td></tr>
+<tr><td><code>${rclcpp_INCLUDE_DIRS}</code> + <code>${rclcpp_LIBRARIES}</code></td><td>ok</td><td>ok</td><td>ok</td><td>5.5 s / 5.7 s / 6.7 s</td></tr>
+<tr><td><code>${rclcpp_INCLUDE_DIRS}</code> only</td><td>fail</td><td>fail</td><td>fail</td><td>fails in 1.8 to 1.9 s</td></tr>
+<tr><td><code>target_link_libraries(node rclcpp)</code></td><td>fail</td><td>fail</td><td>fail</td><td>fails in 1.7 to 1.8 s</td></tr>
+</tbody>
+</table>
+
+<p>The build times are one run each on a 2 vCPU machine. They show that the working options cost about the same, not that one is faster. Use <code>rclcpp::rclcpp</code>. It is one line, it is the only form here that needs nothing else, and it's the one that still works on Lyrical. Every other package you include headers from needs its own link line too. My post on <a href="https://huntlab.app/en/ros-2-lyrical-unknown-cmake-command-ament-target-dependencies/">Unknown CMake command "ament_target_dependencies" in Lyrical</a> measured that replacement on Humble, Jazzy, Kilted and Lyrical, including the <code>std_msgs/msg/string.hpp: No such file or directory</code> you get when you replace only the rclcpp line.</p>
+
+<h2>VS Code says rclcpp.hpp is missing, but colcon builds</h2>
+
+<p>That is a different problem. VS Code's IntelliSense doesn't read CMakeLists.txt, so its red squiggle says nothing about your build. One way to give it the real flags is the file CMake already writes. With <code>--cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code>, every package that configured got a <code>build/&lt;pkg&gt;/compile_commands.json</code>. In every working package it contained the rclcpp include path. The four packages that failed on rclcpp.hpp in their own <code>.cpp</code> file had 0 rclcpp entries, which makes the file a quick way to check a CMakeLists.txt without reading the compiler log. I didn't test the VS Code side itself. Pointing the C/C++ extension at that file is a common approach, but I didn't measure it.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>Humble (rclcpp 16.0.23, ament_cmake 1.3.15) and Jazzy (rclcpp 28.1.22, ament_cmake 2.5.6) behaved the same in every case. Only the wording of the missing-target CMake error changed. CMake 3.22 on Humble prints <code>links to target "rclcpp::rclcpp" but the target was not found</code> and blames the <code>add_executable</code> line. CMake 3.28 on Jazzy puts the target name on its own line and blames the <code>target_link_libraries</code> line.</li>
+<li>Lyrical (rclcpp 32.0.3, ament_cmake 2.8.8) has no <code>ament_target_dependencies</code>. All four packages that used it stopped with <code>Unknown CMake command "ament_target_dependencies".</code>, so on Lyrical you never see "the first argument must be a valid target name". The image still lists a package <code>ros-lyrical-ament-cmake-target-dependencies</code> 2.8.8, but the command wasn't defined in my build.</li>
+<li>The header that fails after rclcpp.hpp, when you add include folders by hand, differs per distro: <code>rmw/init.h</code>, then <code>service_msgs/...</code>, then <code>rosidl_buffer/buffer.hpp</code>. If you see one of these, the cause is the same as Cause 4.</li>
+<li>On Lyrical the <code>PUBLIC</code> library package built, but <code>ros2 run</code> failed with <code>error while loading shared libraries: libmylib.so: cannot open shared object file</code> and exit code 127. My test installed only the executable, not <code>mylib</code>. On Humble and Jazzy the same package ran. I didn't check why the two older images behaved differently. If you hit this, add <code>mylib</code> to your <code>install(TARGETS ...)</code> line.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>VS Code, CLion or any other IDE. Windows and macOS builds. Iron, Kilted and Rolling. Libraries in a second package, <code>ament_export_targets</code> and <code>ament_export_dependencies</code>. <code>ament_auto_add_executable</code> from ament_cmake_auto. Header-only libraries with <code>INTERFACE</code>. Missing <code>&lt;depend&gt;</code> tags in package.xml (every package here had them). Packages with several executables. Each build was timed once, so the timings carry no error bars.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>Why does colcon say rclcpp/rclcpp.hpp: No such file or directory when rclcpp is installed?</h3>
+<p>Because nothing linked your target to rclcpp. <code>find_package(rclcpp REQUIRED)</code>, sourcing setup.bash and the package.xml tag don't add the include path. In my run the include path appeared only after <code>target_link_libraries(node rclcpp::rclcpp)</code> (or <code>ament_target_dependencies</code> on Humble and Jazzy), placed after <code>find_package</code> and <code>add_executable</code>.</p>
+
+<h3>What does "ament_target_dependencies() the first argument must be a valid target name" mean?</h3>
+<p>The first argument isn't the name of a target that exists at that line. In my test it happened when the call came before <code>add_executable</code> and when the name differed in case (<code>Node</code> vs <code>node</code>). Move the call below <code>add_executable</code> or <code>add_library</code> and copy the exact name.</p>
+
+<h3>My library builds, but the executable fails on rclcpp.hpp inside my header. Why?</h3>
+<p>The library links rclcpp <code>PRIVATE</code>, so its include path doesn't reach targets that include its header. Change it to <code>target_link_libraries(mylib PUBLIC rclcpp::rclcpp)</code>. That one change made the package build on Humble, Jazzy and Lyrical.</p>
+
+<h3>Is include_directories with rclcpp_INCLUDE_DIRS enough?</h3>
+<p>No. On its own it fixed rclcpp.hpp and then failed on the next header: <code>rmw/init.h</code> on Humble, a service_msgs header on Jazzy and <code>rosidl_buffer/buffer.hpp</code> on Lyrical. Link the target instead.</p>
+
+<h3>Which line works on Humble, Jazzy and Lyrical?</h3>
+<p><code>target_link_libraries(node rclcpp::rclcpp)</code> after <code>find_package(rclcpp REQUIRED)</code> and <code>add_executable</code>. It built and ran on all three. <code>ament_target_dependencies</code> worked on Humble and Jazzy and was an unknown command on Lyrical.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "Why does colcon say rclcpp/rclcpp.hpp: No such file or directory when rclcpp is installed?", "acceptedAnswer": {"@type": "Answer", "text": "Because nothing linked your target to rclcpp. find_package(rclcpp REQUIRED), sourcing setup.bash and the package.xml tag don't add the include path. In my run the include path appeared only after target_link_libraries(node rclcpp::rclcpp) (or ament_target_dependencies on Humble and Jazzy), placed after find_package and add_executable."}},
+{"@type": "Question", "name": "What does ament_target_dependencies() the first argument must be a valid target name mean?", "acceptedAnswer": {"@type": "Answer", "text": "The first argument isn't the name of a target that exists at that line. In my test it happened when the call came before add_executable and when the name differed in case (Node vs node). Move the call below add_executable or add_library and copy the exact name."}},
+{"@type": "Question", "name": "My library builds, but the executable fails on rclcpp.hpp inside my header. Why?", "acceptedAnswer": {"@type": "Answer", "text": "The library links rclcpp PRIVATE, so its include path doesn't reach targets that include its header. Change it to target_link_libraries(mylib PUBLIC rclcpp::rclcpp). That one change made the package build on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Is include_directories with rclcpp_INCLUDE_DIRS enough?", "acceptedAnswer": {"@type": "Answer", "text": "No. On its own it fixed rclcpp.hpp and then failed on the next header: rmw/init.h on Humble, a service_msgs header on Jazzy and rosidl_buffer/buffer.hpp on Lyrical. Link the target instead."}},
+{"@type": "Question", "name": "Which line works on Humble, Jazzy and Lyrical?", "acceptedAnswer": {"@type": "Answer", "text": "target_link_libraries(node rclcpp::rclcpp) after find_package(rclcpp REQUIRED) and add_executable. It built and ran on all three. ament_target_dependencies worked on Humble and Jazzy and was an unknown command on Lyrical."}}
+]}
+</script>
+
+<p>Measured on 2026-11-22 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, rclcpp 16.0.23, rclpy 3.3.22, ros2cli 0.18.21, rmw 6.1.4), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclcpp 28.1.22, rclpy 7.1.12, ros2cli 0.32.13, rmw 7.3.4) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclcpp 32.0.3, rclpy 10.0.11, ros2cli 0.40.9, rmw 7.10.2), default RMW, colcon with one worker and <code>MAKEFLAGS=-j1</code>. Full digests and versions are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-08-ros2-rclcpp-hpp-no-such-file/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/103541">fatal error: #include "rclcpp/rclcpp.hpp" no such file or directory</a>, <a href="https://robotics.stackexchange.com/questions/104205">fatal error: rclcpp/rclcpp.hpp: No such file or directory</a>, <a href="https://robotics.stackexchange.com/questions/105939">ROS2 - CMake Error - ament_target_dependencies() the first argument must be a valid target name</a>, <a href="https://robotics.stackexchange.com/questions/113810">Configuring a Ros2 c++ project in Vscode</a>, <a href="https://get-help.theconstruct.ai/t/example-1-6-error-with-include-rclcpp-rclcpp-hpp-my-first-ros-program-ros2basicconcepts/8843">Example 1.6 Error with #include "rclcpp/rclcpp.hpp"</a>.</p>
