@@ -1,0 +1,464 @@
+=== distro=lyrical nproc=2 date=2026-11-22T01:44:00Z
+Python 3.14.4
+ros-lyrical-rcl-action 10.4.5-1resolute.20260915.061100
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-fastrtps-cpp 9.4.10-1resolute.20260915.053043
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+default RMW: rmw_fastrtps_cpp
+--- rclpy defaults (source of default_cancel_callback / default_goal_callback):
+def default_cancel_callback(
+    goal_handle: ServerGoalHandle[Any, Any, Any, Any]
+) -> Literal[CancelResponse.REJECT]:
+    """No cancellations."""
+    return CancelResponse.REJECT
+
+def default_goal_callback(
+    goal_request: Msg
+) -> Literal[GoalResponse.ACCEPT]:
+    """Accept all goals."""
+    return GoalResponse.ACCEPT
+
+LINE: 'Goal state not set, assuming aborted. Goal ID: {0}'.format(goal_uuid))
+
+######## rep 1
+
+### case mode=default_cancel cancel_at=1.0 second_at=- load=0.20 0.22 0.14
+[server   0.19s] server up, mode default_cancel executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.40s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[client   1.17s] goal1 cancel_goal_async sent
+[server   6.40s] succeed() done
+[client   5.18s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.60s] spin ended ExternalShutdownException
+
+### case mode=multi_default_cancel cancel_at=1.0 second_at=- load=0.19 0.21 0.14
+[server   0.16s] server up, mode multi_default_cancel executor Multi group Reentrant
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.68s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=0 after 0.00s
+[server   6.69s] succeed() done
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+
+### case mode=accept_nocheck cancel_at=1.0 second_at=- load=0.23 0.22 0.14
+[server   0.16s] server up, mode accept_nocheck executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.66s][client   0.17s] execute start, target  goal1map  goal response accepted=True after 0.00sthread
+ MainThread
+[client   1.17s] goal1 cancel_goal_async sent
+[server   6.66s] succeed() done
+[client   5.18s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.01s
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.85s] spin ended ExternalShutdownException
+[ERROR] [1795311868.263743002] [rcl]: Failed to remove timer jump callback
+
+### case mode=accept_check cancel_at=1.0 second_at=- load=0.20 0.22 0.14
+[server   0.16s] server up, mode accept_check executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[client   1.18s] goal1 cancel_goal_async sent
+[server   6.68s] succeed() done
+[client   5.18s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   8.88s] spin ended ExternalShutdownException
+
+### case mode=multi_default_group cancel_at=1.0 second_at=- load=0.24 0.23 0.14
+[server   0.16s] server up, mode multi_default_group executor Multi group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.65s][client   0.17s] goal1 goal response accepted=True after 0.00s
+ execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.65s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   3.15s] is_cancel_requested True at step 3
+[server   3.15s] goal_handle.canceled() done
+[client   1.68s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   2.69s] client exit
+client exit=0
+
+### case mode=multi_reentrant cancel_at=1.0 second_at=- load=0.22 0.22 0.14
+[server   0.16s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.67s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[client   1.17s] goal1 cancel_goal_async sent
+[server   2.67s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   3.17s] is_cancel_requested True at step 3
+[server   3.17s] goal_handle.canceled() done
+[client   1.68s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   2.68s] client exit
+client exit=0
+[ERROR] [1795311889.223827760] [rcl]: Failed to remove timer jump callback
+
+### case mode=multi_reentrant_nocheck cancel_at=1.0 second_at=- load=0.20 0.22 0.14
+[server   0.16s] server up, mode multi_reentrant_nocheck executor Multi group Reentrant
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s][client   0.17s] goal1 goal response accepted=True after 0.00s
+ execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.69s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[WARN] [1795311893.841319032] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795311894.342165022] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795311894.842824881] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795311895.343779547] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795311895.844480177] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795311896.345250859] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795311896.845987047] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[server   6.70s] succeed() done
+[client   5.20s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=3
+[client   6.21s] client exit
+client exit=0
+
+### case mode=accept_check cancel_at=- second_at=1.0 load=0.17 0.21 0.14
+[server   0.28s] server up, mode accept_check executor Single group default
+[client   0.37s] server found
+[client   0.37s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   2.16s] execute start, target map thread MainThread
+[client   0.37s] goal1 goal response accepted=True after 0.00s
+[client   1.37s] goal2 sent
+[server   7.17s] succeed() done
+[client   5.37s] goal2 goal response accepted=True after 4.00s
+[server   7.17s] execute start, target map thread MainThread
+[server  12.17s] succeed() done
+[client  10.38s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  10.38s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  11.39s] client exit
+client exit=0
+[server  13.37s] spin ended ExternalShutdownException
+[ERROR] [1795311913.373186269] [rcl]: Failed to remove timer jump callback
+
+### case mode=multi_reentrant cancel_at=- second_at=1.0 load=0.13 0.20 0.14
+[server   0.16s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   0.20s] server found
+[client   0.20s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.71s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   0.20s] goal1 goal response accepted=True after 0.00s
+[client   1.20s] goal2 sent
+[client   1.21s] goal2 goal response accepted=True after 0.00s
+[server   2.71s] execute start, target map thread ThreadPoolExecutor-0_1
+[server   6.71s] succeed() done
+[client   5.21s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[server   7.72s] succeed() done
+[client   6.21s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   7.22s] client exit
+client exit=0
+[ERROR] [1795311923.742716967] [rcl]: Failed to remove timer jump callback
+
+### case mode=no_state cancel_at=- second_at=- load=0.11 0.19 0.14
+[server   0.16s] server up, mode no_state executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.67s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[server   6.68s] returning result without succeed()
+[WARN] [1795311931.856969463] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [220 122 222  42  66 255  68 158 172 214 120 232  13 149 235  27]
+[client   5.19s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   6.20s] client exit
+client exit=0
+[server   7.89s] spin ended ExternalShutdownException
+[ERROR] [1795311933.071574283] [rcl]: Failed to remove timer jump callback
+
+### case mode=canceled_unrequested cancel_at=- second_at=- load=0.09 0.18 0.13
+[server   0.16s] server up, mode canceled_unrequested executor Single group default
+[client   0.23s] server found
+[client   0.23s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.77s] execute start, target map thread MainThread
+[client   0.23s] goal1 goal response accepted=True after 0.00s
+[server   6.78s] calling canceled() without a cancel request
+[server   6.78s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state EXECUTING with event CANCELED, at ./src/rcl_action/goal_handle.c:101
+[WARN] [1795311941.295010086] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 95  11 138  79 129  12  74 213 160 223 249 113 226  93 130 230]
+[client   5.25s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   6.26s] client exit
+client exit=0
+[server   7.99s] spin ended ExternalShutdownException
+
+### case mode=succeed_twice cancel_at=- second_at=- load=0.15 0.20 0.14
+[server   0.16s] server up, mode succeed_twice executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.70s] execute start, target map thread MainThread
+[server   6.70s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state SUCCEEDED with event SUCCEED, at ./src/rcl_action/goal_handle.c:101
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.89s] spin ended ExternalShutdownException
+
+### case mode=raise cancel_at=- second_at=- load=0.13 0.19 0.14
+[server   0.16s] server up, mode raise executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[ERROR] [1795311959.967702734] [fib_server.action_server]: Error raised in execute callback: boom in execute
+Traceback (most recent call last):
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/action/server.py", line 461, in _execute_goal
+    execute_result = await await_or_execute(execute_callback, goal_handle)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 139, in await_or_execute
+    return callback(*args)
+  File "/w/ac.py", line 52, in execute
+    raise RuntimeError('boom in execute')
+RuntimeError: boom in execute
+[WARN] [1795311959.970901106] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [188 183 218 238 206  51  75 148 139 197 155  20  71  89   9 224]
+[client   5.20s] goal1 RESULT status=6 ABORTED (empty result) fb_msgs=10
+[client   6.23s] client exit
+client exit=0
+[server   7.94s] spin ended ExternalShutdownException
+
+### case mode=return_none cancel_at=- second_at=- load=0.11 0.18 0.13
+[server   0.16s] server up, mode return_none executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.67s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[server   6.67s] succeed() then return None
+python3: ./.obj-x86_64-linux-gnu/rosidl_generator_py/tf2_msgs/action/_lookup_transform_s.c:326: tf2_msgs__action__lookup_transform__result__convert_from_py: Assertion `strncmp("tf2_msgs.action._lookup_transform", (char *)PyUnicode_1BYTE_DATA(module_attr), 33) == 0' failed.
+[client  12.18s] goal1 NO RESULT within 12.0s
+[client  12.18s] client exit
+client exit=0
+
+######## rep 2
+
+### case mode=default_cancel cancel_at=1.0 second_at=- load=0.08 0.17 0.13
+[server   0.17s] server up, mode default_cancel executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.67s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[client   1.17s] goal1 cancel_goal_async sent
+[server   6.67s] succeed() done
+[client   5.18s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.01s
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.88s] spin ended ExternalShutdownException
+[ERROR] [1795311985.882171154] [rcl]: Failed to remove timer jump callback
+
+### case mode=multi_default_cancel cancel_at=1.0 second_at=- load=0.07 0.17 0.13
+[server   0.16s] server up, mode multi_default_cancel executor Multi group Reentrant
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[server   1.67s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.17s] goal1 cancel_goal_async sent
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=0 after 0.00s
+[server   6.68s] succeed() done
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+
+### case mode=accept_nocheck cancel_at=1.0 second_at=- load=0.06 0.16 0.13
+[server   0.16s] server up, mode accept_nocheck executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[client   1.17s] goal1 cancel_goal_async sent
+[server   6.69s] succeed() done
+[client   5.18s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.88s] spin ended ExternalShutdownException
+[ERROR] [1795312004.531383009] [rcl]: Failed to remove timer jump callback
+
+### case mode=accept_check cancel_at=1.0 second_at=- load=0.05 0.16 0.13
+[server   0.16s] server up, mode accept_check executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[server   1.68s] execute start, target map thread MainThread
+[client   1.18s] goal1 cancel_goal_async sent
+[server   6.68s] succeed() done
+[client   5.18s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   8.89s] spin ended ExternalShutdownException
+
+### case mode=multi_default_group cancel_at=1.0 second_at=- load=0.12 0.17 0.13
+[server   0.16s] server up, mode multi_default_group executor Multi group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.66s][client   0.17s] goal1 goal response accepted=True after 0.00s
+ execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.67s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   3.16s] is_cancel_requested True at step 3
+[server   3.16s] goal_handle.canceled() done
+[client   1.68s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   2.69s] client exit
+client exit=0
+
+### case mode=multi_reentrant cancel_at=1.0 second_at=- load=0.11 0.17 0.13
+[server   0.19s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[server   1.64s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.64s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   3.14s] is_cancel_requested True at step 3
+[server   3.14s] goal_handle.canceled() done
+[client   1.68s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   2.69s] client exit
+client exit=0
+[ERROR] [1795312025.550336092] [rcl]: Failed to remove timer jump callback
+
+### case mode=multi_reentrant_nocheck cancel_at=1.0 second_at=- load=0.17 0.18 0.13
+[server   0.16s] server up, mode multi_reentrant_nocheck executor Multi group Reentrant
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.69s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.69s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[WARN] [1795312030.176356398] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795312030.677224734] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795312031.177977422] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795312031.678893814] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795312032.179605197] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795312032.680318135] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[WARN] [1795312033.181074445] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring
+[server   6.71s] succeed() done
+[client   5.20s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=3
+[client   6.21s] client exit
+client exit=0
+
+### case mode=accept_check cancel_at=- second_at=1.0 load=0.14 0.17 0.13
+[ERROR] [1795312035.907028159] [rcl]: Failed to remove timer jump callback
+[server   0.16s] server up, mode accept_check executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.65s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[client   1.17s] goal2 sent
+[server   6.66s] succeed() done
+[client   5.18s] goal2 goal response accepted=True after 4.00s
+[server   6.66s] execute start, target map thread MainThread
+[server  11.66s] succeed() done
+[client  10.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  10.19s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  11.19s] client exit
+client exit=0
+[server  12.85s] spin ended ExternalShutdownException
+
+### case mode=multi_reentrant cancel_at=- second_at=1.0 load=0.12 0.16 0.13
+[server   0.16s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[server   1.68s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal2 sent
+[client   1.18s] goal2 goal response accepted=True after 0.00s
+[server   2.69s] execute start, target map thread ThreadPoolExecutor-0_1
+[server   6.69s] succeed() done
+[client   5.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[server   7.69s] succeed() done
+[client   6.18s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   7.19s] client exit
+client exit=0
+[ERROR] [1795312059.559063083] [rcl]: Failed to remove timer jump callback
+
+### case mode=no_state cancel_at=- second_at=- load=0.10 0.16 0.13
+[server   0.19s] server up, mode no_state executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.66s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   6.66s] returning result without succeed()
+[WARN] [1795312067.701141927] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [220 132  73 145 240  20  79 212 141  63  53 101  58 193 239 224]
+[client   5.20s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   6.21s] client exit
+client exit=0
+[server   7.87s] spin ended ExternalShutdownException
+
+### case mode=canceled_unrequested cancel_at=- second_at=- load=0.16 0.17 0.13
+[server   0.16s] server up, mode canceled_unrequested executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[server   1.68s] execute start, target map thread MainThread
+[server   6.68s] calling canceled() without a cancel request
+[server   6.68s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state EXECUTING with event CANCELED, at ./src/rcl_action/goal_handle.c:101
+[WARN] [1795312077.037320548] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [153 220  46  83 139 251  76  64 186  30  19  31  26 134 166 218]
+[client   5.20s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   6.20s] client exit
+client exit=0
+[server   7.89s] spin ended ExternalShutdownException
+
+### case mode=succeed_twice cancel_at=- second_at=- load=0.13 0.16 0.13
+[server   0.16s] server up, mode succeed_twice executor Single group default
+[client   0.56s] server found
+[client   0.56s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.58s] goal1 goal response accepted=True after 0.02s
+[server   2.18s] execute start, target map thread MainThread
+[server   7.18s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state SUCCEEDED with event SUCCEED, at ./src/rcl_action/goal_handle.c:101
+[client   5.60s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.61s] client exit
+client exit=0
+[server   9.38s] spin ended ExternalShutdownException
+
+### case mode=raise cancel_at=- second_at=- load=0.19 0.17 0.13
+[ERROR] [1795312089.095710566] [rcl]: Failed to remove timer jump callback
+[server   0.16s] server up, mode raise executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.64s] execute start, target map thread MainThread
+[client   0.17s] goal1 goal response accepted=True after 0.00s
+[ERROR] [1795312096.203490173] [fib_server.action_server]: Error raised in execute callback: boom in execute
+Traceback (most recent call last):
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/action/server.py", line 461, in _execute_goal
+    execute_result = await await_or_execute(execute_callback, goal_handle)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/rclpy/executors.py", line 139, in await_or_execute
+    return callback(*args)
+  File "/w/ac.py", line 52, in execute
+    raise RuntimeError('boom in execute')
+RuntimeError: boom in execute
+[WARN] [1795312096.205687449] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 88  48 203  39  81  97  75  43 152 110 185 250 145 210 248 191]
+[client   5.20s] goal1 RESULT status=6 ABORTED (empty result) fb_msgs=10
+[client   6.20s] client exit
+client exit=0
+[server   7.85s] spin ended ExternalShutdownException
+
+### case mode=return_none cancel_at=- second_at=- load=0.23 0.19 0.14
+[server   0.16s] server up, mode return_none executor Single group default
+[client   0.17s] server found
+[client   0.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   6.69s] succeed() then return None
+python3: ./.obj-x86_64-linux-gnu/rosidl_generator_py/tf2_msgs/action/_lookup_transform_s.c:326: tf2_msgs__action__lookup_transform__result__convert_from_py: Assertion `strncmp("tf2_msgs.action._lookup_transform", (char *)PyUnicode_1BYTE_DATA(module_attr), 33) == 0' failed.
+[client  12.18s] goal1 NO RESULT within 12.0s
+[client  12.18s] client exit
+client exit=0
+=== done lyrical 2026-11-22T01:48:33Z

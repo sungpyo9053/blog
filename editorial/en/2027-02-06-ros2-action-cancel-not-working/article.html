@@ -1,0 +1,217 @@
+<pre><code>[WARN] [1795311336.163220434] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 88 227 164  57 211 177  78 136 191 214  37 106 177 195 185 224]</code></pre>
+
+<p>That warning comes from an rclpy action server whose execute callback returned without calling <code>succeed()</code>, <code>abort()</code> or <code>canceled()</code>. The client gets status 6, ABORTED. The same server code often has a second problem: goals that keep running after the client cancels them. The cancel response then shows up seconds late, with <code>return_code=3</code> and an empty <code>goals_canceling</code> list.</p>
+
+<p>Short answer: a cancel only works in rclpy when three things are true. The server passes a <code>cancel_callback</code> that returns <code>CancelResponse.ACCEPT</code>, because the default one returns <code>REJECT</code> on Humble, Jazzy and Lyrical. The server spins with a <code>MultiThreadedExecutor</code>, so the cancel request can be served while the execute callback is still running. And the execute loop checks <code>goal_handle.is_cancel_requested</code>, then calls <code>goal_handle.canceled()</code> and returns a result. Every execute path has to end with one of <code>succeed()</code>, <code>abort()</code> or <code>canceled()</code>, and has to return a result object, never <code>None</code>. This is a trimmed version of the test server variant that canceled within half a second in every run:</p>
+
+<pre><code class="language-python">import time
+import rclpy
+from rclpy.action import ActionServer, CancelResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node
+from tf2_msgs.action import LookupTransform as Act   # any action type works the same way
+
+class Server(Node):
+    def __init__(self):
+        super().__init__('fib_server')
+        ActionServer(self, Act, 'fib', self.execute,
+                     cancel_callback=lambda goal_handle: CancelResponse.ACCEPT,
+                     callback_group=ReentrantCallbackGroup())
+
+    def execute(self, goal_handle):
+        for i in range(10):
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                return Act.Result()
+            goal_handle.publish_feedback(Act.Feedback())
+            time.sleep(0.5)                 # the real work
+        goal_handle.succeed()
+        return Act.Result()
+
+rclpy.init()
+ex = MultiThreadedExecutor(num_threads=4)
+ex.add_node(Server())
+ex.spin()</code></pre>
+
+<h2>Find your symptom</h2>
+
+<p>Every row behaved the same on Humble, Jazzy and Lyrical, in both repetitions. The server ran 10 steps of 0.5 s. The client sent the cancel 1 s after the goal.</p>
+
+<table>
+<thead><tr><th>What you see</th><th>Cause in my runs</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Cancel response 4.00 to 4.25 s late, <code>return_code=3</code>, <code>goals_canceling=0</code>, goal SUCCEEDED</td><td>Server spins a <code>SingleThreadedExecutor</code> (what <code>rclpy.spin(node)</code> uses) and the execute callback blocks it</td><td><code>MultiThreadedExecutor</code></td></tr>
+<tr><td>Cancel response at once, <code>return_code=0</code> but <code>goals_canceling=0</code>, goal SUCCEEDED</td><td>No <code>cancel_callback</code>, so the default rejected the cancel</td><td>Pass a <code>cancel_callback</code> that returns <code>CancelResponse.ACCEPT</code></td></tr>
+<tr><td><code>goals_canceling=1</code>, but the goal still ends SUCCEEDED after all 10 steps</td><td>Execute loop never reads <code>is_cancel_requested</code></td><td>Check it every step, call <code>canceled()</code></td></tr>
+<tr><td>Second goal accepted 4.00 to 4.01 s after it was sent</td><td>Single-threaded server busy with the first goal</td><td><code>MultiThreadedExecutor</code> and a <code>ReentrantCallbackGroup</code></td></tr>
+<tr><td><code>Goal state not set, assuming aborted</code>, client gets ABORTED</td><td>Execute returned without <code>succeed()</code>, an exception, or a failed <code>canceled()</code></td><td>End every path with a state call</td></tr>
+<tr><td><code>goal_handle attempted invalid transition from state EXECUTING with event CANCELED</code></td><td><code>canceled()</code> without a cancel request</td><td>Use <code>abort()</code> to stop a goal on the server's own decision</td></tr>
+<tr><td><code>invalid transition from state SUCCEEDED with event SUCCEED</code></td><td><code>succeed()</code> called twice</td><td>Call it once</td></tr>
+<tr><td>Client never gets a result, server process gone</td><td>Execute returned <code>None</code></td><td>Return the action's <code>Result()</code> object</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-22 I used the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one container per distro, with networking off. The base images ship only one action type, <code>tf2_msgs/action/LookupTransform</code>, so the test server uses it as a generic action. The result's <code>frame_id</code> carries the number of finished steps, so I could tell a canceled goal from a finished one.</p>
+
+<p>One Python script, <code>ac.py</code>, is either the server or the client. The server runs in one process, the client in another, in the same container. The execute callback does 10 steps of <code>time.sleep(0.5)</code> and publishes feedback after each step, so a goal takes 5 s. The client sends a goal and, depending on the case, sends <code>cancel_goal_async()</code> 1 s later or a second goal 1 s later. It logs the goal response, the cancel response and the result with timestamps, and how long each response took after its request. I ran 14 server variants twice per distro, 84 runs in total. The two repetitions gave the same outcome in every case.</p>
+
+<p>I also printed the source of rclpy's default callbacks on each distro. All three contain the same body:</p>
+
+<pre><code class="language-python">def default_cancel_callback(cancel_request):
+    """No cancellations."""
+    return CancelResponse.REJECT</code></pre>
+
+<p>On Lyrical the parameter is named <code>goal_handle</code> and has type hints. The return value is the same.</p>
+
+<h2>Cause 1: the server can't see the cancel request</h2>
+
+<p>This is the case behind most "cancel does nothing" questions. With a plain <code>rclpy.spin(node)</code>, one thread runs every callback of the node. The execute callback holds that thread for the whole goal. The cancel request is a service call to the server, and it waits in the queue until execute returns.</p>
+
+<p>I tested three server versions on a single-threaded executor: no <code>cancel_callback</code>, a <code>cancel_callback</code> that accepts and a loop that never checks, and the full version that accepts and checks <code>is_cancel_requested</code> every step. All three gave the same result in all 18 runs (3 versions, 3 distros, 2 repetitions):</p>
+
+<ul>
+<li>The cancel callback never ran while the goal was executing. My log line inside it never printed.</li>
+<li><code>is_cancel_requested</code> stayed False, so the loop ran all 10 steps.</li>
+<li>The goal ended with status 4, SUCCEEDED, after 10 steps and 10 feedback messages.</li>
+<li>The cancel response reached the client 4.00 to 4.25 s after it was sent, at the same moment as the result. It said <code>return_code=3</code>, which is <code>ERROR_GOAL_TERMINATED</code>, with an empty <code>goals_canceling</code> list.</li>
+</ul>
+
+<p>So code that looks right can't cancel anything on a single-threaded executor. The return code also points in the wrong direction. It says the goal was already finished, which is true by the time the request was read. If you see code 3 for a goal that was clearly still running when you canceled it, check the executor first.</p>
+
+<p>The fix is a <code>MultiThreadedExecutor</code>. I tried it with the action server in a <code>ReentrantCallbackGroup</code> and with no group argument at all (the node's default group). Both canceled. The cancel callback ran on a second thread about 1 s after the goal started, the cancel response arrived within 0.01 s with <code>return_code=0</code> and <code>goals_canceling=1</code>, the loop saw <code>is_cancel_requested</code> at step 3, and the client got status 5, CANCELED, 0.50 s after it sent the cancel. That held on all three distros in both repetitions. I use the reentrant group anyway, because it's the setting that also lets a second goal run, as shown below.</p>
+
+<p>This is the same family of problems as service calls that hang inside callbacks. My <a href="https://huntlab.app/en/rclpy-asyncio-no-running-event-loop-call-async-hangs/">rclpy and asyncio post</a> measured that an awaited <code>call_async()</code> hung on a single-threaded executor in every setup except one with a <code>ReentrantCallbackGroup</code>. The pattern is the same here. One thread can't serve a request while it waits inside another callback.</p>
+
+<h2>Cause 2: the default cancel callback rejects</h2>
+
+<p>On a <code>MultiThreadedExecutor</code> with no <code>cancel_callback</code>, the cancel response came back at once, 0.00 s after sending. It said <code>return_code=0</code>, which is <code>ERROR_NONE</code>, with <code>goals_canceling=0</code>. The goal ran on and ended SUCCEEDED after 10 steps.</p>
+
+<p>Note that the code was not <code>1</code>. The <code>action_msgs</code> service defines <code>ERROR_REJECTED = 1</code>, and my client printed that constant on every distro. But the rclpy server answered with code 0 in all 6 runs. The only sign of the rejection was the empty list. A client that checks only <code>return_code == 0</code> reports success for a cancel that never happened. Check <code>len(response.goals_canceling)</code> instead.</p>
+
+<p>The fix is a one-line callback:</p>
+
+<pre><code class="language-python">from rclpy.action import CancelResponse
+
+ActionServer(node, Act, 'fib', execute,
+             cancel_callback=lambda goal_handle: CancelResponse.ACCEPT)</code></pre>
+
+<p>Without a callback, every cancel is refused.</p>
+
+<h2>Cause 3: accepted, but the loop never checks</h2>
+
+<p>Accepting the cancel only moves the goal to CANCELING. Nothing stops your code. In the variant with a multithreaded executor, an accepting callback and no <code>is_cancel_requested</code> check, the cancel response said <code>goals_canceling=1</code> within 0.01 s. The loop still ran all 10 steps, and <code>succeed()</code> worked from the CANCELING state. The client got status 4, SUCCEEDED, about 5 s after the goal started.</p>
+
+<p>Lyrical differed in one detail. After the cancel was accepted, every <code>publish_feedback()</code> call printed this warning, and the client stopped getting feedback:</p>
+
+<pre><code>[WARN] [1795311893.841319032] [fib_server.action_server]: publish_feedback() called on a goal handle not in executing state, ignoring</code></pre>
+
+<p>The Lyrical client received 3 feedback messages in this case, against 10 on Humble and Jazzy. So on Lyrical a goal that ignores the cancel goes silent and then reports SUCCEEDED. That can look like a hang from the client side.</p>
+
+<p>The fix is the check in the short answer. Read <code>goal_handle.is_cancel_requested</code> at least once per step, stop the work, call <code>goal_handle.canceled()</code> and return a result. In my runs the check fired at step 3, and the partial result (<code>steps=3</code>) reached the client with status CANCELED.</p>
+
+<h2>Cause 4: one goal at a time</h2>
+
+<p>Several questions describe an action server that "doesn't accept new goals". In my runs the second goal was never rejected. It waited. On a single-threaded server the second goal's response came 4.00 to 4.01 s after it was sent, which is when the first goal finished. Both results then arrived together, 10.01 to 10.02 s after the first goal was accepted. The second goal ran only after the first one was done.</p>
+
+<p>With a <code>MultiThreadedExecutor</code> and a <code>ReentrantCallbackGroup</code>, the second goal was accepted within 0.01 s, both execute callbacks ran at once on different threads, and the two results arrived 1 s apart, matching the 1 s gap between the goals. If your server should run only one goal at a time, that's a policy you write in a <code>goal_callback</code> or <code>handle_accepted_callback</code>. I didn't test those.</p>
+
+<p>A related surprise is two servers with one action name. My <a href="https://huntlab.app/en/ros2-nodes-in-the-graph-share-an-exact-name-warning/">post on duplicate node names</a> measured that two copies of the same action server both executed most of 10 goals. If goals seem to run twice, or a cancel reaches the wrong copy, check <code>ros2 action info</code> for more than one server.</p>
+
+<h2>Cause 5: "Goal state not set, assuming aborted"</h2>
+
+<p>rclpy prints this warning when the execute callback returns and the goal is still EXECUTING. It then sets ABORTED itself. I hit it in three ways, on all three distros:</p>
+
+<table>
+<thead><tr><th>Execute callback did this</th><th>Server log</th><th>Client got</th></tr></thead>
+<tbody>
+<tr><td>Returned a result without any state call</td><td><code>Goal state not set, assuming aborted</code></td><td>status 6 ABORTED, with the returned result (<code>steps=10</code>)</td></tr>
+<tr><td>Called <code>canceled()</code> with no cancel request</td><td><code>RCLError: Failed to update goal state: goal_handle attempted invalid transition from state EXECUTING with event CANCELED</code>, then the warning</td><td>status 6 ABORTED</td></tr>
+<tr><td>Raised <code>RuntimeError</code></td><td><code>Error raised in execute callback: boom in execute</code> with the traceback, then the warning</td><td>status 6 ABORTED, empty result</td></tr>
+</tbody>
+</table>
+
+<p>The client always got its result. The status is what changed. If your client reports ABORTED and the server code never calls <code>abort()</code>, search the server log for this warning. Then look for a return path without a state call, or for an exception just before it.</p>
+
+<p>The second row is a common mistake. <code>canceled()</code> is only allowed after the client asked for a cancel and your callback accepted it. To stop a goal for your own reasons, such as a sensor failure or a timeout, call <code>goal_handle.abort()</code>.</p>
+
+<p>Calling <code>succeed()</code> twice raised <code>invalid transition from state SUCCEEDED with event SUCCEED</code> on the second call. The client still got SUCCEEDED, because the first call had already set it. The rcl source line in the message differed by distro: <code>goal_handle.c:95</code> on Humble, <code>:100</code> on Jazzy and <code>:101</code> on Lyrical. The logger name differed too: <code>[fib_server]</code> on Humble, <code>[fib_server.action_server]</code> on Jazzy and Lyrical. Search for the message text, not the full line.</p>
+
+<h2>Cause 6: returning None kills the server</h2>
+
+<p>This one is worse than the warning. The execute callback called <code>succeed()</code> and then returned <code>None</code>. On Jazzy and Lyrical the server process died on a C assertion in the generated message code:</p>
+
+<pre><code>python3: ./.obj-x86_64-linux-gnu/rosidl_generator_py/tf2_msgs/action/_lookup_transform_s.c:337: tf2_msgs__action__lookup_transform__result__convert_from_py: Assertion `strncmp("tf2_msgs.action._lookup_transform.LookupTransform_Result", full_classname_dest, 56) == 0' failed.</code></pre>
+
+<p>That's the Jazzy text. Lyrical failed a different <code>strncmp</code> at line 326 of the same file. On Humble, <code>executor.spin()</code> raised <code>AssertionError</code> and the server stopped spinning. In all three the client got no result within 12 s. A forgotten <code>return</code> at the end of execute is enough to cause it, and nothing in the error names your callback. Always return the action's <code>Result()</code> object, even an empty one.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Change</th><th>What it fixed in my runs</th><th>What it didn't fix</th></tr></thead>
+<tbody>
+<tr><td><code>MultiThreadedExecutor</code> for the server</td><td>Cancel requests served while executing (response within 0.01 s instead of 4.00 to 4.25 s)</td><td>Default REJECT, loops that don't check</td></tr>
+<tr><td>Plus <code>ReentrantCallbackGroup</code> on the <code>ActionServer</code></td><td>Second goal accepted within 0.01 s and run in parallel</td><td>Nothing extra for cancels; the default group canceled just as fast</td></tr>
+<tr><td><code>cancel_callback</code> returning <code>ACCEPT</code></td><td><code>goals_canceling=1</code> instead of an empty list</td><td>Goal still runs to SUCCEEDED unless the loop checks</td></tr>
+<tr><td>Check <code>is_cancel_requested</code>, then <code>canceled()</code></td><td>Status CANCELED 0.50 s after the cancel, partial result delivered</td><td>Only works with the two rows above</td></tr>
+<tr><td><code>abort()</code> instead of <code>canceled()</code> for server-side stops</td><td>No invalid transition error</td><td>None</td></tr>
+<tr><td>Always return <code>Result()</code></td><td>No crash, no lost result</td><td>None</td></tr>
+<tr><td>Client checks <code>len(goals_canceling)</code></td><td>Detects a rejected cancel that still says <code>return_code=0</code></td><td>Doesn't make the server cancel</td></tr>
+</tbody>
+</table>
+
+<p>The test script stops each server with SIGINT after the client exits. If your server needs to finish or abort its goals cleanly on Ctrl+C, my <a href="https://huntlab.app/en/ros-2-python-node-shutdown-ctrl-c-sigterm-rcl-shutdown-already-called/">node shutdown post</a> measured which exceptions Ctrl+C and SIGTERM raise around <code>spin()</code> and why <code>try_shutdown()</code> avoids <code>rcl_shutdown already called</code>.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The default cancel callback returns <code>REJECT</code> on Humble (rclpy 3.3.22), Jazzy (rclpy 7.1.12) and Lyrical (rclpy 10.0.11). Lyrical renamed its parameter to <code>goal_handle</code>.</li>
+<li>A rejected cancel came back as <code>return_code=0</code> with an empty list on all three, not as <code>ERROR_REJECTED</code>.</li>
+<li>Only Lyrical drops feedback from a goal in CANCELING state and warns on every <code>publish_feedback()</code>.</li>
+<li>Returning <code>None</code> killed the process on Jazzy and Lyrical (C assertion). Humble raised <code>AssertionError</code> out of <code>spin()</code>.</li>
+<li>Logger name and rcl line numbers in the transition error differ, as listed above. The message text is the same.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<ul>
+<li>rclcpp action servers.</li>
+<li>Canceling a goal that is queued behind another goal and hasn't started executing.</li>
+<li><code>goal_callback</code> rejection and <code>handle_accepted_callback</code> policies for one goal at a time.</li>
+<li><code>async def</code> execute callbacks, and long work moved into your own thread.</li>
+<li>Cancels from the <code>ros2 action send_goal</code> CLI (Ctrl+C).</li>
+<li>Cyclone DDS, Zenoh, and servers and clients on different machines. All runs used the default Fast DDS in one container.</li>
+</ul>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "Goal state not set, assuming aborted" mean?</h3>
+<p>The rclpy execute callback returned while the goal was still executing, so rclpy set it to ABORTED. In my runs that happened after a return without <code>succeed()</code>, after a failed <code>canceled()</code> call, and after an exception in the callback. The client got status 6 each time.</p>
+
+<h3>Why does my rclpy action goal not cancel?</h3>
+<p>Three causes, in the order I'd check them. The server spins a single-threaded executor, so the cancel request isn't served until the goal ends. The server has no <code>cancel_callback</code>, and the default rejects. Or the execute loop never reads <code>is_cancel_requested</code>. Fixing all three canceled the goal 0.50 s after the request on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why does cancel_goal_async return code 3 for a running goal?</h3>
+<p>Code 3 is <code>ERROR_GOAL_TERMINATED</code>. On a single-threaded server the cancel request waited 4.00 to 4.25 s until the goal had finished, so by then it really was terminated. Use a <code>MultiThreadedExecutor</code> on the server.</p>
+
+<h3>Why does my action server not accept a second goal?</h3>
+<p>In my runs it accepted it later. A single-threaded server answered the second goal only after the first one finished, 4.00 s later. With a <code>MultiThreadedExecutor</code> and a <code>ReentrantCallbackGroup</code>, both goals were accepted at once and ran in parallel.</p>
+
+<h3>Can I call goal_handle.canceled() to stop a goal from the server?</h3>
+<p>Only after a cancel request was accepted. Without one, rclpy raised <code>invalid transition from state EXECUTING with event CANCELED</code> and the goal ended ABORTED. Use <code>abort()</code> to stop a goal on the server's own decision.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does Goal state not set, assuming aborted mean?", "acceptedAnswer": {"@type": "Answer", "text": "The rclpy execute callback returned while the goal was still executing, so rclpy set it to ABORTED. In my runs that happened after a return without succeed(), after a failed canceled() call, and after an exception in the callback. The client got status 6 each time."}},
+{"@type": "Question", "name": "Why does my rclpy action goal not cancel?", "acceptedAnswer": {"@type": "Answer", "text": "Three causes, in the order I would check them. The server spins a single-threaded executor, so the cancel request is not served until the goal ends. The server has no cancel_callback, and the default rejects. Or the execute loop never reads is_cancel_requested. Fixing all three canceled the goal 0.50 s after the request on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why does cancel_goal_async return code 3 for a running goal?", "acceptedAnswer": {"@type": "Answer", "text": "Code 3 is ERROR_GOAL_TERMINATED. On a single-threaded server the cancel request waited 4.00 to 4.25 s until the goal had finished, so by then it really was terminated. Use a MultiThreadedExecutor on the server."}},
+{"@type": "Question", "name": "Why does my action server not accept a second goal?", "acceptedAnswer": {"@type": "Answer", "text": "In my runs it accepted it later. A single-threaded server answered the second goal only after the first one finished, 4.00 s later. With a MultiThreadedExecutor and a ReentrantCallbackGroup, both goals were accepted at once and ran in parallel."}},
+{"@type": "Question", "name": "Can I call goal_handle.canceled() to stop a goal from the server?", "acceptedAnswer": {"@type": "Answer", "text": "Only after a cancel request was accepted. Without one, rclpy raised invalid transition from state EXECUTING with event CANCELED and the goal ended ABORTED. Use abort() to stop a goal on the server's own decision."}}
+]}
+</script>
+
+<p>Measured on 2026-11-22 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, rclpy 3.3.22, rcl_action 5.3.13, rclcpp 16.0.23, ros2cli 0.18.21, rmw 6.1.4, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rcl_action 9.2.11, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rcl_action 10.4.5, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, Python 3.14.4), default RMW (Fast DDS), on a 2 vCPU machine. Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-06-ros2-action-cancel-not-working/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/104367">Actions in Humble: Cancel action in action client</a>, <a href="https://robotics.stackexchange.com/questions/101758">Cannot cancel ROS2 action goal immediately after sending</a>, <a href="https://robotics.stackexchange.com/questions/102721">Handling long actions in rclpy (with cancellation)</a>, <a href="https://robotics.stackexchange.com/questions/113168">Action server does not receive goals after the first one has terminated</a>, <a href="https://robotics.stackexchange.com/questions/117851">Action server with mutually exclusive group does not work as expected</a>, <a href="https://robotics.stackexchange.com/questions/115609">ROS 2 Action Server doesn't accept new goals after completing one mission</a>.</p>

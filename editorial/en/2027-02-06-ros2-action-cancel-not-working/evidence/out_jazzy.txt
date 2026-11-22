@@ -1,0 +1,451 @@
+=== distro=jazzy nproc=2 date=2026-11-22T01:33:54Z
+Python 3.12.3
+ros-jazzy-rcl-action 9.2.11-1noble.20260912.161932
+ros-jazzy-rclcpp 28.1.22-1noble.20260911.105434
+ros-jazzy-rclpy 7.1.12-1noble.20260912.162354
+ros-jazzy-rmw 7.3.4-1noble.20260911.050254
+ros-jazzy-rmw-fastrtps-cpp 8.4.4-1noble.20260911.100940
+ros-jazzy-rmw-implementation 2.15.6-1noble.20260911.103206
+ros-jazzy-ros2cli 0.32.13-1noble.20261006.033947
+default RMW: rmw_fastrtps_cpp
+--- rclpy defaults (source of default_cancel_callback / default_goal_callback):
+def default_cancel_callback(cancel_request):
+    """No cancellations."""
+    return CancelResponse.REJECT
+
+def default_goal_callback(goal_request):
+    """Accept all goals."""
+    return GoalResponse.ACCEPT
+
+LINE: 'Goal state not set, assuming aborted. Goal ID: {0}'.format(goal_uuid))
+
+######## rep 1
+
+### case mode=default_cancel cancel_at=1.0 second_at=- load=0.17 0.19 0.08
+[server   0.18s] server up, mode default_cancel executor Single group default
+[client   2.68s] server found
+[client   2.68s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.68s] goal1 goal response accepted=True after 0.00s
+[server   4.19s] execute start, target map thread MainThread
+[client   3.69s] goal1 cancel_goal_async sent
+[server   9.19s] succeed() done
+[client   7.69s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   7.69s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   8.70s] client exit
+client exit=0
+[server  10.36s] spin ended KeyboardInterrupt
+
+### case mode=multi_default_cancel cancel_at=1.0 second_at=- load=0.13 0.18 0.08
+[server   0.17s] server up, mode multi_default_cancel executor Multi group Reentrant
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.69s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[client   1.19s] goal1 CANCEL response return_code=0 goals_canceling=0 after 0.00s
+[server   6.69s] succeed() done
+[client   5.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.20s] client exit
+client exit=0
+[server   7.87s] spin ended KeyboardInterrupt
+
+### case mode=accept_nocheck cancel_at=1.0 second_at=- load=0.12 0.17 0.08
+[server   0.17s] server up, mode accept_nocheck executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s][server   1.68s] execute start, target  goal1map thread MainThread
+ goal response accepted=True after 0.00s
+[client   1.18s] goal1 cancel_goal_async sent
+[server   6.68s] succeed() done
+[client   5.19s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   5.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.86s] spin ended KeyboardInterrupt
+
+### case mode=accept_check cancel_at=1.0 second_at=- load=0.18 0.18 0.08
+[server   0.17s] server up, mode accept_check executor Single group default
+[client   2.68s] server found
+[client   2.68s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   4.18s][client   2.68s] goal1 goal response accepted=True after 0.00s
+ execute start, target map thread MainThread
+[client   3.68s] goal1 cancel_goal_async sent
+[server   9.18s] succeed() done
+[client   7.68s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   7.69s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   8.69s] client exit
+client exit=0
+[server  10.36s] spin ended KeyboardInterrupt
+
+### case mode=multi_default_group cancel_at=1.0 second_at=- load=0.14 0.17 0.08
+[server   0.17s] server up, mode multi_default_group executor Multi group default
+[client   2.67s] server found
+[client   2.68s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.68s] goal1 goal response accepted=True after 0.00s
+[server   4.18s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   3.68s] goal1 cancel_goal_async sent
+[server   5.19s] cancel_callback called -> ACCEPT
+[client   3.68s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   5.68s] is_cancel_requested True at step 3
+[server   5.68s] goal_handle.canceled() done
+[client   4.18s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   5.19s] client exit
+client exit=0
+[server   6.86s] spin ended KeyboardInterrupt
+
+### case mode=multi_reentrant cancel_at=1.0 second_at=- load=0.13 0.17 0.08
+[server   0.17s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.68s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.69s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   3.18s] is_cancel_requested True at step 3
+[server   3.18s] goal_handle.canceled() done
+[client   1.68s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   2.69s] client exit
+client exit=0
+[server   4.35s] spin ended KeyboardInterrupt
+
+### case mode=multi_reentrant_nocheck cancel_at=1.0 second_at=- load=0.12 0.17 0.08
+[server   0.17s] server up, mode multi_reentrant_nocheck executor Multi group Reentrant
+[client   2.68s] server found
+[client   2.68s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.68s] goal1 goal response accepted=True after 0.00s
+[server   4.19s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   3.68s] goal1 cancel_goal_async sent
+[server   5.19s] cancel_callback called -> ACCEPT
+[client   3.69s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   9.19s] succeed() done
+[client   7.69s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   8.71s] client exit
+client exit=0
+[server  10.42s] spin ended KeyboardInterrupt
+
+### case mode=accept_check cancel_at=- second_at=1.0 load=0.32 0.21 0.10
+[server   0.18s] server up, mode accept_check executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.67s] execute start, target map thread MainThread
+[client   1.19s] goal2 sent
+[server   6.67s] succeed() done
+[server   6.67s] execute start, target map thread MainThread
+[client   5.19s] goal2 goal response accepted=True after 4.00s
+[server  11.68s] succeed() done
+[client  10.20s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  10.20s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  11.21s] client exit
+client exit=0
+[server  12.85s] spin ended KeyboardInterrupt
+
+### case mode=multi_reentrant cancel_at=- second_at=1.0 load=0.25 0.20 0.09
+[server   0.17s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   2.67s] server found
+[client   2.67s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.68s] goal1 goal response accepted=True after 0.01s
+[server   4.18s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   3.68s] goal2 sent
+[client   3.69s] goal2 goal response accepted=True after 0.00s
+[server   5.19s] execute start, target map thread ThreadPoolExecutor-0_1
+[server   9.19s] succeed() done
+[client   7.69s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[server  10.19s] succeed() done
+[client   8.69s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   9.70s] client exit
+client exit=0
+[server  11.37s] spin ended KeyboardInterrupt
+
+### case mode=no_state cancel_at=- second_at=- load=0.21 0.19 0.09
+[server   0.17s] server up, mode no_state executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   6.68s] returning result without succeed()
+[WARN] [1795311336.163220434] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 88 227 164  57 211 177  78 136 191 214  37 106 177 195 185 224]
+[client   5.22s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   6.23s] client exit
+client exit=0
+[server   7.89s] spin ended KeyboardInterrupt
+
+### case mode=canceled_unrequested cancel_at=- second_at=- load=0.25 0.20 0.10
+[server   0.17s] server up, mode canceled_unrequested executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   6.69s] calling canceled() without a cancel request
+[server   6.69s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state EXECUTING with event CANCELED, at ./src/rcl_action/goal_handle.c:100
+[WARN] [1795311345.398684384] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 62  83 158 158  69  89  78 131 160 114  52  34 240 200 196 190]
+[client   5.21s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   6.21s] client exit
+client exit=0
+[server   7.88s] spin ended KeyboardInterrupt
+
+### case mode=succeed_twice cancel_at=- second_at=- load=0.21 0.20 0.09
+[server   0.17s] server up, mode succeed_twice executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   6.69s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state SUCCEEDED with event SUCCEED, at ./src/rcl_action/goal_handle.c:100
+[client   5.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.86s] spin ended KeyboardInterrupt
+
+### case mode=raise cancel_at=- second_at=- load=0.18 0.19 0.09
+[server   0.17s] server up, mode raise executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.69s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[ERROR] [1795311363.849228648] [fib_server.action_server]: Error raised in execute callback: boom in execute
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/server.py", line 360, in _execute_goal
+    execute_result = await await_or_execute(execute_callback, goal_handle)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 115, in await_or_execute
+    return callback(*args)
+           ^^^^^^^^^^^^^^^
+  File "/w/ac.py", line 52, in execute
+    raise RuntimeError('boom in execute')
+RuntimeError: boom in execute
+[WARN] [1795311363.851387727] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [223  15 101 201 150 172  76  68 177 165 178  46  32 167  26 128]
+[client   5.21s] goal1 RESULT status=6 ABORTED (empty result) fb_msgs=10
+[client   6.22s] client exit
+client exit=0
+[server   7.89s] spin ended KeyboardInterrupt
+
+### case mode=return_none cancel_at=- second_at=- load=0.15 0.18 0.09
+[server   0.17s] server up, mode return_none executor Single group default
+[client   2.67s] server found
+[client   2.67s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   4.18s][client   2.68s] goal1 goal response accepted=True after 0.00s
+ execute start, target map thread MainThread
+[server   9.19s] succeed() then return None
+python3: ./.obj-x86_64-linux-gnu/rosidl_generator_py/tf2_msgs/action/_lookup_transform_s.c:337: tf2_msgs__action__lookup_transform__result__convert_from_py: Assertion `strncmp("tf2_msgs.action._lookup_transform.LookupTransform_Result", full_classname_dest, 56) == 0' failed.
+timeout: the monitored command dumped core
+[client  14.68s] goal1 NO RESULT within 12.0s
+[client  14.68s] client exit
+client exit=0
+/w/repro.sh: line 26:   519 Aborted                 timeout 40 python3 /w/ac.py server $1 2>&1
+
+######## rep 2
+
+### case mode=default_cancel cancel_at=1.0 second_at=- load=0.19 0.19 0.09
+[server   0.17s] server up, mode default_cancel executor Single group default
+[client   2.17s] server found
+[client   2.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   3.96s] execute start, target map thread MainThread
+[client   2.46s] goal1 goal response accepted=True after 0.28s
+[client   3.21s] goal1 cancel_goal_async sent
+[server   8.96s] succeed() done
+[client   7.46s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.25s
+[client   7.46s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   8.47s] client exit
+client exit=0
+[server  10.14s] spin ended KeyboardInterrupt
+
+### case mode=multi_default_cancel cancel_at=1.0 second_at=- load=0.24 0.20 0.10
+[server   0.17s] server up, mode multi_default_cancel executor Multi group Reentrant
+[client   2.18s] server found
+[client   2.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.18s] goal1 goal response accepted=True after 0.00s
+[server   3.69s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   3.18s] goal1 cancel_goal_async sent
+[client   3.19s] goal1 CANCEL response return_code=0 goals_canceling=0 after 0.00s
+[server   8.69s] succeed() done
+[client   7.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   8.20s] client exit
+client exit=0
+[server   9.86s] spin ended KeyboardInterrupt
+
+### case mode=accept_nocheck cancel_at=1.0 second_at=- load=0.25 0.20 0.10
+[server   0.17s] server up, mode accept_nocheck executor Single group default
+[client   2.17s] server found
+[client   2.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.18s] goal1 goal response accepted=True after 0.00s
+[server   3.68s] execute start, target map thread MainThread
+[client   3.18s] goal1 cancel_goal_async sent
+[server   8.68s] succeed() done
+[client   7.18s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.00s
+[client   7.18s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   8.19s] client exit
+client exit=0
+[server   9.85s] spin ended KeyboardInterrupt
+
+### case mode=accept_check cancel_at=1.0 second_at=- load=0.21 0.20 0.10
+[server   0.17s] server up, mode accept_check executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.68s] execute start, target map thread MainThread
+[client   1.18s] goal1 cancel_goal_async sent
+[server   6.69s] succeed() done
+[client   5.19s] goal1 CANCEL response return_code=3 goals_canceling=0 after 4.01s
+[client   5.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.20s] client exit
+client exit=0
+[server   7.86s] spin ended KeyboardInterrupt
+
+### case mode=multi_default_group cancel_at=1.0 second_at=- load=0.18 0.19 0.10
+[server   0.17s] server up, mode multi_default_group executor Multi group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s][server   1.69s] execute start, target map thread ThreadPoolExecutor-0_0
+ goal1 goal response accepted=True after 0.00s
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.69s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   3.19s] is_cancel_requested True at step 3
+[server   3.19s] goal_handle.canceled() done
+[client   1.68s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   2.69s] client exit
+client exit=0
+[server   4.36s] spin ended KeyboardInterrupt
+
+### case mode=multi_reentrant cancel_at=1.0 second_at=- load=0.16 0.19 0.10
+[server   0.17s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   2.18s] server found
+[client   2.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.18s] goal1 goal response accepted=True after 0.00s
+[server   3.69s] execute start, target map thread ThreadPoolExecutor-0_1
+[client   3.18s] goal1 cancel_goal_async sent
+[server   4.69s] cancel_callback called -> ACCEPT
+[client   3.19s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   5.19s] is_cancel_requested True at step 3
+[server   5.19s] goal_handle.canceled() done
+[client   3.69s] goal1 RESULT status=5 CANCELED steps=3 fb_msgs=3
+[client   4.69s] client exit
+client exit=0
+[server   6.36s] spin ended KeyboardInterrupt
+
+### case mode=multi_reentrant_nocheck cancel_at=1.0 second_at=- load=0.15 0.18 0.10
+[server   0.17s] server up, mode multi_reentrant_nocheck executor Multi group Reentrant
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   1.68s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   1.18s] goal1 cancel_goal_async sent
+[server   2.69s] cancel_callback called -> ACCEPT
+[client   1.18s] goal1 CANCEL response return_code=0 goals_canceling=1 after 0.00s
+[server   6.69s] succeed() done
+[client   5.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.86s] spin ended KeyboardInterrupt
+
+### case mode=accept_check cancel_at=- second_at=1.0 load=0.20 0.19 0.10
+[server   0.17s] server up, mode accept_check executor Single group default
+[client   2.68s] server found
+[client   2.68s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   4.18s] execute start, target map thread MainThread
+[client   2.68s] goal1 goal response accepted=True after 0.00s
+[client   3.68s] goal2 sent
+[server   9.18s] succeed() done
+[client   7.68s] goal2 goal response accepted=True after 4.00s
+[server   9.19s] execute start, target map thread MainThread
+[server  14.19s] succeed() done
+[client  12.69s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  12.69s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client  13.70s] client exit
+client exit=0
+[server  15.39s] spin ended KeyboardInterrupt
+
+### case mode=multi_reentrant cancel_at=- second_at=1.0 load=0.14 0.18 0.10
+[server   0.17s] server up, mode multi_reentrant executor Multi group Reentrant
+[client   2.43s] server found
+[client   2.43s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.43s] goal1 goal response accepted=True after 0.00s
+[server   3.93s] execute start, target map thread ThreadPoolExecutor-0_0
+[client   3.43s] goal2 sent
+[client   3.43s] goal2 goal response accepted=True after 0.00s
+[server   4.93s] execute start, target map thread ThreadPoolExecutor-0_1
+[server   8.93s] succeed() done
+[client   7.44s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[server   9.93s] succeed() done
+[client   8.44s] goal2 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   9.45s] client exit
+client exit=0
+[server  11.11s] spin ended KeyboardInterrupt
+
+### case mode=no_state cancel_at=- second_at=- load=0.12 0.17 0.09
+[server   0.17s] server up, mode no_state executor Single group default
+[client   2.17s] server found
+[client   2.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   3.68s] execute start, target map thread MainThread
+[client   2.18s] goal1 goal response accepted=True after 0.00s
+[server   8.68s] returning result without succeed()
+[WARN] [1795311487.796766840] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 57 116  32 211 202  13  77  43 136  75 136  67 216  33  54 169]
+[client   7.20s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   8.21s] client exit
+client exit=0
+[server   9.88s] spin ended KeyboardInterrupt
+
+### case mode=canceled_unrequested cancel_at=- second_at=- load=0.18 0.18 0.10
+[server   0.17s] server up, mode canceled_unrequested executor Single group default
+[client   2.42s] server found
+[client   2.42s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.43s][server   3.93s] execute start, target map thread MainThread
+ goal1 goal response accepted=True after 0.00s
+[server   8.93s] calling canceled() without a cancel request
+[server   8.93s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state EXECUTING with event CANCELED, at ./src/rcl_action/goal_handle.c:100
+[WARN] [1795311499.285551941] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 59 157 226  97  23 238  66 169 131  85 106   8 171 125 212  96]
+[client   7.46s] goal1 RESULT status=6 ABORTED steps=10 fb_msgs=10
+[client   8.47s] client exit
+client exit=0
+[server  10.13s] spin ended KeyboardInterrupt
+
+### case mode=succeed_twice cancel_at=- second_at=- load=0.14 0.17 0.09
+[server   0.17s] server up, mode succeed_twice executor Single group default
+[client   0.18s] server found
+[client   0.18s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   1.68s] execute start, target map thread MainThread
+[client   0.18s] goal1 goal response accepted=True after 0.00s
+[server   6.68s] EXC RCLError Failed to update goal state: goal_handle attempted invalid transition from state SUCCEEDED with event SUCCEED, at ./src/rcl_action/goal_handle.c:100
+[client   5.19s] goal1 RESULT status=4 SUCCEEDED steps=10 fb_msgs=10
+[client   6.19s] client exit
+client exit=0
+[server   7.86s] spin ended KeyboardInterrupt
+
+### case mode=raise cancel_at=- second_at=- load=0.13 0.17 0.09
+[server   0.17s] server up, mode raise executor Single group default
+[client   2.68s] server found
+[client   2.68s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[server   4.18s][client   2.68s] goal1 goal response accepted=True after 0.00s
+ execute start, target map thread MainThread
+[ERROR] [1795311520.232309264] [fib_server.action_server]: Error raised in execute callback: boom in execute
+Traceback (most recent call last):
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/server.py", line 360, in _execute_goal
+    execute_result = await await_or_execute(execute_callback, goal_handle)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 115, in await_or_execute
+    return callback(*args)
+           ^^^^^^^^^^^^^^^
+  File "/w/ac.py", line 52, in execute
+    raise RuntimeError('boom in execute')
+RuntimeError: boom in execute
+[WARN] [1795311520.234285963] [fib_server.action_server]: Goal state not set, assuming aborted. Goal ID: [ 68 162 153 138 166 162  76 144 143 165 228 168 105   8 169  91]
+[client   7.71s] goal1 RESULT status=6 ABORTED (empty result) fb_msgs=10
+[client   8.71s] client exit
+client exit=0
+[server  10.39s] spin ended KeyboardInterrupt
+
+### case mode=return_none cancel_at=- second_at=- load=0.16 0.18 0.10
+[server   0.17s] server up, mode return_none executor Single group default
+[client   2.17s] server found
+[client   2.17s] CancelGoal return codes: {'ERROR_GOAL_TERMINATED': 3, 'ERROR_NONE': 0, 'ERROR_REJECTED': 1, 'ERROR_UNKNOWN_GOAL_ID': 2}
+[client   2.18s][server   3.68s] execute start, target map thread  goal1 goal response accepted=True after 0.00s
+MainThread
+[server   8.68s] succeed() then return None
+python3: ./.obj-x86_64-linux-gnu/rosidl_generator_py/tf2_msgs/action/_lookup_transform_s.c:337: tf2_msgs__action__lookup_transform__result__convert_from_py: Assertion `strncmp("tf2_msgs.action._lookup_transform.LookupTransform_Result", full_classname_dest, 56) == 0' failed.
+timeout: the monitored command dumped core
+[client  14.18s] goal1 NO RESULT within 12.0s
+[client  14.18s] client exit
+client exit=0
+/w/repro.sh: line 26:  1034 Aborted                 timeout 40 python3 /w/ac.py server $1 2>&1
+=== done jazzy 2026-11-22T01:38:59Z
