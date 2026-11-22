@@ -1,0 +1,99 @@
+=== distro lyrical 2026-11-22T07:51:57Z
+Python 3.14.4
+ros-lyrical-geometry-msgs 5.9.3-1resolute.20260915.045122
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-tf2-geometry-msgs 0.45.10-1resolute.20260915.143024
+ros-lyrical-tf2-ros-py 0.45.10-1resolute.20260915.135515
+ros-lyrical-tf2-sensor-msgs 0.45.10-1resolute.20260915.143046
+RMW_IMPLEMENTATION=<unset>
+=== tf2_geometry_msgs python files
+/opt/ros/lyrical/lib/python3.14/site-packages/tf2_geometry_msgs/tf2_geometry_msgs.py
+/opt/ros/lyrical/lib/python3.14/site-packages/tf2_geometry_msgs/__init__.py
+=== do_transform_pose source
+def do_transform_pose(
+        pose: Pose,
+        transform: TransformStamped) -> Pose:
+    """
+    Transform a `Pose` using a given `TransformStamped`.
+
+    This method is used to share the transformation done in
+    `do_transform_pose_stamped()` and `do_transform_pose_with_covariance_stamped()`
+
+    :param pose: The pose
+    :param transform: The transform
+    :returns: The transformed pose
+    """
+    quaternion, point = _decompose_affine(
+        np.matmul(
+            _transform_to_affine(transform),
+            _build_affine(
+                translation=[
+                    pose.position.x,
+                    pose.position.y,
+                    pose.position.z
+                ],
+                rotation=[
+                    pose.orientation.w,
+                    pose.orientation.x,
+                    pose.orientation.y,
+                    pose.orientation.z])))
+    res = Po
+=== tfpy.py
+tf2_geometry_msgs in sys.modules after import tf2_ros: False
+registry before import: []
+CASE A1 buffer.transform(PoseStamped) without import tf2_geometry_msgs: EXC tf2_ros.buffer_interface.TypeException: Type <class 'geometry_msgs.msg._pose_stamped.PoseStamped'> is not loaded or supported  [raised at tf2_ros/buffer_interface.py:290 in get]
+CASE A2 buffer.transform(PointStamped) without import: EXC tf2_ros.buffer_interface.TypeException: Type <class 'geometry_msgs.msg._point_stamped.PointStamped'> is not loaded or supported  [raised at tf2_ros/buffer_interface.py:290 in get]
+tf2_geometry_msgs file: /opt/ros/lyrical/lib/python3.14/site-packages/tf2_geometry_msgs/__init__.py
+registry after import tf2_geometry_msgs: ['geometry_msgs/PointStamped', 'geometry_msgs/PolygonStamped', 'geometry_msgs/PoseStamped', 'geometry_msgs/PoseWithCovarianceStamped', 'geometry_msgs/Vector3Stamped']
+CASE B1 buffer.transform(PoseStamped) after import: OK ('PoseStamped', 'pos=(1.000,3.000,0.000) q=(0.000,0.000,0.707,0.707)')
+CASE B2 buffer.transform(PoseStamped, timeout=1s) after import: OK pos=(1.000,3.000,0.000) q=(0.000,0.000,0.707,0.707)
+CASE B3 buffer.transform(bare Pose): EXC tf2_ros.buffer_interface.TypeException: Type <class 'geometry_msgs.msg._pose.Pose'> is not loaded or supported  [raised at tf2_ros/buffer_interface.py:290 in get]
+CASE B4 buffer.transform(PointStamped): OK geometry_msgs.msg.Point(x=np.float64(1.0), y=np.float64(3.0), z=np.float64(0.0))
+CASE B5 buffer.transform(Vector3Stamped): OK geometry_msgs.msg.Vector3(x=np.float64(0.0), y=np.float64(1.0), z=np.float64(0.0))
+CASE B6 buffer.transform(PoseWithCovarianceStamped): OK pos=(1.000,2.000,0.000) q=(0.000,0.000,0.707,0.707)
+CASE B7 buffer.transform(PoseArray): EXC tf2_ros.buffer_interface.TypeException: Type <class 'geometry_msgs.msg._pose_array.PoseArray'> is not loaded or supported  [raised at tf2_ros/buffer_interface.py:290 in get]
+CASE B8 buffer.transform(Odometry): EXC tf2_ros.buffer_interface.TypeException: Type <class 'nav_msgs.msg._odometry.Odometry'> is not loaded or supported  [raised at tf2_ros/buffer_interface.py:290 in get]
+CASE B9 buffer.transform(TwistStamped): EXC tf2_ros.buffer_interface.TypeException: Type <class 'geometry_msgs.msg._twist_stamped.TwistStamped'> is not loaded or supported  [raised at tf2_ros/buffer_interface.py:290 in get]
+CASE B10 buffer.transform(PoseStamped, new_type=PointStamped): OK geometry_msgs.msg.PoseStamped(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id='world'), pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=np.float64(1.0), y=np.float64(3.0), z=np.float64(0.0)), orientation=geometry_msgs.msg.Quaternion(x=np.float64(0.0), y=np.float64(0.0), z=np.float64(0.7071067811865475), w=np.float64(0.7071067811865475))))
+lookup_transform result: TransformStamped world -> child
+CASE C1 do_transform_pose(PoseStamped, t): EXC builtins.AttributeError: 'PoseStamped' object has no attribute 'position'  [raised at tf2_geometry_msgs/tf2_geometry_msgs.py:352 in do_transform_pose]
+CASE C2 do_transform_pose(Pose, t): OK ('Pose', 'pos=(1.000,3.000,0.000) q=(0.000,0.000,0.707,0.707)')
+CASE C3 do_transform_pose_stamped exists: OK True
+CASE C4 do_transform_pose_stamped(PoseStamped, t): OK ('PoseStamped', 'world', 'pos=(1.000,3.000,0.000) q=(0.000,0.000,0.707,0.707)')
+CASE C5 do_transform_pose_stamped(Pose, t): EXC builtins.AttributeError: 'Pose' object has no attribute 'pose'  [raised at tf2_geometry_msgs/tf2_geometry_msgs.py:384 in do_transform_pose_stamped]
+CASE C6 do_transform_pose(Pose, t.transform): EXC builtins.AttributeError: 'Transform' object has no attribute 'transform'  [raised at tf2_geometry_msgs/tf2_geometry_msgs.py:182 in _transform_to_affine]
+CASE C7 do_transform_point(PointStamped, t): OK geometry_msgs.msg.Point(x=np.float64(1.0), y=np.float64(3.0), z=np.float64(0.0))
+CASE C8 do_transform_point(Point, t): EXC builtins.AttributeError: 'Point' object has no attribute 'point'  [raised at tf2_geometry_msgs/tf2_geometry_msgs.py:284 in do_transform_point]
+CASE C9 do_transform_vector3(Vector3Stamped, t): OK geometry_msgs.msg.Vector3(x=np.float64(0.0), y=np.float64(1.0), z=np.float64(0.0))
+functions in tf2_geometry_msgs: ['do_transform_point', 'do_transform_polygon_stamped', 'do_transform_pose', 'do_transform_pose_stamped', 'do_transform_pose_with_covariance_stamped', 'do_transform_vector3']
+TIMING N=20000 buffer.transform=133.1us lookup+do_transform_pose=138.1us do_transform_pose_only=81.3us
+=== import variants (fresh interpreter each)
+VARIANT "import tf2_geometry_msgs": OK, registered 5 types: ['PointStamped', 'PolygonStamped', 'PoseStamped', 'PoseWithCovarianceStamped', 'Vector3Stamped']
+VARIANT "from tf2_geometry_msgs import do_transform_pose": OK, registered 5 types: ['PointStamped', 'PolygonStamped', 'PoseStamped', 'PoseWithCovarianceStamped', 'Vector3Stamped']
+VARIANT "import tf2_geometry_msgs.tf2_geometry_msgs": OK, registered 5 types: ['PointStamped', 'PolygonStamped', 'PoseStamped', 'PoseWithCovarianceStamped', 'Vector3Stamped']
+VARIANT "from tf2_geometry_msgs.tf2_geometry_msgs import do_transform_pose": OK, registered 5 types: ['PointStamped', 'PolygonStamped', 'PoseStamped', 'PoseWithCovarianceStamped', 'Vector3Stamped']
+VARIANT "import tf2_sensor_msgs": OK, registered 1 types: ['PointCloud2']
+=== node with TransformListener + static_transform_publisher
+[INFO] [1795333929.764478004] [pose_tf_test]: first TypeException at 0.10s Type <class 'geometry_msgs.msg._pose_stamped.PoseStamped'> is not loaded or supported
+RESULT noimport {'TypeException': 30}
+[INFO] [1795333933.246489061] [pose_tf_test]: first LookupException at 0.10s "world" passed to lookupTransform argument target_frame does not exist. 
+[INFO] [1795333934.130508227] [pose_tf_test]: first OK at 1.00s (1.00,2.00)
+RESULT import {'LookupException': 9, 'OK': 21}
+=== done 2026-11-22T07:52:17Z
+=== extra lyrical 2026-11-22T07:55:33Z
+TypeException MRO: ['tf2_ros.buffer_interface.TypeException', 'builtins.Exception', 'builtins.BaseException', 'builtins.object']
+issubclass(TypeException, TransformException): False
+tf2_ros exports TypeException: True
+TransformException MRO: ['tf2.TransformException', 'builtins.Exception', 'builtins.BaseException', 'builtins.object']
+EXCEPTION ESCAPED rclpy.spin after callback 1: TypeException: Type <class 'geometry_msgs.msg._pose_stamped.PoseStamped'> is not loaded or supported
+exit code: 3
+=== uncaught version: plain rclpy.spin, no try/except around spin
+    do_transform = self.registration.get(type(object_stamped))
+  File "/opt/ros/lyrical/lib/python3.14/site-packages/tf2_ros/buffer_interface.py", line 290, in get
+    raise TypeException('Type %s is not loaded or supported' % str(key))
+tf2_ros.buffer_interface.TypeException: Type <class 'geometry_msgs.msg._pose_stamped.PoseStamped'> is not loaded or supported
+exit code: 1

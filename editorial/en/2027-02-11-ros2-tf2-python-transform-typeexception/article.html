@@ -1,0 +1,177 @@
+<pre><code>  File "/opt/ros/humble/lib/python3.10/site-packages/tf2_ros/buffer_interface.py", line 278, in get
+    raise TypeException('Type %s is not loaded or supported' % str(key))
+tf2_ros.buffer_interface.TypeException: Type &lt;class 'geometry_msgs.msg._pose_stamped.PoseStamped'&gt; is not loaded or supported</code></pre>
+
+<p>The second error people hit right after the first one is this, from <code>tf2_geometry_msgs.do_transform_pose()</code>:</p>
+
+<pre><code>AttributeError: 'PoseStamped' object has no attribute 'position'</code></pre>
+
+<p>Short answer: add <code>import tf2_geometry_msgs</code> to the file that calls <code>tf_buffer.transform()</code>. Nothing you call uses that module by name. Importing it is what registers the <code>PoseStamped</code>, <code>PointStamped</code>, <code>Vector3Stamped</code>, <code>PoseWithCovarianceStamped</code> and <code>PolygonStamped</code> conversions with the buffer, and <code>import tf2_ros</code> doesn't do it for you. Also catch <code>TypeException</code>, or fix the import before you rely on <code>except TransformException</code>. <code>TypeException</code> is not a <code>TransformException</code>, so it passed through that handler and stopped <code>rclpy.spin()</code> on all three distros I tested. For the <code>AttributeError</code>, pass a <code>Pose</code> to <code>do_transform_pose()</code>, or use <code>do_transform_pose_stamped()</code> for a <code>PoseStamped</code>:</p>
+
+<pre><code class="language-python">import tf2_ros
+import tf2_geometry_msgs  # noqa: F401  registers the geometry_msgs conversions
+from tf2_ros import TransformException
+from tf2_ros.buffer_interface import TypeException
+from rclpy.duration import Duration
+
+# Option 1: let the buffer look up the transform from the message header
+try:
+    out = self.tf_buffer.transform(pose_stamped, 'world', timeout=Duration(seconds=0.1))
+except (TransformException, TypeException) as e:
+    self.get_logger().warn(f'transform failed: {e}')
+
+# Option 2: look up once, then apply it yourself
+t = self.tf_buffer.lookup_transform('world', pose_stamped.header.frame_id, rclpy.time.Time())
+out = tf2_geometry_msgs.do_transform_pose_stamped(pose_stamped, t)   # PoseStamped in, PoseStamped out
+pose_out = tf2_geometry_msgs.do_transform_pose(pose_stamped.pose, t)  # Pose in, Pose out</code></pre>
+
+<p>This behaved the same on Humble, Jazzy and Lyrical. The messages, the registered types and the function signatures were identical. Only the line number in the traceback and the way Lyrical prints numbers differed.</p>
+
+<h2>Find your error</h2>
+
+<table>
+<thead><tr><th>What you see</th><th>What was wrong in my run</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>TypeException: Type &lt;class '...PoseStamped'&gt; is not loaded or supported</code></td><td>No module in the process had imported <code>tf2_geometry_msgs</code>, so the buffer's registry was empty</td><td><code>import tf2_geometry_msgs</code></td></tr>
+<tr><td>Same error for <code>...PointStamped</code> or <code>...Vector3Stamped</code></td><td>Same cause</td><td>Same fix</td></tr>
+<tr><td>Same error for <code>...Pose</code>, <code>...PoseArray</code>, <code>...TwistStamped</code> or <code>nav_msgs...Odometry</code>, with the import in place</td><td>The type is not one of the five that <code>tf2_geometry_msgs</code> registers</td><td>Wrap a <code>Pose</code> in a <code>PoseStamped</code>, or call <code>do_transform_pose()</code> on each pose yourself</td></tr>
+<tr><td><code>AttributeError: 'PoseStamped' object has no attribute 'position'</code></td><td>A <code>PoseStamped</code> passed to <code>do_transform_pose()</code>, which takes a <code>Pose</code></td><td><code>do_transform_pose_stamped(ps, t)</code> or <code>do_transform_pose(ps.pose, t)</code></td></tr>
+<tr><td><code>AttributeError: 'Pose' object has no attribute 'pose'</code></td><td>The reverse: a <code>Pose</code> passed to <code>do_transform_pose_stamped()</code></td><td>Use <code>do_transform_pose()</code></td></tr>
+<tr><td><code>AttributeError: 'Transform' object has no attribute 'transform'</code></td><td><code>t.transform</code> passed instead of the whole <code>TransformStamped</code></td><td>Pass <code>t</code>, the result of <code>lookup_transform()</code></td></tr>
+<tr><td><code>AttributeError: 'Point' object has no attribute 'point'</code></td><td>A bare <code>Point</code> passed to <code>do_transform_point()</code>, which takes a <code>PointStamped</code></td><td>Wrap it in a <code>PointStamped</code></td></tr>
+<tr><td>Node exits with code 1 even though you wrapped the call in <code>except TransformException</code></td><td><code>TypeException</code> isn't a subclass of <code>TransformException</code></td><td>Add the import, and catch <code>TypeException</code> too</td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-22 I ran the same scripts in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> images, one distro after another, each container with <code>--network none</code> and <code>ROS_DOMAIN_ID=88</code>. All three images already include <code>tf2_ros_py</code>, <code>tf2_geometry_msgs</code> and <code>tf2_sensor_msgs</code>, so nothing was installed.</p>
+
+<p>The first script uses a <code>tf2_ros.Buffer</code> with no node and no DDS traffic. I stored one static transform, <code>world</code> to <code>child</code>, with a translation of (1, 2, 0) and a 90 degree rotation about z. Then I called <code>buffer.transform()</code> and the <code>do_transform_*</code> functions with different message types, before and after <code>import tf2_geometry_msgs</code>. It also prints the buffer's internal registry, the dictionary that maps a message class to its conversion function, so you can see exactly which types are loaded. At the end it times 20,000 calls of each method.</p>
+
+<p>The second script is a real node. It runs a <code>TransformListener</code> next to <code>static_transform_publisher</code> and calls <code>buffer.transform()</code> on a <code>PoseStamped</code> from a 10 Hz timer for 3 seconds, which gives 30 calls. I ran it once without the import and once with it. A third script checks the exception classes and what happens when the error reaches <code>rclpy.spin()</code>.</p>
+
+<h2>Cause 1: the conversions load only when you import tf2_geometry_msgs</h2>
+
+<p><code>buffer.transform()</code> doesn't know how to move a <code>PoseStamped</code>. It looks up the message's class in a registry and calls whatever function was registered for it. Right after <code>import tf2_ros</code> the registry was an empty list on every distro, and <code>tf2_geometry_msgs</code> wasn't in <code>sys.modules</code>. The first <code>buffer.transform()</code> on a <code>PoseStamped</code> raised the <code>TypeException</code>, and a <code>PointStamped</code> raised the same error with its own class name.</p>
+
+<p>After <code>import tf2_geometry_msgs</code> the registry held five types on Humble, Jazzy and Lyrical:</p>
+
+<pre><code>['geometry_msgs/PointStamped', 'geometry_msgs/PolygonStamped', 'geometry_msgs/PoseStamped',
+ 'geometry_msgs/PoseWithCovarianceStamped', 'geometry_msgs/Vector3Stamped']</code></pre>
+
+<p>The same <code>buffer.transform()</code> call then returned a <code>PoseStamped</code> in <code>world</code> at <code>pos=(1.000,3.000,0.000)</code> with the rotation <code>q=(0,0,0.707,0.707)</code>, which is the correct answer for a pose at x=1 in the rotated child frame.</p>
+
+<p>The form of the import didn't matter. I tried four in fresh interpreters, and each one registered the same five types: <code>import tf2_geometry_msgs</code>, <code>from tf2_geometry_msgs import do_transform_pose</code>, <code>import tf2_geometry_msgs.tf2_geometry_msgs</code> and <code>from tf2_geometry_msgs.tf2_geometry_msgs import do_transform_pose</code>. The registry is shared by the whole process, so the import can sit in any module that runs before the first transform. Put it in the file that calls <code>transform()</code>, though, because a linter or a teammate will happily delete an import that looks unused. The <code># noqa: F401</code> comment in the short answer is there for that reason.</p>
+
+<p>This is the situation in <a href="https://github.com/ros2/geometry2/issues/701">ros2/geometry2 issue 701</a> (Humble, 2024). A reply there from a ROS 2 core developer gives the same fix and says it is "really non-obvious that this is what is required". The older <a href="https://robotics.stackexchange.com/questions/94726">transform pose in tf2</a> question reports that commenting out the import brings the error back, which matches my run. That question was on Eloquent, where the Python module wasn't installed at all. On the three current distros it was there in every image.</p>
+
+<h2>Cause 2: the type isn't one of the five</h2>
+
+<p>Even with the import, <code>buffer.transform()</code> raised the same <code>TypeException</code> for a bare <code>Pose</code>, a <code>PoseArray</code>, a <code>TwistStamped</code> and a <code>nav_msgs/Odometry</code>. A bare <code>Pose</code> has no header, so the buffer has no source frame to look up. The other three just have no registered conversion.</p>
+
+<p>That covers the case in <a href="https://robotics.stackexchange.com/questions/101212">Transforming a non-frame pose with TF2</a>, a point some distance in front of the robot. You don't need a new frame for it. Put the pose in a <code>PoseStamped</code> with <code>header.frame_id = 'base_link'</code> and transform that, or look up the transform once and call <code>do_transform_pose(pose, t)</code>, which takes a plain <code>Pose</code> and returned a plain <code>Pose</code> in my run. For a <code>PoseArray</code>, loop over <code>poses</code> with <code>do_transform_pose()</code> and set the new frame on the array's header yourself.</p>
+
+<p>Point clouds need a different module. <code>import tf2_sensor_msgs</code> registered exactly one type, <code>PointCloud2</code>, on all three distros. The cloud post <a href="https://huntlab.app/en/transform-pointcloud2-frame-ros-2-python-keep-intensity/">Transform PointCloud2 frame in ROS 2 Python, keep intensity</a> measured that path. It found that <code>do_transform_cloud()</code> kept the intensity field and that rebuilding the cloud from xyz alone dropped it.</p>
+
+<h2>Why except TransformException doesn't catch it</h2>
+
+<p>Most tutorials wrap the lookup in <code>except TransformException</code>. That doesn't work for this error. On all three distros the classes were:</p>
+
+<pre><code>TypeException MRO: ['tf2_ros.buffer_interface.TypeException', 'builtins.Exception', ...]
+issubclass(TypeException, TransformException): False
+TransformException MRO: ['tf2.TransformException', 'builtins.Exception', ...]</code></pre>
+
+<p>I put <code>buffer.transform()</code> inside <code>try: ... except TransformException</code> in a timer callback. The exception went straight past the handler on the first callback and out of <code>rclpy.spin()</code>. A plain node with no handler printed the traceback above and exited with code 1. The issue 701 report has exactly this code: an <code>except TransformException</code> block and a node that crashed anyway.</p>
+
+<p>The type check also runs before the lookup. In the listener node without the import, all 30 of 30 calls raised <code>TypeException</code>, starting at 0.10 s, before any transform had arrived. So the error hides frame problems. Once the import is in, the next error you see may be a different one. With the import, Humble returned 30 of 30 transforms. On Jazzy the first 10 calls and on Lyrical the first 9 raised <code>LookupException: "world" passed to lookupTransform argument target_frame does not exist</code>, and the first success came at 1.10 s and 1.00 s. That's the static transform still on its way from the publisher. The timing post <a href="https://huntlab.app/en/ros2-tf2-lookup-would-require-extrapolation-into-the-future/">Lookup would require extrapolation into the future</a> measured that family of errors. There, a lookup at <code>now()</code> failed 1,800 of 1,800 times, while <code>Time()</code> or a timeout worked. <code>buffer.transform()</code> uses the stamp in your message header, so the same rules apply to it.</p>
+
+<h2>do_transform_pose takes a Pose, not a PoseStamped</h2>
+
+<p>On all three distros the signature in the installed source was <code>do_transform_pose(pose: Pose, transform: TransformStamped) -&gt; Pose</code>. The stamped version is a separate function. These calls used the <code>TransformStamped</code> from <code>lookup_transform('world', 'child', Time())</code>:</p>
+
+<table>
+<thead><tr><th>Call</th><th>Result (same on Humble, Jazzy, Lyrical)</th></tr></thead>
+<tbody>
+<tr><td><code>do_transform_pose(pose_stamped, t)</code></td><td><code>AttributeError: 'PoseStamped' object has no attribute 'position'</code></td></tr>
+<tr><td><code>do_transform_pose(pose_stamped.pose, t)</code></td><td>returns <code>Pose</code>, <code>pos=(1.000,3.000,0.000)</code></td></tr>
+<tr><td><code>do_transform_pose_stamped(pose_stamped, t)</code></td><td>returns <code>PoseStamped</code>, <code>frame_id='world'</code>, same pose</td></tr>
+<tr><td><code>do_transform_pose_stamped(pose, t)</code></td><td><code>AttributeError: 'Pose' object has no attribute 'pose'</code></td></tr>
+<tr><td><code>do_transform_pose(pose, t.transform)</code></td><td><code>AttributeError: 'Transform' object has no attribute 'transform'</code></td></tr>
+<tr><td><code>do_transform_point(point_stamped, t)</code></td><td>returns <code>PointStamped</code>, point (1, 3, 0)</td></tr>
+<tr><td><code>do_transform_point(point, t)</code></td><td><code>AttributeError: 'Point' object has no attribute 'point'</code></td></tr>
+<tr><td><code>do_transform_vector3(vector3_stamped, t)</code></td><td>returns <code>Vector3Stamped</code>, (1, 0, 0) became (0, 1, 0)</td></tr>
+</tbody>
+</table>
+
+<p>The module exported six functions on every distro: <code>do_transform_point</code>, <code>do_transform_polygon_stamped</code>, <code>do_transform_pose</code>, <code>do_transform_pose_stamped</code>, <code>do_transform_pose_with_covariance_stamped</code> and <code>do_transform_vector3</code>. Only <code>do_transform_pose</code> takes the unstamped type. The others take the stamped message. <a href="https://github.com/ros2/geometry2/issues/707">ros2/geometry2 issue 707</a> (Jazzy, 2024) is this <code>AttributeError</code>, and the reply there was to use <code>do_transform_pose_stamped</code>.</p>
+
+<h2>Two results that surprised me</h2>
+
+<p>A vector only gets the rotation. <code>Vector3Stamped</code> (1, 0, 0) came out as (0, 1, 0) through both <code>buffer.transform()</code> and <code>do_transform_vector3()</code>, with no part of the (1, 2, 0) translation added. That's correct for directions and velocities, but wrong if you stored a position in a <code>Vector3Stamped</code>. Use <code>PointStamped</code> for positions. A point (1, 0, 0) came out as (1, 3, 0).</p>
+
+<p>The <code>new_type</code> argument didn't convert anything. <code>buffer.transform(pose_stamped, 'world', new_type=PointStamped)</code> returned a <code>PoseStamped</code> on all three distros, with no error or warning. If you want a point, take <code>out.pose.position</code> yourself.</p>
+
+<p>A wrong result is harder to spot when the frames themselves are wrong. The static transform post <a href="https://huntlab.app/en/ros2-tf-frame-offset-doubled-static-transform-publisher/">ROS 2 tf Frame Offset Doubled? Check static_transform_publisher</a> measured a backwards static transform. With no rotation, it put the child at exactly twice the intended offset. Check the frame order before you suspect the math.</p>
+
+<h2>Fix options compared</h2>
+
+<p>Timings are the mean of 20,000 calls in one run per distro, in a container limited to 1.5 CPUs on a 2 vCPU host. Read them as a rough size, not a benchmark.</p>
+
+<table>
+<thead><tr><th>Option</th><th>Works for</th><th>Humble</th><th>Jazzy</th><th>Lyrical</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>import tf2_geometry_msgs</code> + <code>buffer.transform(msg, 'world')</code></td><td>The five registered stamped types</td><td>187.9 µs</td><td>131.7 µs</td><td>133.1 µs</td><td>Uses the header's frame and stamp, and takes a <code>timeout</code></td></tr>
+<tr><td><code>lookup_transform()</code> + <code>do_transform_pose(pose, t)</code></td><td>Any <code>Pose</code>, including ones without a header</td><td>176.1 µs</td><td>127.5 µs</td><td>138.1 µs</td><td>You choose the frame and the time</td></tr>
+<tr><td>One <code>lookup_transform()</code>, then <code>do_transform_pose()</code> per pose</td><td>Many poses at the same time, such as a <code>PoseArray</code></td><td>112.9 µs per pose</td><td>85.9 µs per pose</td><td>81.3 µs per pose</td><td>Skips the repeated lookup</td></tr>
+<tr><td><code>do_transform_pose_stamped(ps, t)</code></td><td><code>PoseStamped</code></td><td colspan="3">Not timed</td><td>Sets <code>frame_id</code> to the target frame</td></tr>
+<tr><td><code>import tf2_sensor_msgs</code> + <code>buffer.transform(cloud, ...)</code></td><td><code>PointCloud2</code></td><td colspan="3">Not timed</td><td>Separate module, registers only <code>PointCloud2</code></td></tr>
+</tbody>
+</table>
+
+<p>Both full paths cost about the same. Most of the time went into the matrix math in <code>do_transform_pose()</code>, not the lookup. If you transform one message per callback, pick whichever reads better. For a batch at one time stamp, do the lookup once.</p>
+
+<h2>Version notes</h2>
+
+<ul>
+<li>The error text was identical on all three distros: <code>Type &lt;class '...'&gt; is not loaded or supported</code>. Older questions quote <code>if not loaded or supported</code>, and the issue 701 report quotes <code>is not loaded or suported</code>. Search for <code>not loaded or</code> to match every version.</li>
+<li>The line in the traceback was <code>buffer_interface.py:278</code> on Humble and Jazzy and <code>buffer_interface.py:290</code> on Lyrical.</li>
+<li>Package versions: Humble <code>tf2_ros_py</code> and <code>tf2_geometry_msgs</code> 0.25.24, Jazzy 0.36.23, Lyrical 0.45.10. The registered types and the six function names were the same in all three.</li>
+<li>On Lyrical (Python 3.14) the results print as <code>Point(x=np.float64(1.0), ...)</code>. On Humble and Jazzy the same fields print as plain floats such as <code>x=1.0000000000000002</code>. The values agreed to the printed precision. I didn't test whether publishing those messages behaves differently.</li>
+<li>On Humble, <code>tf2_geometry_msgs</code> was installed under <code>/opt/ros/humble/local/lib/python3.10/dist-packages</code>, while <code>tf2_ros</code> was under <code>lib/python3.10/site-packages</code>. Sourcing <code>setup.bash</code> put both on the path. On Jazzy and Lyrical both were under <code>lib/python3.x/site-packages</code>.</li>
+</ul>
+
+<h2>Not tested</h2>
+
+<p>Foxy, Iron, Kilted and Rolling. Older Humble packages that may still have the <code>suported</code> spelling. C++, where the same mistake is a missing header or a link error at build time instead of an exception. That case is covered in a separate post. <code>MessageFilter</code> in Python. <code>PoseWithCovarianceStamped</code> covariance rotation, where I only checked the pose. Non-default RMW implementations. Each timing was a single run.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>How do I fix "TypeException: Type ... PoseStamped is not loaded or supported"?</h3>
+<p>Add <code>import tf2_geometry_msgs</code> to the Python file that calls <code>tf_buffer.transform()</code>. Importing it registers the conversions for <code>PoseStamped</code>, <code>PointStamped</code>, <code>Vector3Stamped</code>, <code>PoseWithCovarianceStamped</code> and <code>PolygonStamped</code>. Without it the registry was empty on Humble, Jazzy and Lyrical.</p>
+
+<h3>Why doesn't except TransformException catch it?</h3>
+<p><code>TypeException</code> comes from <code>tf2_ros.buffer_interface</code> and inherits straight from <code>Exception</code>, not from <code>tf2.TransformException</code>. In my run it passed through an <code>except TransformException</code> block and stopped <code>rclpy.spin()</code>. Import <code>TypeException</code> from <code>tf2_ros</code> and catch both.</p>
+
+<h3>Why does do_transform_pose say 'PoseStamped' object has no attribute 'position'?</h3>
+<p>In ROS 2, <code>do_transform_pose()</code> takes a <code>Pose</code> and returns a <code>Pose</code>. For a <code>PoseStamped</code>, call <code>do_transform_pose_stamped(ps, t)</code>, or call <code>do_transform_pose(ps.pose, t)</code>. Pass the whole <code>TransformStamped</code>, not <code>t.transform</code>.</p>
+
+<h3>How do I transform a Pose that has no frame?</h3>
+<p>Give it one. Put it in a <code>PoseStamped</code> with the frame it's relative to, such as <code>base_link</code>, then call <code>buffer.transform()</code>. Or look up the transform and call <code>do_transform_pose(pose, t)</code>. A bare <code>Pose</code> passed to <code>buffer.transform()</code> raised <code>TypeException</code> even with the import.</p>
+
+<h3>Can buffer.transform handle Odometry, PoseArray or TwistStamped?</h3>
+<p>Not in my run. All three raised <code>TypeException</code> after <code>import tf2_geometry_msgs</code>, because none of them is registered. Transform the poses inside them one by one with <code>do_transform_pose()</code>. For <code>PointCloud2</code>, <code>import tf2_sensor_msgs</code>.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "How do I fix TypeException: Type PoseStamped is not loaded or supported?", "acceptedAnswer": {"@type": "Answer", "text": "Add import tf2_geometry_msgs to the Python file that calls tf_buffer.transform(). Importing it registers the conversions for PoseStamped, PointStamped, Vector3Stamped, PoseWithCovarianceStamped and PolygonStamped. Without it the registry was empty on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Why doesn't except TransformException catch it?", "acceptedAnswer": {"@type": "Answer", "text": "TypeException comes from tf2_ros.buffer_interface and inherits straight from Exception, not from tf2.TransformException. In my run it passed through an except TransformException block and stopped rclpy.spin(). Import TypeException from tf2_ros and catch both."}},
+{"@type": "Question", "name": "Why does do_transform_pose say PoseStamped object has no attribute position?", "acceptedAnswer": {"@type": "Answer", "text": "In ROS 2, do_transform_pose() takes a Pose and returns a Pose. For a PoseStamped, call do_transform_pose_stamped(ps, t), or call do_transform_pose(ps.pose, t). Pass the whole TransformStamped, not t.transform."}},
+{"@type": "Question", "name": "How do I transform a Pose that has no frame?", "acceptedAnswer": {"@type": "Answer", "text": "Give it one. Put it in a PoseStamped with the frame it's relative to, such as base_link, then call buffer.transform(). Or look up the transform and call do_transform_pose(pose, t). A bare Pose passed to buffer.transform() raised TypeException even with the import."}},
+{"@type": "Question", "name": "Can buffer.transform handle Odometry, PoseArray or TwistStamped?", "acceptedAnswer": {"@type": "Answer", "text": "Not in my run. All three raised TypeException after import tf2_geometry_msgs, because none of them is registered. Transform the poses inside them one by one with do_transform_pose(). For PointCloud2, import tf2_sensor_msgs."}}
+]}
+</script>
+
+<p>Measured on 2026-11-22 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, rclpy 3.3.22, rclcpp 16.0.23, ros2cli 0.18.21, rmw 6.1.4, tf2_ros_py and tf2_geometry_msgs 0.25.24, Python 3.10.12), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, rclpy 7.1.12, rclcpp 28.1.22, ros2cli 0.32.13, rmw 7.3.4, tf2 packages 0.36.23, Python 3.12.3) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, rclpy 10.0.11, rclcpp 32.0.3, ros2cli 0.40.9, rmw 7.10.2, tf2 packages 0.45.10, Python 3.14.4), default RMW (Fast DDS). Full digests are in <code>digests.txt</code>.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-11-ros2-tf2-python-transform-typeexception/evidence">evidence folder</a>. Questions this answers: <a href="https://robotics.stackexchange.com/questions/98071">tf2_ros.Buffer.transform() in Python (Tutorial is lacking?)</a>, <a href="https://robotics.stackexchange.com/questions/94726">transform pose in tf2</a>, <a href="https://robotics.stackexchange.com/questions/101212">ROS2 - Transforming a non-frame pose with TF2?</a>, <a href="https://robotics.stackexchange.com/questions/96892">ros2 import tf2_geometry_msgs</a>, <a href="https://github.com/ros2/geometry2/issues/701">[Humble] Buffer cannot transform b/c of TypeException</a>, <a href="https://github.com/ros2/geometry2/issues/707">[Jazzy] AttributeError: 'PoseStamped' object has no attribute 'position'</a>.</p>
