@@ -1,0 +1,155 @@
+<pre><code>tf2.ConnectivityException: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.</code></pre>
+
+<p>From C++ the text is the same. <code>tf2_echo</code> printed it as <code>[tf2_echo]: Waiting for transform map -&gt;  laser: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.</code> Nav2 and other tools add their own prefix, such as <code>Timed out waiting for transform from base_link to map to become available, tf error:</code>, but the part after it is the same.</p>
+
+<p>Short answer: both frames exist in your tf buffer, but no chain of parent and child links joins them. At least one link between them never reached this buffer. Find the missing link and publish it. In my runs the fix was always one of three things: start the node that publishes the missing link (usually <code>odom</code> to <code>base_link</code>), add a static transform that joins two names for the same body (<code>base_footprint</code> to <code>base_link</code>), or make the publishers and the listener use the same <code>/tf</code> and <code>/tf_static</code> topics. For the name mismatch, this one command fixed it on Humble, Jazzy and Lyrical:</p>
+
+<pre><code>ros2 run tf2_ros static_transform_publisher --x 0 --frame-id base_footprint --child-frame-id base_link</code></pre>
+
+<p>This is a different error from <code>"odom" passed to lookupTransform argument target_frame does not exist</code>. That one means a frame name is not in the buffer at all. "Not part of the same tree" means both names are there, in two separate trees.</p>
+
+<h2>Find your case</h2>
+
+<p>Each row is a setup I built and the result I got. The results were the same on Humble, Jazzy and Lyrical, except for the two-parent row, where the counts varied.</p>
+
+<table>
+<thead><tr><th>Setup</th><th>Lookup</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Static <code>map</code> to <code>odom</code> and <code>base_link</code> to <code>laser</code>, nothing publishing <code>odom</code> to <code>base_link</code></td><td><code>map</code> to <code>laser</code></td><td>not part of the same tree, 30 of 30 polls</td></tr>
+<tr><td>Same, plus a node publishing <code>odom</code> to <code>base_link</code> at 20 Hz</td><td><code>map</code> to <code>laser</code></td><td>OK, 30 of 30, x=1.30</td></tr>
+<tr><td>Odometry publishes <code>odom</code> to <code>base_footprint</code>, robot side publishes <code>base_link</code> to <code>laser</code></td><td><code>odom</code> to <code>laser</code></td><td>not part of the same tree, 30 of 30</td></tr>
+<tr><td>Same, plus static <code>base_footprint</code> to <code>base_link</code></td><td><code>odom</code> to <code>laser</code></td><td>OK, 30 of 30</td></tr>
+<tr><td>Robot's <code>odom</code> to <code>base_link</code> on <code>/robot1/tf</code>, static transforms on global <code>/tf_static</code>, listener on global topics</td><td><code>map</code> to <code>laser</code></td><td>not part of the same tree, 30 of 30</td></tr>
+<tr><td>Static <code>laser</code> to <code>base_link</code> (parent and child swapped) while <code>odom</code> to <code>base_link</code> is dynamic</td><td><code>odom</code> to <code>laser</code></td><td>not part of the same tree, 30 of 30</td></tr>
+<tr><td>Two nodes both publish a parent for <code>base_link</code> (<code>odom</code> and <code>map</code>)</td><td><code>odom</code> to <code>base_link</code></td><td>no error, but wrong values in some polls</td></tr>
+<tr><td>A link that stopped updating 30 s ago</td><td><code>map</code> to <code>base_link</code></td><td><code>ExtrapolationException</code>, not this error</td></tr>
+<tr><td>One frame name not published at all</td><td><code>map</code> to <code>nowhere</code></td><td><code>LookupException</code>: <code>"nowhere" passed to lookupTransform argument source_frame does not exist.</code></td></tr>
+</tbody>
+</table>
+
+<h2>What I ran</h2>
+
+<p>On 2026-11-22 I ran one script, <code>repro.sh</code>, in the official <code>ros:humble-ros-base</code>, <code>ros:jazzy-ros-base</code> and <code>ros:lyrical-ros-base</code> Docker images, one distro after the other, with no network and the default RMW (Fast DDS). It has two parts.</p>
+
+<p>Part 1 fills a <code>tf2_ros.Buffer</code> by hand with <code>set_transform</code> and <code>set_transform_static</code>, then calls <code>lookup_transform</code>. No DDS is involved, so the results don't depend on timing. Part 2 uses real traffic. <code>static_transform_publisher</code> publishes the fixed links, and a small rclpy node with a <code>TransformBroadcaster</code> publishes the moving link at 20 Hz. A listener node with a <code>TransformListener</code> waits 1 second, then calls <code>lookup_transform(target, source, Time())</code> every 0.1 s for 3 or 4 seconds and counts each result. For C++ I ran <code>tf2_echo</code> and <code>tf2_monitor</code> from <code>tf2_ros</code>. The frame names follow a mobile robot: <code>map</code>, <code>odom</code>, <code>base_footprint</code>, <code>base_link</code> and <code>laser</code>.</p>
+
+<h2>What "two or more unconnected trees" means</h2>
+
+<p>tf2 stores, for each frame, which frame is its parent. A lookup walks up from both frames until the two paths meet. If they reach two different roots, there is no answer, and tf2 raises this error. In Part 1, with only <code>map</code> to <code>odom</code> and <code>base_link</code> to <code>laser</code> in the buffer, <code>all_frames_as_yaml()</code> listed two entries:</p>
+
+<pre><code>odom: parent: 'map' ...
+laser: parent: 'base_link' ...</code></pre>
+
+<p><code>map</code> and <code>base_link</code> appear only as parents, never as entries of their own. Each one is a root, so this buffer holds two trees. Every lookup that crossed between them failed: <code>map</code> to <code>laser</code>, <code>laser</code> to <code>map</code>, and also <code>odom</code> to <code>base_link</code>. Lookups inside one tree worked (<code>map</code> to <code>odom</code>, <code>base_link</code> to <code>laser</code>). So when you read the YAML from <code>all_frames_as_yaml()</code>, look for names that appear as a parent but never have an entry. More than one of those means more than one tree.</p>
+
+<p>The exception class matters if you catch it. In rclpy it was <code>tf2.ConnectivityException</code>. Its class chain was <code>ConnectivityException</code>, <code>TransformException</code>, <code>Exception</code>. <code>isinstance(e, tf2_ros.LookupException)</code> was <code>False</code>. Code that catches only <code>LookupException</code> doesn't catch this error, and the exception ends the callback. Catch <code>tf2_ros.TransformException</code>, the base class in that chain, instead.</p>
+
+<h2>Cause 1: the link is never published</h2>
+
+<p>Something should publish <code>odom</code> to <code>base_link</code>: wheel odometry, a simulator plugin, <code>robot_localization</code>. It isn't running, it crashed, or it is publishing somewhere else. The fixed parts of the tree are there, so both frames exist, and the lookup gives the connectivity error instead of "does not exist". With only the two static transforms, the listener got the error in 30 of 30 polls on all three distros. When I started the 20 Hz <code>odom</code> to <code>base_link</code> publisher, the same lookup worked 30 of 30 times with x=1.30, the sum of the 1.0 m odometry offset and the 0.3 m laser offset.</p>
+
+<p>A link that stops is different from a link that never came. In Part 1 I kept <code>map</code> to <code>odom</code> updating up to stamp 140 and stopped <code>odom</code> to <code>base_link</code> at stamp 110. The lookup failed with <code>Lookup would require extrapolation into the past. Requested time 110.000000 but the earliest data is at time 129.000000</code>. tf2 still knew the parent of <code>base_link</code>, so the trees were still joined. A stopped publisher gave extrapolation errors in my run, not this one. Timing errors like that are measured in <a href="https://huntlab.app/en/ros2-tf2-lookup-would-require-extrapolation-into-the-future/">the extrapolation post</a>, which measured why <code>get_clock().now()</code> fails at every publish rate and what a lookup timeout costs.</p>
+
+<h2>Cause 2: two names for the same body</h2>
+
+<p>Odometry often publishes <code>odom</code> to <code>base_footprint</code>, while the URDF and <code>robot_state_publisher</code> start at <code>base_link</code>. Both names exist, nothing joins them, and you have two trees. In Part 1 <code>odom</code> to <code>laser</code> and <code>odom</code> to <code>base_link</code> both failed with the connectivity error, while <code>odom</code> to <code>base_footprint</code> worked. With real traffic the result was 30 of 30 failures. After I added the static <code>base_footprint</code> to <code>base_link</code> transform from the top of this article, the lookup worked 30 of 30 times on every distro.</p>
+
+<h2>Cause 3: the robot's /tf is on another topic</h2>
+
+<p>Multi-robot setups and some robot bringups publish tf under a namespace. A <code>TransformListener</code> subscribes to <code>/tf</code> and <code>/tf_static</code> by default. I started the odometry node with <code>-r __ns:=/robot1 -r /tf:=tf -r /tf_static:=tf_static</code>, so its <code>odom</code> to <code>base_link</code> went to <code>/robot1/tf</code>. The static transforms stayed on the global <code>/tf_static</code>. <code>ros2 topic list</code> showed exactly that: <code>/robot1/tf</code> and <code>/tf_static</code>, with no <code>/tf</code>.</p>
+
+<table>
+<thead><tr><th>Listener subscribed to</th><th>Where the static transforms were</th><th><code>map</code> to <code>laser</code></th></tr></thead>
+<tbody>
+<tr><td><code>/tf</code> and <code>/tf_static</code> (default)</td><td><code>/tf_static</code></td><td>not part of the same tree, 30 of 30</td></tr>
+<tr><td><code>-r /tf:=/robot1/tf</code>, default <code>/tf_static</code></td><td><code>/tf_static</code></td><td>OK, 30 of 30</td></tr>
+<tr><td><code>-r /tf:=/robot1/tf -r /tf_static:=/robot1/tf_static</code></td><td><code>/robot1/tf_static</code></td><td>OK, 30 of 30</td></tr>
+</tbody>
+</table>
+
+<p>The listener has to subscribe to the same pair of topics the publishers use, and the pair can be split. The static parts came through and the moving link did not. That is why the error said "not part of the same tree" and not "does not exist". Static transforms on a separate topic have their own timing trap: <a href="https://huntlab.app/en/ros2-bag-play-tf-static-missing-transient-local-qos-override/">the /tf_static bag play post</a> measured how <code>/tf_static</code> goes missing after <code>ros2 bag play</code> and the QoS override that restores it.</p>
+
+<h2>Cause 4: parent and child swapped in a static transform</h2>
+
+<p>If you swap the parent and child in a static transform, the child of that transform gets a second parent. I published <code>laser</code> to <code>base_link</code> (swapped) as a static transform while <code>odom</code> to <code>base_link</code> came from odometry at 20 Hz. Every <code>odom</code> to <code>laser</code> lookup failed, 30 of 30, and <code>odom</code> to <code>base_link</code> worked. The frame list on the listener had one entry, <code>base_link: parent: 'odom'</code>. <code>laser</code> was gone from the frame list entirely. The odometry updates had replaced the static parent.</p>
+
+<p>Part 1 showed that the most recent call decides which parent wins. Static first and odometry after gave the same result as the real traffic. Odometry first and the swapped static after made <code>base_link</code> a child of <code>laser</code>. After that, <code>odom</code> to <code>base_link</code> failed too, and only <code>laser</code> to <code>base_link</code> worked (x=0.3). <a href="https://huntlab.app/en/ros2-tf-frame-offset-doubled-static-transform-publisher/">The static_transform_publisher post</a> measured the other effect of a swapped transform: with no rotation, the child lands at twice the offset when the frame has no other parent. If you see this error right after adding a sensor, check the order of <code>--frame-id</code> (parent) and <code>--child-frame-id</code> (child).</p>
+
+<h2>Two parents don't give this error, they give wrong numbers</h2>
+
+<p>When two dynamic sources both publish a parent for <code>base_link</code>, tf2 doesn't complain. I ran odometry (<code>odom</code> to <code>base_link</code>, x=1.0) and a second node (<code>map</code> to <code>base_link</code>, x=5.0), both at 20 Hz, with a static identity <code>map</code> to <code>odom</code>. Every lookup returned a transform. There was no exception and no warning, and the values were inconsistent:</p>
+
+<table>
+<thead><tr><th>Distro</th><th><code>odom</code> to <code>base_link</code>, 40 polls</th><th><code>map</code> to <code>base_link</code>, 40 polls</th></tr></thead>
+<tbody>
+<tr><td>Humble</td><td>29 times x=1.00, 11 times x=5.00</td><td>40 times x=5.00</td></tr>
+<tr><td>Jazzy</td><td>40 times x=1.00</td><td>40 times x=5.00</td></tr>
+<tr><td>Lyrical</td><td>14 times x=1.00, 26 times x=5.00</td><td>40 times x=5.00</td></tr>
+</tbody>
+</table>
+
+<p>With an identity <code>map</code> to <code>odom</code>, both lookups should give the same number. They didn't. The split changed from run to run and is not a difference between distros. Jazzy simply had no wrong polls this time. In Part 1, with the second source written last at every stamp, <code>odom</code> to <code>base_link</code> came back as x=4.0, a value neither node published. The usual cause is two localization nodes, or an EKF and a simulator plugin, both publishing the same link. Each frame should have exactly one publisher for its parent link.</p>
+
+<h2>How to see which link is missing</h2>
+
+<p><code>tf2_echo</code> shows the error as it changes. With the two static transforms running, it first printed <code>Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist</code>. About 2 seconds later (1.97 s on Humble, 1.96 s on Jazzy, 1.98 s on Lyrical, from the log timestamps), once data had arrived, it switched to the connectivity error. Don't give up on the first line it prints.</p>
+
+<p><code>tf2_monitor</code> was less helpful here. After 10 seconds it listed <code>Frame: laser</code> and <code>Frame: odom</code> with their delays, and said nothing about two trees or about <code>base_link</code> having no parent. It listed only the two frames that had a parent entry, so the missing link didn't show up at all. In Python, <code>buffer.all_frames_as_yaml()</code> gives the same list with each parent named, and that's enough to find the roots by eye. <code>tf2_tools</code> (for <code>view_frames</code>) is installed in all three ros-base images, but I didn't run it.</p>
+
+<h2>A timeout doesn't help</h2>
+
+<p>A lookup with a timeout waits the full time before it raises this error. With the two-tree setup and a listener spinning in its own thread, <code>lookup_transform('map', 'laser', Time(), timeout=Duration(seconds=2.0))</code> took 2.005 to 2.014 s on every run and distro, then raised <code>ConnectivityException</code>. <code>can_transform</code> with the same timeout returned <code>0</code> after 2.005 to 2.006 s. A frame that didn't exist cost the same, 2.004 to 2.006 s. A connected lookup returned in 0.000 s. So a longer timeout only makes a broken tree fail more slowly. Raise the timeout if data is arriving late, not if a link is missing.</p>
+
+<h2>Fix options compared</h2>
+
+<table>
+<thead><tr><th>Cause</th><th>Fix</th><th>Measured result</th></tr></thead>
+<tbody>
+<tr><td>Missing <code>odom</code> to <code>base_link</code></td><td>Start or fix the odometry publisher</td><td>Error in 30 of 30 polls, then OK in 30 of 30</td></tr>
+<tr><td><code>base_footprint</code> vs <code>base_link</code></td><td>Static <code>base_footprint</code> to <code>base_link</code></td><td>Error in 30 of 30, then OK in 30 of 30</td></tr>
+<tr><td>Robot tf in a namespace</td><td>Remap the listener to the same <code>tf</code> and <code>tf_static</code> topics as the publishers</td><td>Error in 30 of 30, then OK in 30 of 30</td></tr>
+<tr><td>Swapped static transform</td><td>Swap <code>--frame-id</code> and <code>--child-frame-id</code> back</td><td>Error in 30 of 30. The corrected order is the Cause 1 fix (OK in 30 of 30)</td></tr>
+<tr><td>Two parents for one frame</td><td>Stop one publisher</td><td>No error before the fix, only wrong values. Not rerun with one publisher</td></tr>
+<tr><td>Any cause</td><td>Longer lookup timeout</td><td>Fails anyway, after the full timeout (2.0 s gave 2.005 to 2.014 s)</td></tr>
+<tr><td>Code that crashes on it</td><td>Catch <code>TransformException</code>, not <code>LookupException</code></td><td><code>ConnectivityException</code> is not a <code>LookupException</code> in rclpy</td></tr>
+</tbody>
+</table>
+
+<h2>Version notes</h2>
+
+<p>The error text, the Python exception class and every pass or fail count were the same on Humble (tf2 0.25.24), Jazzy (tf2 0.36.23) and Lyrical (tf2 0.45.10). The message has no space between <code>tree.</code> and <code>Tf</code> on all three, so search for <code>same tree.Tf has two</code> if you grep logs. Only the two-parent case differed: 11, 0 and 26 wrong polls of 40, which I attribute to timing, not version.</p>
+
+<h2>Not tested</h2>
+
+<p>Nav2, slam_toolbox, robot_localization and <code>robot_state_publisher</code> as the publishers (I used small stand-ins). <code>view_frames</code> and <code>rqt_tf_tree</code>. A tf listener in my own rclcpp code (C++ was covered only by <code>tf2_echo</code> and <code>tf2_monitor</code>). Cyclone DDS, Zenoh, the Fast DDS discovery server from the TurtleBot 4 report, and traffic between two machines. <code>use_sim_time</code>. Renaming frames inside drivers. Foxy, Iron, Kilted and Rolling.</p>
+
+<h2 id="faq">FAQ</h2>
+
+<h3>What does "not part of the same tree. Tf has two or more unconnected trees" mean?</h3>
+<p>Both frames are in the tf buffer, but no chain of parent and child links connects them, so tf2 can't compute the transform. At least one link between them never arrived. In my runs that was a missing odometry link, a <code>base_footprint</code> and <code>base_link</code> name mismatch, tf published on a namespaced topic, or a static transform with parent and child swapped.</p>
+
+<h3>How is it different from "frame does not exist"?</h3>
+<p>"Does not exist" means one of the names isn't in the buffer at all. It was a <code>LookupException</code> in rclpy. "Not part of the same tree" means both names are there, in separate trees, and it was a <code>ConnectivityException</code>. <code>tf2_echo</code> printed "does not exist" first and switched to the connectivity error about 2 seconds later, once data arrived.</p>
+
+<h3>How do I fix "Could not find a connection between odom and base_link"?</h3>
+<p>Check that the node that publishes <code>odom</code> to <code>base_link</code> is running, and that it uses the same frame names as your URDF. If it publishes <code>base_footprint</code>, add a static <code>base_footprint</code> to <code>base_link</code> transform. Both fixes changed 30 of 30 failed lookups into 30 of 30 successful ones on Humble, Jazzy and Lyrical.</p>
+
+<h3>Will a longer lookup timeout fix it?</h3>
+<p>No. With a 2.0 s timeout the lookup waited 2.005 to 2.014 s and then raised the same error on every distro. A timeout only helps when the missing link is about to arrive.</p>
+
+<h3>Why doesn't except LookupException catch it in rclpy?</h3>
+<p>The error is raised as <code>tf2.ConnectivityException</code>, whose parent class is <code>TransformException</code>, not <code>LookupException</code>. Catch <code>tf2_ros.TransformException</code>, the base class, instead.</p>
+
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+{"@type": "Question", "name": "What does not part of the same tree. Tf has two or more unconnected trees mean?", "acceptedAnswer": {"@type": "Answer", "text": "Both frames are in the tf buffer, but no chain of parent and child links connects them, so tf2 can't compute the transform. At least one link between them never arrived. In my runs that was a missing odometry link, a base_footprint and base_link name mismatch, tf published on a namespaced topic, or a static transform with parent and child swapped."}},
+{"@type": "Question", "name": "How is it different from frame does not exist?", "acceptedAnswer": {"@type": "Answer", "text": "Does not exist means one of the names isn't in the buffer at all. It was a LookupException in rclpy. Not part of the same tree means both names are there, in separate trees, and it was a ConnectivityException. tf2_echo printed does not exist first and switched to the connectivity error about 2 seconds later, once data arrived."}},
+{"@type": "Question", "name": "How do I fix Could not find a connection between odom and base_link?", "acceptedAnswer": {"@type": "Answer", "text": "Check that the node that publishes odom to base_link is running, and that it uses the same frame names as your URDF. If it publishes base_footprint, add a static base_footprint to base_link transform. Both fixes changed 30 of 30 failed lookups into 30 of 30 successful ones on Humble, Jazzy and Lyrical."}},
+{"@type": "Question", "name": "Will a longer lookup timeout fix it?", "acceptedAnswer": {"@type": "Answer", "text": "No. With a 2.0 s timeout the lookup waited 2.005 to 2.014 s and then raised the same error on every distro. A timeout only helps when the missing link is about to arrive."}},
+{"@type": "Question", "name": "Why doesn't except LookupException catch it in rclpy?", "acceptedAnswer": {"@type": "Answer", "text": "The error is raised as tf2.ConnectivityException, whose parent class is TransformException, not LookupException. Catch tf2_ros.TransformException, the base class, instead."}}
+]}
+</script>
+
+<p>Measured on 2026-11-22 with <code>ros:humble-ros-base</code> (<code>sha256:a18afd4a42ad...</code>, tf2 and tf2_ros 0.25.24, rclpy 3.3.22, rclcpp 16.0.23), <code>ros:jazzy-ros-base</code> (<code>sha256:00b8d47a6e63...</code>, tf2 and tf2_ros 0.36.23, rclpy 7.1.12, rclcpp 28.1.22) and <code>ros:lyrical-ros-base</code> (<code>sha256:c69a7a39142b...</code>, tf2 and tf2_ros 0.45.10, rclpy 10.0.11, rclcpp 32.0.3), default RMW (Fast DDS), no network. Full digests and package versions are in <code>digests.txt</code>. Real-traffic cases ran once per distro, with 30 or 40 lookups each.</p>
+
+<p>Script and raw output: <a href="https://github.com/sungpyo9053/blog/tree/main/editorial/en/2027-02-05-ros2-tf2-not-part-of-the-same-tree/evidence">evidence folder</a>. Questions this answers: <a href="https://github.com/turtlebot/turtlebot4/issues/329">Could not find a connection between 'map' and 'base_link' (TurtleBot 4)</a>, <a href="https://github.com/autowarefoundation/AWSIM/issues/76">Vehicle init pose: failed to get transform from map to base_link (AWSIM)</a>, <a href="https://robotics.stackexchange.com/questions/112056">GPS and navsat_transform node issues (Timed out waiting for transform from base_link to map)</a>, <a href="https://robotics.stackexchange.com/questions/101737">I keep getting this error while running navigation with robot_pose_ekf</a>, <a href="https://robotics.stackexchange.com/questions/72648">Could not find a connection between 'map' and 'base_link' because they are not part of the same tree</a>, <a href="https://robotics.stackexchange.com/questions/50746">Missing connection between /map and /base_link</a>.</p>

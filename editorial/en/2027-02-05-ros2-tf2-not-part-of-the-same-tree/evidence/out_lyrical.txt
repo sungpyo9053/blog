@@ -1,0 +1,149 @@
+=== distro=lyrical
+ros-lyrical-rclcpp 32.0.3-1resolute.20260915.061505
+ros-lyrical-rclpy 10.0.11-1resolute.20260915.061807
+ros-lyrical-rmw 7.10.2-3resolute.20260901.091148
+ros-lyrical-rmw-implementation 3.1.6-1resolute.20260915.053750
+ros-lyrical-ros2cli 0.40.9-1resolute.20260915.075638
+ros-lyrical-tf2 0.45.10-1resolute.20260915.134323
+ros-lyrical-tf2-ros 0.45.10-1resolute.20260915.140307
+ros-lyrical-tf2-ros-py 0.45.10-1resolute.20260915.135515
+ros-lyrical-tf2-tools 0.45.10-1resolute.20260915.135840
+RMW_IMPLEMENTATION=unset
+--- error strings in libtf2.so
+ does not exist. 
+' because they are not part of the same tree.
+?' because they are not part of tf the same tree.Tf has two or more unconnected t
+Could not find a connection between '
+Tf has two or more unconnected trees.
+frame does not exist
+### part1 direct Buffer
+BUILD A_missing_link dyn=[('map', 'odom')] static=[('base_link', 'laser')]
+  YAML odom: parent: 'map' broadcaster: 'dyn' rate: 10000.000 most_recent_transform: 100.000000 oldest_transform: 100.000000 buffer_length: 0.000 laser: parent: 'base_link' broadcaster: 'stat' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  A lookup(map, laser): FAIL tf2.ConnectivityException: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  A lookup(odom, base_link): FAIL tf2.ConnectivityException: Could not find a connection between 'odom' and 'base_link' because they are not part of the same tree.Tf has two or more unconnected trees.
+  A lookup(laser, map): FAIL tf2.ConnectivityException: Could not find a connection between 'laser' and 'map' because they are not part of the same tree.Tf has two or more unconnected trees.
+  A lookup(map, odom): OK x=1.0
+  A lookup(base_link, laser): OK x=1.0
+  A can_transform(map, laser) = 0
+  A debug tuple = (0, "Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.")
+BUILD B_footprint_vs_link dyn=[('odom', 'base_footprint')] static=[('base_link', 'laser')]
+  YAML base_footprint: parent: 'odom' broadcaster: 'dyn' rate: 10000.000 most_recent_transform: 100.000000 oldest_transform: 100.000000 buffer_length: 0.000 laser: parent: 'base_link' broadcaster: 'stat' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  B lookup(odom, laser): FAIL tf2.ConnectivityException: Could not find a connection between 'odom' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  B lookup(odom, base_link): FAIL tf2.ConnectivityException: Could not find a connection between 'odom' and 'base_link' because they are not part of the same tree.Tf has two or more unconnected trees.
+  B lookup(odom, base_footprint): OK x=1.0
+  B after static base_footprint->base_link: lookup(odom, laser): OK x=2.0
+BUILD C_exist dyn=[('map', 'odom')] static=[]
+  YAML odom: parent: 'map' broadcaster: 'dyn' rate: 10000.000 most_recent_transform: 100.000000 oldest_transform: 100.000000 buffer_length: 0.000
+  C lookup(map, nowhere): FAIL tf2.LookupException: "nowhere" passed to lookupTransform argument source_frame does not exist.
+  C lookup(nowhere, odom): FAIL tf2.LookupException: "nowhere" passed to lookupTransform argument target_frame does not exist.
+  C lookup(foo, bar): FAIL tf2.LookupException: "foo" passed to lookupTransform argument target_frame does not exist.
+BUILD D_old_link dyn=[('map', 'odom'), ('odom', 'base_link')] static=[]
+  YAML odom: parent: 'map' broadcaster: 'dyn' rate: 10000.000 most_recent_transform: 100.000000 oldest_transform: 100.000000 buffer_length: 0.000 base_link: parent: 'odom' broadcaster: 'dyn' rate: 10000.000 most_recent_transform: 200.000000 oldest_transform: 200.000000 buffer_length: 0.000
+  D lookup(map, base_link, Time()): FAIL tf2.ExtrapolationException: Lookup would require extrapolation at time 100.000000, but only time 200.000000 is in the buffer, when looking up transform from frame [base_link] to frame [map]
+  D lookup(map, base_link, t=200): FAIL tf2.ExtrapolationException: Lookup would require extrapolation at time 200.000000, but only time 100.000000 is in the buffer, when looking up transform from frame [base_link] to frame [map]
+BUILD E_stale_link map->odom stamps 100..140, odom->base_link stamps 100..110
+  E lookup(map, base_link, Time()): FAIL tf2.ExtrapolationException: Lookup would require extrapolation into the past. Requested time 110.000000 but the earliest data is at time 129.000000, when looking up transform from frame [base_link] to frame [map]
+  E lookup(map, base_link, t=140): FAIL tf2.ExtrapolationException: Lookup would require extrapolation into the future. Requested time 140.000000 but the latest data is at time 110.000000, when looking up transform from frame [base_link] to frame [map]
+  E lookup(odom, base_link, Time()): OK x=1.0
+BUILD F_two_parents each stamp: map->odom, odom->base_link x=1, map->base_link x=5
+  YAML odom: parent: 'map' broadcaster: 'dyn' rate: 1.100 most_recent_transform: 110.000000 oldest_transform: 100.000000 buffer_length: 10.000 base_link: parent: 'map' broadcaster: 'second_source' rate: 2.200 most_recent_transform: 110.000000 oldest_transform: 100.000000 buffer_length: 10.000
+  F lookup(map, base_link): OK x=5.0
+  F lookup(odom, base_link): OK x=4.0
+  F lookup(map, odom): OK x=1.0
+BUILD F2_two_parents same, but odom->base_link set last
+  F2 lookup(map, base_link): OK x=2.0
+  F2 lookup(odom, base_link): OK x=1.0
+BUILD G_swapped_static laser->base_link static, then odom->base_link dynamic
+  YAML base_link: parent: 'odom' broadcaster: 'odometry' rate: 1.100 most_recent_transform: 110.000000 oldest_transform: 100.000000 buffer_length: 10.000
+  G lookup(odom, laser): FAIL tf2.ConnectivityException: Could not find a connection between 'odom' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  G lookup(odom, base_link): OK x=1.0
+  G lookup(laser, base_link): FAIL tf2.ConnectivityException: Could not find a connection between 'laser' and 'base_link' because they are not part of the same tree.Tf has two or more unconnected trees.
+BUILD G2_swapped_static odom->base_link dynamic first, then laser->base_link static
+  YAML base_link: parent: 'laser' broadcaster: 'swapped_static' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  G2 lookup(odom, laser): FAIL tf2.ConnectivityException: Could not find a connection between 'odom' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  G2 lookup(odom, base_link): FAIL tf2.ConnectivityException: Could not find a connection between 'odom' and 'base_link' because they are not part of the same tree.Tf has two or more unconnected trees.
+  G2 lookup(laser, base_link): OK x=0.3
+BUILD H_classes dyn=[('map', 'odom')] static=[('base_link', 'laser')]
+  YAML odom: parent: 'map' broadcaster: 'dyn' rate: 10000.000 most_recent_transform: 100.000000 oldest_transform: 100.000000 buffer_length: 0.000 laser: parent: 'base_link' broadcaster: 'stat' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  H MRO ['tf2.ConnectivityException', 'tf2.TransformException', 'builtins.Exception', 'builtins.BaseException', 'builtins.object']
+  H isinstance LookupException: False ConnectivityException: True TransformException: True
+=== uptime 1.27 0.44 0.16 1/208 39
+### case R1 missing odom->base_link (statics map->odom, base_link->laser), lookup map->laser
+  FRAMES laser: parent: 'base_link' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 odom: parent: 'map' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  RESULT map->laser count=30 ConnectivityException: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+### case R1fix same plus fake_odom odom->base_link
+  FRAMES odom: parent: 'map' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 base_link: parent: 'odom' broadcaster: 'default_authority' rate: 20.083 most_recent_transform: 1795308713.021202 oldest_transform: 1795308709.137359 buffer_length: 3.884 laser: parent: 'base_link' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  RESULT map->laser count=30 OK x=1.30
+### case R2 odom publishes base_footprint, URDF side has base_link->laser
+  FRAMES laser: parent: 'base_link' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 base_footprint: parent: 'odom' broadcaster: 'default_authority' rate: 19.944 most_recent_transform: 1795308722.028712 oldest_transform: 1795308718.017550 buffer_length: 4.011
+  RESULT odom->laser count=30 ConnectivityException: Could not find a connection between 'odom' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+### case R2fix add static base_footprint->base_link
+  FRAMES base_footprint: parent: 'odom' broadcaster: 'default_authority' rate: 20.087 most_recent_transform: 1795308731.335375 oldest_transform: 1795308727.501964 buffer_length: 3.833 laser: parent: 'base_link' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 base_link: parent: 'base_footprint' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  RESULT odom->laser count=30 OK x=1.30
+=== uptime 0.65 0.38 0.16 1/208 317
+### case R3 namespaced robot: odom->base_link on /robot1/tf, statics on global /tf_static, listener global
+  FRAMES laser: parent: 'base_link' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 odom: parent: 'map' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  RESULT map->laser count=30 ConnectivityException: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+### case R3b listener remaps only /tf:=/robot1/tf
+  FRAMES odom: parent: 'map' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 laser: parent: 'base_link' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 base_link: parent: 'odom' broadcaster: 'default_authority' rate: 20.085 most_recent_transform: 1795308749.764843 oldest_transform: 1795308745.881443 buffer_length: 3.883
+  RESULT map->laser count=30 OK x=1.30
+### case R3fix all robot publishers and the listener on /robot1/tf and /robot1/tf_static
+  FRAMES laser: parent: 'base_link' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 base_link: parent: 'odom' broadcaster: 'default_authority' rate: 20.096 most_recent_transform: 1795308758.768595 oldest_transform: 1795308755.036585 buffer_length: 3.732 odom: parent: 'map' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  RESULT map->laser count=30 OK x=1.30
+### case R3cli ros2 topic list during R3
+  topic list exit=0
+  topic: /parameter_events
+  topic: /robot1/tf
+  topic: /rosout
+  topic: /tf_static
+=== uptime 0.57 0.40 0.17 1/207 614
+### case R4 static publisher with parent and child swapped (laser->base_link) while odom->base_link is dynamic
+  FRAMES base_link: parent: 'odom' broadcaster: 'default_authority' rate: 20.086 most_recent_transform: 1795308777.079903 oldest_transform: 1795308773.146769 buffer_length: 3.933
+  RESULT odom->laser count=30 ConnectivityException: Could not find a connection between 'odom' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+### case R4b same, lookup odom->base_link
+  FRAMES base_link: parent: 'odom' broadcaster: 'default_authority' rate: 20.099 most_recent_transform: 1795308786.156378 oldest_transform: 1795308782.524375 buffer_length: 3.632
+  RESULT odom->base_link count=30 OK x=1.00
+### case R5 two dynamic parents for base_link (odom->base_link x=1 and map->base_link x=5), map->odom static x=0
+  FRAMES odom: parent: 'map' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000 base_link: parent: 'map' broadcaster: 'default_authority' rate: 39.266 most_recent_transform: 1795308796.514571 oldest_transform: 1795308791.675773 buffer_length: 4.839
+  RESULT odom->base_link count=26 OK x=5.00
+  RESULT odom->base_link count=14 OK x=1.00
+### case R5b same, lookup map->base_link
+  FRAMES base_link: parent: 'map' broadcaster: 'default_authority' rate: 39.288 most_recent_transform: 1795308805.818495 oldest_transform: 1795308800.829741 buffer_length: 4.989 odom: parent: 'map' broadcaster: 'default_authority' rate: 10000.000 most_recent_transform: 0.000000 oldest_transform: 0.000000 buffer_length: 0.000
+  RESULT map->base_link count=40 OK x=5.00
+=== uptime 0.61 0.42 0.19 1/207 883
+### case R6 C++ tf2_echo map laser with the R1 tree
+  lines=6 same_tree_lines=2 translation_lines=0
+  raw: [INFO] [1795308809.778489770] [tf2_echo]: Waiting for transform map ->  laser: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+  raw: [INFO] [1795308811.758214390] [tf2_echo]: Waiting for transform map ->  laser: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  raw: [INFO] [1795308813.758222268] [tf2_echo]: Waiting for transform map ->  laser: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+### case R6b tf2_echo map nowhere
+  raw: [INFO] [1795308818.755643063] [tf2_echo]: Waiting for transform map ->  nowhere: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+  raw: [INFO] [1795308820.719134526] [tf2_echo]: Waiting for transform map ->  nowhere: Invalid frame ID "nowhere" passed to canTransform argument source_frame - frame does not exist
+### case R6c tf2_monitor with the R1 tree
+  mon: Gathering data on all frames for 10 seconds...
+  mon: RESULTS: for all Frames
+  mon: Frames:
+  mon: Frame: laser, published by <no authority available>, Average Delay: 0.232189, Max Delay: 0.232189
+  mon: Frame: odom, published by <no authority available>, Average Delay: 0.188408, Max Delay: 0.188408
+  mon: All Broadcasters:
+  mon: Node: <no authority available> 29.7978 Hz, Average Delay: 0.210299 Max Delay: 0.232189
+  mon: [ros2run]: Received signal:  Terminated
+  mon: [INFO] [1795308841.476531689] [rclcpp]: signal_handler(signum=15)
+  mon: [INFO] [1795308841.480452106] [rclcpp]: signal_handler(signum=15)
+### case R6d view_frames available?
+  /opt/ros/lyrical
+=== uptime 0.34 0.37 0.18 1/207 1071
+### case R7 timing (R1 tree: map->odom and base_link->laser static)
+  TIMING lookup(map, laser, timeout=2.0) run=0 elapsed=2.005s -> ConnectivityException: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  TIMING lookup(map, laser, timeout=2.0) run=1 elapsed=2.005s -> ConnectivityException: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  TIMING lookup(map, laser, timeout=2.0) run=2 elapsed=2.005s -> ConnectivityException: Could not find a connection between 'map' and 'laser' because they are not part of the same tree.Tf has two or more unconnected trees.
+  TIMING can_transform(map, laser, timeout=2.0) elapsed=2.005s -> 0
+  TIMING lookup(map, odom, timeout=2.0) run=0 elapsed=0.000s -> OK
+  TIMING lookup(map, odom, timeout=2.0) run=1 elapsed=0.000s -> OK
+  TIMING lookup(map, odom, timeout=2.0) run=2 elapsed=0.000s -> OK
+  TIMING can_transform(map, odom, timeout=2.0) elapsed=0.000s -> 1
+  TIMING lookup(map, nowhere, timeout=2.0) run=0 elapsed=2.004s -> LookupException: "nowhere" passed to lookupTransform argument source_frame does not exist.
+  TIMING lookup(map, nowhere, timeout=2.0) run=1 elapsed=2.004s -> LookupException: "nowhere" passed to lookupTransform argument source_frame does not exist.
+  TIMING lookup(map, nowhere, timeout=2.0) run=2 elapsed=2.004s -> LookupException: "nowhere" passed to lookupTransform argument source_frame does not exist.
+  TIMING can_transform(map, nowhere, timeout=2.0) elapsed=2.004s -> 0
+=== done lyrical
