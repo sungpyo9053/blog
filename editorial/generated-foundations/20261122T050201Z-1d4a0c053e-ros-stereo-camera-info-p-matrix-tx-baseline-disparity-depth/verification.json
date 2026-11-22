@@ -1,0 +1,88 @@
+{
+  "checked_at": "2026-11-22T14:02:10.214891+09:00",
+  "python": "3.12.3",
+  "command": "python3 -I example.py",
+  "exit_code": 0,
+  "stdout": "[{\"name\": \"오른쪽 P에서 baseline 구하기: B = -Tx / fx' (m)\", \"actual\": 0.12}, {\"name\": \"오답: Tx를 그대로 baseline으로 읽은 값 (단위가 px·m라 m로 읽으면 700배)\", \"actual\": 84}, {\"name\": \"오답: P의 fx' 대신 K의 fx 750을 쓴 baseline (m)\", \"actual\": 0.112}, {\"name\": \"경계: 왼쪽(첫 번째) 카메라의 camera_info를 읽으면 Tx = 0이라 baseline도 0\", \"actual\": 0.0}, {\"name\": \"왼쪽 영상의 가로 픽셀 x_l = (fx'·X + cx'·Z + 0) / Z\", \"actual\": 495.0}, {\"name\": \"오른쪽 영상의 가로 픽셀 x_r = (fx'·X + cx'·Z + Tx) / Z\", \"actual\": 453.0}, {\"name\": \"시차 d = x_l - x_r (px), fx'·B/Z = 700·0.12/2와 같아야 함\", \"actual\": 42.0}, {\"name\": \"깊이 되돌리기: Z = -Tx / d (m), fx'를 몰라도 됨\", \"actual\": 2.0}, {\"name\": \"가까운 점: 시차 21 px의 깊이 (m)\", \"actual\": 4.0}, {\"name\": \"가까운 점의 시차를 1 px 작게 읽으면 (20 px)\", \"actual\": 4.2}, {\"name\": \"먼 점: 시차 4 px의 깊이 (m)\", \"actual\": 21.0}, {\"name\": \"먼 점의 시차를 1 px 작게 읽으면 (3 px)\", \"actual\": 28.0}]\n",
+  "cases": [
+    {
+      "name": "오른쪽 P에서 baseline 구하기: B = -Tx / fx' (m)",
+      "expression": "-(-84)/700",
+      "expected": 0.12,
+      "actual": 0.12
+    },
+    {
+      "name": "오답: Tx를 그대로 baseline으로 읽은 값 (단위가 px·m라 m로 읽으면 700배)",
+      "expression": "-(-84)",
+      "expected": 84,
+      "actual": 84
+    },
+    {
+      "name": "오답: P의 fx' 대신 K의 fx 750을 쓴 baseline (m)",
+      "expression": "-(-84)/750",
+      "expected": 0.112,
+      "actual": 0.112
+    },
+    {
+      "name": "경계: 왼쪽(첫 번째) 카메라의 camera_info를 읽으면 Tx = 0이라 baseline도 0",
+      "expression": "0/700",
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "name": "왼쪽 영상의 가로 픽셀 x_l = (fx'·X + cx'·Z + 0) / Z",
+      "expression": "(700*0.5+320*2.0+0)/2.0",
+      "expected": 495,
+      "actual": 495.0
+    },
+    {
+      "name": "오른쪽 영상의 가로 픽셀 x_r = (fx'·X + cx'·Z + Tx) / Z",
+      "expression": "(700*0.5+320*2.0+(-84))/2.0",
+      "expected": 453,
+      "actual": 453.0
+    },
+    {
+      "name": "시차 d = x_l - x_r (px), fx'·B/Z = 700·0.12/2와 같아야 함",
+      "expression": "(700*0.5+320*2.0+0)/2.0-(700*0.5+320*2.0+(-84))/2.0",
+      "expected": 42,
+      "actual": 42.0
+    },
+    {
+      "name": "깊이 되돌리기: Z = -Tx / d (m), fx'를 몰라도 됨",
+      "expression": "-(-84)/42",
+      "expected": 2,
+      "actual": 2.0
+    },
+    {
+      "name": "가까운 점: 시차 21 px의 깊이 (m)",
+      "expression": "84/21",
+      "expected": 4,
+      "actual": 4.0
+    },
+    {
+      "name": "가까운 점의 시차를 1 px 작게 읽으면 (20 px)",
+      "expression": "84/20",
+      "expected": 4.2,
+      "actual": 4.2
+    },
+    {
+      "name": "먼 점: 시차 4 px의 깊이 (m)",
+      "expression": "84/4",
+      "expected": 21,
+      "actual": 21.0
+    },
+    {
+      "name": "먼 점의 시차를 1 px 작게 읽으면 (3 px)",
+      "expression": "84/3",
+      "expected": 28,
+      "actual": 28.0
+    }
+  ],
+  "teaching_context": {
+    "description": "보정(rectified)된 수평 스테레오 쌍을 설명용으로 가정합니다. 실제 카메라 값이 아닙니다. 오른쪽 camera_info의 P는 fx' = 700 px, cx' = 320 px, Tx = -84 px·m, Ty = 0이고, 왼쪽 P는 같은 fx'·cx'에 Tx = 0입니다. CameraInfo 정의대로 Tx = -fx'·B이므로 설계한 baseline은 0.12 m입니다. 카메라 좌표의 점 X = 0.5 m, Y = 0, Z = 2.0 m를 [u v w]' = P·[X Y Z 1]', x = u/w로 양쪽에 투영해 가로 픽셀 좌표를 구하고, 그 차이로 시차와 깊이를 거꾸로 계산합니다. 오답 비교를 위해 넣은 값이 있습니다. K 행렬의 fx는 P의 fx'와 다를 수 있다는 문장에 따라 750 px로 두었습니다. 시차 쌍 21/20과 4/3은 가까운 점과 먼 점에서 1픽셀 오차의 영향을 비교하려고, 84로 나눠 떨어지는 값으로 골랐습니다.",
+    "conclusion": "baseline은 오른쪽 camera_info P 행렬의 Tx에 숨어 있고, -Tx를 같은 P의 fx'로 나눠야 미터 값 0.12 m가 됩니다. Tx를 그대로 쓰면 84, K의 fx를 쓰면 0.112가 나와 각각 다른 방식으로 틀립니다. 결과가 0이라면 오른쪽이 아니라 왼쪽 camera_info를 읽은 것입니다. 두 P로 같은 점을 투영한 시차 42 px는 fx'·B/Z와 정확히 맞고, Z = -Tx/d로 2 m를 되돌릴 수 있습니다. 시차가 작을수록 1픽셀 오차가 깊이를 크게 흔듭니다. 시차 21에서 20으로 줄면 깊이가 0.2 m 바뀌고, 4에서 3으로 줄면 7 m 바뀝니다. 독자는 자기 카메라의 오른쪽 camera_info에서 p[0]과 p[3]을 출력해 B를 구하고, 제조사 사양의 baseline과 비교하는 것부터 하면 됩니다.",
+    "limitations": "이 예제는 산술 모델일 뿐이고, 카메라·드라이버·image_geometry·stereo_image_proc을 실행한 결과가 아닙니다. 세 가지를 가정했습니다. 첫째, 두 영상이 보정(rectified)되어 있습니다. 둘째, 수평 스테레오 쌍이라 Ty = 0입니다. 셋째, 두 P의 cx'가 같습니다. cx'가 다르면 시차에 cx' 차이가 더해지므로 d = fx'·B/Z를 그대로 쓸 수 없습니다. 왜곡 보정 전 원시 영상의 픽셀에는 P가 아니라 D와 K가 필요하므로 이 계산이 맞지 않습니다. 드라이버가 Tx를 정의대로 채웠는지, 보정이 정확한지, 시차를 어떻게 매칭하는지, 실제 깊이 잡음이 얼마인지는 이 계산으로 알 수 없습니다. 1픽셀 오차 비교도 측정된 정확도가 아니라 Z = -Tx/d 식의 민감도를 보여 줄 뿐입니다."
+  },
+  "teaching_context_origin": "researcher explanation independently reviewed; not measured hardware facts",
+  "scope": "purpose_built_arithmetic_not_robot_or_simulator_execution"
+}
