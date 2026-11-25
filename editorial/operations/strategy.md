@@ -67,3 +67,6 @@
 | ④ (나) ROS 유료 자료 | 데이터 없음. EN 60일 조회 120·수익 31.5원 | 사용자 참여 필요(실제 경험·강의) |
 
 11/30 재판 안건 후보: "(가) 실행 — 12/02 KO 재개 + 빠진 글 보강 계속"이 M1(2027-01-31, 색인 150·Organic 주 50)에 닿을 근거가 있는가. 11/27 insp 재측정과 12/01 네이버 site: 결과를 붙여서 올린다.
+- 11/25 10:2x **수동 조치·보안 문제: GSC 둘 다 "감지된 문제 없음"**(ego 확인) → 벌점이 아니라 알고리즘의 사이트 단위 평가로 보임.
+- 구글 공식 근거(developers.google.com, 11/25 받음): core-updates — "Deleting content is a last resort … if you're considering deleting entire sections of your site, that's likely a sign those sections were created for search engines first … deleting the unhelpful content can help the good content on your site perform better", 효과는 "a few days … several months". spam-policies — "Scaled content abuse is when many pages are generated for the primary purpose of manipulating search rankings and not helping users … Using generative AI tools … to generate many pages without adding value". 우리 KO 생활 글 약 200편 같은 틀·하루 4~8편은 이 정의에 걸릴 위험이 있다(판정은 확인하지 못했다).
+- **11/30 재판 안건 후보 2**: "같은 틀 KO 생활 글 중 약한 글을 합치거나 noindex해 사이트 전체 평가를 올린다" — 업데이트는 끝났으니 11/22 '업데이트 중 대량 수정·삭제 금지'의 전제는 풀림. 단 되돌리기 어렵고 사용자 결정 필요 → 재판 → 사용자 버튼.
