@@ -59,5 +59,8 @@ html = src.replace('@@SCRIPT@@', script).replace('@@TABLE@@', '\n'.join(rows))
 sc = script[script.index('>') + 1:]
 assert '&' not in sc and '<' not in sc.replace('</script>', ''), 'bad char in script'
 assert '\n\n' not in script
+import sys; sys.path.insert(0, __import__('os').path.abspath(__file__).rsplit('/editorial/', 1)[0])  # repo root
+from scripts.audit_content_repetition import template_flags  # refuse to write old template (pipeline-review C4)
+if template_flags(html): raise SystemExit('template flags, not written: ' + ' '.join(template_flags(html)))
 open(os.path.join(H, '..', 'ko.html'), 'w').write(html)
 print('ko.html written', len(html))

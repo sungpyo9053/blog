@@ -172,12 +172,18 @@ def analyze_posts(posts: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # Template signals measured 11/28 (research/naver-style-by-topic.md §6, style-v1-rules.md).
-FIXED_HEADINGS = {"30초 핵심 요약", "20초 핵심 요약", "자주 묻는 질문", "같이 보면 좋은 글"}
+# 11/29: QA fixes (research/qa-style-baseline.md §4-3) — closer/opener without "에"/date, FAQ 6+ block.
+FIXED_HEADINGS = {"30초 핵심 요약", "20초 핵심 요약", "자주 묻는 질문", "같이 보면 좋은 글", "함께 읽으면 좋은 글"}
 BOILERPLATE = {
-    "opener": re.compile(r"^\d{4}년 \d{1,2}월 \d{1,2}일 .{0,200}확인했습니다"),
+    "opener": re.compile(r"^\d{4}년 \d{1,2}월 \d{1,2}일 .{0,200}확인했습니다|확인했습니다\.?$"),
     "checked_box": re.compile(r"자료 확인일"),
-    "closer": re.compile(r"에 확인하자\.?$"),
+    "closer": re.compile(r"확인하자\.?$"),
 }
+FAQ_BLOCK_MIN = 6  # ko-life-style-v1: "7개 고정 금지"; 6~8+ is the same fixed block (QA §4-3-3)
+
+
+def faq_count(rendered: str) -> int:
+    return len(re.findall(r'"@type"\s*:\s*"Question"', rendered))
 
 
 def template_flags(rendered: str) -> list[str]:
@@ -185,13 +191,15 @@ def template_flags(rendered: str) -> list[str]:
     parser = StructureParser()
     parser.feed(rendered)
     flags = [f"fixed_heading:{h}" for h in parser.headings if h in FIXED_HEADINGS]
-    if len(re.findall(r'"@type"\s*:\s*"Question"', rendered)) == 7:
-        flags.append("faq_exactly_7")
+    faq = faq_count(rendered)
+    if faq >= FAQ_BLOCK_MIN:
+        flags.append(f"faq_block:{faq}")
     if parser.paragraphs and BOILERPLATE["opener"].search(parser.paragraphs[0]):
         flags.append("opener")
     if BOILERPLATE["checked_box"].search(normalize_text(re.sub(r"<[^>]+>", " ", rendered))):
         flags.append("checked_box")
-    if parser.paragraphs and BOILERPLATE["closer"].search(parser.paragraphs[-1]):
+    # closer often sits just before a final disclaimer paragraph (QA §4-3-1)
+    if any(BOILERPLATE["closer"].search(p) for p in parser.paragraphs[-3:]):
         flags.append("closer")
     return flags
 

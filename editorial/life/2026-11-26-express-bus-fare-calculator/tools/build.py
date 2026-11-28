@@ -26,5 +26,8 @@ def table(dep):
 src = open(os.path.join(B, 'tools', 'ko.src.html'), encoding='utf-8').read()
 src = src.replace('__DATA__', js).replace('__T010__', table('서울경부')).replace('__T021__', table('센트럴시티(서울)')).replace('__T032__', table('동서울'))
 assert not re.search(r'__(DATA|T0\d\d)__', src)
+import sys; sys.path.insert(0, __import__('os').path.abspath(__file__).rsplit('/editorial/', 1)[0])  # repo root
+from scripts.audit_content_repetition import template_flags  # refuse to write old template (pipeline-review C4)
+if template_flags(src): raise SystemExit('template flags, not written: ' + ' '.join(template_flags(src)))
 open(os.path.join(B, 'ko.html'), 'w', encoding='utf-8').write(src)
 print('routes', len(data))

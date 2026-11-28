@@ -32,6 +32,8 @@ def _prompt(topic_dir: Path, slug: str) -> str:
         "the title must contain the words an English developer types into Google for this problem (the exact "
         "error message or command when there is one, plus 'ROS 2'), front-loaded and under 65 characters; the "
         "slug uses those same words; the excerpt states the concrete answer, not a teaser. "
+        "Follow editorial/guide/en-style-v1.md: headings from this post's symptoms (no 'Short answer', 'FAQ' or "
+        "'Reproduce it' headings), no 'Short answer:' opener, FAQ only for real extra questions (0 is fine). "
         "Do not write anything else."
     )
 
