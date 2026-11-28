@@ -71,7 +71,12 @@ if __name__ == "__main__":
         if only and it["id"] not in only: continue
         out = outdir / f"glance-{it['id']}.png"; t = render(it, out)
         alt = TXT[it.get("lang", "en")][2].format(t)
+        # per-post caption from this table's own header and size (11/28 style rule 5: no shared caption)
+        rows = [r for r in (cells(r) for r in re.findall(r"<tr.*?</tr>", it["table"], re.S)) if r]
+        cols = ", ".join(rows[0][:4]) if rows else ""
+        cap = (f"{t}: {cols} 기준 {len(rows) - 1}개 항목 표" if it.get("lang") == "ko"
+               else f"{t}: {cols} for {len(rows) - 1} rows")
         if client:
-            m = client.upload_media(out, alt_text=alt); res[it["id"]] = {"url": m["source_url"], "alt": alt, "w": Image.open(out).size, "lang": it.get("lang", "en")}
+            m = client.upload_media(out, alt_text=alt); res[it["id"]] = {"url": m["source_url"], "alt": alt, "w": Image.open(out).size, "lang": it.get("lang", "en"), "cap": cap}
         else: print("rendered", out, Image.open(out).size)
     if client: print(json.dumps(res))
