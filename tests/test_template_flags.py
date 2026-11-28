@@ -44,3 +44,14 @@ class TemplateFlagsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CloserFaqTest(unittest.TestCase):
+    def test_faq_answer_is_not_closer(self) -> None:
+        html = ('<p>첫 문장은 금액이다.</p><h2 id="faq">배당은 언제 들어오나</h2><p>지급일은 증권사에 확인하자.</p>'
+                '<h2 id="related">다음에 볼 글</h2><p>출처: 국세청</p>')
+        self.assertNotIn("closer", template_flags(html))
+
+    def test_real_closer_still_flagged(self) -> None:
+        html = '<p>첫 문장은 금액이다.</p><h2>신청</h2><p>설명</p><p>복지로에 다시 확인하자.</p>'
+        self.assertIn("closer", template_flags(html))

@@ -198,8 +198,10 @@ def template_flags(rendered: str) -> list[str]:
         flags.append("opener")
     if BOILERPLATE["checked_box"].search(normalize_text(re.sub(r"<[^>]+>", " ", rendered))):
         flags.append("checked_box")
-    # closer often sits just before a final disclaimer paragraph (QA §4-3-1)
-    if any(BOILERPLATE["closer"].search(p) for p in parser.paragraphs[-3:]):
+    # closer often sits just before a final disclaimer paragraph (QA §4-3-1); FAQ answers are not closers (warn-trial-1129)
+    tail = StructureParser()
+    tail.feed(re.sub(r'<h2[^>]*(?:id="faq"[^>]*>|>\s*자주 묻는 질문\s*</h2>).*?(?=<h2|$)', "", rendered, flags=re.S))
+    if any(BOILERPLATE["closer"].search(p) for p in tail.paragraphs[-3:] + parser.paragraphs[-1:]):
         flags.append("closer")
     return flags
 
