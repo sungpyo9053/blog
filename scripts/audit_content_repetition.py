@@ -171,6 +171,31 @@ def analyze_posts(posts: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+# Template signals measured 11/28 (research/naver-style-by-topic.md §6, style-v1-rules.md).
+FIXED_HEADINGS = {"30초 핵심 요약", "20초 핵심 요약", "자주 묻는 질문", "같이 보면 좋은 글"}
+BOILERPLATE = {
+    "opener": re.compile(r"^\d{4}년 \d{1,2}월 \d{1,2}일 .{0,200}확인했습니다"),
+    "checked_box": re.compile(r"자료 확인일"),
+    "closer": re.compile(r"에 확인하자\.?$"),
+}
+
+
+def template_flags(rendered: str) -> list[str]:
+    """Return mass-template signals found in one post body (empty list = clean)."""
+    parser = StructureParser()
+    parser.feed(rendered)
+    flags = [f"fixed_heading:{h}" for h in parser.headings if h in FIXED_HEADINGS]
+    if len(re.findall(r'"@type"\s*:\s*"Question"', rendered)) == 7:
+        flags.append("faq_exactly_7")
+    if parser.paragraphs and BOILERPLATE["opener"].search(parser.paragraphs[0]):
+        flags.append("opener")
+    if BOILERPLATE["checked_box"].search(normalize_text(re.sub(r"<[^>]+>", " ", rendered))):
+        flags.append("checked_box")
+    if parser.paragraphs and BOILERPLATE["closer"].search(parser.paragraphs[-1]):
+        flags.append("closer")
+    return flags
+
+
 def fetch_public_posts(base_url: str) -> list[dict[str, Any]]:
     url = (
         base_url.rstrip("/")
@@ -185,7 +210,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Audit material repetition across Hunt News")
     parser.add_argument("--base-url", default="https://huntlab.app")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--files", nargs="+", type=Path, help="pre-schedule lint: template signals per local post HTML")
     args = parser.parse_args()
+    if args.files:
+        dirty = 0
+        for path in args.files:
+            flags = template_flags(path.read_text(encoding="utf-8"))
+            dirty += bool(flags)
+            print(f"{'FLAG' if flags else 'OK  '} {path} {' '.join(flags)}")
+        return 1 if dirty else 0
     result = {
         "checked_at": datetime.now(UTC).isoformat(),
         **analyze_posts(fetch_public_posts(args.base_url)),
