@@ -88,7 +88,7 @@ def main():
         if post.get("featured_media"):
             print("skip has-image", c["post_id"])
             continue
-        media = client.upload_media(out, alt_text=c["title"].partition(":")[0].strip())
+        media = client.upload_media(out, alt_text=c["title"].strip())  # full title: ':' split truncated EN alts (11/28)
         client.request("POST", f"{c.get('type', 'posts')}/{c['post_id']}", payload={"featured_media": media["id"]}, expected=(200,))
         print("set", c["post_id"], media["id"], media.get("source_url"))
 
